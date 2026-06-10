@@ -1,0 +1,10 @@
+[
+  {
+    "id": "a53e934e-cfe5-4f25-90e2-4c8f79786c2d",
+    "name": "Claude Sonnet 4.6",
+    "provider": "anthropic",
+    "model": "claude-sonnet-4-6",
+    "baseUrl": "",
+    "createdAt": 1780909561972
+  }
+]
