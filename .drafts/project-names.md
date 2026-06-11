@@ -1,4 +1,4 @@
-# TODO
+# Project Names
 
 - *Prometheus (дарит "огонь" знаний, но персонально)
 - OmniCorp
@@ -37,3 +37,7 @@
 - Division — подразделения агентов.
 - Guild — каждый агент имеет специализацию.
 - AgentCo
+- Kratos
+- Kratus
+- Cratos
+- Cratus
