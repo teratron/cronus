@@ -37,7 +37,11 @@
 - Division — подразделения агентов.
 - Guild — каждый агент имеет специализацию.
 - AgentCo
-- Kratos
+- *Kratos
 - Kratus
 - Cratos
 - Cratus
+- Chronos
+- *Cronus
+- Khronos
+- Chronus
