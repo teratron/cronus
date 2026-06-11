@@ -6,4 +6,4 @@
 
 - [ ] доктор, самолечение
 - [ ] чтоб сам агент при каждой ошибки отправлял issue в GitHub с позволения пользователя
-- [ ]
+- [ ] Стек: React (Next.js) + TypeScript + Tauri (для десктопа) + Capacitor (для сторов iOS/Android), PNPM + Turborepo, Tailwind CSS + DaisyUI/Lexical, Vite,
