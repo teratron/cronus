@@ -6,6 +6,7 @@
 - <https://github.com/google-gemini/gemini-cli>
 - <https://github.com/openai/codex>
 - <https://github.com/QwenLM/qwen-code>
+- <https://github.com/XiaomiMiMo/MiMo-Code>
 - <https://github.com/openclaw/openclaw>
 - <https://github.com/NousResearch/hermes-agent>
 - <https://github.com/fathah/hermes-desktop>
