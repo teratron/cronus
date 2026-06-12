@@ -11,6 +11,7 @@
 - <https://github.com/fathah/hermes-desktop>
 - <https://github.com/diegosouzapw/OmniRoute>
 - <https://github.com/paperclipai/paperclip>
+- <https://github.com/pewdiepie-archdaemon/odysseus>
 - <https://www.agentik-os.com/>
 
 ## Memory
@@ -20,3 +21,7 @@
 - <https://github.com/codegraph-ai/codegraph>
 - <https://github.com/anvanster/tempera>
 - <https://github.com/adminlove520/holographic-memory.git>
+
+## Tools
+
+- `npm i fallow`
