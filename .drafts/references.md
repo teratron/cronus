@@ -14,6 +14,14 @@
 - <https://github.com/pewdiepie-archdaemon/odysseus>
 - <https://www.agentik-os.com/>
 
+## Spec-Driven Development
+
+- <https://github.com/teratron/magic-spec>
+- <https://github.com/github/spec-kit>
+- <https://github.com/bmad-code-org/BMAD-METHOD>
+- <https://github.com/Fission-AI/OpenSpec>
+- <https://github.com/gsd-build/get-shit-done>
+
 ## Memory
 
 - <https://github.com/safishamsi/graphify>
