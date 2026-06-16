@@ -4,26 +4,26 @@
 
 ```plaintext
 release/
-├── corporation/       # Portable execution distribution; can live in any user-selected location.
+├── Cronus/            # Portable execution distribution; can live in any user-selected location.
 │   ├── app/           # Runtime application code and core services.
 │   ├── bin/           # Launchers, CLI entry points, and service wrappers.
 │   ├── languages/     # Language packs, prompt locales, and UI localization assets.
 │   └── templates/     # Blueprints used to create mutable user state.
 │       ├── employee/  # Initial structure for a hired office employee.
-│       └── workspace/ # Initial structure for a corporation or project workspace.
-└── .corporation/      # Mutable user repository produced and maintained by the runtime.
+│       └── workspace/ # Initial structure for a Cronus or project workspace.
+└── .cronus/           # Mutable user repository produced and maintained by the runtime.
 ```
 
 ## User Repository Layout
 
 ```plaintext
-/home/<user>/.corporation/       # User-owned corporation state and configuration.
+/home/<user>/.cronus/            # User-owned Cronus state and configuration.
 ├── .env                         # Local environment variables and machine-specific secrets.
 ├── AGENTS.md                    # Global agent rules inherited by all employees and workspaces.
 ├── app.json                     # User-facing application preferences, including locale.
 ├── auth.json                    # Authentication provider registry and credential references.
-├── channels.json                # Communication channels connected to the corporation.
-├── config.json                  # Corporation-level settings and defaults.
+├── channels.json                # Communication channels connected to the Cronus ecosystem.
+├── config.json                  # Cronus-level settings and defaults.
 ├── gateway.json                 # Gateway process state and external platform health.
 ├── models.json                  # Available AI models and provider bindings.
 ├── employees/                   # Global pool of hireable office roles.
@@ -34,8 +34,8 @@ release/
 │   │   ├── config.json          # Employee runtime configuration.
 │   │   └── RULES.md             # Employee-specific operating rules.
 │   └── code-reviewer/           # Employee profile for review and quality control.
-└── workspaces/                  # Offices where corporation-level and project work happens.
-    ├── default/                 # Shared corporation office with the orchestrator or general AI chat.
+└── workspaces/                  # Offices where Cronus-level and project work happens.
+    ├── default/                 # Shared Cronus office with the orchestrator or general AI chat.
     │   ├── cache/               # Generated media, graph artifacts, and reusable computed state.
     │   ├── schedules/           # Scheduled routines and recurring office processes.
     │   ├── dashboard/           # Workspace dashboard state and visual summaries.
@@ -58,17 +58,17 @@ release/
 ### User Repository Block Architecture
 
 ```plaintext
-.corporation/
+.cronus/
 ├── Runtime configuration block       # Mutable settings used by the execution distribution.
 │   ├── .env                          # Local process environment.
 │   ├── app.json                      # Application preferences.
 │   ├── auth.json                     # Authentication provider state.
 │   ├── channels.json                 # Connected communication surfaces.
-│   ├── config.json                   # Global corporation defaults.
+│   ├── config.json                   # Global Cronus defaults.
 │   ├── gateway.json                  # Gateway lifecycle and integration health.
 │   └── models.json                   # AI model catalog.
 ├── Policy block                      # Global behavior constraints.
-│   └── AGENTS.md                     # Rules inherited across the corporation.
+│   └── AGENTS.md                     # Rules inherited across Cronus.
 ├── Employee block                    # Hireable roles with personal memory and capabilities.
 │   └── employees/<employee>/
 │       ├── config.json               # Role configuration, model preferences, and limits.
@@ -76,7 +76,7 @@ release/
 │       ├── memories/                 # Employee-owned memory.
 │       ├── skills/                   # Role-specific tools and workflows.
 │       └── skins/                    # Persona and presentation variants.
-└── Workspace block                   # Corporation and project offices.
+└── Workspace block                   # Cronus and project offices.
     └── workspaces/<workspace>/
         ├── config.json               # Workspace identity, manager, team, and policies.
         ├── RULES.md                  # Workspace operating rules.

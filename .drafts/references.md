@@ -11,6 +11,7 @@
 - <https://github.com/NVIDIA/NemoClaw>
 - <https://github.com/NousResearch/hermes-agent>
 - <https://github.com/fathah/hermes-desktop>
+- <https://github.com/tinyhumansai/openhuman>
 - <https://github.com/diegosouzapw/OmniRoute>
 - <https://github.com/paperclipai/paperclip>
 - <https://github.com/pewdiepie-archdaemon/odysseus>
@@ -34,4 +35,5 @@
 
 ## Tools
 
+- <https://github.com/AlexsJones/llmfit>
 - `npm i fallow`
