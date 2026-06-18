@@ -1,0 +1,7 @@
+{
+  "strategy": "difficulty-threshold",
+  "cost_quality_tradeoff": 7,
+  "fallback": ["subscription", "api-key", "cheap", "free"],
+  "semantic_cache": { "enabled": true },
+  "local_first": { "enabled": true, "max_local_params_b": 3 }
+}

@@ -1,0 +1,8 @@
+{
+  "pid": null,
+  "argv": ["gateway"],
+  "platforms": {
+    "api_server": { "state": "stopped", "error_code": null, "error_message": null, "updated_at": null }
+  },
+  "updated_at": null
+}

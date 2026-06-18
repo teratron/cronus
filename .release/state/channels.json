@@ -1,0 +1,13 @@
+{
+  "platforms": {
+    "telegram": [],
+    "discord": [],
+    "whatsapp": [],
+    "slack": [],
+    "signal": [],
+    "matrix": [],
+    "email": [],
+    "sms": []
+  },
+  "updated_at": null
+}

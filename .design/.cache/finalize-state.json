@@ -1,9 +1,9 @@
 {
-  "lastVersion": "0.1.2",
-  "lastBumpAt": "2026-06-18T07:57:15.582Z",
+  "lastVersion": "0.1.3",
+  "lastBumpAt": "2026-06-18T08:49:19.184Z",
   "lastWorkflow": "magic.spec",
   "lastWorkspace": "main",
   "lastSnapshot": {
-    ".design/main/INDEX.md": "c5a37dc17d603ad1b1ee5aac4fcdb59e6fe8ecf16d465a2b29f97c0452e8f0a6"
+    ".design/main/INDEX.md": "08fb514285687754459045aef060eef6ff81e32c732cbc8e22e58104c31c0d6b"
   }
 }
