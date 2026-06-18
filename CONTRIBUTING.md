@@ -108,8 +108,13 @@ One command surface is exposed across the CLI and the TUI (and a matching librar
 | `cronus compact` | `/compact` | Compact the working context/state |
 | `cronus analyze` | `/analyze` | Analyze the project/workspace |
 | `cronus check [<gate>]` | `/check [<gate>]` | Run quality gates (tests, lint, types, format, bench, security) |
+| `cronus doctor [--fix]` | `/doctor [--fix]` | Run self-healing health checks (and safe repairs) |
+| `cronus backup [--to <path>]` | `/backup …` | Back up the state tier (excludes secrets and cache) |
+| `cronus restore <backup>` | `/restore <backup>` | Restore the state tier from a backup |
+| `cronus report` | `/report` | Report the last error to the tracker (with consent) |
 | `cronus memory` | `/memory` | Query and manage memory |
-| `cronus goal` | `/goal` | Start an autonomous goal loop that runs until the goal is met |
+| `cronus goal <text>` | `/goal <text>` | Start an autonomous goal loop (runs until a judge confirms the goal or a budget limit is hit) |
+| `cronus goal stop` | `/goal stop` | Stop the current autonomous goal run |
 | `cronus quit` | `/quit` | End the current session |
 | `cronus exit` | `/exit` | Exit the application |
 
@@ -137,6 +142,24 @@ One command surface is exposed across the CLI and the TUI (and a matching librar
 | `cronus board unblock <card-id>` | `/board unblock <card-id>` | Unblock a card |
 | `cronus board archive <card-id>` | `/board archive <card-id>` | Archive a card (manual override; done cards auto-archive) |
 
+### Office
+
+| CLI | TUI/UI | Description |
+| --- | --- | --- |
+| `cronus office show` | `/office show` | Show the office (interaction graph / spatial floor) |
+| `cronus office building` | `/office building` | Building overview of all offices (home workspace only) |
+| `cronus office inspect <node-id>` | `/office inspect <id>` | Inspect an agent or task node |
+
+### Role
+
+| CLI | TUI/UI | Description |
+| --- | --- | --- |
+| `cronus role list [--catalog\|--hired]` | `/role list …` | List preset catalog and/or hired roles |
+| `cronus role hire <preset> [--as <name>]` | `/role hire <preset> …` | Hire a preset role into the office |
+| `cronus role create <name> [--from <preset>]` | `/role create <name> …` | Create a custom role |
+| `cronus role show <id>` | `/role show <id>` | Show a role |
+| `cronus role fire <id>` | `/role fire <id>` | Release a role (memory archived) |
+
 ### Schedule
 
 | CLI | TUI/UI | Description |
@@ -153,6 +176,16 @@ One command surface is exposed across the CLI and the TUI (and a matching librar
 | `cronus schedule run <id>` | `/schedule run <id>` | Fire a schedule now |
 
 > Schedule fire actions: `heartbeat` (wake the office, no card), `routine` (recurring work), `reminder` (notification).
+
+### Model & Routing
+
+| CLI | TUI/UI | Description |
+| --- | --- | --- |
+| `cronus model list` | `/model list` | List available AI models |
+| `cronus route policy` | `/route policy` | Show the model-routing policy |
+| `cronus route explain "<task>"` | `/route explain …` | Explain which model a task would route to |
+
+> Default model routing is local-first (prefer an on-device model when capable; fall back to cloud).
 
 ## Visualization Stubs
 

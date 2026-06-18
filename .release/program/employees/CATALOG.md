@@ -24,3 +24,8 @@ immutable; runtime memory/skills live in the hired copy under the state tier.
 | sql-expert | Database and queries |
 | test-writer | Test authoring |
 | archivist | Memory curation: consolidation, decay, prune, tagging |
+| finance | Budgeting and financial analysis |
+| hr | Hiring policy and team composition |
+| marketing | Marketing and positioning |
+| support | User support |
+| game-dev | Game development |

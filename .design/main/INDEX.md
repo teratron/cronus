@@ -20,6 +20,14 @@ Local registry of specifications for this workspace.
 | [l1-kanban-model.md](specifications/l1-kanban-model.md) | Canonical work board: fixed pipeline, office-managed, auto-archival, one board per office (tech-agnostic) | Stable | 1 | 1.0.0 |
 | [l1-scheduler-model.md](specifications/l1-scheduler-model.md) | Schedules: recurring/one-shot, recurrence, fire actions (wake/routine/reminder), autonomy (tech-agnostic) | Stable | 1 | 1.0.0 |
 | [l1-quality-standards.md](specifications/l1-quality-standards.md) | Mandatory tiered quality gates as definition-of-done, role-enforced, universal+dogfood (tech-agnostic) | Stable | 1 | 1.0.0 |
+| [l1-office-visualization.md](specifications/l1-office-visualization.md) | Office as a live projection: graph + spatial floor, per-office + building overview (tech-agnostic) | Stable | 1 | 1.0.0 |
+| [l1-orchestration.md](specifications/l1-orchestration.md) | Coordination protocol: adaptive topology, delegation, /goal+judge+budget, briefings (tech-agnostic) | Stable | 1 | 1.0.0 |
+| [l1-roles.md](specifications/l1-roles.md) | Roles as specialties: preset + custom, hire/fire non-destructive, manager-driven (tech-agnostic) | Stable | 1 | 1.0.0 |
+| [l1-routing.md](specifications/l1-routing.md) | Smart-router pattern: multi-signal selection, fallback, cache, scope resolution (tech-agnostic) | Stable | 1 | 1.0.0 |
+| [l1-doctor.md](specifications/l1-doctor.md) | Self-healing: continuous checks, safe auto-repair, escalation, crash recovery (tech-agnostic) | Stable | 1 | 1.0.0 |
+| [l1-security.md](specifications/l1-security.md) | Client security: secret isolation, safe defaults, no exfiltration, sandboxing (tech-agnostic) | Stable | 1 | 1.0.0 |
+| [l1-error-reporting.md](specifications/l1-error-reporting.md) | Consent-gated, scrubbed, de-duplicated error reporting (tech-agnostic) | Stable | 1 | 1.0.0 |
+| [l1-telemetry.md](specifications/l1-telemetry.md) | Opt-in, program-data-only, privacy-first improvement telemetry (tech-agnostic) | Stable | 1 | 1.0.0 |
 | [l2-technology-stack.md](specifications/l2-technology-stack.md) | Validated cross-platform technology stack | Stable | 2 | 1.0.0 |
 | [l2-core-library.md](specifications/l2-core-library.md) | Layer 1: embeddable core library (foundation) | Stable | 2 | 1.0.0 |
 | [l2-cli.md](specifications/l2-cli.md) | Layer 2: command-line frontend | Stable | 2 | 1.0.0 |
@@ -31,6 +39,15 @@ Local registry of specifications for this workspace.
 | [l2-kanban-board.md](specifications/l2-kanban-board.md) | Board storage, transitions, auto-archival store, board command surface | Stable | 2 | 1.0.0 |
 | [l2-scheduler.md](specifications/l2-scheduler.md) | Friendly recurrence + raw cron, per-workspace storage, firing, schedule command surface | Stable | 2 | 1.0.0 |
 | [l2-quality-pipeline.md](specifications/l2-quality-pipeline.md) | Per-language toolchain map, local/pre-commit/CI gate runner, check command surface | Stable | 2 | 1.0.0 |
+| [l2-office-view.md](specifications/l2-office-view.md) | Office projection sources, graph+spatial render, home building overview, office command surface | Stable | 2 | 1.0.0 |
+| [l2-orchestration.md](specifications/l2-orchestration.md) | Delegation via board, messaging, context isolation, judge+budget /goal loop, adaptive topology | Stable | 2 | 1.0.0 |
+| [l2-role-catalog.md](specifications/l2-role-catalog.md) | Preset catalog + hired instances, role definition format, custom roles, hire/fire, role commands | Stable | 2 | 1.0.0 |
+| [l2-model-router.md](specifications/l2-model-router.md) | Model selection: local-first, difficulty/cost, fallback cascade, semantic cache, routing commands | Stable | 2 | 1.0.0 |
+| [l2-context-router.md](specifications/l2-context-router.md) | Memory/rules/session routing, most-specific-first, session continue/retire | Stable | 2 | 1.0.0 |
+| [l2-doctor.md](specifications/l2-doctor.md) | Health check suite, safe-repair vs escalate, crash recovery, doctor command | Stable | 2 | 1.0.0 |
+| [l2-security.md](specifications/l2-security.md) | Secret storage, gitignore defaults, egress gate, execution sandbox, audit log | Stable | 2 | 1.0.0 |
+| [l2-github-issue.md](specifications/l2-github-issue.md) | Consent + scrub + dedup pipeline, GitHub issue filing, report commands | Stable | 2 | 1.0.0 |
+| [l2-backup.md](specifications/l2-backup.md) | State-tier backup minus secrets/cache, restore-by-copy, backup commands | Stable | 2 | 1.0.0 |
 
 ## Meta Information
 
