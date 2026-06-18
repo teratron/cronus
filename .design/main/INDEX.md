@@ -15,12 +15,14 @@ Local registry of specifications for this workspace.
 | [l1-architecture.md](specifications/l1-architecture.md) | Layered core+frontends and hub-and-spoke topology (tech-agnostic) | Stable | 1 | 1.0.0 |
 | [l1-office-model.md](specifications/l1-office-model.md) | Office/corporation agent model: orchestrator, roles, client interaction, autonomy (tech-agnostic) | Stable | 1 | 1.0.0 |
 | [l1-storage-model.md](specifications/l1-storage-model.md) | Two-tier (immutable program / mutable state) + multi-level memory model (tech-agnostic) | Stable | 1 | 1.0.0 |
+| [l1-memory-model.md](specifications/l1-memory-model.md) | Memory subsystem: 4 scopes, hybrid recall, lifecycle, service+curator ownership (tech-agnostic) | Stable | 1 | 1.0.0 |
 | [l2-technology-stack.md](specifications/l2-technology-stack.md) | Validated cross-platform technology stack | Stable | 2 | 1.0.0 |
 | [l2-core-library.md](specifications/l2-core-library.md) | Layer 1: embeddable core library (foundation) | Stable | 2 | 1.0.0 |
 | [l2-cli.md](specifications/l2-cli.md) | Layer 2: command-line frontend | Stable | 2 | 1.0.0 |
 | [l2-tui.md](specifications/l2-tui.md) | Layer 3: terminal UI frontend | Stable | 2 | 1.0.0 |
 | [l2-app-ui.md](specifications/l2-app-ui.md) | Layer 4: desktop/web/mobile application UI/UX | Stable | 2 | 1.0.0 |
 | [l2-filesystem-layout.md](specifications/l2-filesystem-layout.md) | OS-native filesystem layout: tiers, trees, DB placement, memory paths | Stable | 2 | 1.0.0 |
+| [l2-memory-store.md](specifications/l2-memory-store.md) | Memory store: SQLite + sqlite-vec + FTS5 + tags, archivist curator, graph deferred | Stable | 2 | 1.0.0 |
 
 ## Meta Information
 

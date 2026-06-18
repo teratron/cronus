@@ -12,6 +12,7 @@
 - <https://github.com/NousResearch/hermes-agent>
 - <https://github.com/fathah/hermes-desktop>
 - <https://github.com/tinyhumansai/openhuman>
+- <https://github.com/agentscope-ai/QwenPaw>
 - <https://github.com/diegosouzapw/OmniRoute>
 - <https://github.com/paperclipai/paperclip>
 - <https://github.com/pewdiepie-archdaemon/odysseus>
@@ -31,7 +32,7 @@
 - <https://github.com/colbymchenry/codegraph>
 - <https://github.com/codegraph-ai/codegraph>
 - <https://github.com/anvanster/tempera>
-- <https://github.com/adminlove520/holographic-memory.git>
+- <https://github.com/adminlove520/holographic-memory>
 
 ## Tools
 

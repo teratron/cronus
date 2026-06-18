@@ -23,3 +23,4 @@ immutable; runtime memory/skills live in the hired copy under the state tier.
 | security-auditor | Security review |
 | sql-expert | Database and queries |
 | test-writer | Test authoring |
+| archivist | Memory curation: consolidation, decay, prune, tagging |
