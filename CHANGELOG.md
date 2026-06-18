@@ -12,4 +12,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Added 6 specifications (main)
 - Added 7 specifications (main)
 - Added 2 specifications (main)
+- Updated 3 specifications (main)
+- Updated 5 specifications (main)
+- Updated 7 specifications (main)
+- Updated 9 specifications (main)
 

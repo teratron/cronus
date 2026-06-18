@@ -90,6 +90,70 @@ Memory is organized into four scopes; the router reads from most specific to lea
 
 Read order at retrieval: Employee → Workspace → Global (most specific wins). Deleting an office or a role removes its memory with it; only the global level outlives them.
 
+## Commands
+
+One command surface is exposed across the CLI and the TUI (and a matching library API). Grammar follows mainstream-CLI conventions: a top-level command `cronus <command>`, or a command group `cronus <group> <verb> [args] [--flags]`. The TUI mirrors each with a leading slash. This table is kept in sync as functionality grows.
+
+### Core
+
+| CLI | TUI/UI | Description |
+| --- | --- | --- |
+| `cronus help` | `/help` | Show usage and discover commands |
+| `cronus init` | `/init` | Initialize Cronus (first run) or a project in the current location |
+| `cronus idea` | `/idea` | Capture an idea or requirement for the office |
+| `cronus plan` | `/plan` | Generate a plan from captured intent |
+| `cronus task` | `/task` | Generate or list tasks |
+| `cronus run` | `/run` | Execute queued work |
+| `cronus status` | `/status` | Show current position, progress, and blockers |
+| `cronus compact` | `/compact` | Compact the working context/state |
+| `cronus analyze` | `/analyze` | Analyze the project/workspace |
+| `cronus check [<gate>]` | `/check [<gate>]` | Run quality gates (tests, lint, types, format, bench, security) |
+| `cronus memory` | `/memory` | Query and manage memory |
+| `cronus goal` | `/goal` | Start an autonomous goal loop that runs until the goal is met |
+| `cronus quit` | `/quit` | End the current session |
+| `cronus exit` | `/exit` | Exit the application |
+
+### Workspace
+
+| CLI | TUI/UI | Description |
+| --- | --- | --- |
+| `cronus workspace list` | `/workspace list` | List workspaces |
+| `cronus workspace create <name> [-d <desc>] [-p <path>]` | `/workspace create …` | Create a project office |
+| `cronus workspace open <id>` | `/workspace open <id>` | Open / switch to a workspace |
+| `cronus workspace info <id>` | `/workspace info <id>` | Show workspace details |
+| `cronus workspace set <id> [--name <v>] [--description <v>] [--path <v>]` | `/workspace set <id> …` | Edit workspace metadata |
+| `cronus workspace close <id>` | `/workspace close <id>` | Hide a workspace tab (state kept) |
+| `cronus workspace delete <id>` | `/workspace delete <id>` | Delete a project workspace (home is protected) |
+| `cronus workspace home` | `/workspace home` | Switch to the home workspace |
+
+### Board
+
+| CLI | TUI/UI | Description |
+| --- | --- | --- |
+| `cronus board show` | `/board show` | Show the office board |
+| `cronus board list [--state <s>]` | `/board list …` | List cards, optionally by state |
+| `cronus board move <card-id> <state>` | `/board move <card-id> <state>` | Move a card to a state |
+| `cronus board block <card-id> --reason <r>` | `/board block …` | Block a card with a reason |
+| `cronus board unblock <card-id>` | `/board unblock <card-id>` | Unblock a card |
+| `cronus board archive <card-id>` | `/board archive <card-id>` | Archive a card (manual override; done cards auto-archive) |
+
+### Schedule
+
+| CLI | TUI/UI | Description |
+| --- | --- | --- |
+| `cronus schedule create <name> --action <a> --when <preset> [--time HH:MM] [--days mon,tue] [--every 15m]` | `/schedule create …` | Create a recurring schedule (friendly) |
+| `cronus schedule create <name> --action <a> --once --at <datetime>` | `/schedule create … --once` | Create a one-shot schedule (auto-deletes after firing) |
+| `cronus schedule create <name> --action <a> --cron "<expr>"` | `/schedule create … --cron …` | Create a schedule from a raw cron expression (advanced) |
+| `cronus schedule list` | `/schedule list` | List schedules |
+| `cronus schedule show <id>` | `/schedule show <id>` | Show a schedule |
+| `cronus schedule set <id> [--when …] [--cron …] [--enabled true\|false]` | `/schedule set <id> …` | Edit a schedule |
+| `cronus schedule enable <id>` | `/schedule enable <id>` | Enable a schedule |
+| `cronus schedule disable <id>` | `/schedule disable <id>` | Disable a schedule (kept, not deleted) |
+| `cronus schedule delete <id>` | `/schedule delete <id>` | Delete a schedule |
+| `cronus schedule run <id>` | `/schedule run <id>` | Fire a schedule now |
+
+> Schedule fire actions: `heartbeat` (wake the office, no card), `routine` (recurring work), `reminder` (notification).
+
 ## Visualization Stubs
 
 The repository's `.release/` directory is a temporary visualization sandbox holding empty stubs of both tiers:

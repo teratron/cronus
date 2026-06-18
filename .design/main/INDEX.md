@@ -16,6 +16,10 @@ Local registry of specifications for this workspace.
 | [l1-office-model.md](specifications/l1-office-model.md) | Office/corporation agent model: orchestrator, roles, client interaction, autonomy (tech-agnostic) | Stable | 1 | 1.0.0 |
 | [l1-storage-model.md](specifications/l1-storage-model.md) | Two-tier (immutable program / mutable state) + multi-level memory model (tech-agnostic) | Stable | 1 | 1.0.0 |
 | [l1-memory-model.md](specifications/l1-memory-model.md) | Memory subsystem: 4 scopes, hybrid recall, lifecycle, service+curator ownership (tech-agnostic) | Stable | 1 | 1.0.0 |
+| [l1-workspace-lifecycle.md](specifications/l1-workspace-lifecycle.md) | Home vs project workspaces, creation/edit/delete, default manager, hire/fire (tech-agnostic) | Stable | 1 | 1.0.0 |
+| [l1-kanban-model.md](specifications/l1-kanban-model.md) | Canonical work board: fixed pipeline, office-managed, auto-archival, one board per office (tech-agnostic) | Stable | 1 | 1.0.0 |
+| [l1-scheduler-model.md](specifications/l1-scheduler-model.md) | Schedules: recurring/one-shot, recurrence, fire actions (wake/routine/reminder), autonomy (tech-agnostic) | Stable | 1 | 1.0.0 |
+| [l1-quality-standards.md](specifications/l1-quality-standards.md) | Mandatory tiered quality gates as definition-of-done, role-enforced, universal+dogfood (tech-agnostic) | Stable | 1 | 1.0.0 |
 | [l2-technology-stack.md](specifications/l2-technology-stack.md) | Validated cross-platform technology stack | Stable | 2 | 1.0.0 |
 | [l2-core-library.md](specifications/l2-core-library.md) | Layer 1: embeddable core library (foundation) | Stable | 2 | 1.0.0 |
 | [l2-cli.md](specifications/l2-cli.md) | Layer 2: command-line frontend | Stable | 2 | 1.0.0 |
@@ -23,6 +27,10 @@ Local registry of specifications for this workspace.
 | [l2-app-ui.md](specifications/l2-app-ui.md) | Layer 4: desktop/web/mobile application UI/UX | Stable | 2 | 1.0.0 |
 | [l2-filesystem-layout.md](specifications/l2-filesystem-layout.md) | OS-native filesystem layout: tiers, trees, DB placement, memory paths | Stable | 2 | 1.0.0 |
 | [l2-memory-store.md](specifications/l2-memory-store.md) | Memory store: SQLite + sqlite-vec + FTS5 + tags, archivist curator, graph deferred | Stable | 2 | 1.0.0 |
+| [l2-workspace-management.md](specifications/l2-workspace-management.md) | Desktop tab UX, creation form, kebab naming, template→state, manager bootstrap | Stable | 2 | 1.0.0 |
+| [l2-kanban-board.md](specifications/l2-kanban-board.md) | Board storage, transitions, auto-archival store, board command surface | Stable | 2 | 1.0.0 |
+| [l2-scheduler.md](specifications/l2-scheduler.md) | Friendly recurrence + raw cron, per-workspace storage, firing, schedule command surface | Stable | 2 | 1.0.0 |
+| [l2-quality-pipeline.md](specifications/l2-quality-pipeline.md) | Per-language toolchain map, local/pre-commit/CI gate runner, check command surface | Stable | 2 | 1.0.0 |
 
 ## Meta Information
 

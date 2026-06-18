@@ -1,0 +1,5 @@
+{
+  "states": ["triage", "todo", "ready", "running", "blocked", "done"],
+  "cards": [],
+  "archive_condition": { "type": "age", "days": null }
+}

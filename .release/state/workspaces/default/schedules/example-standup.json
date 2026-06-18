@@ -1,0 +1,10 @@
+{
+  "id": "example-standup",
+  "name": "Weekday standup",
+  "kind": "recurring",
+  "action": "routine",
+  "recurrence": { "preset": "weekdays", "times": ["09:00"] },
+  "timezone": "host",
+  "enabled": true,
+  "delete_after_fire": false
+}

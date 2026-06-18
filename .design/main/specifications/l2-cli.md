@@ -76,6 +76,19 @@ graph TD
     RENDER --> EXIT[Exit code]
 ```
 
+### 4.4 Command grammar (project standard)
+
+The CLI follows mainstream-CLI conventions (the git/docker/kubectl family). This grammar is the project-wide standard for every command group; new functionality MUST conform.
+
+- **Verb-first with flags:** `cronus <noun> <verb> [<id>] [--flag <value>]`.
+- **Explicit verbs:** `create`, `delete`, `open`, `list`, `info`, `set`, `close` — no terse aliases.
+- **Sub-command groups (namespaces):** related operations group under a noun (e.g. `workspace`; later `memory`, `kanban`, `model`).
+- **Editing properties:** `set <id> --<property> <value>`; multiple `--property` flags may be combined in one call.
+- **TUI parity:** the TUI mirrors the same grammar in slash form, `/<noun> <verb> …` (INV-3).
+- **Library is the source:** each command binds to a public core method `<noun>.<verb>(...)`; the CLI/TUI add no behavior.
+
+> Per-group command tables live in each group's profile spec (e.g. workspace commands in `l2-workspace-management.md`), all conforming to this grammar.
+
 ## 5. Drawbacks & Alternatives
 
 - **Limited richness:** CLI cannot show live boards well; that is the TUI/app's role — acceptable by INV-6.

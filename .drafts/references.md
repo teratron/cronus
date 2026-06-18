@@ -37,4 +37,4 @@
 ## Tools
 
 - <https://github.com/AlexsJones/llmfit>
-- `npm i fallow`
+- `pnpm i fallow`
