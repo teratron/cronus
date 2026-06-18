@@ -4,7 +4,7 @@
 <!-- Maximum 100 lines. Agent updates AFTER each completed action. -->
 
 **Workspace:** main
-**Updated:** 2026-06-16 16:00
+**Updated:** 2026-06-18 07:57
 **Phase:** 0 — Not Started
 **Status:** Active
 
@@ -12,7 +12,7 @@
 
 - **Task:** [T-0000] Setup Workspace
 - **Spec:** none
-- **Next Action:** Run /magic.task
+- **Next Action:** Run /magic.task main to update the plan
 
 ## Progress
 
