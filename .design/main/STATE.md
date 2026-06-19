@@ -4,15 +4,15 @@
 <!-- Maximum 100 lines. Agent updates AFTER each completed action. -->
 
 **Workspace:** main
-**Updated:** 2026-06-19 08:28
-**Phase:** 1 — Foundation & Scaffolding
+**Updated:** 2026-06-19 08:40
+**Phase:** 1 — Seed I: Foundation
 **Status:** Active
 
 ## Current Position
 
 - **Task:** [T-0000] Setup Workspace
 - **Spec:** none
-- **Next Action:** Run /magic.task main to update the plan
+- **Next Action:** Plan complete — author new scope via /magic.spec main (or /magic.status for a briefing)
 
 ## Progress
 

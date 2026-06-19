@@ -34,6 +34,7 @@
 │   └── workspace.json
 ├── .drafts/
 │   ├── TODO.md
+│   ├── desktop.drawio.svg
 │   ├── project-names.md
 │   ├── references.md
 │   ├── release.drawio.svg
@@ -58,11 +59,11 @@
 ├── crates/
 │   ├── cli/
 │   ├── core/
+│   ├── nodus/
 │   └── tui/
 ├── docs/
-├── packages/
-│   └── ui/
-└── tests/
+└── packages/
+    └── ui/
 ```
 
 ## Recent Changes

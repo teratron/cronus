@@ -49,7 +49,7 @@
 
 - [x] команды:
 
-| cli | tui/ui |
+| cli | tui/gui |
 | --- | --- |
 | `cronus help` | `/help` |
 | `cronus init` | `/init` |
