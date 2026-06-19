@@ -39,4 +39,6 @@
 
 - <https://github.com/AlexsJones/llmfit>
 - <https://github.com/cjpais/Handy>
+- <https://github.com/shadcn/improve>
+- <https://github.com/nvidia/skillspector>
 - `pnpm i fallow`
