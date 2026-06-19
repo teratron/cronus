@@ -1,6 +1,6 @@
 # Scheduler
 
-**Version:** 1.0.0
+**Version:** 1.0.1
 **Status:** Stable
 **Layer:** implementation
 **Implements:** l1-scheduler-model.md
@@ -76,9 +76,9 @@ The model wants recurrence-first scheduling that a non-technical client can use,
 
 The scheduler service evaluates due schedules against the host clock + timezone, fires the declared action, and for one-shot schedules deletes the file after firing. On restart it reloads all files and re-arms (SCH-6). Missed-fire handling during downtime is configurable. <!-- TBD: missed-fire behavior (skip vs catch-up) -->
 
-### 4.4 Board interaction (deferred)
+### 4.4 Board interaction
 
-`heartbeat` never touches the board (SCH-4). `routine` may create a board card; the de-duplication/coalescing policy that would prevent repeated routine fires from accumulating duplicate cards is **deferred** and will be decided after real-world testing — v0.1.0 does not implement coalescing. <!-- TBD: routine-fire board de-duplication policy (coalesce vs skip) -->
+`heartbeat` never touches the board (SCH-4). `routine` may create a board card; the exact de-duplication behavior is governed by the concurrency policy defined in §4.7.
 
 ### 4.5 Command surface
 
@@ -116,6 +116,73 @@ Toolsets available to a fired job follow this precedence:
 User-level `disabled_toolsets` from the global agent config is layered on top of all of the above; a per-job override cannot widen past what the global config denies.
 
 The `messaging` and `clarify` toolsets are always disabled in cron context: `messaging` requires a live gateway session; `clarify` blocks waiting for user input — both are incompatible with unattended execution.
+
+### 4.7 Routine execution policy
+
+Routines (recurring `action: "routine"` schedules) carry execution policy that governs what happens when a new fire is due while a previous run is still active, and what happens to fires that were missed during downtime.
+
+#### Concurrency policy
+
+```text
+[REFERENCE]
+Schedule.concurrencyPolicy: "coalesce_if_active" | "run_parallel" | "skip_if_active"
+```
+
+| Policy | Behavior |
+| --- | --- |
+| `coalesce_if_active` (default) | If a run is still active, the new fire is merged into it (recorded as a coalesced trigger). No new run is started. |
+| `run_parallel` | A new run starts regardless; concurrent runs are allowed for this routine. |
+| `skip_if_active` | If a run is still active, the new fire is silently dropped (logged but no action). |
+
+#### Catch-up policy
+
+```text
+[REFERENCE]
+Schedule.catchUpPolicy: "skip_missed" | "run_once" | "run_all"
+```
+
+| Policy | Behavior after downtime |
+| --- | --- |
+| `skip_missed` (default) | Fires that were due during downtime are dropped; only the next scheduled fire runs. |
+| `run_once` | One catch-up run is started immediately on recovery, then normal cadence resumes. |
+| `run_all` | All missed fires are replayed in sequence. Use with caution — can produce burst load. |
+
+#### Idempotency and dispatch fingerprint
+
+To prevent exact-duplicate runs when the scheduler restarts or a cluster has split-brain, each dispatched run carries:
+
+```text
+[REFERENCE]
+RoutineRun.idempotencyKey: String    // unique per (schedule_id, scheduled_fire_at) pair
+RoutineRun.dispatchFingerprint: String // hash of (schedule_id, fire_at, concurrency_policy)
+RoutineRun.coalescedIntoRunId?: String // set if this fire was merged into an existing run
+```
+
+Before dispatching, the scheduler checks for an existing run with the same `idempotencyKey`. If one exists, dispatch is a no-op (idempotent re-fire). This ensures exactly-once delivery even under restart conditions.
+
+#### Webhook triggers
+
+Routines may also be triggered by an inbound HTTP request in addition to (or instead of) the cron expression:
+
+```text
+[REFERENCE]
+ScheduleTrigger {
+  kind: "cron" | "webhook",
+  cronExpression?: String,       // for kind = "cron"
+  publicId?: String,             // public endpoint path component (webhook URL)
+  secretId?: String,             // signing key stored in the secret store
+  signingMode: "hmac_sha256" | "none",
+  replayWindowSec: u32           // reject requests older than this; default 300
+}
+```
+
+Webhook validation:
+
+1. Extract `X-Cronus-Signature` header (HMAC-SHA256 of the raw body using `secretId`).
+2. Reject if timestamp in body is older than `replayWindowSec` seconds (replay protection).
+3. If valid, dispatch the routine as a one-shot run with `idempotencyKey = sha256(raw_body)`.
+
+The signing key is stored in the OS keychain under the same mechanism as `l2-security.md §4.1`; it is never logged or exported. Webhook triggers share the same concurrency and catch-up policies as cron triggers.
 
 ## 5. Drawbacks & Alternatives
 

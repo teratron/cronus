@@ -39,12 +39,12 @@ Local registry of specifications for this workspace.
 | [l2-filesystem-layout.md](specifications/l2-filesystem-layout.md) | OS-native filesystem layout: tiers, trees, DB placement, memory paths | Stable | 2 | 1.0.0 |
 | [l2-memory-store.md](specifications/l2-memory-store.md) | Memory store: SQLite + sqlite-vec + FTS5 + tags, archivist curator, graph deferred | Stable | 2 | 1.0.0 |
 | [l2-workspace-management.md](specifications/l2-workspace-management.md) | Desktop tab UX, creation form, kebab naming, template→state, manager bootstrap | Stable | 2 | 1.0.0 |
-| [l2-kanban-board.md](specifications/l2-kanban-board.md) | Board storage, transitions, auto-archival store, board command surface | Stable | 2 | 1.0.0 |
-| [l2-scheduler.md](specifications/l2-scheduler.md) | Friendly recurrence + raw cron, per-workspace storage, firing, schedule command surface | Stable | 2 | 1.0.0 |
+| [l2-kanban-board.md](specifications/l2-kanban-board.md) | Board storage, transitions, auto-archival store, execution semantics (atomic checkout, monitor scheduling, delegation depth) | Stable | 2 | 1.0.1 |
+| [l2-scheduler.md](specifications/l2-scheduler.md) | Friendly recurrence + raw cron, per-workspace storage, firing, routine execution policy (concurrency, catch-up, idempotency, webhooks) | Stable | 2 | 1.0.1 |
 | [l2-quality-pipeline.md](specifications/l2-quality-pipeline.md) | Per-language toolchain map (incl. JS/TS structural analysis), local/pre-commit/CI gate runner, check command surface | Stable | 2 | 1.1.0 |
 | [l2-office-view.md](specifications/l2-office-view.md) | Office projection sources, graph+spatial render, home building overview, office command surface | Stable | 2 | 1.0.0 |
 | [l2-orchestration.md](specifications/l2-orchestration.md) | Delegation via board, messaging, context isolation, judge+budget /goal loop, adaptive topology | Stable | 2 | 1.0.0 |
-| [l2-role-catalog.md](specifications/l2-role-catalog.md) | Preset catalog + hired instances, role definition format, custom roles, hire/fire, role commands | Stable | 2 | 1.0.0 |
+| [l2-role-catalog.md](specifications/l2-role-catalog.md) | Preset catalog + hired instances, role definition format, custom roles, hire/fire, adapter protocol (integration levels, fat/thin context, config revisions) | Stable | 2 | 1.0.1 |
 | [l2-model-router.md](specifications/l2-model-router.md) | Model selection: local-first, difficulty/cost, fallback cascade, semantic cache, routing commands | Stable | 2 | 1.0.1 |
 | [l2-model-error-recovery.md](specifications/l2-model-error-recovery.md) | Error taxonomy (FailoverKind), priority classification pipeline, retry/compress/rotate/fallback loop, credential pool | Stable | 2 | 1.0.0 |
 | [l2-agent-session.md](specifications/l2-agent-session.md) | Turn skeleton: TurnContext, IterationBudget, pluggable ContextEngine interface, prologue steps | Stable | 2 | 1.0.0 |
@@ -55,15 +55,17 @@ Local registry of specifications for this workspace.
 | [l2-backup.md](specifications/l2-backup.md) | State-tier backup minus secrets/cache, restore-by-copy, backup commands | Stable | 2 | 1.0.0 |
 | [l2-dashboard.md](specifications/l2-dashboard.md) | Statistics metrics + sources, per-office + home aggregate, dashboard command | Stable | 2 | 1.0.0 |
 | [l2-workflow-runtime.md](specifications/l2-workflow-runtime.md) | In-tree Rust runtime crate (lexer/parser/validator/executor/transpiler), in-process, subsystem-bound; port architecture | Stable | 2 | 1.2.0 |
-| [l2-extension-registry.md](specifications/l2-extension-registry.md) | Extension manifest, preset/custom locations, MCP client + sandbox, skill generation, plugin config schema, ext commands | Stable | 2 | 1.0.1 |
+| [l2-extension-registry.md](specifications/l2-extension-registry.md) | Extension manifest, preset/custom locations, MCP client + sandbox, skill generation, plugin config schema, remote skill catalog (trust levels, GitHub source) | Stable | 2 | 1.0.2 |
 | [l2-learning-loop.md](specifications/l2-learning-loop.md) | Post-turn background review fork, skill package format, idle-triggered curator with lifecycle transitions | Stable | 2 | 1.0.0 |
 | [l2-source-layout.md](specifications/l2-source-layout.md) | Dev monorepo layout: crates/apps/packages, dependency direction, in-tree workflow-runtime crate | Stable | 2 | 1.1.0 |
 | [l2-agent-constitution.md](specifications/l2-agent-constitution.md) | Per-workspace identity file system: SOUL, PROFILE, MEMORY, HEARTBEAT, BOOTSTRAP files and bootstrap ritual | Stable | 2 | 1.0.0 |
 | [l2-tool-security.md](specifications/l2-tool-security.md) | Two-layer tool defense: static skill scanner (8 categories) + runtime tool guard (10 threat categories, approval escalation) | Stable | 2 | 1.0.0 |
 | [l2-mission-mode.md](specifications/l2-mission-mode.md) | Two-phase autonomous goal execution: PRD generation → user checkpoint → story-verified execution loop | Stable | 2 | 1.0.0 |
+| [l2-budget-engine.md](specifications/l2-budget-engine.md) | Hierarchical budget policies (office/project/agent), cost events, warn/hard-stop thresholds, monthly reset, cascade invariant | Stable | 2 | 1.0.0 |
+| [l2-execution-workspace.md](specifications/l2-execution-workspace.md) | Isolated execution environments (local/worktree/ssh/sandbox), no-remote-git contract, finalize write-back, workspace forking, cleanup lifecycle | Stable | 2 | 1.0.0 |
 
 ## Meta Information
 
 - **Maintainer**: Core Team
 - **Last Updated**: 2026-06-19
-- **Spec Count**: 49 (19 L1 + 30 L2)
+- **Spec Count**: 51 (19 L1 + 32 L2)

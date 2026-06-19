@@ -1,13 +1,13 @@
 # Implementation Plan
 
-**Version:** 1.4.0
+**Version:** 1.5.0
 **Generated:** 2026-06-19
 **Based on:** .design/main/INDEX.md v1.0.0
 **Status:** Active
 
 ## Overview
 
-Implementation plan for Cronus from 49 Stable specifications (19 L1 concepts + 30 L2 implementations). Phases follow a **growth order**: the agent grows like a sprout from a seed.
+Implementation plan for Cronus from 51 Stable specifications (19 L1 concepts + 32 L2 implementations). Phases follow a **growth order**: the agent grows like a sprout from a seed.
 
 - **Seed = the library** (`crates/core` + `crates/nodus` runtime) — Phases 1–2.
 - **Stem = the CLI** — Phase 3, the first usable surface, emerging straight from the seed.
@@ -83,6 +83,8 @@ Execution mode: **Parallel** (C3); tracks grouped by file independence. Critical
 - [ ] **Role Catalog** ([l2-role-catalog.md](specifications/l2-role-catalog.md)) [L2]
 - [ ] **Kanban Board** ([l2-kanban-board.md](specifications/l2-kanban-board.md)) [L2]
 - [ ] **Scheduler** ([l2-scheduler.md](specifications/l2-scheduler.md)) [L2]
+- [ ] **Budget Engine** ([l2-budget-engine.md](specifications/l2-budget-engine.md)) [L2] — hierarchical budget policies, cost events, hard-stop enforcement, monthly reset (depends on roles + kanban)
+- [ ] **Execution Workspace** ([l2-execution-workspace.md](specifications/l2-execution-workspace.md)) [L2] — isolated execution environments, no-remote-git contract, finalize write-back gate (depends on security + kanban)
 - [ ] **Quality Pipeline** ([l2-quality-pipeline.md](specifications/l2-quality-pipeline.md)) [L2]
 - [ ] **Extension Registry** ([l2-extension-registry.md](specifications/l2-extension-registry.md)) [L2] — skills / MCP / plugins, sandboxed; skill generation (depends on roles + security + workflow runtime)
 - [ ] **Learning Loop** ([l2-learning-loop.md](specifications/l2-learning-loop.md)) [L2] — post-turn background review fork, skill package format, curator (depends on extension-registry + memory-store + agent-session)

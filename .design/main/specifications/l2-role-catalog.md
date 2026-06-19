@@ -1,6 +1,6 @@
 # Role Catalog
 
-**Version:** 1.0.0
+**Version:** 1.0.1
 **Status:** Stable
 **Layer:** implementation
 **Implements:** l1-roles.md
@@ -15,6 +15,8 @@ The concrete realization of roles: the read-only preset catalog in the program t
 - [l2-filesystem-layout.md](l2-filesystem-layout.md) - Catalog (`program/employees/`) and instances (`state/employees/`).
 - [l2-orchestration.md](l2-orchestration.md) - The manager hires/releases and delegates to roles.
 - [l2-cli.md](l2-cli.md) - Command grammar standard the `role` commands follow.
+- [l2-execution-workspace.md](l2-execution-workspace.md) - Workspaces allocated to agent runs.
+- [l2-budget-engine.md](l2-budget-engine.md) - Budget policies scoped to agent instances.
 
 ## 1. Motivation
 
@@ -88,6 +90,56 @@ Role operations conform to the CLI grammar standard (see `l2-cli.md` §4.4).
 | create custom | `cronus role create <name> [--from <preset>]` | `/role create <name> …` | `roles.create(name, opts) -> Role` |
 | show | `cronus role show <id>` | `/role show <id>` | `roles.get(id) -> Role` |
 | fire | `cronus role fire <id>` | `/role fire <id>` | `roles.fire(id) -> void` |
+
+### 4.6 Agent adapter protocol and config revisions
+
+Hired agents may be backed by external runtimes (a locally spawned process, a remote API, or a sandboxed binary). The adapter protocol defines three integration levels, each building on the previous:
+
+#### Integration levels
+
+| Level | Capability | Required interface |
+| --- | --- | --- |
+| Callable | Accept a task, return a result. | `run(payload) -> result` |
+| Status-reporting | Callable + emit progress events during execution. | Callable + `status(runId) -> RunStatus` |
+| Fully instrumented | Status-reporting + heartbeat, cost events, structured logs. | Status + `heartbeat()` + `report_cost(event)` + structured log sink |
+
+The orchestration layer treats a callable adapter as a black box — it cannot monitor progress or enforce a budget mid-run. A fully-instrumented adapter enables real-time budget enforcement, liveness checks, and fine-grained audit logs. New adapters should target fully instrumented; callable is the minimum for third-party integration.
+
+#### Context delivery: fat payload vs thin ping
+
+```text
+[REFERENCE]
+ContextDelivery: "fat_payload" | "thin_ping"
+```
+
+`fat_payload` — the full task context (briefing, constraints, tools, conversation history) is bundled into the initial `run()` call. The adapter needs no further calls to the control plane to begin work. Best for remote adapters with high latency per round-trip.
+
+`thin_ping` — only a task identifier is sent. The adapter fetches the full context from the control plane on demand. Best for local adapters where a round-trip is cheap and context may be large.
+
+The `config.json` for a hired instance records which delivery mode the adapter requires. The orchestration layer selects accordingly.
+
+#### Config revisions and rollback
+
+Every change to a hired agent's `config.json` is recorded as a revision, enabling rollback:
+
+```text
+[REFERENCE]
+AgentConfigRevision {
+  id,
+  agentId,
+  revisionNumber: u32,          // monotonically increasing
+  beforeConfig: JsonObject,     // snapshot of config before this change
+  afterConfig: JsonObject,      // snapshot of config after this change
+  changedKeys: String[],        // which top-level keys changed
+  source: "patch" | "rollback", // how this revision was created
+  rolledBackFromRevisionId?,    // set when source = "rollback"
+  createdAt
+}
+```
+
+Rollback procedure: the orchestration layer reads `beforeConfig` from the target revision and applies it as a new `patch` revision (source = `"rollback"`, `rolledBackFromRevisionId` = target). This means rollback itself is recorded — there is no destructive edit of history.
+
+Revision records are stored in `<state>/employees/<id>/config-revisions/` as append-only JSON files (one per revision).
 
 ## 5. Drawbacks & Alternatives
 

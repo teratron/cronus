@@ -1,6 +1,6 @@
 # Kanban Board
 
-**Version:** 1.0.0
+**Version:** 1.0.1
 **Status:** Stable
 **Layer:** implementation
 **Implements:** l1-kanban-model.md
@@ -15,6 +15,8 @@ The concrete realization of the office board: where the single canonical board l
 - [l2-filesystem-layout.md](l2-filesystem-layout.md) - The `kanban/` location within a workspace.
 - [l2-core-library.md](l2-core-library.md) - Hosts the board service and the archival job.
 - [l2-cli.md](l2-cli.md) - Command grammar standard the board commands follow.
+- [l2-execution-workspace.md](l2-execution-workspace.md) - Isolated workspace assigned to a card via `executionWorkspaceId`.
+- [l2-budget-engine.md](l2-budget-engine.md) - Budget exhaustion transitions running cards to `blocked`.
 
 ## 1. Motivation
 
@@ -90,6 +92,56 @@ Board operations across all three surfaces, conforming to the CLI grammar standa
 | archive (manual override) | `cronus board archive <card-id>` | `/board archive <card-id>` | `board.archive(cardId) -> void` |
 
 Cards are created from the office's tasks by the manager (not a client command in v0.1.0); the client surface is primarily `show`/`list`. `move`/`block`/`unblock` are the office's operations, exposed for tooling/automation.
+
+### 4.5 Execution semantics
+
+Cards that are in `running` state carry additional execution metadata that the orchestration layer writes and reads. This layer is distinct from the board's state machine — the board transitions between states; the execution layer tracks *who* is running *what* inside a given state.
+
+#### Ownership vs active execution
+
+```text
+[REFERENCE]
+Card execution fields (added when state = running):
+  checkoutRunId,        // run that claimed this card (ownership lock)
+  executionRunId,       // run currently executing (may differ after delegation)
+  executionLockedAt,    // timestamp of the most recent execution lock
+  executionWorkspaceId  // workspace allocated to this run (see l2-execution-workspace.md)
+```
+
+`checkoutRunId` is set when a run picks up a card. It is cleared only by the stale-cleanup process (if the run is confirmed dead) — never by the run itself. `executionRunId` may change when a manager delegates a card to a sub-agent: the checkout owner remains unchanged while the active executor is updated.
+
+This two-lock design ensures that a crash cannot leave a card permanently claimed: the cleanup process reads `executionLockedAt`, and if it is stale (no heartbeat seen since), it clears both fields and returns the card to `ready`.
+
+#### Monitor scheduling for blocked cards
+
+When a card is blocked waiting for an external condition (e.g. another card completing, a tool call timing out), the system schedules an auto-wake rather than polling:
+
+```text
+[REFERENCE]
+Card monitor fields (set when state = blocked for external reason):
+  monitorNextCheckAt,    // UTC timestamp when the scheduler should re-evaluate
+  monitorAttemptCount    // number of times the monitor has checked without unblocking
+```
+
+On each monitor check: if the condition is resolved, the card transitions to `ready`; otherwise `monitorNextCheckAt` is advanced using exponential back-off capped at a configurable maximum interval.
+
+#### Parent/child vs blockers (separate concerns)
+
+Parent/child is structural hierarchy: card B is a sub-issue of card A (`parentId` on the card record). This is a decomposition relationship — A owns B.
+
+Blockers are dependency: card B cannot start until card C is done (`blockerIds` list). This is a sequencing relationship — they are peers.
+
+These two relationships must not be conflated. A card that is both a child and has blockers is valid and common. The board renders them separately; the orchestration layer enforces them separately.
+
+#### Delegation depth
+
+```text
+[REFERENCE]
+Card delegation field:
+  requestDepth: u8   // 0 = top-level goal; incremented by 1 on each manager→sub-agent delegation
+```
+
+A hard cap (default: 10) prevents infinite delegation chains. When `requestDepth` reaches the cap, the next delegation attempt fails with `DelegationDepthExceeded`; the card transitions to `blocked` with that reason. The cap is configurable in the workspace config.
 
 ## 5. Drawbacks & Alternatives
 

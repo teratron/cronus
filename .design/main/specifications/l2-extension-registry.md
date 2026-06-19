@@ -1,6 +1,6 @@
 # Extension Registry
 
-**Version:** 1.0.0
+**Version:** 1.0.2
 **Status:** Stable
 **Layer:** implementation
 **Implements:** l1-extensions.md
@@ -132,7 +132,82 @@ plugin.json {
 
 **Compatibility:** `min_version` is checked at install time; incompatible plugins are blocked from activation with a clear version error.
 
-### 4.6 Command surface
+### 4.7 Remote skill catalog
+
+Skills may be published to and installed from a remote catalog. Each catalog entry carries trust metadata so the registry can enforce sandboxing proportional to the skill's capabilities.
+
+#### CatalogSkill record
+
+```text
+[REFERENCE]
+CatalogSkill {
+  id,
+  name,
+  version,
+  description,
+  trustLevel: "markdown_only" | "assets" | "scripts_executables",
+  compatibility: {
+    minCronusVersion: String,
+    platforms: ("windows" | "macos" | "linux")[],
+    architectures?: ("x86_64" | "aarch64")[]
+  },
+  defaultInstall: bool,           // pre-installed for all workspaces
+  recommendedForRoles: String[],  // preset role ids for which this skill is suggested
+  contentHash: String,            // SHA-256 of the downloaded archive — verified before activation
+  source: {
+    kind: "github",
+    hostname: String,             // default: "github.com"
+    owner: String,
+    repo: String,
+    ref: String,                  // branch, tag, or "latest"
+    commit: String                // pinned commit SHA — immutable reference
+  }
+}
+```
+
+#### Trust levels
+
+| Level | What it contains | Sandbox behavior |
+| --- | --- | --- |
+| `markdown_only` | Pure text instructions, no executable content. | No sandbox needed; loaded as instruction text only. |
+| `assets` | Instruction text + static data files (images, templates). | Sandboxed file access to the assets path; no code execution. |
+| `scripts_executables` | Any executable code (scripts, binaries, WASM). | Full execution sandbox; same constraints as plugins (EXT-4). |
+
+`markdown_only` skills are the safest — they carry no attack surface beyond prompt injection (caught by the skill scanner at §4.4). `scripts_executables` skills receive the most restrictive sandbox; they require an explicit user grant, not just an activation.
+
+#### Catalog operations
+
+The catalog is a read-only remote index. Local installs are a pull from the catalog followed by content hash verification.
+
+Install flow:
+
+1. Resolve `source.ref` to a commit SHA (immutable pin recorded in `source.commit`).
+2. Download archive.
+3. Verify `sha256(archive) == contentHash` — reject if mismatch.
+4. Run skill scanner (static analysis, `trustLevel`-appropriate checks).
+5. Register as `discovered`; activate only after explicit grant.
+
+```text
+[REFERENCE]
+cronus skill catalog list [--role <role-id>] [--trust <level>]
+cronus skill catalog install <catalog-id>
+cronus skill catalog update <installed-id>
+```
+
+Remote catalog configuration (stored in workspace config, not tracked files):
+
+```text
+[REFERENCE]
+CatalogConfig {
+  url: String,           // catalog index endpoint
+  signingKey?: String,   // public key to verify catalog index signature
+  autoUpdate: bool       // default: false — catalog checks are always user-triggered
+}
+```
+
+`autoUpdate: false` is the default; operators who want automatic catalog refreshes must opt in explicitly. Updates never auto-activate new skill versions — they go through the same `discovered → permitted → active` lifecycle.
+
+### 4.8 Command surface
 
 Conforms to the CLI grammar standard (see `l2-cli.md` §4.4).
 
