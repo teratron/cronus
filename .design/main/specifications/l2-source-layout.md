@@ -1,6 +1,6 @@
 # Source Layout (Monorepo)
 
-**Version:** 1.0.0
+**Version:** 1.1.0
 **Status:** Stable
 **Layer:** implementation
 **Implements:** l1-architecture.md
@@ -26,7 +26,7 @@ The architecture separates a reusable core from thin frontends; the source tree 
 
 - Dependency direction is inward: frontends/apps depend on the core; the core depends on nothing in this product (INV-1/INV-2).
 - Rust members live in a Cargo workspace; JS members in a pnpm workspace; the polyglot runner (moon/Nx) sequences both.
-- The workflow runtime is an **external** Rust crate (its own repository), consumed as a dependency — not vendored into the tree (per the adopted decision).
+- The workflow runtime is an **in-tree** Rust crate (`crates/workflow`), a self-contained workspace member; it may be extracted to a standalone crate later if another consumer needs it (per the adopted decision).
 
 ## 3. Invariant Compliance (Layer 2 only)
 
@@ -45,6 +45,7 @@ The architecture separates a reusable core from thin frontends; the source tree 
 cronus/
 ├── crates/                 # Rust workspace (Cargo)
 │   ├── core/               # engine library: orchestration, memory, scheduler, routers, quality, board, office projection
+│   ├── workflow/           # workflow-language runtime (lexer/parser/validator/executor/transpiler); core depends on it
 │   ├── cli/                # `cronus` binary (depends on core)
 │   └── tui/                # `cronus-tui` binary (depends on core)
 ├── apps/
@@ -55,7 +56,7 @@ cronus/
 └── (build config: Cargo workspace, pnpm-workspace, moon/Nx)
 ```
 
-External dependency (not in-tree): the **workflow-runtime crate** (its own repository), referenced by `crates/core` in its `Cargo.toml`.
+The **workflow-runtime crate** (`crates/workflow`) is an in-tree workspace member that `crates/core` depends on; it is self-contained so it can be lifted out to its own repository later if reused elsewhere.
 
 ### 4.2 Dependency direction
 
@@ -65,7 +66,7 @@ graph TD
     DESKTOP --> CORE[crates/core]
     CLI[crates/cli] --> CORE
     TUI[crates/tui] --> CORE
-    CORE --> WFL[(external workflow-runtime crate)]
+    CORE --> WFL[crates/workflow runtime]
     CORE --> DEPS[(sqlite-vec, llama.cpp FFI, ...)]
 ```
 
@@ -82,8 +83,8 @@ The initial placeholder `src/{app,cli,core,dashboard,kanban,office,tui}` mixed R
 ## 5. Drawbacks & Alternatives
 
 - **Root-level crates/apps/packages vs everything under src/:** root-level is the polyglot-monorepo norm and keeps Rust/JS workspaces clean; chosen over a single `src/`.
-- **External workflow-runtime crate:** adds a cross-repo dependency to manage, but preserves the runtime's reuse beyond Cronus (its design goal).
-- **Alternative — vendor the runtime in `crates/`:** available as a fallback if cross-repo coordination becomes painful.
+- **In-tree workflow-runtime crate:** vendored as `crates/workflow` since no other consumer needs it yet; the self-contained crate boundary keeps later extraction cheap.
+- **Alternative — standalone repository now:** deferred; revisit if the runtime gains consumers outside Cronus.
 
 ## Canonical References
 

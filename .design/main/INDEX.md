@@ -51,8 +51,8 @@ Local registry of specifications for this workspace.
 | [l2-github-issue.md](specifications/l2-github-issue.md) | Consent + scrub + dedup pipeline, GitHub issue filing, report commands | Stable | 2 | 1.0.0 |
 | [l2-backup.md](specifications/l2-backup.md) | State-tier backup minus secrets/cache, restore-by-copy, backup commands | Stable | 2 | 1.0.0 |
 | [l2-dashboard.md](specifications/l2-dashboard.md) | Statistics metrics + sources, per-office + home aggregate, dashboard command | Stable | 2 | 1.0.0 |
-| [l2-workflow-runtime.md](specifications/l2-workflow-runtime.md) | Independent Rust runtime crate (lexer/parser/validator/executor/transpiler), in-process, subsystem-bound steps | Stable | 2 | 1.1.0 |
-| [l2-source-layout.md](specifications/l2-source-layout.md) | Dev monorepo layout: crates/apps/packages, dependency direction, external workflow-runtime crate | Stable | 2 | 1.0.0 |
+| [l2-workflow-runtime.md](specifications/l2-workflow-runtime.md) | In-tree Rust runtime crate (lexer/parser/validator/executor/transpiler), in-process, subsystem-bound; port architecture | Stable | 2 | 1.2.0 |
+| [l2-source-layout.md](specifications/l2-source-layout.md) | Dev monorepo layout: crates/apps/packages, dependency direction, in-tree workflow-runtime crate | Stable | 2 | 1.1.0 |
 
 ## Meta Information
 
