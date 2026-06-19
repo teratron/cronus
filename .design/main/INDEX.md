@@ -30,6 +30,7 @@ Local registry of specifications for this workspace.
 | [l1-telemetry.md](specifications/l1-telemetry.md) | Opt-in, program-data-only, privacy-first improvement telemetry (tech-agnostic) | Stable | 1 | 1.0.0 |
 | [l1-dashboard.md](specifications/l1-dashboard.md) | Live read-only statistics projection: per-office + building aggregate (tech-agnostic) | Stable | 1 | 1.0.0 |
 | [l1-workflow-language.md](specifications/l1-workflow-language.md) | Agent workflow DSL: dual-mode, schema contract, constraints, subsystem-bound steps (tech-agnostic) | Stable | 1 | 1.0.0 |
+| [l1-extensions.md](specifications/l1-extensions.md) | Unified extensions: skills/MCP/plugins, default-deny+sandboxed lifecycle, skill generation (tech-agnostic) | Stable | 1 | 1.0.0 |
 | [l2-technology-stack.md](specifications/l2-technology-stack.md) | Validated cross-platform technology stack | Stable | 2 | 1.0.0 |
 | [l2-core-library.md](specifications/l2-core-library.md) | Layer 1: embeddable core library (foundation) | Stable | 2 | 1.0.0 |
 | [l2-cli.md](specifications/l2-cli.md) | Layer 2: command-line frontend | Stable | 2 | 1.0.0 |
@@ -52,6 +53,7 @@ Local registry of specifications for this workspace.
 | [l2-backup.md](specifications/l2-backup.md) | State-tier backup minus secrets/cache, restore-by-copy, backup commands | Stable | 2 | 1.0.0 |
 | [l2-dashboard.md](specifications/l2-dashboard.md) | Statistics metrics + sources, per-office + home aggregate, dashboard command | Stable | 2 | 1.0.0 |
 | [l2-workflow-runtime.md](specifications/l2-workflow-runtime.md) | In-tree Rust runtime crate (lexer/parser/validator/executor/transpiler), in-process, subsystem-bound; port architecture | Stable | 2 | 1.2.0 |
+| [l2-extension-registry.md](specifications/l2-extension-registry.md) | Extension manifest, preset/custom locations, MCP client + sandbox, skill generation, ext commands | Stable | 2 | 1.0.0 |
 | [l2-source-layout.md](specifications/l2-source-layout.md) | Dev monorepo layout: crates/apps/packages, dependency direction, in-tree workflow-runtime crate | Stable | 2 | 1.1.0 |
 
 ## Meta Information

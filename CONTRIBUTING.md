@@ -96,7 +96,7 @@ One command surface is exposed across the CLI and the TUI (and a matching librar
 
 ### Core
 
-| CLI | TUI/UI | Description |
+| CLI | TUI/GUI | Description |
 | --- | --- | --- |
 | `cronus help` | `/help` | Show usage and discover commands |
 | `cronus init` | `/init` | Initialize Cronus (first run) or a project in the current location |
@@ -123,7 +123,7 @@ One command surface is exposed across the CLI and the TUI (and a matching librar
 
 ### Workspace
 
-| CLI | TUI/UI | Description |
+| CLI | TUI/GUI | Description |
 | --- | --- | --- |
 | `cronus workspace list` | `/workspace list` | List workspaces |
 | `cronus workspace create <name> [-d <desc>] [-p <path>]` | `/workspace create …` | Create a project office |
@@ -136,7 +136,7 @@ One command surface is exposed across the CLI and the TUI (and a matching librar
 
 ### Board
 
-| CLI | TUI/UI | Description |
+| CLI | TUI/GUI | Description |
 | --- | --- | --- |
 | `cronus board show` | `/board show` | Show the office board |
 | `cronus board list [--state <s>]` | `/board list …` | List cards, optionally by state |
@@ -147,7 +147,7 @@ One command surface is exposed across the CLI and the TUI (and a matching librar
 
 ### Office
 
-| CLI | TUI/UI | Description |
+| CLI | TUI/GUI | Description |
 | --- | --- | --- |
 | `cronus office show` | `/office show` | Show the office (interaction graph / spatial floor) |
 | `cronus office building` | `/office building` | Building overview of all offices (home workspace only) |
@@ -155,7 +155,7 @@ One command surface is exposed across the CLI and the TUI (and a matching librar
 
 ### Role
 
-| CLI | TUI/UI | Description |
+| CLI | TUI/GUI | Description |
 | --- | --- | --- |
 | `cronus role list [--catalog\|--hired]` | `/role list …` | List preset catalog and/or hired roles |
 | `cronus role hire <preset> [--as <name>]` | `/role hire <preset> …` | Hire a preset role into the office |
@@ -165,7 +165,7 @@ One command surface is exposed across the CLI and the TUI (and a matching librar
 
 ### Schedule
 
-| CLI | TUI/UI | Description |
+| CLI | TUI/GUI | Description |
 | --- | --- | --- |
 | `cronus schedule create <name> --action <a> --when <preset> [--time HH:MM] [--days mon,tue] [--every 15m]` | `/schedule create …` | Create a recurring schedule (friendly) |
 | `cronus schedule create <name> --action <a> --once --at <datetime>` | `/schedule create … --once` | Create a one-shot schedule (auto-deletes after firing) |
@@ -182,7 +182,7 @@ One command surface is exposed across the CLI and the TUI (and a matching librar
 
 ### Workflow
 
-| CLI | TUI/UI | Description |
+| CLI | TUI/GUI | Description |
 | --- | --- | --- |
 | `cronus workflow new <name>` | `/workflow new <name>` | Scaffold a new workflow |
 | `cronus workflow validate <file>` | `/workflow validate <file>` | Validate a workflow (structure + lint) |
@@ -190,9 +190,22 @@ One command surface is exposed across the CLI and the TUI (and a matching librar
 | `cronus workflow transpile <file> --to <compact\|human>` | `/workflow transpile …` | Convert between compact and human renderings |
 | `cronus workflow test [<file>]` | `/workflow test …` | Run a workflow's inline tests |
 
+### Extensions
+
+| CLI | TUI/GUI | Description |
+| --- | --- | --- |
+| `cronus ext list [--kind skill\|mcp\|plugin]` | `/ext list …` | List extensions |
+| `cronus ext add <source>` | `/ext add <source>` | Add an extension (prompts for a permission grant) |
+| `cronus ext enable\|disable <id>` | `/ext enable\|disable <id>` | Activate / deactivate an extension |
+| `cronus ext remove <id>` | `/ext remove <id>` | Remove an extension |
+| `cronus mcp add <name> (--stdio "<cmd>" \| --url <url>)` | `/mcp add …` | Connect an MCP server |
+| `cronus skill generate` | `/skill generate` | Distill recurring patterns into candidate skills |
+
+> Extensions are default-deny and sandboxed: nothing runs until permitted, with scoped fs/network/secret grants and the egress gate.
+
 ### Model & Routing
 
-| CLI | TUI/UI | Description |
+| CLI | TUI/GUI | Description |
 | --- | --- | --- |
 | `cronus model list` | `/model list` | List available AI models |
 | `cronus route policy` | `/route policy` | Show the model-routing policy |

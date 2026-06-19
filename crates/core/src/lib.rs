@@ -3,7 +3,12 @@
 //! All domain logic lives here; frontends (CLI, TUI, app) are thin and call the
 //! capability contract below. The core has no presentation dependencies.
 
+pub mod egress;
 pub mod paths;
+pub mod redact;
+pub mod secrets;
+pub mod state;
+pub mod store;
 
 /// The public capability contract that frontends invoke.
 ///
