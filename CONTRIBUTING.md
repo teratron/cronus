@@ -208,7 +208,7 @@ The repository is a polyglot monorepo: a Rust workspace for the engine and binar
 cronus/
 ├── crates/                 # Rust workspace
 │   ├── core/               # engine library (orchestration, memory, scheduler, routers, quality, board, office)
-│   ├── workflow/           # workflow-language runtime (lexer/parser/validator/executor/transpiler); core depends on it
+│   ├── nodus/              # workflow-language runtime (lexer/parser/validator/executor/transpiler); core depends on it
 │   ├── cli/                # `cronus` binary
 │   └── tui/                # `cronus-tui` binary
 ├── apps/
@@ -217,7 +217,7 @@ cronus/
     └── ui/                 # React 19 + Vite frontend (office view, board, dashboard, editor)
 ```
 
-The workflow runtime is an in-tree, self-contained Rust crate (`crates/workflow`) consumed by `crates/core` (extractable to its own repository later). Cargo owns Rust builds/caching; pnpm + the polyglot runner sequence the JS and Tauri builds.
+The workflow runtime is an in-tree, self-contained Rust crate (`crates/nodus`) consumed by `crates/core` (extractable to its own repository later). Cargo owns Rust builds/caching; pnpm + the polyglot runner sequence the JS and Tauri builds.
 
 ## Visualization Stubs
 
