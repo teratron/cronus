@@ -180,6 +180,16 @@ One command surface is exposed across the CLI and the TUI (and a matching librar
 
 > Schedule fire actions: `heartbeat` (wake the office, no card), `routine` (recurring work), `reminder` (notification).
 
+### Workflow
+
+| CLI | TUI/UI | Description |
+| --- | --- | --- |
+| `cronus workflow new <name>` | `/workflow new <name>` | Scaffold a new workflow |
+| `cronus workflow validate <file>` | `/workflow validate <file>` | Validate a workflow (structure + lint) |
+| `cronus workflow run <file>` | `/workflow run <file>` | Run a workflow |
+| `cronus workflow transpile <file> --to <compact\|human>` | `/workflow transpile …` | Convert between compact and human renderings |
+| `cronus workflow test [<file>]` | `/workflow test …` | Run a workflow's inline tests |
+
 ### Model & Routing
 
 | CLI | TUI/UI | Description |
