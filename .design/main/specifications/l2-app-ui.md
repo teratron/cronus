@@ -1,6 +1,6 @@
 # Application UI/UX Frontend (Desktop / Web / Mobile)
 
-**Version:** 1.0.0
+**Version:** 1.1.0
 **Status:** Stable
 **Layer:** implementation
 **Implements:** l1-architecture.md
@@ -76,6 +76,24 @@ graph TD
 ### 4.4 Store-compliance notes
 
 To mitigate App Store Guideline 4.2 ("repackaged website") risk for a WebView app, the mobile build provides genuine native integrations (push, native share, file pickers, app-like navigation, offline UI). See [l2-technology-stack.md](l2-technology-stack.md) §5.
+
+### 4.5 Theming
+
+The app ships three themes: **system** (default — follows the OS appearance), **light**, and **dark**, built on Tailwind v4 design tokens. The choice persists in `app.json` (`theme`) and applies across all surfaces. Switching is instant and never alters behavior (cosmetic only).
+
+| Theme | Behavior |
+| --- | --- |
+| system | follow OS light/dark preference (default) |
+| light | force light |
+| dark | force dark |
+
+<!-- TBD: whether to support user-defined custom themes beyond system/light/dark -->
+
+### 4.6 Localization (i18n)
+
+The UI is localized via language packs from the program tier (`languages/`); the active locale persists in `app.json` (`locale`). Initial languages: **English (`en`, default)** and **Russian (`ru`)**; the catalog is extensible. UI strings are externalized (no hardcoded user-facing text); missing translations fall back to English.
+
+<!-- TBD: RTL support timing; pluralization/format library choice -->
 
 ## 5. Drawbacks & Alternatives
 

@@ -112,6 +112,9 @@ One command surface is exposed across the CLI and the TUI (and a matching librar
 | `cronus backup [--to <path>]` | `/backup …` | Back up the state tier (excludes secrets and cache) |
 | `cronus restore <backup>` | `/restore <backup>` | Restore the state tier from a backup |
 | `cronus report` | `/report` | Report the last error to the tracker (with consent) |
+| `cronus dashboard [building]` | `/dashboard [building]` | Show the statistics dashboard (office; `building` for the home aggregate) |
+| `cronus theme <system\|light\|dark>` | `/theme <…>` | Set the UI theme |
+| `cronus lang <code>` | `/lang <code>` | Set the UI language (e.g. `en`, `ru`) |
 | `cronus memory` | `/memory` | Query and manage memory |
 | `cronus goal <text>` | `/goal <text>` | Start an autonomous goal loop (runs until a judge confirms the goal or a budget limit is hit) |
 | `cronus goal stop` | `/goal stop` | Stop the current autonomous goal run |

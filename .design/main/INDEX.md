@@ -28,11 +28,12 @@ Local registry of specifications for this workspace.
 | [l1-security.md](specifications/l1-security.md) | Client security: secret isolation, safe defaults, no exfiltration, sandboxing (tech-agnostic) | Stable | 1 | 1.0.0 |
 | [l1-error-reporting.md](specifications/l1-error-reporting.md) | Consent-gated, scrubbed, de-duplicated error reporting (tech-agnostic) | Stable | 1 | 1.0.0 |
 | [l1-telemetry.md](specifications/l1-telemetry.md) | Opt-in, program-data-only, privacy-first improvement telemetry (tech-agnostic) | Stable | 1 | 1.0.0 |
+| [l1-dashboard.md](specifications/l1-dashboard.md) | Live read-only statistics projection: per-office + building aggregate (tech-agnostic) | Stable | 1 | 1.0.0 |
 | [l2-technology-stack.md](specifications/l2-technology-stack.md) | Validated cross-platform technology stack | Stable | 2 | 1.0.0 |
 | [l2-core-library.md](specifications/l2-core-library.md) | Layer 1: embeddable core library (foundation) | Stable | 2 | 1.0.0 |
 | [l2-cli.md](specifications/l2-cli.md) | Layer 2: command-line frontend | Stable | 2 | 1.0.0 |
 | [l2-tui.md](specifications/l2-tui.md) | Layer 3: terminal UI frontend | Stable | 2 | 1.0.0 |
-| [l2-app-ui.md](specifications/l2-app-ui.md) | Layer 4: desktop/web/mobile application UI/UX | Stable | 2 | 1.0.0 |
+| [l2-app-ui.md](specifications/l2-app-ui.md) | Layer 4: desktop/web/mobile application UI/UX (incl. theming + localization) | Stable | 2 | 1.1.0 |
 | [l2-filesystem-layout.md](specifications/l2-filesystem-layout.md) | OS-native filesystem layout: tiers, trees, DB placement, memory paths | Stable | 2 | 1.0.0 |
 | [l2-memory-store.md](specifications/l2-memory-store.md) | Memory store: SQLite + sqlite-vec + FTS5 + tags, archivist curator, graph deferred | Stable | 2 | 1.0.0 |
 | [l2-workspace-management.md](specifications/l2-workspace-management.md) | Desktop tab UX, creation form, kebab naming, template→state, manager bootstrap | Stable | 2 | 1.0.0 |
@@ -48,6 +49,7 @@ Local registry of specifications for this workspace.
 | [l2-security.md](specifications/l2-security.md) | Secret storage, gitignore defaults, egress gate, execution sandbox, audit log | Stable | 2 | 1.0.0 |
 | [l2-github-issue.md](specifications/l2-github-issue.md) | Consent + scrub + dedup pipeline, GitHub issue filing, report commands | Stable | 2 | 1.0.0 |
 | [l2-backup.md](specifications/l2-backup.md) | State-tier backup minus secrets/cache, restore-by-copy, backup commands | Stable | 2 | 1.0.0 |
+| [l2-dashboard.md](specifications/l2-dashboard.md) | Statistics metrics + sources, per-office + home aggregate, dashboard command | Stable | 2 | 1.0.0 |
 
 ## Meta Information
 
