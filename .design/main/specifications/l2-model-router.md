@@ -15,6 +15,7 @@ The concrete model router: how Cronus chooses which model answers a prompt — l
 - [l2-technology-stack.md](l2-technology-stack.md) - Local execution (llama.cpp via FFI) and cloud providers.
 - [l1-architecture.md](l1-architecture.md) - Hub-and-spoke (local on capable host) and security (INV-7).
 - [l2-cli.md](l2-cli.md) - Command grammar standard for routing commands.
+- [l2-model-error-recovery.md](l2-model-error-recovery.md) - Error taxonomy and credential pool (multi-key rotation) that interacts with the fallback cascade.
 
 ## 1. Motivation
 

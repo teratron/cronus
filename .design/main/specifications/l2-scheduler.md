@@ -15,6 +15,7 @@ The concrete scheduler: a friendly recurrence model (alarm-clock style presets) 
 - [l2-filesystem-layout.md](l2-filesystem-layout.md) - The `schedules/` location within a workspace.
 - [l2-kanban-board.md](l2-kanban-board.md) - Where `routine` fires may place cards.
 - [l2-cli.md](l2-cli.md) - Command grammar standard the schedule commands follow.
+- [l2-security.md](l2-security.md) - Prompt injection scanning and sandbox constraints applied at fire time.
 
 ## 1. Motivation
 
@@ -96,11 +97,32 @@ Schedule operations across all three surfaces, conforming to the CLI grammar sta
 | delete | `cronus schedule delete <id>` | `/schedule delete <id>` | `schedule.delete(id) -> void` |
 | run now | `cronus schedule run <id>` | `/schedule run <id>` | `schedule.runNow(id) -> void` |
 
+### 4.6 Security constraints for fired jobs
+
+Scheduled jobs run in a non-interactive, auto-approved context — there is no human in the loop to catch a bad action. Three constraints are enforced unconditionally at fire time:
+
+**Anti-recursion guard**
+A cron-spawned agent always has the `cronjob` toolset disabled. This prevents a fired job from scheduling additional cron jobs — an attack surface for exponential schedule growth via prompt injection in a workflow or skill.
+
+**Fire-time prompt injection scanning**
+The fully-assembled prompt is scanned for injection patterns at fire time, not just at create time. A job may load skill content that was not present when the job was created; that content could carry an injection payload. If scanning detects a violation, the job raises `CronPromptInjectionBlocked` and the delivery platform receives a "job blocked" notification instead of executing.
+
+**Per-job toolset scoping**
+Toolsets available to a fired job follow this precedence:
+1. Per-job `enabled_toolsets` (set at create/update time) — job-scoped override.
+2. Platform-level toolset config for the `cron` platform — mirrors gateway behavior.
+3. Full default toolset — fallback only.
+
+User-level `disabled_toolsets` from the global agent config is layered on top of all of the above; a per-job override cannot widen past what the global config denies.
+
+The `messaging` and `clarify` toolsets are always disabled in cron context: `messaging` requires a live gateway session; `clarify` blocks waiting for user input — both are incompatible with unattended execution.
+
 ## 5. Drawbacks & Alternatives
 
 - **Two recurrence representations (friendly + cron):** a small translation/validation cost; justified by serving both audiences (SCH-2).
 - **File-per-schedule:** simple and inspectable; if schedules grow large, an index or SQLite-backed store can be introduced later (consistent with STO-8).
 - **Coalescing deferred:** accepted risk of duplicate routine cards until tuned in real use (§4.4).
+- **Always-disabled toolsets (cronjob/messaging/clarify):** not configurable by design — the non-interactive execution context makes these toolsets structurally unsafe in cron.
 
 ## Canonical References
 

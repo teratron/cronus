@@ -1,6 +1,6 @@
 # Implementation Plan
 
-**Version:** 1.2.0
+**Version:** 1.3.0
 **Generated:** 2026-06-19
 **Based on:** .design/main/INDEX.md v1.0.0
 **Status:** Active
@@ -70,6 +70,8 @@ Execution mode: **Parallel** (C3); tracks grouped by file independence. Critical
 
 - [ ] **Memory Store** ([l2-memory-store.md](specifications/l2-memory-store.md)) [L2]
 - [ ] **Model Router** ([l2-model-router.md](specifications/l2-model-router.md)) [L2]
+- [ ] **Model Error Recovery** ([l2-model-error-recovery.md](specifications/l2-model-error-recovery.md)) [L2] — error taxonomy, classification pipeline, credential pool (depends on model-router)
+- [ ] **Agent Session Loop** ([l2-agent-session.md](specifications/l2-agent-session.md)) [L2] — TurnContext, IterationBudget, ContextEngine interface (depends on model-router + context-router)
 - [ ] **Context Router** ([l2-context-router.md](specifications/l2-context-router.md)) [L2]
 - [ ] **Workspace Management** ([l2-workspace-management.md](specifications/l2-workspace-management.md)) [L2]
 
@@ -82,6 +84,7 @@ Execution mode: **Parallel** (C3); tracks grouped by file independence. Critical
 - [ ] **Scheduler** ([l2-scheduler.md](specifications/l2-scheduler.md)) [L2]
 - [ ] **Quality Pipeline** ([l2-quality-pipeline.md](specifications/l2-quality-pipeline.md)) [L2]
 - [ ] **Extension Registry** ([l2-extension-registry.md](specifications/l2-extension-registry.md)) [L2] — skills / MCP / plugins, sandboxed; skill generation (depends on roles + security + workflow runtime)
+- [ ] **Learning Loop** ([l2-learning-loop.md](specifications/l2-learning-loop.md)) [L2] — post-turn background review fork, skill package format, curator (depends on extension-registry + memory-store + agent-session)
 
 ## Phase 6 — Orchestration & Autonomy
 
