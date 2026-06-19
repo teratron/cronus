@@ -84,7 +84,55 @@ Skills also attach to roles (`<state>/employees/<role>/skills/`) and offices (`<
 
 The curator/archivist role detects recurring successful patterns and distills a candidate `SKILL` into `<state>/extensions/skills/`, marked `source: generated`, status `discovered` (inactive) pending review. <!-- TBD: distillation trigger threshold + whether generated skills auto-activate after N successful reuses -->
 
-### 4.5 Command surface
+### 4.5 Plugin manifest extended schema
+
+Plugins that expose UI-configurable tools use an extended manifest format. The `meta.tools[*].config_fields` array declares the fields the desktop UI renders as a configuration form; values the user fills in are stored via the secret store (for `"password"` type) or the workspace config (for `"text"` and `"number"`).
+
+```text
+[REFERENCE]
+plugin.json {
+  id, name, version,
+  type: "tool" | "bundle",
+  description: String,
+  description_i18n?: { "en-US": String, "zh-CN": String, ... },
+  author: String,
+  entry: { backend: "<filename>" },
+  dependencies?: ["pkg>=version"],
+  min_version?: String,           // minimum Cronus version required
+  meta?: {
+    tools: [
+      {
+        name: String,             // tool function name
+        description: String,
+        icon?: String,            // emoji or icon identifier
+        requires_config?: bool,   // true → block use until config_fields are filled
+        config_fields?: [
+          {
+            name: String,         // identifier used in the plugin code
+            label: String,        // displayed in the UI form
+            type: "text" | "password" | "number",
+            required: bool,
+            placeholder?: String,
+            help?: String,
+            min?: number,         // for type: "number"
+            max?: number
+          }
+        ]
+      }
+    ],
+    api_key_url?: String,         // where to obtain credentials
+    api_key_hint?: String
+  }
+}
+```
+
+**Storage:** `password` fields are stored in the OS keychain (same mechanism as `l2-security.md §4.1`); `text` and `number` fields are stored in `<ws>/extensions/plugins/<id>/config.json`. Neither type is written to tracked files.
+
+**Localization:** `description_i18n` provides locale-keyed descriptions; the UI falls back to `description` when the current locale is absent.
+
+**Compatibility:** `min_version` is checked at install time; incompatible plugins are blocked from activation with a clear version error.
+
+### 4.6 Command surface
 
 Conforms to the CLI grammar standard (see `l2-cli.md` §4.4).
 
@@ -113,4 +161,5 @@ Conforms to the CLI grammar standard (see `l2-cli.md` §4.4).
 | --- | --- | --- |
 | `[MODEL]` | `.design/main/specifications/l1-extensions.md` | Invariants this registry satisfies |
 | `[SECURITY]` | `.design/main/specifications/l2-security.md` | Sandbox + egress enforcement |
+| `[TOOLSEC]` | `.design/main/specifications/l2-tool-security.md` | Skill scanner runs at activation gate |
 | `[CLI]` | `.design/main/specifications/l2-cli.md` | Command grammar standard |

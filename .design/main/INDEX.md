@@ -49,17 +49,21 @@ Local registry of specifications for this workspace.
 | [l2-model-error-recovery.md](specifications/l2-model-error-recovery.md) | Error taxonomy (FailoverKind), priority classification pipeline, retry/compress/rotate/fallback loop, credential pool | Stable | 2 | 1.0.0 |
 | [l2-agent-session.md](specifications/l2-agent-session.md) | Turn skeleton: TurnContext, IterationBudget, pluggable ContextEngine interface, prologue steps | Stable | 2 | 1.0.0 |
 | [l2-context-router.md](specifications/l2-context-router.md) | Memory/rules/session routing, most-specific-first, session continue/retire | Stable | 2 | 1.0.0 |
-| [l2-doctor.md](specifications/l2-doctor.md) | Health check suite, safe-repair vs escalate, crash recovery, doctor command | Stable | 2 | 1.0.0 |
+| [l2-doctor.md](specifications/l2-doctor.md) | Health check suite, safe-repair vs escalate, crash recovery, extensible check registry, doctor command | Stable | 2 | 1.0.1 |
 | [l2-security.md](specifications/l2-security.md) | Secret storage, gitignore defaults, egress gate, execution sandbox, audit log | Stable | 2 | 1.0.0 |
 | [l2-github-issue.md](specifications/l2-github-issue.md) | Consent + scrub + dedup pipeline, GitHub issue filing, report commands | Stable | 2 | 1.0.0 |
 | [l2-backup.md](specifications/l2-backup.md) | State-tier backup minus secrets/cache, restore-by-copy, backup commands | Stable | 2 | 1.0.0 |
 | [l2-dashboard.md](specifications/l2-dashboard.md) | Statistics metrics + sources, per-office + home aggregate, dashboard command | Stable | 2 | 1.0.0 |
 | [l2-workflow-runtime.md](specifications/l2-workflow-runtime.md) | In-tree Rust runtime crate (lexer/parser/validator/executor/transpiler), in-process, subsystem-bound; port architecture | Stable | 2 | 1.2.0 |
-| [l2-extension-registry.md](specifications/l2-extension-registry.md) | Extension manifest, preset/custom locations, MCP client + sandbox, skill generation, ext commands | Stable | 2 | 1.0.0 |
+| [l2-extension-registry.md](specifications/l2-extension-registry.md) | Extension manifest, preset/custom locations, MCP client + sandbox, skill generation, plugin config schema, ext commands | Stable | 2 | 1.0.1 |
 | [l2-learning-loop.md](specifications/l2-learning-loop.md) | Post-turn background review fork, skill package format, idle-triggered curator with lifecycle transitions | Stable | 2 | 1.0.0 |
 | [l2-source-layout.md](specifications/l2-source-layout.md) | Dev monorepo layout: crates/apps/packages, dependency direction, in-tree workflow-runtime crate | Stable | 2 | 1.1.0 |
+| [l2-agent-constitution.md](specifications/l2-agent-constitution.md) | Per-workspace identity file system: SOUL, PROFILE, MEMORY, HEARTBEAT, BOOTSTRAP files and bootstrap ritual | Stable | 2 | 1.0.0 |
+| [l2-tool-security.md](specifications/l2-tool-security.md) | Two-layer tool defense: static skill scanner (8 categories) + runtime tool guard (10 threat categories, approval escalation) | Stable | 2 | 1.0.0 |
+| [l2-mission-mode.md](specifications/l2-mission-mode.md) | Two-phase autonomous goal execution: PRD generation → user checkpoint → story-verified execution loop | Stable | 2 | 1.0.0 |
 
 ## Meta Information
 
 - **Maintainer**: Core Team
 - **Last Updated**: 2026-06-19
+- **Spec Count**: 49 (19 L1 + 30 L2)

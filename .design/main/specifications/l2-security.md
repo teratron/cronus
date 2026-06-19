@@ -15,6 +15,7 @@ The concrete security mechanisms: where secrets are stored and how they are excl
 - [l2-filesystem-layout.md](l2-filesystem-layout.md) - `.env` location; state-tier boundary.
 - [l2-technology-stack.md](l2-technology-stack.md) - Sandbox backends per OS.
 - [l2-backup.md](l2-backup.md) - Backups exclude secrets.
+- [l2-tool-security.md](l2-tool-security.md) - Two-layer runtime defense (skill scanner + tool guard) that enforces SEC-3/SEC-6 at the tool-call level.
 
 ## 1. Motivation
 

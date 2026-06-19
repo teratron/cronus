@@ -49,7 +49,44 @@ The model needs concrete checks and a clear safe/risky split so the office self-
 | disk/resource pressure | clear cache | low disk needing user action |
 | crash recovery | resume from durable state | divergent partial writes |
 
-### 4.2 Command surface
+### 4.2 Extensibility
+
+Third-party packages (channel connectors, plugins, workspace extensions) can contribute their own health checks without modifying the core. Two registration paths are supported:
+
+**Programmatic registration** (within the same process):
+
+```text
+[REFERENCE]
+register_doctor_contribution(id: String, fn: DoctorCheckFn) -> void
+// id should be namespaced, e.g. "myplugin.cron"
+// fn: (ctx: DoctorRunContext) -> String[]
+// Returns informational lines (empty list = nothing to report)
+```
+
+**Package entry-point** (third-party packages):
+
+```text
+[REFERENCE]
+// In package metadata (equivalent of pyproject.toml or Cargo's inventory pattern):
+[project.entry-points."cronus.doctor"]
+my_plugin = "my_crate::doctor:doctor_notes"
+```
+
+`DoctorRunContext` is passed to each extension callable:
+
+```text
+[REFERENCE]
+DoctorRunContext {
+  cfg: Config,           // current workspace configuration
+  cli_base_url: String,  // base URL for local service health checks
+  timeout: f32,          // per-check timeout in seconds
+  deep: bool             // true when --deep flag was passed
+}
+```
+
+Extension execution order: manual registrations first (alphabetical by id), then entry-point discoveries (alphabetical by name). Each extension runs in isolation — a panicking or erroring extension logs a warning and is skipped; it does not abort the rest of the check suite.
+
+### 4.3 Command surface
 
 | Action | CLI | TUI | Library (no code) |
 | --- | --- | --- | --- |

@@ -1,13 +1,13 @@
 # Implementation Plan
 
-**Version:** 1.3.0
+**Version:** 1.4.0
 **Generated:** 2026-06-19
 **Based on:** .design/main/INDEX.md v1.0.0
 **Status:** Active
 
 ## Overview
 
-Implementation plan for Cronus from 43 Stable specifications (19 L1 concepts + 24 L2 implementations). Phases follow a **growth order**: the agent grows like a sprout from a seed.
+Implementation plan for Cronus from 49 Stable specifications (19 L1 concepts + 30 L2 implementations). Phases follow a **growth order**: the agent grows like a sprout from a seed.
 
 - **Seed = the library** (`crates/core` + `crates/nodus` runtime) — Phases 1–2.
 - **Stem = the CLI** — Phase 3, the first usable surface, emerging straight from the seed.
@@ -74,6 +74,7 @@ Execution mode: **Parallel** (C3); tracks grouped by file independence. Critical
 - [ ] **Agent Session Loop** ([l2-agent-session.md](specifications/l2-agent-session.md)) [L2] — TurnContext, IterationBudget, ContextEngine interface (depends on model-router + context-router)
 - [ ] **Context Router** ([l2-context-router.md](specifications/l2-context-router.md)) [L2]
 - [ ] **Workspace Management** ([l2-workspace-management.md](specifications/l2-workspace-management.md)) [L2]
+- [ ] **Agent Constitution** ([l2-agent-constitution.md](specifications/l2-agent-constitution.md)) [L2] — per-workspace identity files (SOUL/PROFILE/MEMORY/HEARTBEAT/BOOTSTRAP), bootstrap ritual (depends on workspace-management + memory-store)
 
 ## Phase 5 — Office Work Engine
 
@@ -85,12 +86,14 @@ Execution mode: **Parallel** (C3); tracks grouped by file independence. Critical
 - [ ] **Quality Pipeline** ([l2-quality-pipeline.md](specifications/l2-quality-pipeline.md)) [L2]
 - [ ] **Extension Registry** ([l2-extension-registry.md](specifications/l2-extension-registry.md)) [L2] — skills / MCP / plugins, sandboxed; skill generation (depends on roles + security + workflow runtime)
 - [ ] **Learning Loop** ([l2-learning-loop.md](specifications/l2-learning-loop.md)) [L2] — post-turn background review fork, skill package format, curator (depends on extension-registry + memory-store + agent-session)
+- [ ] **Tool Security** ([l2-tool-security.md](specifications/l2-tool-security.md)) [L2] — two-layer defense: static skill scanner (8 categories) + runtime tool guard (10 threat categories, approval escalation, hard-blocked patterns)
 
 ## Phase 6 — Orchestration & Autonomy
 
 *Coordination protocol that ties subsystems into an autonomous office.*
 
 - [ ] **Orchestration** ([l2-orchestration.md](specifications/l2-orchestration.md)) [L2] — delegation, /goal+judge+budget, briefings, adaptive topology
+- [ ] **Mission Mode** ([l2-mission-mode.md](specifications/l2-mission-mode.md)) [L2] — two-phase autonomous goal execution: PRD generation → user checkpoint → story-verified loop with max-iterations circuit-breaker (depends on orchestration + kanban + tool-security)
 
 ## Phase 7 — Leaf: TUI
 
