@@ -43,6 +43,34 @@ build/
 *.min.js
 *.min.css
 
+# Rust / Cargo (crates/*, apps/desktop/src-tauri)
+target/
+**/*.rs.bk
+*.pdb
+# Note: Cargo.lock IS committed (workspace ships binaries — reproducible builds).
+
+# Node / pnpm (packages/*, apps/*)
+node_modules/
+.pnpm-store/
+.npm/
+*.tsbuildinfo
+# Note: pnpm-lock.yaml IS committed (reproducible installs).
+
+# Vite
+.vite/
+*.timestamp-*.mjs
+
+# Tauri (apps/desktop/src-tauri)
+**/src-tauri/gen/schemas/
+# src-tauri/target is covered by `target/` above.
+# Signing keys — never commit.
+*.keystore
+*.jks
+*.p12
+
+# fallow (codebase intelligence) — ignore local cache only; fallow-baselines/ ARE committed.
+.fallow/
+
 # Editor backup files
 *.bak
 *.tmp

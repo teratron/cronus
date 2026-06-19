@@ -1,0 +1,13 @@
+[package]
+name = "cronus-tui"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+repository.workspace = true
+
+[[bin]]
+name = "cronus-tui"
+path = "src/main.rs"
+
+[dependencies]
+cronus-core = { workspace = true }

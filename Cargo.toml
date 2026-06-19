@@ -1,0 +1,13 @@
+[workspace]
+resolver = "2"
+members = ["crates/core", "crates/nodus", "crates/cli", "crates/tui"]
+
+[workspace.package]
+version = "0.1.0"
+edition = "2024"
+license = "MIT"
+repository = "https://github.com/teratron/cronus"
+
+[workspace.dependencies]
+cronus-core = { path = "crates/core" }
+nodus = { path = "crates/nodus" }

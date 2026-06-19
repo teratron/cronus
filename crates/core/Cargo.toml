@@ -1,0 +1,9 @@
+[package]
+name = "cronus-core"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+repository.workspace = true
+
+[dependencies]
+# Foundation is std-only; subsystem dependencies (sqlite-vec, nodus, ...) land in later phases.

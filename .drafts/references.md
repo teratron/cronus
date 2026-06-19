@@ -25,6 +25,7 @@
 - <https://github.com/bmad-code-org/BMAD-METHOD>
 - <https://github.com/Fission-AI/OpenSpec>
 - <https://github.com/gsd-build/get-shit-done>
+- <https://github.com/DietrichGebert/ponytail>
 
 ## Memory
 
@@ -37,4 +38,5 @@
 ## Tools
 
 - <https://github.com/AlexsJones/llmfit>
+- <https://github.com/cjpais/Handy>
 - `pnpm i fallow`

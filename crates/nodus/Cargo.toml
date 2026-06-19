@@ -1,0 +1,9 @@
+[package]
+name = "nodus"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+repository.workspace = true
+
+[dependencies]
+# Self-contained workflow-language runtime; the port lands in Phase 2.
