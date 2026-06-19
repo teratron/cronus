@@ -200,6 +200,24 @@ One command surface is exposed across the CLI and the TUI (and a matching librar
 
 > Default model routing is local-first (prefer an on-device model when capable; fall back to cloud).
 
+## Source Layout (development)
+
+The repository is a polyglot monorepo: a Rust workspace for the engine and binaries, an apps layer for the shell, and a JS/TS package layer for the UI. Dependencies point inward to `core`.
+
+```plaintext
+cronus/
+├── crates/                 # Rust workspace
+│   ├── core/               # engine library (orchestration, memory, scheduler, routers, quality, board, office)
+│   ├── cli/                # `cronus` binary
+│   └── tui/                # `cronus-tui` binary
+├── apps/
+│   └── desktop/            # Tauri v2 shell (desktop + mobile thin client)
+└── packages/
+    └── ui/                 # React 19 + Vite frontend (office view, board, dashboard, editor)
+```
+
+The workflow runtime is an external Rust crate (its own repository) consumed by `crates/core`. Cargo owns Rust builds/caching; pnpm + the polyglot runner sequence the JS and Tauri builds.
+
 ## Visualization Stubs
 
 The repository's `.release/` directory is a temporary visualization sandbox holding empty stubs of both tiers:

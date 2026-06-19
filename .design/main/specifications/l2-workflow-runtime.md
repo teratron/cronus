@@ -1,18 +1,19 @@
 # Workflow Runtime
 
-**Version:** 1.0.0
+**Version:** 1.1.0
 **Status:** Stable
 **Layer:** implementation
 **Implements:** l1-workflow-language.md
 
 ## Overview
 
-The concrete realization of the workflow language: a **Rust runtime embedded in the core** — lexer, parser, validator (lint), executor, and transpiler — that runs everywhere the core runs (desktop and mobile), with no external language runtime. Workflow steps bind to existing Cronus subsystems; execution is schema-driven, validated, and bounded.
+The concrete realization of the workflow language: an **independent Rust runtime crate** — lexer, parser, validator (lint), executor, and transpiler — that the Cronus core depends on and links **in-process**, so it runs everywhere the core runs (desktop and mobile) with no external language process. The runtime is maintained as a standalone library (its own crate/repository) to stay reusable beyond Cronus; the core wires its step handlers to Cronus subsystems. Execution is schema-driven, validated, and bounded.
 
 ## Related Specifications
 
 - [l1-workflow-language.md](l1-workflow-language.md) - The language model this runtime implements.
-- [l2-core-library.md](l2-core-library.md) - The runtime is part of the Rust core.
+- [l2-core-library.md](l2-core-library.md) - The core depends on this runtime crate and binds its steps.
+- [l2-source-layout.md](l2-source-layout.md) - Where this external crate sits relative to the Cronus workspace.
 - [l2-orchestration.md](l2-orchestration.md) - Delegated work / `/goal` loops execute workflows.
 - [l2-model-router.md](l2-model-router.md) - Generation/analysis steps route models here.
 - [l2-cli.md](l2-cli.md) - Command grammar standard for `workflow` commands.
@@ -23,7 +24,7 @@ The language must run on every Cronus target — including the mobile thin clien
 
 ## 2. Constraints & Assumptions
 
-- The runtime is a Rust component of the core; no external language runtime is bundled.
+- The runtime is an independent Rust crate the core depends on; it links in-process (no external language runtime is bundled, no separate process).
 - A formal grammar drives the parser; a schema is loaded before execution.
 - Steps call core subsystems through internal interfaces; the runtime owns no domain logic of its own beyond control flow.
 
@@ -73,7 +74,7 @@ The runtime is the scripting layer; each command handler calls the owning subsys
 
 ### 4.3 Embeddability
 
-Because the runtime is Rust in the core, it executes on desktop and mobile alike. The always-on hub runs workflows for autonomous routines/goals; the mobile thin client can validate/preview and run foreground workflows. No separate language process is required on any target.
+Because the runtime is a Rust crate the core links in-process, it executes on desktop and mobile alike — there is no separate language process on any target. The always-on hub runs workflows for autonomous routines/goals; the mobile thin client can validate/preview and run foreground workflows. Keeping the runtime an independent crate (not buried inside the core) preserves its reuse beyond Cronus while still linking statically into the core build.
 
 ### 4.4 Command surface
 
