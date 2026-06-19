@@ -40,7 +40,7 @@ Local registry of specifications for this workspace.
 | [l2-workspace-management.md](specifications/l2-workspace-management.md) | Desktop tab UX, creation form, kebab naming, template→state, manager bootstrap | Stable | 2 | 1.0.0 |
 | [l2-kanban-board.md](specifications/l2-kanban-board.md) | Board storage, transitions, auto-archival store, board command surface | Stable | 2 | 1.0.0 |
 | [l2-scheduler.md](specifications/l2-scheduler.md) | Friendly recurrence + raw cron, per-workspace storage, firing, schedule command surface | Stable | 2 | 1.0.0 |
-| [l2-quality-pipeline.md](specifications/l2-quality-pipeline.md) | Per-language toolchain map, local/pre-commit/CI gate runner, check command surface | Stable | 2 | 1.0.0 |
+| [l2-quality-pipeline.md](specifications/l2-quality-pipeline.md) | Per-language toolchain map (incl. JS/TS structural analysis), local/pre-commit/CI gate runner, check command surface | Stable | 2 | 1.1.0 |
 | [l2-office-view.md](specifications/l2-office-view.md) | Office projection sources, graph+spatial render, home building overview, office command surface | Stable | 2 | 1.0.0 |
 | [l2-orchestration.md](specifications/l2-orchestration.md) | Delegation via board, messaging, context isolation, judge+budget /goal loop, adaptive topology | Stable | 2 | 1.0.0 |
 | [l2-role-catalog.md](specifications/l2-role-catalog.md) | Preset catalog + hired instances, role definition format, custom roles, hire/fire, role commands | Stable | 2 | 1.0.0 |

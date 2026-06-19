@@ -21,4 +21,5 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Added 17 specifications (main)
 - Updated 2 specifications (main)
 - Updated task plan and task index (main)
+- Updated specification `quality-pipeline` (main)
 

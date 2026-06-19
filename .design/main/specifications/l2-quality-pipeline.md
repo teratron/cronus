@@ -1,6 +1,6 @@
 # Quality Pipeline
 
-**Version:** 1.0.0
+**Version:** 1.1.0
 **Status:** Stable
 **Layer:** implementation
 **Implements:** l1-quality-standards.md
@@ -52,6 +52,10 @@ Gates are conceptual; this spec binds them to real tools per language and define
 | Go | `go test` | `golangci-lint` | `gofmt -l` | `go test -bench` | `govulncheck` |
 
 The map is extensible; unknown languages fall back to project-declared commands. Cronus itself uses the Rust (core) and TypeScript (frontend) rows (QLY-6).
+
+**Structural analysis (JS/TS):** beyond lint/format/types, the TypeScript/JS gate adds a codebase-intelligence tool (`fallow`) for the structural dimension — dead code (unused files/exports/dependencies), duplication, circular dependencies, complexity hotspots, and **architecture-boundary enforcement**. It runs in the always-on static-analysis tier: `fallow audit --changed-since <base> --format json` (exit 0 pass/warn, 1 fail), with saved baselines for incremental adoption. Boundary rules mechanically enforce presentation-only frontends with inward-pointing dependencies (consistent with INV-2). It is a dev/CI tool (free static layer), not a runtime dependency, so it does not affect the embeddable/mobile build. <!-- TBD: choose a `.fallowrc.json` boundaries preset vs custom zones for packages/ui -->
+
+Rust gets the equivalent structural coverage from `cargo clippy` plus dependency/cycle checks; the JS/TS ecosystem lacks an equivalent, which is why a dedicated tool is named there.
 
 ### 4.2 Where gates run
 
