@@ -1,8 +1,8 @@
 # Master Task Index (Registry)
 
-**Version:** 1.1.0
+**Version:** 1.2.0
 **Generated:** 2026-06-19
-**Based on:** .design/main/PLAN.md v1.1.0
+**Based on:** .design/main/PLAN.md v1.2.0
 **Based on RULES:** .design/RULES.md v1.4.0
 **Execution Mode:** Parallel
 **Status:** Active
@@ -19,7 +19,7 @@ Tactical registry of all phases and their statuses, ordered by the growth metaph
 | Phase 2 | Seed II — Workflow runtime (`crates/nodus`) port | `Pending` |
 | Phase 3 | Stem — CLI (command framework + grammar + core bindings) | `Pending` |
 | Phase 4 | Core Subsystems: memory store, model/context routers, workspace management | `Pending` |
-| Phase 5 | Office Work Engine: role catalog, kanban board, scheduler, quality pipeline | `Pending` |
+| Phase 5 | Office Work Engine: role catalog, kanban board, scheduler, quality pipeline, extension registry | `Pending` |
 | Phase 6 | Orchestration & Autonomy: delegation, /goal+judge+budget, briefings | `Pending` |
 | Phase 7 | Leaf — TUI (interactive terminal) | `Pending` |
 | Phase 8 | Flower — Desktop App: application UI, office view, dashboard | `Pending` |

@@ -1,13 +1,13 @@
 # Implementation Plan
 
-**Version:** 1.1.0
+**Version:** 1.2.0
 **Generated:** 2026-06-19
 **Based on:** .design/main/INDEX.md v1.0.0
 **Status:** Active
 
 ## Overview
 
-Implementation plan for Cronus from 41 Stable specifications (18 L1 concepts + 23 L2 implementations). Phases follow a **growth order**: the agent grows like a sprout from a seed.
+Implementation plan for Cronus from 43 Stable specifications (19 L1 concepts + 24 L2 implementations). Phases follow a **growth order**: the agent grows like a sprout from a seed.
 
 - **Seed = the library** (`crates/core` + `crates/nodus` runtime) — Phases 1–2.
 - **Stem = the CLI** — Phase 3, the first usable surface, emerging straight from the seed.
@@ -40,6 +40,7 @@ Execution mode: **Parallel** (C3); tracks grouped by file independence. Critical
 - [x] **Telemetry** ([l1-telemetry.md](specifications/l1-telemetry.md)) [L1]
 - [x] **Dashboard & Statistics** ([l1-dashboard.md](specifications/l1-dashboard.md)) [L1]
 - [x] **Workflow Language** ([l1-workflow-language.md](specifications/l1-workflow-language.md)) [L1]
+- [x] **Extensions** ([l1-extensions.md](specifications/l1-extensions.md)) [L1]
 
 ## Phase 1 — Seed I: Foundation
 
@@ -74,12 +75,13 @@ Execution mode: **Parallel** (C3); tracks grouped by file independence. Critical
 
 ## Phase 5 — Office Work Engine
 
-*Roles, board, scheduling, quality gates — the machinery that runs work.*
+*Roles, board, scheduling, quality gates, and extensions — the machinery and capabilities that run work.*
 
 - [ ] **Role Catalog** ([l2-role-catalog.md](specifications/l2-role-catalog.md)) [L2]
 - [ ] **Kanban Board** ([l2-kanban-board.md](specifications/l2-kanban-board.md)) [L2]
 - [ ] **Scheduler** ([l2-scheduler.md](specifications/l2-scheduler.md)) [L2]
 - [ ] **Quality Pipeline** ([l2-quality-pipeline.md](specifications/l2-quality-pipeline.md)) [L2]
+- [ ] **Extension Registry** ([l2-extension-registry.md](specifications/l2-extension-registry.md)) [L2] — skills / MCP / plugins, sandboxed; skill generation (depends on roles + security + workflow runtime)
 
 ## Phase 6 — Orchestration & Autonomy
 

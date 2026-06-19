@@ -4,7 +4,7 @@
 
 ## Active Technologies
 
-- Unknown (no manifest detected)
+- Rust
 
 ## Core Project Structure
 
@@ -41,9 +41,6 @@
 │   └── technology-stack-research.md
 ├── .env
 ├── .env.example
-├── .fallow/
-│   ├── .gitignore
-│   └── cache.bin
 ├── .gitignore
 ├── .markdownlint.json
 ├── .release/
@@ -52,6 +49,8 @@
 ├── AGENTS.md
 ├── CHANGELOG.md
 ├── CONTRIBUTING.md
+├── Cargo.lock
+├── Cargo.toml
 ├── LICENSE
 ├── README.md
 ├── apps/
@@ -62,8 +61,9 @@
 │   ├── nodus/
 │   └── tui/
 ├── docs/
-└── packages/
-    └── ui/
+├── packages/
+│   └── ui/
+└── rust-toolchain.toml
 ```
 
 ## Recent Changes

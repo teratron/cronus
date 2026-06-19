@@ -4,7 +4,7 @@
 <!-- Maximum 100 lines. Agent updates AFTER each completed action. -->
 
 **Workspace:** main
-**Updated:** 2026-06-19 13:32
+**Updated:** 2026-06-19 18:13
 **Phase:** 1 — Seed I: Foundation
 **Status:** Done
 
@@ -12,7 +12,7 @@
 
 - **Task:** T-1B02/C02/E01/E02 + validation — Phase 1 Rust complete
 - **Spec:** none
-- **Next Action:** Run /magic.task main to update the plan
+- **Next Action:** Plan complete — author new scope via /magic.spec main (or /magic.status for a briefing)
 
 ## Progress
 
