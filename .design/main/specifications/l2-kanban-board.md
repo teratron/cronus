@@ -1,6 +1,6 @@
 # Kanban Board
 
-**Version:** 1.0.3
+**Version:** 1.0.4
 **Status:** Stable
 **Layer:** implementation
 **Implements:** l1-kanban-model.md
@@ -292,6 +292,77 @@ The slug is a lowercase-hyphenated summary of the story. Key segments are stable
 Stories within an epic are created **one at a time**, sequentially. A developer creates the next story file only after the previous story reaches `done` — this allows each story's implementation to inform the next story's AC definition, incorporating real discoveries rather than planning assumptions.
 
 The code review step is a distinct phase: when a story reaches `review`, the review is performed in a fresh context (ideally by a different model or agent instance) to avoid the implementation bias of the author.
+
+### 4.9 Task XML format for plan execution
+
+Individual tasks within a plan file are declared using a structured XML format. The format encodes the task type (automatic, test-driven, or checkpoint), the files involved, the specific action, and the acceptance criteria. This structure makes tasks machine-parseable for executor agents and human-readable for review.
+
+#### Automatic task (type="auto")
+
+```text
+[REFERENCE]
+<task type="auto">
+  <name>Short descriptive name</name>
+  <files>path/to/file.ext</files>               <!-- files to create or modify -->
+  <read_first>path/to/reference.ext</read_first> <!-- files to read before acting -->
+  <action>
+    Specific implementation instruction with concrete values.
+    Must be precise enough that the executor does not need to guess.
+    References D-NN decision IDs where applicable ("per D-02").
+  </action>
+  <verify>Shell command that proves the task is done (e.g. grep, cargo test, tsc)</verify>
+  <acceptance_criteria>
+    - Grep-verifiable condition
+    - File exists at expected path
+    - Command exits 0
+  </acceptance_criteria>
+  <done>Measurable acceptance criteria (observable, not "code written")</done>
+</task>
+```
+
+#### Test-driven task (type="tdd")
+
+Identical to `type="auto"` but the executor writes the test first, confirms it fails, then writes the implementation, and confirms the test passes. The `verify` step runs the test suite.
+
+#### Decision checkpoint (type="checkpoint:decision", gate="blocking")
+
+```text
+[REFERENCE]
+<task type="checkpoint:decision" gate="blocking">
+  <decision>Exact question that must be decided before execution can continue</decision>
+  <context>Why this decision matters and what downstream work it affects</context>
+  <options>
+    <option id="option-a">
+      <name>Name</name>
+      <pros>Why to choose this</pros>
+      <cons>What this option gives up</cons>
+    </option>
+    <option id="option-b">
+      <name>Name</name>
+      <pros>Why to choose this</pros>
+      <cons>What this option gives up</cons>
+    </option>
+  </options>
+  <resume-signal>Select: option-a or option-b</resume-signal>
+</task>
+```
+
+#### Human-verify checkpoint (type="checkpoint:human-verify", gate="blocking")
+
+```text
+[REFERENCE]
+<task type="checkpoint:human-verify" gate="blocking">
+  <what-built>Concise description of what the executor built in the preceding tasks</what-built>
+  <how-to-verify>
+    Visual or manual checks the human should perform.
+    NO CLI commands here — this section is for human eyes.
+    Examples: "Open the app, navigate to X, confirm Y is visible."
+  </how-to-verify>
+  <resume-signal>Type "approved" or describe what is wrong</resume-signal>
+</task>
+```
+
+`gate="blocking"` on a checkpoint triggers writing `.planning/.continue-here.md` (see `l2-orchestration.md` §4.14). Execution halts until the user provides the `resume-signal`. Non-blocking checkpoints (`gate="advisory"`) emit a notice but do not halt execution.
 
 ## 5. Drawbacks & Alternatives
 

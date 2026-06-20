@@ -1,6 +1,6 @@
 # Quality Pipeline
 
-**Version:** 1.1.3
+**Version:** 1.1.4
 **Status:** Stable
 **Layer:** implementation
 **Implements:** l1-quality-standards.md
@@ -439,6 +439,71 @@ Parent assembly:
   - Roll up medium + low findings as "N medium / M low findings — see <file>".
   - Require an explicit acknowledgment or mitigation before proceeding.
 ```
+
+### 4.12 Goal-backward verification protocol
+
+Standard code review verifies that tasks were completed. Goal-backward verification takes the opposite stance: **assume the goal was NOT achieved and look for codebase evidence that proves otherwise**. This posture surfaces gaps that task-completion checklists miss — particularly phantom implementations, stub code left in place, and integration points that are wired in tests but broken at runtime.
+
+#### Adversarial stance
+
+```text
+[REFERENCE]
+Verifier posture:
+  - Start from the goal (PLAN.md must_haves), not from the task list.
+  - Assume every must_haves.truths item is false until code evidence proves it true.
+  - Assume every must_haves.artifacts item contains a stub until its real content is confirmed.
+  - "SUMMARY.md claims are not evidence." The verifier reads actual code, not the executor's own summary.
+  - If a truth or artifact cannot be verified from the codebase alone, classify it as UNCERTAIN.
+```
+
+#### Finding classification
+
+Every finding is classified into one of three levels:
+
+| Level | Meaning | Effect |
+| --- | --- | --- |
+| `VERIFIED` | Codebase evidence confirms this item is satisfied | No action |
+| `FAILED` | Codebase evidence contradicts this item, or item is demonstrably absent | **BLOCKER — must not proceed** |
+| `UNCERTAIN` | Not enough information to confirm or deny | WARNING — human decision required |
+
+A phase cannot advance to `Executed` status if any `must_haves` item is `FAILED`. `UNCERTAIN` items require explicit user acknowledgment before the phase can be marked `Complete`.
+
+#### VERIFICATION.md format
+
+```text
+[REFERENCE]
+VERIFICATION.md frontmatter:
+
+---
+phase: XX-name
+plan: NN
+status: passed | failed | needs-review
+verified-at: YYYY-MM-DD
+---
+
+## Goal Verification
+
+### must_haves.truths
+- [VERIFIED] <truth statement> — evidence: <file:line or command output>
+- [FAILED] <truth statement> — reason: <what the verifier found instead>
+- [UNCERTAIN] <truth statement> — gap: <what is missing to confirm>
+
+### must_haves.artifacts
+- [VERIFIED] <artifact path> — content confirmed: <key implementation detail>
+- [FAILED] <artifact path> — is stub / does not exist / missing required implementation
+
+### must_haves.key_links
+- [VERIFIED] <link description> — confirmed via: <evidence>
+- [FAILED] <link description> — broken: <what is missing>
+
+## Summary
+<One-paragraph interpretation of the results. Does the phase deliver its goal?>
+
+## Escalation (if status: failed or needs-review)
+<What must be fixed before the phase can advance. Be specific — name files and functions.>
+```
+
+The verifier must write `VERIFICATION.md` even if every item passes — a `status: passed` file is the gate signal that the orchestrator uses to advance the phase.
 
 ## 5. Drawbacks & Alternatives
 

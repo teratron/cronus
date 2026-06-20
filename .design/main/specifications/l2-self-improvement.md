@@ -1,6 +1,6 @@
 # Self-Improvement
 
-**Version:** 1.0.1
+**Version:** 1.0.2
 **Status:** Stable
 **Layer:** implementation
 **Implements:** l1-memory-model.md
@@ -403,6 +403,91 @@ Per plan:
   Record issue URL in plan's Status block and in the index.
 
 The plan file is the source of truth; the issue is distribution only.
+```
+
+### 4.9 Retrospective and milestone format
+
+After a phase or milestone is completed, a structured retrospective captures what worked, what was inefficient, and what patterns are worth preserving. These retrospectives feed directly back into calibration buckets (§4.1) and plan templates (§4.5) — they are not optional documentation but inputs to the self-improvement loop.
+
+#### Phase retrospective
+
+```text
+[REFERENCE]
+Phase retrospective (written to archives/retrospectives/phase-{N}.md):
+
+## What Was Built
+[One paragraph — what exists now that didn't before. Observable deliverables only.]
+
+## What Worked
+[Bullet list — techniques, patterns, or decisions that produced good outcomes faster or with less rework.
+ Include: specific tools, agent configurations, plan structures, communication patterns.]
+
+## What Was Inefficient
+[Bullet list — where time or tokens were wasted. Be specific: which step, why it was slow or wrong,
+ what the cost was. This is the input to future improvements.]
+
+## Patterns Established
+[Bullet list — reusable patterns that emerged during this phase.
+ Format: "Pattern name: one-sentence description of when to apply it."]
+
+## Key Lessons
+[Bullet list — non-obvious things that a future agent working on similar scope should know.
+ Things that would have saved time if known at the start.]
+
+## Cost Observations
+[Optional: token / time / iteration counts that were surprising. Quantitative observations
+ feed future budget estimates.]
+```
+
+#### Cross-milestone trends
+
+When a milestone closes, the self-improvement system produces a cross-milestone trend table that surfaces progression across the project's lifetime:
+
+```text
+[REFERENCE]
+Cross-milestone trends table (appended to MILESTONES.md):
+
+| Milestone | Sessions | Phases | Key change |
+| --- | --- | --- | --- |
+| v0.1 Setup    | 3  | 2 | Established base patterns |
+| v0.2 Core     | 7  | 5 | Reduced rework by 40% via better planning |
+| v0.3 Features | 12 | 8 | Wave parallelism cut wall-time in half |
+
+Columns:
+  - Milestone: version tag and name
+  - Sessions: number of agent sessions in this milestone
+  - Phases: number of phases completed
+  - Key change: one-line observation about process improvement since prior milestone
+```
+
+#### MILESTONES.md entry format
+
+Each shipped milestone is recorded with a structured entry that provides a durable project history:
+
+```text
+[REFERENCE]
+MILESTONES.md entry format:
+
+## v{X.Y} {Name} (Shipped: YYYY-MM-DD)
+
+**Delivered:** One sentence — what this milestone delivers to users.
+
+**Phases completed:** X through Y (Z plans total)
+
+**Key accomplishments:**
+- Accomplishment 1
+- Accomplishment 2
+
+**Stats:**
+- Files created/modified: N
+- Lines of code added: N
+- Agent sessions: N
+- Plans executed: N
+- Days to complete: N
+
+**Git range:** First commit of milestone → last commit of milestone
+
+**What's next:** One sentence — what the next milestone builds on top of this.
 ```
 
 ## 5. Drawbacks & Alternatives

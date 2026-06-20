@@ -1,6 +1,6 @@
 # Orchestration
 
-**Version:** 1.0.4
+**Version:** 1.0.5
 **Status:** Stable
 **Layer:** implementation
 **Implements:** l1-orchestration.md
@@ -490,6 +490,130 @@ purpose: deck              // presentation spine; not binding
 ```
 
 Only `build-substrate` spines create real implementation obligations. Other purposes are informational artifacts that may later be promoted.
+
+### 4.12 Wave-based parallel execution
+
+When a phase consists of multiple plans, those plans can execute in parallel if their file-level and dependency-level footprints do not conflict. The orchestrator pre-computes a `wave` assignment for each plan at **planning time** — so the execution layer requires no graph reasoning at runtime and can simply launch all plans sharing the same wave number simultaneously.
+
+#### Wave assignment rules (pre-computed by planner)
+
+```text
+[REFERENCE]
+Plans share a wave when ALL of the following hold:
+  1. No dependency conflict: neither plan lists the other (or a common ancestor) in depends_on[].
+  2. No file conflict: their files_modified[] lists are disjoint — no shared file path.
+  3. No submodule intersection: they do not both write to the same crate, package, or app directory.
+
+Tie-breaking: when a plan has any depends_on, its wave is max(wave of dependencies) + 1.
+A plan with no depends_on and no conflicts gets wave 1.
+```
+
+Plans in the same wave are fully parallel-safe: they can run as independent worktree-isolated executors with no coordination between them beyond the shared git base.
+
+#### Worktree isolation
+
+Each plan that runs in parallel spawns in a fresh git worktree:
+
+```text
+[REFERENCE]
+Per-plan worktree isolation:
+  - Create a temporary worktree from the current HEAD before spawning the executor.
+  - The executor commits its work to that worktree.
+  - After the executor finishes, merge the worktree branch back into the main branch.
+  - If the merge has conflicts: pause the wave, surface the conflict to the user.
+  - Remove the worktree after successful merge.
+
+Worktree guard:
+  - Before creating a worktree, confirm the plan's files_modified[] has no overlap with
+    any currently-active worktree's files_modified[]. If overlap is detected, shift the
+    plan to the next wave rather than risk a merge conflict.
+```
+
+Plans that must run sequentially (different waves) do not use worktrees — they commit directly.
+
+#### PLAN.md frontmatter schema
+
+```text
+[REFERENCE]
+PLAN.md required frontmatter:
+
+---
+phase: XX-name           # phase this plan belongs to
+plan: NN                 # plan number within the phase (sequential)
+type: execute | tdd      # execution mode: standard or test-driven-development
+wave: N                  # pre-computed wave number; same wave = parallel-safe
+depends_on: []           # plan IDs (NN) that must complete before this plan can start
+files_modified: []       # file paths this plan will create or change
+autonomous: true         # false if this plan contains checkpoint tasks that need human input
+requirements: []         # REQUIRED — requirement IDs from the phase's ROADMAP entry
+
+must_haves:
+  truths: []             # observable behaviors that must be true in code when done
+  artifacts: []          # files that must exist with real (non-stub) implementation
+  key_links: []          # critical relationships between artifacts that must be verifiable
+---
+```
+
+The `must_haves` block is the **goal contract** for the verifier agent: it describes what "done" looks like in observable terms, not in terms of task completion. A plan is not complete when its tasks finish — it is complete when every `truths` item, every `artifacts` item, and every `key_links` item can be confirmed in the codebase.
+
+### 4.13 Safe resume gate
+
+Before spawning an executor for a plan, the orchestrator runs a safe-resume check to detect partial prior execution:
+
+```text
+[REFERENCE]
+Safe resume gate (runs before every executor spawn):
+
+1. Run: git log --oneline --grep="plan-{NN}" --grep="phase-{XX}" for this plan's commits.
+2. If no commits found:
+   → Clean slate. Spawn executor normally.
+3. If commits found AND SUMMARY.md exists:
+   → Plan already complete. Skip executor, load SUMMARY.md.
+4. If commits found AND SUMMARY.md is missing:
+   → Partial execution detected. Offer three options:
+     (a) Close out: spawn a close-out executor to write SUMMARY.md from existing commits.
+     (b) Re-execute: discard prior commits, reset the branch to pre-plan HEAD, re-execute.
+     (c) Mark-and-skip: write a minimal SUMMARY.md flagging the plan as "incomplete — skipped"
+         and continue. Requires explicit user acknowledgment.
+
+The orchestrator MUST NOT auto-advance past option (a/b/c) — this is a required human gate.
+```
+
+The safe resume gate prevents silent data loss: re-running a plan that already committed work would overwrite commits without warning. The gate surfaces the ambiguity and makes the recovery path explicit.
+
+### 4.14 Checkpoint continuation file
+
+When plan execution encounters a blocking checkpoint (`gate="blocking"`), a continuation file is written so that the auto-advance safety gate can detect the pause:
+
+```text
+[REFERENCE]
+Checkpoint continuation file: .planning/.continue-here.md
+
+Written when: a blocking checkpoint task (type="checkpoint:decision" or
+  type="checkpoint:human-verify" with gate="blocking") is encountered during execution.
+
+Content:
+  ---
+  plan: NN
+  phase: XX-name
+  checkpoint_type: decision | human-verify
+  blocking_since: <ISO datetime>
+  resume_signal: <exact string the user must type to resume>
+  context: <one-paragraph summary of what was built and what decision is needed>
+  ---
+
+Cleared when: the user provides the resume signal and the executor acknowledges it.
+
+Auto-advance safety gate behavior:
+  - Before advancing to the next plan or phase, check for .planning/.continue-here.md.
+  - If the file exists: HARD STOP. Do not advance. Surface the file content to the user.
+  - Three additional gates block auto-advance:
+      1. STATE.md shows status: error or status: failed
+      2. VERIFICATION.md has unresolved FAILED findings
+      3. Prior phase has plans with commits but missing SUMMARY.md files
+```
+
+The continuation file is the mechanism that makes autonomous execution safe: the system can run unattended until it hits a decision point, then pause cleanly and wait for human input rather than making an autonomous choice at a fork.
 
 ## 5. Drawbacks & Alternatives
 

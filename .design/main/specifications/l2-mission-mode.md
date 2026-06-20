@@ -1,6 +1,6 @@
 # Mission Mode
 
-**Version:** 1.0.0
+**Version:** 1.0.1
 **Status:** Stable
 **Layer:** implementation
 **Implements:** l1-orchestration.md
@@ -141,6 +141,7 @@ Append-only log, seeded with a `## Codebase Patterns` section that the agent pop
 ### 4.6 Resuming a mission
 
 On restart, the agent can call `mission resume` to re-enter Phase 2 from the persisted state:
+
 1. Locate the most recent `missions/mission-*/loop_config.json` matching the current session.
 2. Read `prd.json` — stories with `passes: true` are already done; only false stories remain.
 3. Re-enter the execution loop from the current story count.
@@ -157,6 +158,148 @@ Missions are not automatically resumed on process restart; the user issues `miss
 | list missions | `cronus mission list` | `/mission list` | `mission.list() -> Mission[]` |
 | resume | `cronus mission resume [<id>]` | `/mission resume` | `mission.resume(id?) -> void` |
 | abort | `cronus mission abort [<id>]` | `/mission abort` | `mission.abort(id?) -> void` |
+
+### 4.8 Discuss-phase decision capture
+
+Before a mission is planned, a structured discussion phase extracts implementation decisions. The discussion agent is a thinking partner, not an interviewer: it identifies ambiguous implementation choices ("gray areas"), presents them to the user, and captures concrete decisions for downstream planners and researchers to act on.
+
+#### Decision document format (CONTEXT.md)
+
+```text
+[REFERENCE]
+# Phase [N]: [Name] — Context
+
+**Gathered:** [date]
+**Status:** Ready for planning
+
+<domain>
+## Phase Boundary
+[Clear scope statement from the roadmap — fixed; discussion clarifies HOW to implement, never WHETHER to add new capabilities]
+</domain>
+
+<decisions>
+## Implementation Decisions
+
+### [Topic area]
+- **D-01:** [Specific decision — concrete enough for planner to act without asking again]
+- **D-02:** [Another decision if applicable]
+
+### Claude's Discretion
+[Areas where user explicitly deferred to the agent — agent has flexibility here]
+</decisions>
+
+<deferred>
+## Deferred Ideas
+[Ideas that surfaced but belong in other phases. Captured so they're not lost, but explicitly out of scope for this phase.]
+</deferred>
+
+<canonical_refs>
+## Canonical References
+[Specs, ADRs, or design docs that agents must read before planning or implementing — full relative paths]
+</canonical_refs>
+```
+
+#### Decision ID traceability (D-NN)
+
+Each decision is assigned a stable ID (D-01, D-02, …). Planner agents must:
+
+- Reference the decision ID in task actions ("per D-03")
+- Include at least one task implementing every locked decision
+- Never include tasks implementing a deferred idea
+
+Decisions are binding; the planner honors them even when research suggests a different approach. Any conflict between a locked decision and research findings is documented with an explanation ("using X per D-02; research suggested Y").
+
+#### Scope guardrail
+
+Discussion scope is fixed by the roadmap boundary. New capabilities cannot be added during discussion:
+
+- **Allowed:** clarifying HOW to implement what is already in scope (layout, behavior, edge cases)
+- **Not allowed:** adding new capabilities ("what about also adding X?")
+
+When the user suggests out-of-scope work, the agent captures it under "Deferred Ideas" — not lost, not acted on.
+
+#### Gray area identification
+
+Gray areas are implementation choices the user cares about that could go multiple ways and would change the delivered result. The agent identifies them by reading the phase goal and considering what would be visible/observable to the user:
+
+- Things users SEE, CALL, RUN, or READ
+- Choices between multiple valid implementations where the user has a preference
+- Behaviors on edge cases or empty states that are product decisions, not engineering decisions
+
+### 4.9 Phase lifecycle state machine
+
+Mission phases follow a deterministic status progression. Each phase status is machine-readable and gates whether planning, execution, or verification may run:
+
+```text
+[REFERENCE]
+Phase status values:
+  Pending      — Phase exists in roadmap; no discussion or planning has started
+  Planned      — CONTEXT.md or PLAN.md files exist; planning complete, not yet executing
+  In Progress  — Execution is running; some plans have summaries, some do not
+  Executed     — All plans have SUMMARY.md files; awaiting verification
+  Needs Review — Execution complete but verification has FAIL items without overrides
+  Complete     — All SUMMARY.md files exist AND VERIFICATION.md shows status: passed
+
+Status transition guards:
+  Planned → In Progress  : at least one executor has committed work
+  Executed → Complete    : VERIFICATION.md with status: passed added
+  Complete → replanned   : HARD BLOCK unless --force flag; prevents overwriting shipped evidence
+```
+
+The `Complete` status is a hard gate: replanning a closed phase silently rewrites plan documents that no longer match the shipped code. An explicit override flag is required, and a warning banner must be emitted if that flag is used.
+
+Prior-phase completeness scan runs before any phase advance:
+
+- Plans without matching summaries (execution started, not completed) → warning with deferred-backlog option
+- Prior phases with unresolved VERIFICATION.md FAIL items → hard stop
+
+### 4.10 SUMMARY.md rich frontmatter
+
+Each plan produces a SUMMARY.md after completion. The frontmatter carries a structured dependency graph and tech-tracking metadata that downstream agents and future planning phases use to understand what each plan built and how it relates to adjacent work:
+
+```text
+[REFERENCE]
+SUMMARY.md frontmatter:
+
+---
+phase: XX-name
+plan: NN
+subsystem: [primary category: auth, payments, ui, api, database, infra, testing, etc.]
+tags: [searchable tech terms: jwt, stripe, react, postgres, prisma]
+
+# Dependency graph
+requires:
+  - phase: [prior phase or plan this depends on]
+    provides: [what that phase built that this plan uses]
+provides:
+  - [bullet list of what this plan built/delivered]
+affects: [list of phase names or keywords that will need this context]
+
+# Tech tracking
+tech-stack:
+  added: [libraries/tools added in this plan]
+  patterns: [architectural/code patterns established]
+
+key-files:
+  created: [important files created]
+  modified: [important files modified]
+
+key-decisions:
+  - "Decision 1"
+  - "Decision 2"
+
+patterns-established:
+  - "Pattern 1: description"
+
+requirements-completed: []  # REQUIRED — all requirement IDs from this plan's `requirements` field
+
+# Metrics
+duration: Xmin
+completed: YYYY-MM-DD
+---
+```
+
+The `requires/provides/affects` graph enables future planner agents to detect what prior plans built and whether they need to load earlier summaries for context. The `requirements-completed` field is mandatory: it must copy every requirement ID from the plan's own `requirements` frontmatter field so that coverage can be verified across the entire phase.
 
 ## 5. Drawbacks & Alternatives
 
