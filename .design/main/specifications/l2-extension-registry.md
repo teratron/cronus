@@ -1,6 +1,6 @@
 # Extension Registry
 
-**Version:** 1.0.3
+**Version:** 1.0.4
 **Status:** Stable
 **Layer:** implementation
 **Implements:** l1-extensions.md
@@ -160,6 +160,7 @@ Subdirectory nesting creates namespaces: `commands/ci/lint.md` → command `lint
 #### `${PLUGIN_ROOT}` path variable
 
 `${PLUGIN_ROOT}` expands to the plugin's absolute on-disk directory at session start. Use it in:
+
 - Hook `command` fields: `"bash ${PLUGIN_ROOT}/scripts/validate.sh"`
 - MCP server `command` and `args` fields
 - Environment variable values in MCP server `env` blocks
@@ -265,14 +266,47 @@ A skill is a directory in the plugin's `skills/` subtree containing a `SKILL.md`
 ```text
 [REFERENCE]
 SKILL.md YAML frontmatter:
-  name:        String   // kebab-case skill identifier
-  description: String   // trigger description — concrete phrases, tasks, or file patterns
-                        // that should activate this skill; include negative examples
-                        // (when NOT to activate) to sharpen precision
-  version:     String   // semver: "1.0.0"
+  name:            String    // kebab-case skill identifier
+  description:     String    // trigger description — concrete phrases, tasks, or file patterns
+                             // that should activate this skill; include negative examples
+                             // (when NOT to activate) to sharpen precision
+  version:         String    // semver: "1.0.0"
+  trigger:         String[]  // 5–8 natural-language phrases a user might say to invoke the skill;
+                             // exhaustive is better — users won't remember skill names
+  integrations:    String[]  // named integration slots the skill requires to run, e.g.:
+                             //   "vault-search-fts5", "web-search-ddgr", "google-calendar-read"
+  inputs:          Input[]   // typed input declarations the UI/CLI can render as a form
+  output_artifact: String?   // relative path of the document the skill writes, e.g. "wiki/[slug].md"
+  frequency:       Frequency // execution cadence (see below)
+  pack:            String?   // optional function-pack grouping label, e.g. "ceo" | "engineering"
+                             // used by the UI to group skills into pack browsers
+
+Input {
+  name:        String
+  description: String
+  required:    bool   // default false
+}
+
+Frequency: "on-demand"            // user-triggered only
+         | "cron:<CRON_EXPR>"     // scheduled via the workspace cron system; e.g. "cron:0 8 * * *"
+         | "on-demand-or-cron"    // supports both paths; scheduled-run context available via env
 ```
 
-Directory layout:
+#### Skill body structure
+
+Content-generating skills (blog posts, reports, research briefs, any output a human will read or publish) **must** embed voice and quality enforcement in the body's Steps section as numbered rules — not merely as style guidance. Voice rules that aren't enforced at the step level will be ignored by the agent.
+
+The recommended body has five H2 sections:
+
+```text
+## When to run       – practitioner situation that earns the skill its keep
+## What you'll get   – artifact shape + leverage ("what becomes possible")
+## Steps             – numbered, ordered instructions; reference integrations explicitly
+## Output format     – fenced example of the expected output document frontmatter + structure
+## Example output    – 15–30 line realistic sample
+```
+
+#### Directory layout
 
 ```
 skills/
@@ -280,6 +314,28 @@ skills/
     ├── SKILL.md          # frontmatter + instruction body
     └── references/       # optional reference files cited in SKILL.md
 ```
+
+### 4.9.1 Skill pack override (shipped vs. user-owned)
+
+Shipped skills are read-only — they live in the system extensions directory and are replaced on upgrade. Users can override any shipped skill by placing an edited copy in the workspace skill scope (`<ws>/skills/<pack>/<name>.md`) or the user-scope skill directory (`<state>/extensions/skills/<pack>/<name>/SKILL.md`).
+
+```text
+[REFERENCE]
+Resolution order (first match wins):
+  1. workspace skills     <ws>/skills/<pack>/<name>.md           (highest precedence)
+  2. user-scope skills    <state>/extensions/skills/<pack>/<name>/SKILL.md
+  3. shipped skills       <program>/extensions/skills/<pack>/<name>/SKILL.md
+
+Override contract:
+  - Updates to shipped skills NEVER overwrite user-owned copies.
+  - Conflict is detected by name — if <pack>/<name> matches, user copy wins.
+  - On activation, the registry records source: "shipped" | "workspace" | "user"
+    for provenance tracking and doctor diagnostics.
+  - A user override that is semantically identical to the shipped version produces a warning
+    ("override is identical to shipped — consider deleting"); never an error.
+```
+
+This lets users customize any skill for their context without touching the ship directory. A `skill status` command shows whether each active skill is shipped or overridden.
 
 ### 4.10 Agent definition format
 

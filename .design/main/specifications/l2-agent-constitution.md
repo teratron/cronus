@@ -1,6 +1,6 @@
 # Agent Constitution
 
-**Version:** 1.0.0
+**Version:** 1.0.1
 **Status:** Stable
 **Layer:** implementation
 **Implements:** l1-office-model.md, l1-memory-model.md
@@ -191,6 +191,68 @@ When loading a session, the agent reads constitution files as follows:
 4. Check HEARTBEAT.md to determine whether a heartbeat schedule is meaningful.
 
 Each file's `read_when` list guides lazy loading; files not matching conditions are skipped for that session.
+
+### 4.8 Persona wizard
+
+When a new agent workspace is first bootstrapped interactively, BOOTSTRAP.md guides a 3-question wizard to populate the persona fields before the agent's first active session. The wizard runs through the CLI or TUI bootstrap ritual; non-interactive installs accept `--agent-name`, `--voice`, and `--focus` flags instead.
+
+```text
+[REFERENCE]
+Wizard prompts (in order):
+  1. "What should we call this assistant?"        → PROFILE.md Identity.Name
+  2. "Voice style (one word: direct / warm / clear / playful / analytical)"
+                                                  → PROFILE.md Identity.Vibe
+  3. "Primary job-to-be-done (one line)"          → SOUL.md Focus header
+
+Behavior rules:
+  - Existing values are displayed as defaults; Enter accepts them.
+  - A blank answer keeps the existing default — never clears it.
+  - After the wizard completes, PROFILE.md and SOUL.md are updated atomically (write-then-rename).
+  - The wizard exit line mirrors the result: "Persona set: <Name>, <Voice>, <Focus>"
+```
+
+The wizard also offers an optional GitHub backup for the constitution directory — if the user answers yes and the `gh` CLI is present, the workspace constitution folder is pushed to a private repository. This is opt-in and skipped silently when `gh` is absent.
+
+### 4.9 Communication contract
+
+SOUL.md must include a **Communication contract** section that constrains how the agent presents output. This section is read at every session start (it is part of SOUL.md's `read_when: [Session start]`).
+
+```text
+[REFERENCE]
+Required subsections within SOUL.md Communication contract:
+
+Style rules:
+  - BLUF (bottom line up front) — lead every response with the conclusion, not the buildup.
+  - No hedging language ("I think", "you might find", "it seems").
+  - Short, declarative sentences. No em-dash abuse.
+  - Practitioner voice — describe situations and decisions, not features.
+
+Contradiction handling:
+  - Flag contradictions explicitly; do NOT silently resolve them.
+  - Record the contradiction in <ws>/contradictions.md with the conflicting sources.
+  - Ask for the user's decision rather than picking a side.
+
+Source citation:
+  - Cite vault sources with [[wikilink]] syntax.
+  - Only fall back to web research when the vault has no relevant material.
+  - Search the vault first for any question about the user's domain.
+
+Vocabulary preferences (per workspace):
+  - A "use:" list and an "avoid:" list; both are free-form.
+  - The lists travel in SOUL.md (user-editable).
+  - Example avoid patterns: AI jargon, corporate buzzwords, named AI persona mascots.
+
+Does / does-NOT-do contract:
+  - Two short lists in SOUL.md: what the agent actively does, and what it refuses.
+  - Does-NOT-do entries are invariants, not suggestions — they require explicit user override to lift.
+  - Examples of does-NOT-do invariants:
+      "modify reviewed/stable documents without explicit instruction"
+      "push to a remote git repository without being asked"
+      "fabricate information not present in sources or web research"
+      "resolve contradictions silently"
+```
+
+The does/does-NOT-do contract is particularly valuable when the agent is running scheduled tasks autonomously — it limits the blast radius of any misfire without requiring the user to be present.
 
 ## 5. Drawbacks & Alternatives
 

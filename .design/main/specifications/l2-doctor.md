@@ -1,6 +1,6 @@
 # Doctor
 
-**Version:** 1.0.0
+**Version:** 1.0.1
 **Status:** Stable
 **Layer:** implementation
 **Implements:** l1-doctor.md
@@ -86,7 +86,74 @@ DoctorRunContext {
 
 Extension execution order: manual registrations first (alphabetical by id), then entry-point discoveries (alphabetical by name). Each extension runs in isolation — a panicking or erroring extension logs a warning and is skipped; it does not abort the rest of the check suite.
 
-### 4.3 Command surface
+### 4.3 Extended check runbook
+
+Beyond the check suite in §4.1, the doctor runs a structured runbook that surfaces environmental and installation-layer issues the abstract checks can't reach. Each runbook step is a named probe; output is a pass/warn/fail line with a remediation hint on non-pass.
+
+```text
+[REFERENCE]
+Runbook probes (in execution order):
+
+[prereqs]
+  For each required tool (git, node-runtime, python):
+    pass  — tool found in PATH, version meets minimum
+    warn  — optional tool (e.g. web search CLI) absent; graceful degradation applies
+    fail  — required tool missing; remediation = install command
+
+[config]
+  config.json (or equivalent workspace config) exists
+    pass  — file found, required fields present (vault_path, port, host, install_id)
+    warn  — optional fields absent (hermes_api_url, last_check_for_updates)
+    fail  — file missing or unparseable; remediation = re-run install or create minimal config
+
+[token]
+  Ephemeral session token present (see l2-security.md §4.7 ephemeral mode)
+    pass  — token file present, length ≥ 32 chars
+    warn  — token missing; will be regenerated on next server start
+    fail  — token directory not writable
+
+[vault-zones]
+  Knowledge vault contains all four expected zones:
+    sources/   — raw materials; agent read-only
+    wiki/      — synthesized knowledge; agent read+write
+    journal/   — user-owned entries; agent read-only
+    schema/    — rules files; agent read-only
+  pass  — all four zone directories exist
+  warn  — vault.db (FTS5+vector index) absent; keyword search falls back to linear scan
+  fail  — vault path not configured or does not exist; remediation = re-run install wizard
+
+[build-artifacts]
+  UI build artifacts present (for the local console frontend):
+    pass  — build output directory present
+    warn  — no production build; dev server still works
+    fail  — node_modules missing; run dependency install first
+
+[server]
+  Console process is listening on configured port:
+    pass  — port is bound
+    warn  — no process on port; server not started yet
+    (not fail — server may be intentionally stopped)
+
+[skills]
+  Shipped skill packs installed and counted:
+    pass  — skills directory exists, N skill files found (report N)
+    warn  — skills directory absent or empty; remediation = re-run install
+
+[bridge]
+  Bridge extension installed (the mutation-only channel for agent→runtime writes):
+    pass  — bridge skills directory present with ≥1 skill file
+    fail  — bridge absent; agent mutations will fail silently
+
+[search-tools]
+  Free-tier web search CLI tools detected (optional; no paid APIs required):
+    pass  — at least one of: ddgr, gogcli found in PATH
+    warn  — neither found; web search skills will fall back to the agent's built-in browser tool
+    (not fail — browser fallback is a supported degraded path)
+```
+
+Each runbook probe is registered as an extension check (same mechanism as §4.2); operators can add custom probes for workspace-specific dependencies.
+
+### 4.4 Command surface
 
 | Action | CLI | TUI | Library (no code) |
 | --- | --- | --- | --- |
