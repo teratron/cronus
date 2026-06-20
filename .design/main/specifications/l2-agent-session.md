@@ -1,6 +1,6 @@
 # Agent Session Loop
 
-**Version:** 1.0.3
+**Version:** 1.0.4
 **Status:** Stable
 **Layer:** implementation
 **Implements:** l1-orchestration.md, l1-routing.md
@@ -489,6 +489,120 @@ Disable: CRONUS_SERVE_ACP_HTTP=0 env var prevents mounting /acp routes at startu
 Migration path: once the ACP Streamable HTTP specification ratifies and SDKs ship,
 the REST surface may be reframed as a thin compatibility shim over /acp (separate PR).
 ```
+
+### 4.11 MCP tool session contract
+
+[ADDED] The contract governing how Cronus exposes its capabilities to MCP clients and how
+tool responses must be shaped to maintain agent trust across the session lifetime.
+
+#### Server instructions as single source of truth
+
+The `initialize` response carries the primary agent-facing guidance for all tools exposed
+by the Cronus MCP server. This text is emitted once at session start and surfaced in the
+agent's system prompt by every compliant MCP client — it is the **only** place tool guidance
+lives. Instructions must NOT be duplicated in agent-config files (`CLAUDE.md`, `.cursor/rules/`,
+`AGENTS.md`, etc.); writing duplicate blocks into those files means updating the server
+changes nothing for agents that already have the cached copy.
+
+Two variants are emitted based on workspace state:
+
+```text
+[REFERENCE]
+ACTIVE   — emitted when a Cronus session is fully initialized and tools are available.
+           Contains: tool-selection-by-intent, common chains, anti-patterns, limitations.
+           `tools/list` returns the full exposed surface.
+
+INACTIVE — emitted when the session cannot serve tools (e.g. workspace not yet ready,
+           missing required configuration). Contains: one short note that the toolset is
+           inactive this session plus one action the user can take.
+           `tools/list` returns an EMPTY list — absence is the one signal an agent
+           cannot misread. A non-empty but uniformly-failing tool list teaches
+           abandonment through error accumulation.
+```
+
+Inactive variant MUST be ≤ 3 lines. The agent should not consume context explaining a
+toolset it cannot use.
+
+#### Error response taxonomy
+
+MCP tool calls return one of two shapes. The choice is permanent for the session: a single
+`isError: true` response early in a session observably causes agents to stop calling the
+entire toolset for the rest of that session (abandonment learned from negative signal).
+Reserve it accordingly.
+
+```text
+[REFERENCE]
+ToolCallOutcome:
+  Success {
+    content: Vec<ToolContent>,
+    isError: false,     // default; omit in wire format
+  }
+
+  GuidedRecovery {
+    content: Vec<ToolContent>,   // plain-text guidance what to do instead
+    isError: false,              // SUCCESS-SHAPED — agent continues calling tools
+  }
+
+  HardRefusal {
+    content: Vec<ToolContent>,   // brief explanation (1-2 sentences)
+    isError: true,               // reserved for "stop trying" conditions only
+  }
+
+GuidedRecovery is correct for:
+  - Workspace not yet initialized (guide: user can run `cronus init`)
+  - Symbol/entity not found (guide: try a search with fewer terms)
+  - Tool parameters out of range (guide: valid range or alternative)
+
+HardRefusal is correct for:
+  - Security path refusals (sensitive directories blocked by policy)
+  - Genuine server malfunctions (not recoverable by agent action)
+  - A HardRefusal MUST NOT include retry guidance — abandonment is the intended outcome.
+```
+
+#### Input / output size limits
+
+All tool call handlers enforce bounds before touching any state:
+
+```text
+[REFERENCE]
+MAX_QUERY_INPUT_CHARS  = 10_000   // free-form text: query, task, symbol name
+MAX_PATH_INPUT_CHARS   =  4_096   // path-like inputs: filePath, glob pattern
+MAX_OUTPUT_CHARS       = 15_000   // total tool response to prevent context bloat
+
+Inputs exceeding the limit → GuidedRecovery (not HardRefusal):
+  "Input exceeds the maximum length of {N} characters. Please shorten the query."
+
+Output exceeding the limit is truncated server-side at the nearest sentence/line
+boundary with a trailing note: "… [output truncated to {MAX_OUTPUT_CHARS} characters]"
+```
+
+These bounds protect against hostile or buggy MCP clients sending oversized payloads (OOM,
+runaway FTS scans) without treating it as an error that would teach abandonment.
+
+#### Tool surface gating by context size
+
+The number of tools exposed via `tools/list` may be reduced when the estimated prompt-context
+cost of the full surface exceeds a threshold. This is the tool-profile concept:
+
+```text
+[REFERENCE]
+ToolSurfaceProfile:
+  full     — every registered tool available (default for interactive sessions)
+  core     — 5–8 high-frequency tools only (search + context + recall)
+  headless — 3–4 tools only (context retrieval + one write surface)
+
+Switching triggers (automatic, not user-facing):
+  full    → core:     accumulated_context_tokens >= PROFILE_DOWNGRADE_THRESHOLD
+  core    → headless: tool_call_count >= PROFILE_HEADLESS_THRESHOLD
+
+Constants:
+  PROFILE_DOWNGRADE_THRESHOLD =  60_000   // estimated tokens in conversation so far
+  PROFILE_HEADLESS_THRESHOLD  = 100       // total tool calls in the session
+```
+
+An agent consuming too many tokens on structural lookups gets a narrower surface that
+preserves budget for high-value calls. The switch is transparent (tools simply disappear
+from `tools/list`); no notification is sent.
 
 ## 5. Drawbacks & Alternatives
 

@@ -1,6 +1,6 @@
 # Security
 
-**Version:** 1.0.4
+**Version:** 1.0.5
 **Status:** Stable
 **Layer:** implementation
 **Implements:** l1-security.md
@@ -361,6 +361,129 @@ Outcome: "approve" updates hooks_hash entry; "deny" disables this hook for the s
 ```
 
 This guards against supply-chain attacks where a malicious `git pull` replaces a trusted hook with a harmful command.
+
+### 4.9 Telemetry data contract
+
+[ADDED] Cronus may collect anonymous usage statistics to inform which features and
+integrations receive the most development attention. The contract below defines the
+exact collection boundary; any field not listed here is NEVER collected.
+
+#### Collection scope (allowlist)
+
+Every telemetry payload carries this envelope (no exceptions):
+
+```text
+[REFERENCE]
+TelemetryEnvelope {
+  machine_id:        String,   // random UUID, minted on first send, stored in <state>/telemetry.json
+  cronus_version:    String,
+  os:                String,   // "darwin" | "windows" | "linux" (platform identifier only)
+  arch:              String,   // "arm64" | "x64" (CPU architecture only)
+  ci:                bool,     // whether the CI env var was set
+  schema_version:    u8,       // bumped when the allowlist changes
+}
+```
+
+And exactly one event from this set:
+
+```text
+[REFERENCE]
+TelemetryEvent:
+  install {
+    agents: Vec<String>,   // agent IDs configured (e.g. ["claude", "cursor"])
+    scope:  "global" | "local",
+    kind:   "fresh" | "upgrade" | "rerun",
+  }
+  index_complete {
+    languages:    Vec<String>,    // language names present (e.g. ["rust", "typescript"])
+    file_bucket:  FileCountBucket,  // see bucketing below
+    duration_bucket: DurationBucket,
+  }
+  usage_rollup {
+    // one entry per tool per day — aggregated locally, not a per-call stream
+    tool_name:  String,   // e.g. "cronus_recall", "cronus_context"
+    call_count: u32,
+    error_count: u32,
+    agent_name:  Option<String>,   // from MCP handshake (e.g. "Claude Code 2.1")
+    date:        String,           // "YYYY-MM-DD" (UTC)
+  }
+  uninstall {
+    agents: Vec<String>,
+  }
+
+FileCountBucket: "<100" | "100-1k" | "1k-10k" | "10k+"
+DurationBucket:  "<10s" | "10-60s" | "1-5m" | "5m+"
+```
+
+Bucketing replaces exact counts and durations — the endpoint receives a category, not a
+number. This makes it structurally impossible to derive precise workspace size from telemetry.
+
+#### What is NEVER collected (hard constraints)
+
+```text
+[REFERENCE]
+Never collected — enforced at the ingest endpoint (any unlisted field is DROPPED):
+  × Source code (any fragment)
+  × File paths, file names, directory names
+  × Repository names or URLs
+  × Symbol names, function names, query strings
+  × Error messages containing user content
+  × IP addresses (not read, not logged, IP discarding enabled at the analytics backend)
+  × Username, hostname, email, environment variables
+  × Any personally identifying information
+```
+
+The machine ID is a **random UUID** stored in `<state>/telemetry.json`. It is derived from
+nothing — not hardware fingerprint, not username, not any OS identifier. Deleting the file
+(or running `cronus telemetry off` then `on`) creates a new UUID with no link to the old
+one.
+
+#### Transmission model
+
+```text
+[REFERENCE]
+Aggregation:   events are accumulated as in-memory counters during a session; they are
+               merged into daily totals in <state>/telemetry.json at session end.
+               Nothing is sent in real time, per-call, or per-turn.
+
+Buffering:     the local buffer is capped at TELEMETRY_BUFFER_MAX_BYTES.
+               Writes that would exceed the cap drop the oldest entry.
+
+Sending:       fires once at session start (flush-on-open), fire-and-forget with a
+               short timeout. Failures are silently discarded — telemetry never
+               slows a session down, never logs errors, never retries in a loop.
+
+Constants:
+  TELEMETRY_BUFFER_MAX_BYTES = 262_144   // 256 KB local buffer cap
+  TELEMETRY_SEND_TIMEOUT_MS  =   3_000   // network timeout; fire-and-forget
+```
+
+#### Opt-out
+
+```text
+[REFERENCE]
+Priority order (highest wins):
+  1. DO_NOT_TRACK=1 env var (cross-tool standard; always honored)
+  2. CRONUS_TELEMETRY=0 env var (per-shell override)
+  3. telemetry.enabled: false in <state>/settings.json (persisted choice)
+  4. Default: enabled (with one-time notice on first send if the interactive
+     installer was not run)
+
+Opt-out is stored in <state>/telemetry.json { enabled: false }.
+Off means off: when disabled, Cronus records nothing, opens no connection,
+and sends no "opted-out" ping.
+```
+
+The interactive installer (`cronus install`) presents an explicit opt-in toggle with a
+visible default and does not re-ask on subsequent runs. Silent mode (`--non-interactive`)
+inherits the stored preference or defaults to disabled.
+
+#### SEC-4 compliance
+
+This design enforces SEC-4 (data vs telemetry) by construction: the telemetry payload is
+built from the allowlist above; user content cannot appear because no collection path
+touches it. The endpoint validates against the allowlist server-side — any unlisted field
+is dropped rather than stored, providing defense-in-depth.
 
 ## 5. Drawbacks & Alternatives
 

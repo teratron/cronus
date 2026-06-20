@@ -1,6 +1,6 @@
 # Extension Registry
 
-**Version:** 1.0.5
+**Version:** 1.0.6
 **Status:** Stable
 **Layer:** implementation
 **Implements:** l1-extensions.md
@@ -593,6 +593,125 @@ Third-party channel plugins may register additional slash commands via `register
 | status | `cronus channel status` | `/channel status` |
 | list pending pairings | `cronus channel pairing list <channel>` | — |
 | approve pairing | `cronus channel pairing approve <channel> <code>` | — |
+
+### 4.14 Installer target interface
+
+[ADDED] The multi-agent installer exposes a uniform interface for wiring Cronus (or any
+MCP-capable extension) into the configuration of every supported AI agent host. Adding
+support for a new agent host requires exactly one new file implementing this interface and
+one registry entry.
+
+#### AgentTarget interface
+
+```text
+[REFERENCE]
+AgentTarget {
+  id:          TargetId,       // stable kebab-case identifier ("claude", "cursor", …)
+  display_name: String,        // human-readable name for interactive prompts
+  docs_url:    Option<String>, // where users can learn more about this agent
+
+  supports_location(loc: Location) -> bool
+    // Location: "global" | "local"
+    // Some agents have no per-project config (only a global ~/.agent/ dir).
+    // Return false for unsupported (target, location) pairs — installer skips cleanly.
+
+  detect(loc: Location) -> DetectionResult
+    // Best-effort heuristic: is this agent installed? Has Cronus already been wired?
+    // False positives acceptable; false negatives require manual opt-in.
+
+  install(loc: Location, opts: InstallOptions) -> WriteResult
+    // Write the MCP-server config for this agent at the given location.
+    // Surgical edit — never touch sibling MCP servers, sibling permissions, or
+    // unrelated config sections. Idempotent: a byte-identical re-run returns `unchanged`.
+
+  uninstall(loc: Location) -> WriteResult
+    // Inverse of install. Removes only what install would have written.
+    // Safe to call when nothing was ever installed (returns `not-found` actions).
+
+  print_config(loc: Location) -> String
+    // Print the MCP-server snippet a user would paste manually.
+    // MUST NOT touch the filesystem — pure display function.
+
+  describe_paths(loc: Location) -> Vec<String>
+    // Filesystem paths this target would write to at this location.
+    // Used for dry-run output and uninstall confirmation.
+}
+
+Location:  "global" | "local"
+InstallOptions { auto_allow: bool }  // whether to write agent permission grants (if any)
+```
+
+#### DetectionResult and WriteResult
+
+```text
+[REFERENCE]
+DetectionResult {
+  installed:          bool,           // agent CLI / config dir detected on this machine
+  already_configured: bool,           // Cronus MCP already wired at this location
+  config_path:        Option<String>, // path inspected; shown in diagnostic / dry-run
+}
+
+WriteResult {
+  files: Vec<{
+    path:   String,
+    action: FileAction,
+  }>,
+  notes: Vec<String>,   // optional one-line notes surfaced verbatim; keep short
+}
+
+FileAction:
+  "created"   — new file written
+  "updated"   — existing file modified
+  "unchanged" — file touched but byte-identical; idempotent re-run
+  "removed"   — file deleted by uninstall
+  "not-found" — uninstall called on a file that was never written (safe no-op)
+  "kept"      — file present but NOT touched (e.g. uninstall preserving sibling config)
+
+`unchanged` is the critical state for installer stability: a re-run that writes the same
+content must return `unchanged`, not `updated`, so callers can detect genuine changes.
+```
+
+#### Registry pattern
+
+```text
+[REFERENCE]
+ALL_TARGETS: readonly Vec<AgentTarget>   // ordered; order is prompt order and --target=all order
+
+get_target(id: &str) -> Option<&AgentTarget>
+detect_all(loc: Location) -> Vec<(AgentTarget, DetectionResult)>
+
+resolve_target_flag(value: &str, loc: Location) -> Vec<AgentTarget>:
+  "auto" → detect_all, return those with installed=true; fallback to first target if none
+  "all"  → ALL_TARGETS
+  "none" → []
+  csv    → split on ',', look up each id; error on unknown ids with the known list
+
+CLI --target flag grammar:
+  --target=auto       (default when flag omitted)
+  --target=all
+  --target=none
+  --target=claude,cursor
+```
+
+#### Surgical config editing
+
+Installer writes MUST use surgical JSON/TOML/JSONC editing rather than full rewrites.
+This preserves user comments, formatting, sibling MCP servers, and unrelated config blocks
+when Cronus is added or removed.
+
+For JSONC: parse with a comment-preserving parser; locate or insert the
+`mcpServers.cronus` key; write only that subtree. Adjacent keys and comments are untouched.
+
+For TOML: a hand-rolled serializer scoped to `[mcp_servers.cronus]`; sibling `[section]`
+blocks and `[[array]]` entries are preserved verbatim.
+
+**Idempotency invariant**: install then uninstall then install must return the config file
+to the same byte-exact state as after the first install.
+
+#### Adding a new target
+
+One new file `targets/<id>.ts` implementing `AgentTarget` + one entry in `ALL_TARGETS`.
+No changes to the installer orchestrator or the MCP server itself.
 
 ## 5. Drawbacks & Alternatives
 
