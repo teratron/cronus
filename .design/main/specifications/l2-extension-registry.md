@@ -1,6 +1,6 @@
 # Extension Registry
 
-**Version:** 1.0.6
+**Version:** 1.0.7
 **Status:** Stable
 **Layer:** implementation
 **Implements:** l1-extensions.md
@@ -277,9 +277,13 @@ SKILL.md YAML frontmatter:
                              //   "vault-search-fts5", "web-search-ddgr", "google-calendar-read"
   inputs:          Input[]   // typed input declarations the UI/CLI can render as a form
   output_artifact: String?   // relative path of the document the skill writes, e.g. "wiki/[slug].md"
-  frequency:       Frequency // execution cadence (see below)
-  pack:            String?   // optional function-pack grouping label, e.g. "ceo" | "engineering"
-                             // used by the UI to group skills into pack browsers
+  frequency:       Frequency   // execution cadence (see below)
+  pack:            String?     // optional function-pack grouping label, e.g. "ceo" | "engineering"
+                               // used by the UI to group skills into pack browsers
+  permissions?:    String[]    // explicit capability declarations; minimal, no wildcards
+                               // (wildcards "*"/"all"/"full"/"any" are flagged HIGH by the scanner)
+                               // e.g. ["network:read", "fs:read:/tmp/"]
+  parameters?:     Parameter[] // for skills that expose MCP tools: tool parameter declarations
 
 Input {
   name:        String
@@ -287,10 +291,27 @@ Input {
   required:    bool   // default false
 }
 
+Parameter {
+  name:        String
+  description: String   // must not exceed 500 chars; longer descriptions are flagged as
+                        // potential instruction-smuggling vectors (TP3) by the scanner
+  type:        "string" | "number" | "boolean"
+  required:    bool
+}
+
 Frequency: "on-demand"            // user-triggered only
          | "cron:<CRON_EXPR>"     // scheduled via the workspace cron system; e.g. "cron:0 8 * * *"
          | "on-demand-or-cron"    // supports both paths; scheduled-run context available via env
 ```
+
+#### MCP permission declarations and activation scan
+
+Skills that declare `permissions` or `parameters` trigger additional least-privilege and tool-poisoning checks during the skill-scanner pass at activation (see `l2-tool-security.md §4.9`):
+
+- **LP1–LP4** (least privilege): code-detected capabilities must match declared `permissions`; wildcard grants are flagged HIGH; missing `permissions` when capabilities are detectable is flagged MEDIUM.
+- **TP1–TP4** (tool poisoning): tool names and parameter descriptions are checked for hidden directives (zero-width chars), Unicode confusable characters (CRITICAL), and suspiciously long descriptions (>500 chars).
+
+Permission strings follow the pattern `<category>:<access>:<scope>` where scope is optional. Omit the field entirely for markdown-only skills that need no capabilities.
 
 #### Skill body structure
 

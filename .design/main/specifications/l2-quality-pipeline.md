@@ -1,6 +1,6 @@
 # Quality Pipeline
 
-**Version:** 1.1.1
+**Version:** 1.1.2
 **Status:** Stable
 **Layer:** implementation
 **Implements:** l1-quality-standards.md
@@ -298,11 +298,65 @@ Status values: TODO | IN PROGRESS | DONE | BLOCKED (<one-line reason>) | REJECTE
 - No secret values anywhere — locations and credential types only.
 - Is the "Planned at" SHA filled in and the drift check's in-scope paths matching the Scope section?
 
+### 4.8 Live Dependency Vulnerability Lookup
+
+The security gate supplements per-ecosystem audit tools (§4.1) with a cross-ecosystem live lookup against the OSV.dev public vulnerability database. This covers dependency declarations in skill manifests and any project-level lockfile parsed during the audit workflow.
+
+```text
+[REFERENCE]
+Lookup procedure:
+  1. Parse dependency declarations: requirements.txt / pyproject.toml (PyPI),
+     package.json / package-lock.json (npm), Cargo.toml / Cargo.lock (crates.io),
+     go.mod (Go Modules).
+  2. Batch-query OSV.dev:
+       POST https://api.osv.dev/v1/querybatch
+       Body: { queries: [{ package: { name, ecosystem }, version? }, ...] }
+       Request timeout: 10 s
+  3. Cache results in-memory: key = (name.lower().replace("_","-"), version, ecosystem)
+     TTL = 3 600 s (1 hour); evict on TTL expiry, not on process exit.
+  4. On network failure or timeout: emit a WARNING in the gate report and continue.
+     The security gate never hard-blocks solely due to an unreachable CVE API.
+  5. Findings carry: vuln_id, summary, severity, CVE/GHSA aliases.
+
+Offline fallback: a small bundled static list covers the highest-severity known packages
+  (updated at release time). The live lookup supplements this list; it does not replace it.
+```
+
+No API key is required for OSV.dev. The batch endpoint is rate-limit-lenient for typical project sizes; no authentication or registration is needed.
+
+### 4.9 SARIF Output Format
+
+The quality pipeline gate runner emits findings in SARIF 2.1.0 format when the `--format sarif` flag is specified or when any security finding is present in a CI run. SARIF is consumed by GitHub Code Scanning, VS Code problem pane, and most CI security dashboards.
+
+```text
+[REFERENCE]
+Gate runner SARIF output:
+
+  CLI:   cronus check security --format sarif [--output findings.sarif]
+  CI:    automatic when CRONUS_SARIF_OUTPUT env var is set to an output path
+
+SARIF severity mapping:
+  gate finding CRITICAL / HIGH  → level: "error"
+  gate finding MEDIUM           → level: "warning"
+  gate finding LOW / INFO       → level: "note"
+
+Result location schema:
+  artifactLocation.uri:    file path relative to project root
+  region.startLine:        first affected line
+  region.endLine:          last affected line (= startLine when single-line)
+  rule.id:                 gate-qualified finding ID (e.g. "security/TT3", "security/SC4")
+  rule.shortDescription:   one-line finding message
+
+The skill scanner (`l2-tool-security.md §4.13`) uses the same SARIF schema for
+skill-level findings, so both streams can be merged in a single CI SARIF upload.
+```
+
 ## 5. Drawbacks & Alternatives
 
 - **Toolchain drift:** ecosystems change default tools (e.g. eslint vs biome); mitigated by making the map configurable per project.
 - **Detection ambiguity in polyglot repos:** multiple language markers require running multiple toolchains; the runner aggregates their reports.
 - **Alternative — one fixed toolchain:** rejected; the office builds projects in many languages (QLY-6).
+- **OSV.dev latency:** live CVE lookup adds a network round-trip to the security gate. Mitigated by the 1-hour cache and the offline fallback list; the gate never blocks solely on a network failure.
 
 ## Canonical References
 
