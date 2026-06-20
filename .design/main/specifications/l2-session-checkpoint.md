@@ -1,6 +1,6 @@
 # Session Checkpoint
 
-**Version:** 1.0.0
+**Version:** 1.0.1
 **Status:** Stable
 **Layer:** implementation
 **Implements:** l1-orchestration.md, l1-memory-model.md
@@ -186,12 +186,112 @@ Both predicates gate spawning of the `memory-writer` background agent (see l2-ag
 | view checkpoint | `cronus session checkpoint [--session-id <id>]` | `/checkpoint` | `checkpoint.read(session_id) -> CheckpointContext` |
 | clear checkpoint | `cronus session checkpoint clear [--session-id <id>]` | `/checkpoint clear` | `checkpoint.clear(session_id) -> void` |
 
+### 4.10 File-level snapshot contract
+
+Sections §4.1–§4.9 describe conversation-level checkpointing (what was said and attempted). This section defines a complementary **file-level snapshot** mechanism: before any tool that mutates the file system executes, the runtime captures the current state of all touched files in a shadow repository. This lets the user restore exact file content independently of the conversation history.
+
+#### Shadow repository layout
+
+The shadow repository is a bare-git-style store isolated from the project's own `.git` directory:
+
+```text
+[REFERENCE]
+<state>/snapshots/<project_hash>/
+  .git/        — shadow git store (bare objects, HEAD branch = "snapshots")
+  <named-refs> — one ref per snapshot (see naming convention below)
+
+project_hash = SHA-256(canonical_project_root_path)[0..16]  // hex, 16 chars
+```
+
+The shadow repo is created on first use; its existence is transparent to the project's own git history. The project's `.gitignore`, hooks, and branches are not read or modified.
+
+#### Snapshot naming convention
+
+Each snapshot is named to be human-readable and sortable:
+
+```text
+[REFERENCE]
+<ISO8601_compact>-<sanitized_filename>-<tool_name>
+
+Examples:
+  20260620T143201Z-main.rs-write_file
+  20260620T144500Z-config.toml-replace
+  20260620T144900Z-tests-run_shell
+
+Rules:
+  ISO8601_compact = UTC timestamp, format YYYYMMDDTHHMMSSZ, no separators
+  sanitized_filename = first affected file's basename; "/" replaced with "_"; max 32 chars
+  tool_name = the name of the tool that triggered the snapshot
+```
+
+For tools affecting multiple files, `sanitized_filename` uses the first file alphabetically. The full list of affected files is stored in the snapshot's commit message.
+
+#### Snapshot trigger
+
+A snapshot is created immediately before a tool's `PreToolUse` hook chain completes, when the tool's `mutates_filesystem` flag is true. The snapshot precedes the tool execution; if the tool fails, the snapshot still exists and can be used to confirm the pre-failure state.
+
+```text
+[REFERENCE]
+tools with mutates_filesystem = true (initial set):
+  write_file, replace, edit, delete_file, move_file, rename_file,
+  run_shell (when shell output includes file mutations, best-effort)
+```
+
+Third-party tools may opt in by setting `mutates_filesystem: true` in their tool definition.
+
+#### Snapshot commit
+
+The snapshot commit captures:
+
+1. The full text of every file the tool will touch (tracked files only; binary files are excluded with a manifest entry).
+2. A commit message with structured metadata:
+
+```text
+[REFERENCE]
+snapshot: <tool_name> @ <ISO8601_compact>
+
+Files: <comma-separated list of relative paths>
+Session: <session_id>
+Actor: <actor_id>
+Tool input (sanitized): <JSON of tool input with secret fields redacted>
+```
+
+Secret fields (`password`, `token`, `api_key`, `secret`, `credential`) are replaced with `[REDACTED]` in the commit message.
+
+#### Restore command
+
+```text
+[REFERENCE]
+| Action | CLI | TUI | Library |
+| restore file state to snapshot | cronus snapshot restore <name> | /snapshot restore <name> | snapshot.restore(name) -> RestoreResult |
+| list snapshots for current project | cronus snapshot list | /snapshot list | snapshot.list() -> Vec<SnapshotMeta> |
+| show snapshot details | cronus snapshot show <name> | /snapshot show <name> | snapshot.show(name) -> SnapshotDetail |
+
+RestoreResult { restored_files: Vec<String>, skipped_files: Vec<String>, errors: Vec<String> }
+SnapshotMeta { name: String, timestamp: String, tool: String, files: Vec<String> }
+```
+
+Restore rewrites the project files to the snapshot state. It does NOT restore conversation history (that is `cronus session checkpoint`'s domain). After restore, the session emits a `SessionStart` hook event with `source: "restore"` so hooks can re-initialize environment.
+
+#### Non-interference invariants
+
+```text
+[REFERENCE]
+Invariants:
+  SNAP-1 The shadow repo never modifies <project_root>/.git in any way.
+  SNAP-2 Snapshot names are monotonically increasing (timestamp-prefixed); no name is ever reused.
+  SNAP-3 Snapshots are retention-limited: keep the 50 most recent snapshots per project; older ones are pruned on each new snapshot creation.
+  SNAP-4 Binary files (non-UTF-8) are excluded from content capture; a manifest entry records their path and size for reference.
+  SNAP-5 Secrets (matched by field name in tool_input JSON) are redacted in commit messages; file content is captured verbatim (secrets in files are the user's responsibility).
+```
+
 ## 5. Drawbacks & Alternatives
 
 - **Fork-agent complexity:** the ForkContext in-memory map couples the spawn machinery to the checkpoint writer. The benefit (KV-cache warm hit) is significant for long-running autonomous tasks.
 - **Section budgets are fixed defaults:** adaptive budgets (sized by remaining context window) would be more accurate but require knowing the provider's exact context size before writing.
 - **Alternative — compact-on-every-turn:** too expensive for short turns; checkpointing only at context-window boundaries keeps the overhead proportional to actual context pressure.
 - **Alternative — re-summarize the whole history:** LLM-based summarization loses precise action log detail; the structured checkpoint.md preserves actionable specifics the model needs to resume correctly.
+- **File-level snapshots vs conversation checkpoints:** they serve different recovery goals. Snapshots restore disk state; conversation checkpoints restore model context. A full recovery combines both: restore files first, then resume from the conversation checkpoint.
 
 ## Canonical References
 

@@ -1,6 +1,6 @@
 # Plugin Hook System
 
-**Version:** 1.0.2
+**Version:** 1.0.3
 **Status:** Stable
 **Layer:** implementation
 **Implements:** l1-extensions.md
@@ -522,12 +522,149 @@ Hooks without a trusted_hash execute unconditionally (legacy / low-risk hooks).
 
 Hash verification failures are appended to the audit log with `category: "hook_integrity_failure"` and are visible in the Doctor health report.
 
+### 4.14 Model-level hook events
+
+Sections §4.10–§4.13 operate at tool-call granularity. This section defines three hook events that fire at **LLM-call granularity** — once per provider request, not once per tool execution. These hooks give plugins fine-grained control over the prompt sent to the model and the response received from it, without touching the tool pipeline.
+
+#### Event definitions
+
+| Event | When | Primary use |
+| --- | --- | --- |
+| `BeforeModel` | Before each LLM request is dispatched to the provider | Modify system prompt, inject context, or provide a synthetic mock response |
+| `AfterModel` | After the LLM response arrives, before tool dispatch | Redact, log, or modify the response; block on policy violations |
+| `BeforeToolSelection` | After context is assembled but before the model selects tools | Dynamically restrict the available tool list or force a specific tool config |
+
+All three events use the standard hook input/output format (§4.10) and honor the same exit-code contract. They fire in the order `BeforeModel → [LLM call] → AfterModel → BeforeToolSelection → [model selects tools]`.
+
+#### BeforeModel
+
+```text
+[REFERENCE]
+BeforeModelInput {
+  session_id:      String,
+  transcript_path: String,
+  cwd:             String,
+  hook_event_name: "BeforeModel",
+  timestamp:       String,
+  llm_request: {
+    system:   String[],    // system prompt blocks, in order
+    messages: Message[],   // conversation history
+    tools:    ToolDef[],   // currently registered tools
+    model:    String,      // resolved model identifier
+  }
+}
+
+BeforeModelOutput {
+  // Standard fields (continue, suppressOutput, systemMessage)
+  hookSpecificOutput?: {
+    hookEventName: "BeforeModel",
+    // Modify the outgoing request (merged field-by-field):
+    llm_request?: {
+      system?:   String[],
+      messages?: Message[],
+    },
+    // Inject a synthetic response — the LLM call is skipped entirely when present:
+    llm_response?: {
+      candidates: [{ content: { role: "model", parts: [{ text: String }] } }]
+    }
+  }
+}
+```
+
+Synthetic response injection bypasses the provider call; the runtime behaves as if the model returned that response. Use for testing hooks, policy bypasses in CI, or cached-response injection.
+
+#### AfterModel
+
+```text
+[REFERENCE]
+AfterModelInput {
+  session_id:      String,
+  hook_event_name: "AfterModel",
+  timestamp:       String,
+  llm_request:     LLMRequest,   // same shape as BeforeModelInput.llm_request
+  llm_response: {
+    candidates: [{ content: { role: "model", parts: Part[] } }]
+  }
+}
+
+AfterModelOutput {
+  hookSpecificOutput?: {
+    hookEventName: "AfterModel",
+    // Replace the model response delivered to the tool dispatcher:
+    llm_response?: {
+      candidates: [{ content: { role: "model", parts: [{ text: String }] } }]
+    }
+  }
+}
+```
+
+If `llm_response` is present in the hook output, it replaces the provider's response. If absent, the original response is used. Use for redaction (strip PII from model output before it reaches the conversation), policy enforcement (block specific tool-call patterns), or audit logging.
+
+#### BeforeToolSelection
+
+```text
+[REFERENCE]
+BeforeToolSelectionInput {
+  session_id:      String,
+  hook_event_name: "BeforeToolSelection",
+  timestamp:       String,
+  llm_request:     LLMRequest,   // assembled context for this turn
+}
+
+BeforeToolSelectionOutput {
+  hookSpecificOutput?: {
+    hookEventName: "BeforeToolSelection",
+    toolConfig?: {
+      mode: "auto" | "any" | "none",
+      allowedTools?: String[],   // tool names to allow; absent = all tools allowed
+    }
+  }
+}
+```
+
+`toolConfig.mode` mirrors the provider's function-calling mode:
+
+- `"auto"` — model may call any allowed tool or respond with text.
+- `"any"` — model must call a tool (forces tool use).
+- `"none"` — model may not call any tool (text-only response).
+
+`toolConfig.allowedTools` restricts the tool set visible to the model for this turn without removing tool definitions from the registry. Use for role-based tool restrictions, mode-specific tool filtering (e.g. read-only mode removes all write tools), or A/B experiments.
+
+#### Tail tool call request (§4.10 extension)
+
+The `AfterTool` hook output may include a `tailToolCallRequest` that the runtime executes immediately after the original tool completes. The tail call's result **replaces** the original tool's result as seen by the model:
+
+```text
+[REFERENCE]
+// In AfterToolOutput.hookSpecificOutput:
+tailToolCallRequest?: {
+  name: String,          // name of the tool to execute
+  args: Map<String, Any> // arguments for the tail tool
+}
+```
+
+Use case example: after a `run_shell` tool completes, a hook executes a lint or test runner as a tail call; the model sees the linter output rather than the raw shell result. Only one tail call per `AfterTool` invocation; chaining is not supported (prevents infinite recursion).
+
+#### Context clear on AfterAgent
+
+The `AfterAgent` hook output may request context window clearing after the agent turn completes:
+
+```text
+[REFERENCE]
+// In AfterAgentOutput.hookSpecificOutput (extends §4.10 AfterAgent output):
+clearContext?: bool   // when true, the runtime clears the session context window
+                      // after this agent turn; next turn starts with a fresh context
+```
+
+Use for long-running autonomous agents that periodically flush stale context to stay within token limits while preserving the constitutional files loaded from `<ws>/constitution/`.
+
 ## 5. Drawbacks & Alternatives
 
 - **Sequential execution:** deterministic but not concurrent. A misbehaving plugin that hangs delays all subsequent hooks. Mitigated by per-hook timeouts (future work).
 - **Fail-forward error contract:** a plugin error is logged but does not fail the actor. This is intentional — a buggy plugin should not take down the whole turn.
 - **MAX_PRE_REACT/POST_REACT = 3:** arbitrary but prevents runaway loops. Configurable per workspace.
 - **Alternative — event-driven hooks only:** simpler, but preStop/postStop re-entry capability is needed for automatic memory consolidation and subagent health checks without user involvement.
+- **Model-level hooks bypass guardrails if misused:** synthetic response injection (§4.14) effectively mocks the LLM; a malicious plugin could inject harmful responses. Mitigation: model-level hooks require the same `trusted_hash` verification (§4.13) as other hooks; any hash mismatch skips the hook rather than allowing the mock.
 
 ## Canonical References
 

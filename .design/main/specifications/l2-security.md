@@ -1,6 +1,6 @@
 # Security
 
-**Version:** 1.0.3
+**Version:** 1.0.4
 **Status:** Stable
 **Layer:** implementation
 **Implements:** l1-security.md
@@ -236,10 +236,138 @@ AuthKeyringBackendKind {
 
 `Keyring` is the most secure option (key material never touches disk in plaintext). `Secrets` is the Windows default because DPAPI's generic keyring does not offer the same cross-session durability as macOS Keychain. `Ephemeral` is the most constrained — a sandboxed agent running in this mode cannot exfiltrate credentials across session boundaries, limiting the blast radius of a credential theft attack.
 
+### 4.8 Workspace trust model
+
+When Cronus opens a project directory for the first time, it cannot know whether that directory's `.cronus/settings.json` and hook definitions are safe to execute. The workspace trust model provides a first-run gate that presents the user with a discovery summary before loading any project-level configuration.
+
+#### Trust registry
+
+Workspace trust decisions are recorded in a per-user registry file that persists across sessions:
+
+```text
+[REFERENCE]
+<state>/trusted_workspaces.json
+
+Entry {
+  path:       String,        // canonical absolute path of the trusted folder
+  trust_level: TrustLevel,   // see below
+  granted_at: Timestamp,
+  hooks_hash: Map<String, String>,  // hook-file-path → SHA-256 at time of trust grant
+                                    // (same mechanism as l2-plugin-hooks.md §4.13)
+}
+
+TrustLevel: "trusted" | "trusted-parent" | "denied"
+  // "trusted"        — this specific directory is trusted.
+  // "trusted-parent" — any subdirectory of this path is trusted (blanket grant).
+  // "denied"         — this directory is explicitly untrusted; run in safe mode.
+```
+
+Trust decisions apply at directory granularity. A `trusted-parent` entry at `/projects/` automatically trusts `/projects/foo/`, `/projects/bar/`, etc. Lookup walks from the project root upward, first match wins.
+
+#### Discovery phase
+
+Before presenting the trust dialog, the runtime performs a read-only **discovery scan** of the project directory. The scan reports what would be loaded if the user grants trust:
+
+```text
+[REFERENCE]
+DiscoveryScan {
+  commands:         Vec<String>,    // .cronus/commands/**/*.toml — custom command files found
+  mcp_servers:      Vec<String>,    // MCP server entries in .cronus/settings.json
+  hooks:            Vec<HookEntry>, // hook definitions in hooks/hooks.json
+  skills:           Vec<String>,    // skill names found in .cronus/skills/
+  settings_summary: Vec<String>,    // non-default settings keys in .cronus/settings.json
+  security_warnings: Vec<String>,   // flagged dangerous settings (see below)
+  discovery_errors:  Vec<String>,   // parse errors encountered during scan
+}
+
+HookEntry { event: String, type: "command" | "prompt" | "agent", command_preview: String? }
+```
+
+The scan is entirely read-only; no code from the project directory is executed during discovery.
+
+#### Security warnings
+
+The discovery scan flags settings that elevate risk:
+
+```text
+[REFERENCE]
+Security warnings (emitted when .cronus/settings.json contains):
+  approval_mode: "yolo"          → "Auto-approve all tool calls is enabled"
+  sandbox.enabled: false         → "Tool sandboxing is disabled"
+  hooks with async: true         → "Async (non-blocking) hooks are present — they run without awaiting approval"
+  any hook command containing environment variable expansion not from the approved set
+                                 → "Hook command references untrusted env vars"
+```
+
+Any security warning must be displayed prominently in the trust dialog before the user can grant trust.
+
+#### Trust dialog (interactive)
+
+When no trust entry matches the current directory, the runtime presents a structured dialog:
+
+```text
+[REFERENCE]
+Trust dialog flow:
+  1. Display DiscoveryScan summary.
+  2. Display security_warnings (if any) in highlighted WARNING blocks.
+  3. Display discovery_errors (if any).
+  4. Present exactly three choices:
+       [T] Trust this folder: grants TrustLevel "trusted" for <project_root> only.
+       [P] Trust parent folder: grants TrustLevel "trusted-parent" for <project_root>/.
+       [D] Don't trust (safe mode): records TrustLevel "denied"; project settings are ignored.
+  5. Write the chosen entry to trusted_workspaces.json.
+  6. Proceed according to the outcome (§ safe mode below).
+```
+
+Non-interactive mode (headless / CI): if `CRONUS_TRUST_MODE=auto-trust` env var is set, the runtime grants `"trusted"` silently and logs the grant. If `CRONUS_TRUST_MODE=deny`, it grants `"denied"` silently. Any other value or absence → prompt is required; headless mode fails with a clear error if a TTY is unavailable.
+
+#### Safe mode (denied workspace)
+
+When a workspace is denied, the runtime loads only user-scope and system-scope configuration. Project-level settings are completely ignored:
+
+```text
+[REFERENCE]
+In safe mode:
+  - .cronus/settings.json is NOT loaded (workspace settings ignored).
+  - hooks/hooks.json is NOT loaded (project hooks do not fire).
+  - .cronus/commands/ are NOT loaded (project commands unavailable).
+  - .cronus/skills/ are NOT loaded (project skills unavailable).
+  - MCP servers defined in .cronus/settings.json are NOT connected.
+  - User-scope settings (~/<state>/settings.json) ARE loaded normally.
+  - A persistent banner "⚠ Untrusted workspace — project settings ignored" is shown.
+```
+
+Safe mode does not prevent the user from running the agent; it prevents untrusted project configuration from influencing execution.
+
+#### Hook fingerprint rotation
+
+When a previously trusted hook file is modified (its SHA-256 changes relative to `hooks_hash` in the registry entry), the hook is treated as **new and untrusted**. The user is prompted once to review and re-approve the changed hook:
+
+```text
+[REFERENCE]
+Hook fingerprint check (on each session start for trusted workspaces):
+  for hook in discovered_hooks:
+    stored_hash = registry.hooks_hash.get(hook.path)
+    current_hash = sha256(read(hook.path))
+    if stored_hash == None:
+      // new hook added since trust was granted → prompt to approve
+    elif stored_hash != current_hash:
+      // existing hook modified (e.g. via git pull) → prompt to re-approve
+    else:
+      // unchanged → execute normally
+
+Re-approval dialog shows: old command preview, new command preview, diff if text-comparable.
+Outcome: "approve" updates hooks_hash entry; "deny" disables this hook for the session (not globally).
+```
+
+This guards against supply-chain attacks where a malicious `git pull` replaces a trusted hook with a harmful command.
+
 ## 5. Drawbacks & Alternatives
 
 - **Redaction gaps:** unknown secret formats could slip; mitigated by allowlist-based telemetry and conservative defaults.
 - **Alternative — no sandbox:** rejected; agents execute untrusted code.
+- **Workspace trust adds friction on first use:** mitigated by the `trusted-parent` option (grant once per projects directory) and the `CRONUS_TRUST_MODE=auto-trust` env var for CI environments.
+- **Hook fingerprint rotation prompts on every `git pull`:** intentional — silent re-trust of changed hooks would defeat the guard. Teams that frequently update hooks should commit `hooks_hash` values to their project config so approvals propagate via version control.
 
 ## Canonical References
 
