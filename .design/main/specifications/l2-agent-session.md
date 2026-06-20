@@ -1,6 +1,6 @@
 # Agent Session Loop
 
-**Version:** 1.0.2
+**Version:** 1.0.3
 **Status:** Stable
 **Layer:** implementation
 **Implements:** l1-orchestration.md, l1-routing.md
@@ -330,6 +330,165 @@ goalReentryLoop(goal: Goal, turn_context: &mut TurnContext):
 `MAX_GOAL_REACT` (12) is higher than the plugin hook's `MAX_PRE_REACT` (3) because main-session goals are structurally larger tasks with more steps.
 
 The cap is per-turn, not per-goal: a goal that spans multiple user turns accumulates re-entries independently across each turn.
+
+### 4.10 Session server mode (daemon)
+
+`cronus serve` starts a daemon that exposes agent sessions over HTTP, allowing remote
+clients (IDE extensions, SDKs, web UIs) to drive Cronus without spawning a new process
+per connection. The daemon maintains a pool of long-lived agent sessions; clients
+connect via **ACP Streamable HTTP transport** — a single `/acp` endpoint mounted
+alongside the existing REST session surface.
+
+#### ACP HTTP endpoint
+
+```text
+[REFERENCE]
+POST   /acp  — send a JSON-RPC request or notification (response: 200 on initialize;
+                202 Accepted for all other methods — response is on the SSE stream)
+GET    /acp  — open a long-lived SSE stream (connection-scoped or session-scoped)
+DELETE /acp  — terminate this connection and cancel all its owned sessions
+
+Auth: Authorization: Bearer <token> (same middleware as the REST surface).
+SSRF guard (l2-security.md §4.4) applies to any outbound URL derived from client input.
+
+JSON-RPC methods accepted on POST /acp:
+  initialize               — mint Acp-Connection-Id; return protocol version + capabilities
+  session/new              — create an agent session; response on connection stream
+  session/load             — restore a saved session
+  session/resume           — resume an existing session
+  session/prompt           — send a prompt; response streams on the session stream
+  session/cancel           — (notification) cancel the in-flight prompt
+  session/close            — close a session
+  session/list             — enumerate active sessions
+  session/set_config_option — change model or approval mode (standard ACP method;
+                              configId: "model" | "mode")
+  _cronus/session/context   — get session context status (vendor extension)
+  _cronus/session/update_metadata — patch session metadata
+  _cronus/workspace/mcp     — MCP server status
+  _cronus/workspace/skills  — loaded skills
+  _cronus/workspace/env     — environment variable summary
+  _cronus/session/heartbeat — extend the connection idle TTL (vendor extension)
+  JSON-RPC response object  — client answer to an agent→client request (e.g. permission)
+```
+
+#### Identity layers
+
+Three identity scopes are stacked to correlate connection, session, and message:
+
+```text
+[REFERENCE]
+Acp-Connection-Id  (HTTP header) — transport binding; minted by the daemon at initialize.
+                                   Must be present on all /acp requests after initialization.
+Acp-Session-Id     (HTTP header) — required on session-scoped GET and session-scoped POSTs.
+                                   Must match sessionId inside the JSON-RPC params.
+sessionId          (JSON-RPC param) — inside method params; cross-checked against the header.
+                                      Mismatch → INVALID_PARAMS error.
+
+Session ownership: a connection may only subscribe to or prompt sessions it created via
+session/new / session/load / session/resume.
+Unowned session access → 403 Forbidden or INVALID_PARAMS.
+
+Loopback detection: captured at the TCP layer on each request (127.0.0.0/8, ::1,
+::ffff:127.*) and threaded into permission decisions ("local-only" policy).
+```
+
+#### Two-tier SSE streams
+
+```text
+[REFERENCE]
+Connection-scoped stream: GET /acp with Acp-Connection-Id only (no Acp-Session-Id).
+  Receives: session/new response, session/load response, connection-level notifications.
+
+Session-scoped stream: GET /acp with Acp-Connection-Id + Acp-Session-Id.
+  Receives: session/update notifications (streaming agent output),
+            agent→client requests (session/request_permission),
+            final prompt result frame ({id, result: {stopReason}}).
+
+Framing: standard SSE format ("data: <JSON-RPC object>\n\n"); events carry a monotonic id.
+Resume: Last-Event-ID header resumes from the connection's ring-buffer EventBus
+        (same ring-buffer maxQueued = 256 as the REST surface).
+
+Reconnect: a client may close and re-open the session-scoped SSE stream (e.g., network glitch)
+without losing the in-flight prompt. The new stream attaches to the live session binding;
+the old stream's onClose does NOT abort promptAbort if a fresh stream is now live.
+```
+
+#### Extension namespace
+
+```text
+[REFERENCE]
+Standard ACP methods are never renamed.
+Cronus-specific capabilities without a standard ACP equivalent use vendor-namespaced names:
+  _cronus/<area>/<verb>   (ACP spec reserves the _ prefix for extensions)
+
+Extensions are advertised at initialize under:
+  agentCapabilities._meta: { "cronus": { ... } }
+
+Clients feature-detect before use; unknown _cronus/* methods return method-not-found (-32601).
+```
+
+#### Connection lifecycle
+
+```text
+[REFERENCE]
+ConnectionRegistry {
+  max_connections: usize,   // cap: 64; 503 when exceeded (logged to stderr)
+  idle_ttl_ms:     u64,    // default: 30 min; reap idle connections
+}
+
+touch() resets the idle clock. Called on:
+  - any valid POST from this client
+  - each SSE heartbeat write (prevents long-running prompts from being idle-reaped)
+
+On connection reap: log entry + close SSE streams + abort promptAbort on each owned session.
+
+Pre-attach buffer (frames queued before the client opens GET /acp):
+  capped at 256 frames, drop-oldest policy.
+
+AbortController lifecycle for session streams:
+  Each GET /acp session stream installs a fresh AbortController — never reused.
+  Closing the old stream AFTER the new one is attached; avoids aborting the
+  new stream's event pump on reconnect.
+```
+
+#### Permission round-trip
+
+```text
+[REFERENCE]
+When an in-flight prompt requires user approval:
+
+Agent → client (on session-scoped SSE stream):
+  { "id": "_cronus_perm_N", "method": "session/request_permission", "params": { ... } }
+
+Client → agent (POST /acp, JSON-RPC response object):
+  { "id": "_cronus_perm_N", "result": { "approved": true } }
+  OR
+  { "id": "_cronus_perm_N", "error": { ... } }
+
+Daemon-allocated ids use the string form "_cronus_perm_N" (N monotonic) to avoid
+collisions with client-supplied numeric ids.
+
+Pending permissions are tracked in the connection registry by JSON-RPC id.
+On connection teardown or session close: outstanding permissions are cancelled via
+cancelAbandonedPermission — never left blocking an in-flight prompt.
+On malformed client vote (result: {}): cancel the permission and release the mediator
+so the agent is not permanently stalled.
+```
+
+#### Dual-transport policy
+
+```text
+[REFERENCE]
+The /acp endpoint is ADDITIVE — it runs alongside the existing REST session routes.
+Both transports share one underlying session engine; no state duplication.
+A single session may be driven concurrently by REST and /acp clients (multi-client attach
+is intentional; the bearer-token + single-workspace bind remains the trust boundary).
+
+Disable: CRONUS_SERVE_ACP_HTTP=0 env var prevents mounting /acp routes at startup.
+
+Migration path: once the ACP Streamable HTTP specification ratifies and SDKs ship,
+the REST surface may be reframed as a thin compatibility shim over /acp (separate PR).
+```
 
 ## 5. Drawbacks & Alternatives
 

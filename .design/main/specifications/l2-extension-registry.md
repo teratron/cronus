@@ -1,6 +1,6 @@
 # Extension Registry
 
-**Version:** 1.0.4
+**Version:** 1.0.5
 **Status:** Stable
 **Layer:** implementation
 **Implements:** l1-extensions.md
@@ -419,6 +419,180 @@ The `connect` configuration in `.mcp.json` or the `mcpServers` manifest field ac
 **Tool naming**: registered MCP tools are prefixed as `mcp__<plugin-name>_<server-name>__<tool-name>`. Commands pre-allow specific tools via `allowed-tools`; prefer explicit names over wildcard `__*` grants.
 
 **Security**: use HTTPS/WSS only; reference credentials via environment variables (`${MY_API_KEY}`); document required env vars in the plugin README.
+
+### 4.13 Channel plugin kind
+
+A **channel plugin** connects an external messaging platform (Telegram, Slack, DingTalk,
+WeChat, or any third-party IM service) to a Cronus agent session. Channel plugins are a
+distinct extension kind (`kind: "channel"`) in the unified registry alongside skills,
+MCP servers, and plugins.
+
+#### Channel interface
+
+Every channel plugin implements three lifecycle methods:
+
+```text
+[REFERENCE]
+ChannelPlugin {
+  channel_type:           String,        // unique kind identifier, e.g. "telegram"
+  display_name:           String,
+  required_config_fields: Vec<String>,   // field names the user must provide (e.g. "token")
+  create_channel(config: ChannelConfig) -> ChannelInstance
+}
+
+ChannelInstance methods:
+  connect()                              // connect to platform; register message handlers
+  send_message(chat_id: &str, text: &str) // format and deliver agent response
+  disconnect()                            // clean up on shutdown
+
+On receiving an inbound message, the plugin builds an Envelope and calls
+handle_inbound(envelope). The base runtime handles routing, access control, session
+management, slash commands, prompt serialization, and crash recovery — the plugin is
+responsible only for the platform API translation.
+```
+
+#### Envelope (normalized inbound format)
+
+All platforms convert inbound messages to a common Envelope before routing:
+
+```text
+[REFERENCE]
+Envelope {
+  // Identity
+  sender_id:    String,          // stable unique identifier for this sender on this platform
+  sender_name:  String,          // display name (may be empty)
+  chat_id:      String,          // DM or group identifier; must distinguish DMs from groups
+  channel_name: String,          // matches ChannelPlugin.channel_type
+
+  // Content
+  text:             String,      // message text; @mentions stripped by the plugin
+  image_base64:     Option<String>,
+  image_mime_type:  Option<String>,
+  referenced_text:  Option<String>,   // quoted/replied-to text
+
+  // Context flags
+  is_group:       bool,
+  is_mentioned:   bool,   // bot was @mentioned in a group; used by GroupGate
+  is_reply_to_bot: bool,
+  thread_id:      Option<String>,
+}
+
+Plugin contract:
+  sender_id must be stable across messages (same user → same id).
+  chat_id must distinguish DM channels from group channels.
+  Boolean flags must be accurate — they directly gate access-control decisions.
+  @mentions must be stripped from text before building the Envelope.
+```
+
+#### Session routing
+
+One Cronus process serves multiple simultaneous users; each (channel, routing-key)
+pair maps to an isolated agent session:
+
+```text
+[REFERENCE]
+SessionScope: "user" | "thread" | "single"
+  "user"   — one session per sender_id (default); conversations are fully isolated
+  "thread" — one session per thread_id (or chat_id when thread_id is absent)
+  "single" — all senders on this channel share one session (broadcast / group-bot use)
+
+Routing key: "<channel_name>:<scope_key>"
+  user   → scope_key = sender_id
+  thread → scope_key = thread_id ?? chat_id
+  single → scope_key = channel_name (constant)
+
+Per-routing-key message chains are serialized (one promise chain per key) to prevent
+concurrent prompt collisions on the same session.
+```
+
+#### Access control
+
+Two gate layers are applied in order before a message reaches the agent:
+
+```text
+[REFERENCE]
+SenderGate: "allowlist" | "pairing" | "open"
+  "allowlist" — only sender_ids listed in allowed_users are forwarded; others dropped silently
+  "pairing"   — new users must complete a pairing handshake (/pair <code>); codes are
+                generated via CLI and approved by an operator
+  "open"      — any sender may interact (suitable only for private/internal deployments)
+
+GroupGate: "disabled" | "allowlist" | "open"
+  "disabled"  — group messages are always dropped (default)
+  "allowlist" — only group chat_ids listed in the groups config are accepted
+  "open"      — any group chat may interact
+
+GroupConfig {
+  require_mention: bool,   // when true, bot must be @mentioned; bare group messages are ignored
+}
+```
+
+#### Channel manifest
+
+Channel plugins are packaged as extensions. The manifest (`extension.json`) declares
+each channel type under a `"channels"` key:
+
+```text
+[REFERENCE]
+extension.json {
+  "name":    "my-channel-extension",
+  "version": "1.0.0",
+  "channels": {
+    "my-platform": {
+      "entry":        "dist/index.js",
+      "display_name": "My Platform"
+    }
+  }
+}
+```
+
+Channel instances are configured in the workspace settings (not tracked files):
+
+```text
+[REFERENCE]
+settings.json "channels" block:
+{
+  "channels": {
+    "<instance-name>": {
+      "type":          "<channel_type>",        // matches ChannelPlugin.channel_type
+      "token":         "$MY_BOT_TOKEN",         // env var reference — never hardcoded
+      "sender_policy": "allowlist",             // SenderGate policy
+      "allowed_users": ["user123"],
+      "session_scope": "user",                  // SessionScope
+      "cwd":           "/path/to/project",      // working directory for agent sessions
+      "model":         "...",                   // optional model override for this channel
+      "instructions":  "...",                   // per-channel system prompt supplement
+      "group_policy":  "disabled",              // GroupGate policy
+      "groups":        { "*": { "require_mention": true } }
+    }
+  }
+}
+
+Auth is plugin-specific. Credentials (tokens, app secrets) are stored via the secret
+store (l2-security.md §4.1) — never written to tracked configuration files.
+```
+
+#### Built-in slash commands
+
+The base channel runtime intercepts these slash commands before forwarding to the agent:
+
+```text
+[REFERENCE]
+/clear  — end the current session; the next message starts a fresh session
+/help   — show channel-specific help and available commands
+/status — show session status, uptime, and current model
+```
+
+Third-party channel plugins may register additional slash commands via `register_command()`.
+
+#### Channel CLI surface
+
+| Action | CLI | TUI |
+| start | `cronus channel start [name]` | `/channel start [name]` |
+| stop | `cronus channel stop` | `/channel stop` |
+| status | `cronus channel status` | `/channel status` |
+| list pending pairings | `cronus channel pairing list <channel>` | — |
+| approve pairing | `cronus channel pairing approve <channel> <code>` | — |
 
 ## 5. Drawbacks & Alternatives
 

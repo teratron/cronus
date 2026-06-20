@@ -1,6 +1,6 @@
 # Memory Store
 
-**Version:** 1.0.4
+**Version:** 1.0.5
 **Status:** Stable
 **Layer:** implementation
 **Implements:** l1-memory-model.md
@@ -502,6 +502,141 @@ Phase 2 extends the quick-memory layout from §4.11:
 #### Relationship to the archivist role
 
 The two-phase pipeline is the data-ingestion layer that keeps `MEMORY.md` current between archivist cycles. The archivist's `distill` and `reconcile` stages (§4.4) operate on the already-consolidated MEMORY.md; Phase 1/2 handle the raw transcript-to-memory conversion that feeds the archivist.
+
+### 4.13 Quick memory recall lifecycle
+
+The §4.11 quick memory files (`MEMORY.md`, `USER.md`) are authoritative reference text
+injected at session start. This section specifies three complementary operations that
+complete the lifecycle: an extract cursor that prevents double-processing of transcript
+slices, a dual-path strategy for selecting relevant entries per turn, and a forget
+operation for targeted entry removal.
+
+#### Extract cursor
+
+Phase 1 of the consolidation pipeline (§4.12) may receive multiple concurrent startup
+requests across sessions. An extract cursor prevents the same transcript slice from
+being extracted twice:
+
+```text
+[REFERENCE]
+ExtractCursor {
+  session_id:        String,    // session whose transcript is being processed
+  processed_offset:  usize,    // count of already-processed messages in this transcript
+  updated_at:        Timestamp,
+}
+
+Procedure per eligible rollout:
+  1. Read extract-cursor.json for this role scope.
+  2. If session_id changed: reset processed_offset to 0.
+  3. Load transcript messages[processed_offset..] ("unprocessed slice").
+  4. If slice is empty → return (no patches needed).
+  5. Run LLM extraction sub-agent against the slice.
+  6. Write patches; update processed_offset = transcript.len().
+  7. Write extract-cursor.json.
+
+Skip triggers (extraction is skipped when):
+  memory_tool    — the current agent turn already wrote memory files directly this turn
+  already_running — extraction is in progress and the queue is full
+  queued         — a later extraction will subsume this one (only one queue slot)
+
+Patch filtering before write (discard a candidate patch when):
+  - summary length < 12 characters
+  - summary ends with '?' (questions are not facts)
+  - summary contains transient keywords: today / now / currently / temporary / this week
+  - (type, summary) pair already present in the file (exact duplicate)
+```
+
+#### Recall dual-path
+
+Before each turn the quick memory files relevant to the user's query are injected into
+the system prompt. Two selection paths are tried in order:
+
+```text
+[REFERENCE]
+RecallStrategy: "model" | "heuristic" | "none"
+
+Path 1 — Model-driven (preferred when LLM available):
+  Issue a lightweight side-query: given the user's current message, which memory files
+  (identified by their description line) are relevant? The model returns a ranked subset.
+  → strategy: "model"
+
+Path 2 — Heuristic fallback (tokenize query, score each file):
+  score(doc, query) =
+    + 2 for each query token found in doc body or description
+    + 1 for each query token that is a type-characteristic keyword (see below)
+    + 1 if doc body is non-empty
+  Rank by score descending; discard documents with score == 0.
+  → strategy: "heuristic"
+
+Type-characteristic keywords (boost by +1 per match):
+  user      → user, preference, background, role, habit
+  feedback  → feedback, rule, avoid, style, correction
+  project   → project, goal, deadline, milestone, incident
+  reference → reference, dashboard, link, ticket, docs
+
+Injection limits:
+  MAX_RECALL_DOCS     = 5       // maximum files injected into the system prompt per turn
+  MAX_DOC_BODY_CHARS  = 1200   // body truncated to this many characters before injection
+
+When a body is truncated, append:
+  "NOTE: memory entry truncated for prompt budget."
+
+strategy: "none" is returned (no injection) when:
+  - the query is empty
+  - no memory files exist in scope
+  - all files score 0 on the heuristic path
+  - Path 1 and Path 2 both fail or return empty results
+```
+
+#### Forget operation
+
+Users may delete a specific memory entry via `/forget <query>`. The forget operation
+locates the matching entry and removes it without disturbing other entries in the file.
+
+```text
+[REFERENCE]
+ForgetResult {
+  removed_entries: Vec<ForgetEntry>,
+  strategy:        RecallStrategy,   // how the target was selected
+}
+
+ForgetEntry {
+  entry_id: String,   // stable identifier (see below)
+  topic:    String,   // relative file path (e.g. "feedback/style.md")
+}
+
+Stable entry ID scheme:
+  Single-entry file → entry_id = relative_path (e.g. "feedback/no-summary.md")
+  Multi-entry file  → entry_id = "relative_path:index" (e.g. "feedback/style.md:2")
+  index is 0-based, determined at scan time, stable within one forget operation.
+
+Procedure:
+  1. Scan all memory files; enumerate entries; assign stable IDs.
+  2. Select target entry via model (side-query, temperature = 0) or heuristic.
+  3. Single-entry file → delete the file.
+  4. Multi-entry file → parse all entries, remove target, rewrite file.
+  5. Rebuild MEMORY.md index.
+
+On teardown of a connection/session with an outstanding forget in progress,
+abort and do not apply partial writes.
+```
+
+#### MEMORY.md index limits
+
+The `MEMORY.md` index summarizes all memory topics for fast scanning and injection.
+To keep it injectable at low token cost:
+
+```text
+[REFERENCE]
+MEMORY_INDEX_MAX_LINES      = 200      // maximum entry count
+MEMORY_INDEX_MAX_LINE_CHARS = 150      // each line truncated with "…" if longer
+MEMORY_INDEX_MAX_BYTES      = 25_000   // total file size ceiling in bytes
+
+Entry format:
+  - [Title](relative_path.md) — one-line hook (≤150 chars total)
+
+The index is rebuilt after every successful Extract, Dream, or Forget operation.
+```
 
 ## 5. Drawbacks & Alternatives
 
