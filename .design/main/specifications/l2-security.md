@@ -1,6 +1,6 @@
 # Security
 
-**Version:** 1.0.6
+**Version:** 1.0.7
 **Status:** Stable
 **Layer:** implementation
 **Implements:** l1-security.md
@@ -570,6 +570,58 @@ resolve_and_connect(host, port, server_name):
 
 redirect_handler: every redirect target re-validated through the same pipeline.
                   Prevents open-redirect SSRF (http→file://, http→internal).
+```
+
+### 4.11 Credential finding protocol
+
+When an audit workflow (§4.5 of `l2-quality-pipeline.md`) or any agent discovers a credential in the repository, the finding must be recorded and remediated following a strict protocol. The constraint is asymmetric: **a secret committed to git history is burned even after deletion** — the commit containing the secret remains accessible via `git log` and any clones made before deletion. Remediation therefore requires rotation as the primary action, not just removal.
+
+#### Finding format for credentials
+
+```text
+[REFERENCE]
+Credential findings MUST:
+  - Name the credential type: "Stripe live key", "AWS_SECRET_ACCESS_KEY", "private RSA key", etc.
+  - Reference the location: file path + line number (e.g. `config/secrets.ts:12`).
+  - NEVER reproduce the actual secret value — not in findings, plans, issue bodies, logs, or any other artifact.
+
+Credential findings MUST NOT:
+  - Include the token/key/password string itself in any form (redacted, partial, or encoded).
+  - Include reproduction steps that would allow a reader to locate the credential from the finding alone
+    beyond what a `git log --all -S <hint>` would trivially reveal.
+```
+
+#### Remediation sketch (mandatory in every credential finding's fix sketch)
+
+```text
+[REFERENCE]
+Remediation order:
+  1. Rotate first — invalidate the exposed credential at the provider before removing it from code.
+     A removed but un-rotated credential is still valid in every prior commit and any clone.
+  2. Remove from code — replace with a reference to a secret store or environment variable.
+  3. Purge from git history — use git filter-repo (preferred) or BFG Repo-Cleaner.
+     Inform all contributors: their local clones still contain the credential until they re-clone or
+     run git fetch --force.
+  4. Notify downstream — if the credential had production access, treat it as compromised and initiate
+     the relevant incident response for any systems it protected.
+  5. Add a pre-commit hook (or CI check) that prevents future secret commits:
+     e.g. gitleaks, git-secrets, or trufflehog in pre-push mode.
+
+The fix sketch in the plan must include steps 1 and 2 at minimum.
+Step 1 (rotate) must precede all other steps, even if the credential appears internal or low-risk.
+```
+
+#### Agent behavior on discovery
+
+If an agent encounters a credential value during file reads (not an audit finding — e.g. incidental discovery while reading config files):
+
+```text
+[REFERENCE]
+- Do NOT include the value in any response, log, or tool output.
+- Do NOT pass the value as an argument to any tool.
+- Stop the current operation if it would cause the value to be propagated.
+- Surface a security note to the user: credential type + file:line only.
+  Example: "Found what appears to be a live API key at config/secrets.ts:12 — recommend rotation."
 ```
 
 ## 5. Drawbacks & Alternatives
