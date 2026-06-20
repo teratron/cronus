@@ -1,6 +1,6 @@
 # Security
 
-**Version:** 1.0.2
+**Version:** 1.0.3
 **Status:** Stable
 **Layer:** implementation
 **Implements:** l1-security.md
@@ -206,6 +206,35 @@ isHashVerificationIssue(msg: String) -> bool:
 ```
 
 A drift event is logged at ERROR and included in the Doctor health report with severity `Critical`. The host process is notified; the recommended recovery is to restore the file from backup (see `l2-backup.md`) and re-raise shields.
+
+### 4.7 Credential storage modes
+
+API keys, session tokens, and OAuth credentials use a configurable storage backend rather than a single fixed location.
+
+```text
+[REFERENCE]
+AuthCredentialsStoreMode {
+  File      — encrypted file in <state>/.credentials/; survives process restarts;
+               key material on disk (less secure, more portable)
+  Keyring   — OS keychain (Keychain on macOS, Secret Service on Linux,
+               Credential Manager on Windows); survives restarts; requires OS keychain
+  Auto      — prefer Keyring; fall back to File when the OS keychain is unavailable (default)
+  Ephemeral — held in process memory only; lost on process exit; use for sandboxed or
+               temporary sessions where persisting credentials is undesirable
+}
+
+AuthKeyringBackendKind {
+  Direct  — credential stored directly in the OS keyring entry
+  Secrets — credential encrypted in a local file; encryption key alone is in the OS keyring
+             (default on Windows — DPAPI does not provide generic cross-session secrets entries)
+}
+```
+
+`OAuthCredentialsStoreMode` (`Auto | File | Keyring`) applies to MCP/OAuth refresh tokens. It intentionally excludes `Ephemeral` because OAuth tokens must survive process restarts to avoid forcing re-authentication on every launch.
+
+#### Security ordering
+
+`Keyring` is the most secure option (key material never touches disk in plaintext). `Secrets` is the Windows default because DPAPI's generic keyring does not offer the same cross-session durability as macOS Keychain. `Ephemeral` is the most constrained — a sandboxed agent running in this mode cannot exfiltrate credentials across session boundaries, limiting the blast radius of a credential theft attack.
 
 ## 5. Drawbacks & Alternatives
 

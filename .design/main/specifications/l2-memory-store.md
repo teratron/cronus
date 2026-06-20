@@ -1,6 +1,6 @@
 # Memory Store
 
-**Version:** 1.0.3
+**Version:** 1.0.4
 **Status:** Stable
 **Layer:** implementation
 **Implements:** l1-memory-model.md
@@ -431,6 +431,77 @@ set_user_context(content: &str, role: &str) -> Result<(), MemoryLimitError>
 #### Relationship to the vector/FTS store
 
 Quick memory files are the **working memory** — small, always injected, human-inspectable. The vector/FTS store (§4.1–4.10) is the **deep archive** — indexed, queried on demand. The archivist's distill stage may promote stable quick-memory items into the structured store; the quick-memory files then slim down to the most immediately relevant facts.
+
+### 4.12 Two-phase memory consolidation pipeline
+
+A structured pipeline converts raw session transcripts into consolidated role memories through two bounded phases that run independently.
+
+#### Phase 1 — Rollout Extraction (per-session, bounded-parallel)
+
+Runs at session startup. For each eligible session transcript ("rollout"):
+
+```text
+[REFERENCE]
+Eligibility criteria (all must be true):
+  idle_hours          >= MIN_ROLLOUT_IDLE_HOURS              // session ended long enough ago
+  age_days            <= MAX_ROLLOUT_AGE_DAYS                // not too stale to extract value
+  rate_remaining_pct  >= MIN_RATE_LIMIT_REMAINING_PERCENT    // preserve API budget headroom
+
+Constants:
+  MAX_ROLLOUTS_PER_STARTUP             = 2    // process at most N rollouts per startup
+  MAX_ROLLOUT_AGE_DAYS                 = 10
+  MIN_ROLLOUT_IDLE_HOURS               = 6
+  MIN_RATE_LIMIT_REMAINING_PERCENT     = 25   // percent of hourly API budget remaining
+
+Procedure per eligible rollout:
+  1. Claim the rollout (lease/claim prevents double-processing across concurrent startups).
+  2. Run LLM extraction sub-agent: extract structured facts from the session transcript.
+  3. Append extracted facts to raw_memories.md in the role's memories directory.
+  4. Write a per-rollout summary to rollout_summaries/<thread_id>.md.
+```
+
+Phase 1 agents run with a concurrency cap (at most 2 concurrent extractions) to avoid saturating the model API.
+
+#### Phase 2 — Global Consolidation (single global lock)
+
+Runs after Phase 1 completes (or independently on a schedule). At most one Phase 2 can run at a time:
+
+```text
+[REFERENCE]
+Constants:
+  MAX_RAW_MEMORIES_FOR_CONSOLIDATION  = 256   // clamp raw input to protect context window
+  MAX_UNUSED_DAYS                     = 30    // prune entries not referenced in this window
+
+Procedure:
+  1. Acquire global lock (prevents concurrent Phase 2 runs).
+  2. Clamp: read at most MAX_RAW_MEMORIES_FOR_CONSOLIDATION entries from raw_memories.md.
+  3. Capture git-baseline snapshot of the current MEMORY.md.
+  4. Run diff-driven consolidation sub-agent:
+       reads baseline + raw memories → produces unified MEMORY.md;
+       eliminates duplicates, resolves contradictions, prunes entries
+       not referenced within MAX_UNUSED_DAYS.
+  5. Write phase2_workspace_diff.md (diff vs baseline, audit trail).
+  6. Apply: update MEMORY.md and memory_summary.md.
+  7. Release lock.
+```
+
+#### Extended file layout
+
+Phase 2 extends the quick-memory layout from §4.11:
+
+```plaintext
+<state>/employees/<role>/memories/
+├── MEMORY.md                          # consolidated output (§4.11 writer, §4.12 updater)
+├── USER.md                            # user profile context (§4.11)
+├── raw_memories.md                    # Phase 1 accumulator (structured extracted facts)
+├── rollout_summaries/<thread_id>.md   # per-session Phase 1 extraction results
+├── phase2_workspace_diff.md           # last Phase 2 diff (audit trail)
+└── memory_summary.md                  # narrative summary updated by Phase 2
+```
+
+#### Relationship to the archivist role
+
+The two-phase pipeline is the data-ingestion layer that keeps `MEMORY.md` current between archivist cycles. The archivist's `distill` and `reconcile` stages (§4.4) operate on the already-consolidated MEMORY.md; Phase 1/2 handle the raw transcript-to-memory conversion that feeds the archivist.
 
 ## 5. Drawbacks & Alternatives
 

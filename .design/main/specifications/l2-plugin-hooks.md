@@ -1,6 +1,6 @@
 # Plugin Hook System
 
-**Version:** 1.0.1
+**Version:** 1.0.2
 **Status:** Stable
 **Layer:** implementation
 **Implements:** l1-extensions.md
@@ -289,13 +289,16 @@ Sections §4.1–§4.9 define hook injection points at **actor-turn granularity*
 | Event | When | Primary use |
 | --- | --- | --- |
 | `PreToolUse` | Before a tool executes | Validate, approve, modify input |
+| `PermissionRequest` | When a tool requests user approval | Approve, deny, or modify programmatically |
 | `PostToolUse` | After a tool completes | Feedback, logging |
+| `PreCompact` | Before context compaction | Mark critical context to preserve |
+| `PostCompact` | After context compaction completes | Restore context, inject follow-up |
 | `Stop` | Before main agent stops | Completeness verification |
+| `SubagentStart` | When a subagent starts | Constraint injection, context initialization |
 | `SubagentStop` | Before a subagent stops | Subagent task validation |
 | `SessionStart` | Session opens | Context loading, env initialization |
 | `SessionEnd` | Session closes | Cleanup, state persistence |
 | `UserPromptSubmit` | User submits input | Context injection, prompt augmentation |
-| `PreCompact` | Before context compaction | Mark critical context to preserve |
 | `Notification` | Agent emits notification | Logging, reactions |
 
 #### Two hook execution models
@@ -304,13 +307,23 @@ Sections §4.1–§4.9 define hook injection points at **actor-turn granularity*
 
 **Command hooks** (preferred for fast, deterministic checks): a script or binary runs to completion and emits a JSON response. Supported on all events.
 
+**Agent hooks** (for complex multi-step logic): spawns a complete agent sub-process that receives the full hook payload and session context. Supported on all events; use when command/prompt cannot encode the required logic. More expensive — prefer command hooks for performance-critical events.
+
 ```text
 [REFERENCE]
-HookDef (command): { "type": "command", "command": String, "timeout": Number }
-                   // default timeout: 60 s
+HookDef (command): {
+  "type":           "command",
+  "command":        String,         // Unix/POSIX shell command
+  "commandWindows": String?,        // optional Windows-specific override (defaults to command)
+  "timeout":        Number,         // default 60 s
+  "async":          bool            // default false; true runs hook without blocking the operation
+}
 
 HookDef (prompt):  { "type": "prompt",  "prompt": String,  "timeout": Number }
                    // default timeout: 30 s
+
+HookDef (agent):   { "type": "agent" }
+                   // spawns a full agent subprocess; inherits session context
 ```
 
 All matching hooks for a given event run **in parallel**; design hooks for independence — they do not see each other's output and their execution order within a parallel group is non-deterministic.
@@ -475,6 +488,39 @@ Command hooks execute arbitrary scripts that receive unvalidated external input.
 - **Quote all bash variables**: unquoted variables allow injection — always `echo "$file_path"`, never `echo $file_path`.
 - **Set timeouts**: `"timeout"` is mandatory on every hook entry. Command hooks < 10 s; offload slow work to `PostToolUse` or `SessionEnd`.
 - **Never log sensitive data**: hooks must not write user content, credentials, or file contents to stdout/stderr.
+
+### 4.13 Hook state tracking
+
+Each tool-event hook entry (§4.10) may carry a state block that the runtime checks before executing the handler.
+
+```text
+[REFERENCE]
+HookState {
+  enabled:      bool?,    // null = inherit default (enabled); false disables without removing the hook
+  trusted_hash: String?,  // SHA-256 hex of the hook file/command content.
+                          // When set, the hook fires ONLY when the on-disk handler matches this
+                          // hash exactly. A mismatch is logged as WARNING and the hook is skipped
+                          // — the operation is not aborted.
+}
+```
+
+#### trusted_hash usage
+
+The `trusted_hash` field provides a tamper-detection guard: a hook file edited after the hash was recorded will not execute until the operator updates the hash. This prevents a compromised plugin directory from silently replacing a security-critical hook with malicious logic.
+
+```text
+[REFERENCE]
+Workflow:
+  1. Finalize the hook handler file.
+  2. Compute its SHA-256: sha256sum hooks/my_hook.sh
+  3. Set state.trusted_hash in the hook configuration to the computed value.
+  4. On each invocation the runtime verifies the hash before execution.
+  5. On intentional update: modify the file, re-compute, update trusted_hash.
+
+Hooks without a trusted_hash execute unconditionally (legacy / low-risk hooks).
+```
+
+Hash verification failures are appended to the audit log with `category: "hook_integrity_failure"` and are visible in the Doctor health report.
 
 ## 5. Drawbacks & Alternatives
 

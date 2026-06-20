@@ -16,6 +16,7 @@
 - <https://github.com/diegosouzapw/OmniRoute>
 - <https://github.com/paperclipai/paperclip>
 - <https://github.com/pewdiepie-archdaemon/odysseus>
+- <https://github.com/aporb/agentic-os>
 - <https://www.agentik-os.com/>
 
 ## Spec-Driven Development

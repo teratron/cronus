@@ -1,6 +1,6 @@
 # Model Router
 
-**Version:** 1.0.1
+**Version:** 1.0.2
 **Status:** Stable
 **Layer:** implementation
 **Implements:** l1-routing.md
@@ -153,6 +153,171 @@ If the checkpoint is unavailable or the pool config is absent, the router falls 
 #### Configuration location
 
 `RouterPoolConfig` is stored in `<state>/router-pool.json` (alongside `routing.json`). The catalog in `models.json` is the source for the full model list; `router-pool.json` references a subset of those models that are candidates for semantic routing.
+
+### 4.7 Three-layer provider resilience
+
+Three independent mechanisms with different scope. Keep them separate when debugging routing failures.
+
+```text
+[REFERENCE]
+Layer               | Scope                              | Skips when …
+────────────────────────────────────────────────────────────────────────────
+Circuit Breaker     | Whole provider (e.g. "anthropic")  | Provider-level errors (408/500/502/503/504) exceed threshold
+Connection Cooldown | Single API key / account           | That key returns account-level errors (429, auth failures)
+Model Lockout       | Provider + connection + model      | That model returns per-model errors (404, per-model quota)
+```
+
+#### Circuit Breaker (four states)
+
+```text
+[REFERENCE]
+CircuitBreaker states: CLOSED → DEGRADED → OPEN → HALF_OPEN → CLOSED
+
+  CLOSED    — normal; all requests pass through
+  DEGRADED  — elevated failure rate; requests pass but alerting fires
+  OPEN      — provider blocked; routing skips it
+  HALF_OPEN — probe allowed after reset timeout; success → CLOSED, failure → OPEN
+
+Thresholds per provider class:
+  | Class   | Degraded at | Opens at    | Reset timeout |
+  | oauth   | 5 failures  | 8 failures  | 60 s          |
+  | api-key | 7 failures  | 12 failures | 30 s          |
+  | local   | derived     | 2 failures  | 15 s          |
+
+degradation_threshold: default 60% of failure_threshold (configurable)
+
+Adaptive backoff:
+  max_backoff_multiplier   = 16   // escalates on repeated OPEN→HALF_OPEN→OPEN cycles
+  backoff_escalation_count = 3    // cycles before backoff escalates
+  openCycleCount tracked per breaker for diagnostics
+
+Per-kind thresholds: failure_kind = rate_limit | quota_exhausted | transient
+  Each kind may carry a separate threshold and cooldown; transient triggers immediate OPEN
+
+Transition history: last 20 { from, to, timestamp, failure_count, reason }
+
+Trip codes (provider-level only): [408, 500, 502, 503, 504]
+Do NOT trip for: 401, 403, 429 — those belong to Connection Cooldown
+
+Lazy recovery: getStatus() refreshes OPEN → HALF_OPEN when reset_timeout expires;
+               no background timer required
+```
+
+#### Connection Cooldown
+
+When one key fails, other keys for the same provider keep serving.
+
+```text
+[REFERENCE]
+Connection fields:
+  rate_limited_until: Timestamp  // connection skipped while this is in the future
+  test_status: "unavailable"     // set on failure; cleared by clear_account_error() on success
+  backoff_level: u8              // incremented on each recoverable failure
+
+Default cooldowns:
+  oauth base:   5 s
+  api-key base: 3 s
+  api-key 429:  prefer upstream Retry-After / reset headers when present
+  backoff:      base_cooldown_ms * 2 ** backoff_level
+
+Terminal states (NOT cooldowns — persist until credentials change or operator reset):
+  "banned" | "expired" | "credits_exhausted"
+  Do NOT overwrite terminal states with transient cooldown state.
+
+Anti-thundering-herd guard: concurrent failures on the same connection do NOT
+  double-increment backoff_level or extend the cooldown redundantly.
+```
+
+#### Model Lockout
+
+When only one model fails, the connection continues serving other models.
+
+```text
+[REFERENCE]
+Scope: provider + connection + model triple
+
+Trigger examples:
+  - Per-model quota (429)
+  - Missing model (404) on local providers
+  - Provider-specific permission failures
+
+API:
+  lock_model(provider, connection, model, expires_at)
+  clear_model_lock(provider, connection, model)
+  list_model_lockouts() -> [ {provider, connection, model, reason, expires_at} ]
+```
+
+#### Resilience debugging guide
+
+```text
+All keys for a provider skipped → check circuit breaker state AND each connection's rate_limited_until
+Provider excluded after reset window → use getStatus() instead of reading raw state field
+One key fails, others should work → connection cooldown (not circuit breaker)
+Only one model fails → model lockout (not connection cooldown)
+State should self-recover but doesn't → check future-timestamp + lazy-read path
+```
+
+### 4.8 Multi-factor candidate scoring
+
+When multiple model candidates qualify, a weighted 9-factor score ranks them. All weights sum to 1.0; `validateWeights()` enforces this at startup.
+
+#### Score factors
+
+```text
+[REFERENCE]
+Factor            | Default | Description
+──────────────────────────────────────────────────────────────────────────────
+health            | 0.22    | Circuit breaker: CLOSED=1.0, HALF_OPEN=0.5, OPEN=0.0
+quota             | 0.17    | Remaining quota / rate-limit headroom [0..1]
+cost_inv          | 0.17    | Inverse blended cost (60% input + 40% output, normalized)
+latency_inv       | 0.13    | Inverse p95 latency normalized across pool
+task_fit          | 0.08    | Task-type fitness: coding|review|planning|analysis|debugging|docs
+specificity_match | 0.08    | Match between request specificity and model tier
+stability         | 0.05    | Variance-based stability (low latency stdDev + error rate)
+tier_priority     | 0.05    | Account tier: Ultra=1.0, Pro=0.67, Standard=0.33, Free=0.0
+tier_affinity     | 0.05    | Affinity between candidate tier and recommended tier
+```
+
+Candidates with score < 0.2 are temporarily excluded (5 min initial, progressive backoff, max 30 min).
+
+In incident mode (>50% of candidates OPEN), exploration is disabled and stability is maximized.
+
+#### Mode packs
+
+Four pre-defined weight profiles for common optimization goals:
+
+```text
+[REFERENCE]
+Mode pack     | Primary signal     | Weight | Goal
+──────────────────────────────────────────────────
+"ship-fast"   | latency_inv        | 0.32   | Lowest latency
+"cost-saver"  | cost_inv           | 0.37   | Cheapest per token
+"quality"     | task_fit           | 0.37   | Best task fit + stability
+"offline"     | quota              | 0.37   | Max quota headroom
+
+Usage: routing.json `strategy_mode` = "ship-fast" | "cost-saver" | "quality" | "offline"
+```
+
+#### LKGP (Last-Known-Good-Path)
+
+Routes to the most recently successful candidate. Falls back to the next-best scored candidate on failure. Session-sticky with health safety: if the LKGP candidate is OPEN or DEGRADED, scoring resumes.
+
+#### Reset-aware tiebreaker
+
+When scores are within 0.05 of each other, prefer the candidate whose quota resets soonest:
+
+```text
+[REFERENCE]
+reset_boost(candidate):
+  if candidate.quota_resets_at is set:
+    time_to_reset_ms = max(0, candidate.quota_resets_at - now_ms())
+    return 1.0 - (time_to_reset_ms / MAX_RESET_WINDOW_MS)   // [0..1]
+  else: 0.5                                                   // neutral
+```
+
+#### Exploration (bandit)
+
+5% of requests (configurable `exploration_rate`) route to random candidates. Exploration is disabled in incident mode.
 
 ## 5. Drawbacks & Alternatives
 
