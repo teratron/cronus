@@ -1,6 +1,6 @@
 # Memory Store
 
-**Version:** 1.0.2
+**Version:** 1.0.3
 **Status:** Stable
 **Layer:** implementation
 **Implements:** l1-memory-model.md
@@ -381,6 +381,56 @@ This feeds the Bellman temporal credit window: propagation uses the linked episo
 | `Related` | Loosely related (explicit manual link) |
 
 Continuation links are created automatically by session chaining. The other types are created explicitly by the session pipeline when the agent expresses the relationship.
+
+### 4.11 Lightweight quick memory
+
+A human-readable, immediately injectable complement to the vector/FTS store. Two Markdown files per role scope provide always-available context without embedding or search overhead.
+
+#### File layout
+
+```plaintext
+<state>/employees/<role>/memories/
+├── MEMORY.md   # fact entries delimited by § — injected verbatim every session
+└── USER.md     # user profile context (free-form) — injected verbatim every session
+```
+
+#### Entry format (MEMORY.md)
+
+Entries are separated by the Unicode section delimiter `\n§\n` (newline + `§` + newline). Each entry is free-form Markdown. Example:
+
+```markdown
+## SSH
+- home-server → 192.168.1.100, user: admin
+
+§
+
+## Lessons
+- The build cache at ~/.local/share/app must be cleared after dependency updates.
+```
+
+#### Character limits
+
+Configurable in `<role>/config.yaml`. Writes that would exceed the limit are rejected with a descriptive error.
+
+```yaml
+memory:
+  memory_char_limit: 2200   # default — MEMORY.md ceiling in characters
+  user_char_limit: 1375     # default — USER.md ceiling in characters
+```
+
+#### Write API
+
+```text
+[REFERENCE]
+add_quick_memory(content: &str, role: &str) -> Result<(), MemoryLimitError>
+update_quick_memory(index: usize, content: &str, role: &str) -> Result<(), MemoryLimitError>
+delete_quick_memory(index: usize, role: &str) -> Result<()>
+set_user_context(content: &str, role: &str) -> Result<(), MemoryLimitError>
+```
+
+#### Relationship to the vector/FTS store
+
+Quick memory files are the **working memory** — small, always injected, human-inspectable. The vector/FTS store (§4.1–4.10) is the **deep archive** — indexed, queried on demand. The archivist's distill stage may promote stable quick-memory items into the structured store; the quick-memory files then slim down to the most immediately relevant facts.
 
 ## 5. Drawbacks & Alternatives
 

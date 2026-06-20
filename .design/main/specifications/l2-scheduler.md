@@ -1,6 +1,6 @@
 # Scheduler
 
-**Version:** 1.0.3
+**Version:** 1.0.4
 **Status:** Stable
 **Layer:** implementation
 **Implements:** l1-scheduler-model.md
@@ -32,9 +32,9 @@ The model wants recurrence-first scheduling that a non-technical client can use,
 
 | L1 Invariant | Implementation |
 | --- | --- |
-| SCH-1 Two kinds | `kind: recurring|oneshot`; one-shot sets `delete_after_fire: true` and is removed after firing. |
+| SCH-1 Two kinds | `kind: recurring\|oneshot`; one-shot sets`delete_after_fire: true` and is removed after firing. |
 | SCH-2 Recurrence expressiveness | `recurrence` presets (weekdays/weekends/daily/days/interval + times) OR a raw `cron` string. |
-| SCH-3 Single declared action | `action: heartbeat|routine|reminder` — exactly one per schedule. |
+| SCH-3 Single declared action | `action: heartbeat\|routine\|reminder` — exactly one per schedule. |
 | SCH-4 Wake produces no card | `heartbeat` fires call only the office wake entry point; no board API is invoked. |
 | SCH-5 Workspace-scoped | Schedule files live under `<ws>/schedules/`; firing targets that office only. |
 | SCH-6 Autonomous & durable | Schedules persist as files; the scheduler service reloads and re-arms them on restart. |
@@ -61,7 +61,14 @@ The model wants recurrence-first scheduling that a non-technical client can use,
   start_at?, end_at?,           // optional window
   timezone,                     // default: host
   enabled: true,
-  delete_after_fire: false      // true for oneshot (SCH-1)
+  delete_after_fire: false,     // true for oneshot (SCH-1)
+  repeat?: {                    // bounded recurrence; absent = unlimited
+    times: u32 | null,          // total run cap; null = unlimited
+    completed: u32              // runs completed so far (runtime-managed, not user-set)
+  },
+  deliver?: String[],           // ordered delivery target IDs resolved at fire time (§4.9)
+  skills?: String[],            // skill IDs injected into the session context at fire time
+  script?: String               // optional script/workflow run instead of the LLM prompt
 }
 ```
 
@@ -91,7 +98,7 @@ Schedule operations across all three surfaces, conforming to the CLI grammar sta
 | create (raw cron) | `cronus schedule create <name> --action <a> --cron "<expr>"` | `/schedule create … --cron …` | `schedule.create(name, spec) -> Schedule` |
 | list | `cronus schedule list` | `/schedule list` | `schedule.list() -> Schedule[]` |
 | show | `cronus schedule show <id>` | `/schedule show <id>` | `schedule.get(id) -> Schedule` |
-| set | `cronus schedule set <id> [--when …] [--cron …] [--time …] [--enabled true|false]` | `/schedule set <id> …` | `schedule.update(id, patch) -> Schedule` |
+| set | `cronus schedule set <id> [--when …] [--cron …] [--time …] [--enabled true\|false]` | `/schedule set <id> …` | `schedule.update(id, patch) -> Schedule` |
 | enable | `cronus schedule enable <id>` | `/schedule enable <id>` | `schedule.enable(id) -> Schedule` |
 | disable | `cronus schedule disable <id>` | `/schedule disable <id>` | `schedule.disable(id) -> Schedule` |
 | delete | `cronus schedule delete <id>` | `/schedule delete <id>` | `schedule.delete(id) -> void` |
@@ -109,6 +116,7 @@ The fully-assembled prompt is scanned for injection patterns at fire time, not j
 
 **Per-job toolset scoping**
 Toolsets available to a fired job follow this precedence:
+
 1. Per-job `enabled_toolsets` (set at create/update time) — job-scoped override.
 2. Platform-level toolset config for the `cron` platform — mirrors gateway behavior.
 3. Full default toolset — fallback only.
@@ -323,9 +331,12 @@ On successful completion, the session's final reply is dispatched to the job's c
 ```text
 [REFERENCE]
 CronDeliveryTarget:
-  | { kind: "announce" }         // no delivery; result is silently discarded
-  | { kind: "session", session_key: String }  // inject result into another session as a message
+  | { kind: "announce" }                       // no delivery; result is silently discarded
+  | { kind: "local" }                          // surface result in the user's active UI session
+  | { kind: "session", session_key: String }   // inject result into a named session via the Inbox
 ```
+
+The `deliver` field on the job (§4.1) is an ordered list of target identifiers. `"local"` and `"announce"` are literal identifiers; `"session:<key>"` maps to `{ kind: "session", session_key: <key> }`. Multiple targets receive the result in order.
 
 The `"session"` target injects the result via the Inbox system (see `l2-inbox.md`), allowing a background cron result to surface in a named conversation session.
 

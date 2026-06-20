@@ -1,6 +1,6 @@
 # Kanban Board
 
-**Version:** 1.0.1
+**Version:** 1.0.2
 **Status:** Stable
 **Layer:** implementation
 **Implements:** l1-kanban-model.md
@@ -47,9 +47,12 @@ The model requires a single per-office board, office-driven movement, and automa
 
 ```plaintext
 <ws>/kanban/
-├── board.json        # board meta + ordered state set + card index
-├── cards/<card-id>.json   # one card per file (state, task ref, reason?, history[])
-└── archive/<card-id>.json # auto-archived done cards (history preserved)
+├── board.json                     # board meta + ordered state set + card index
+├── cards/<card-id>.json           # card record (state, task ref, history[])
+├── runs/<card-id>/<run-id>.json   # per-execution run records (§4.6)
+├── events/<card-id>.jsonl         # append-only event log per card (§4.7)
+├── comments/<card-id>.jsonl       # append-only comment log per card (§4.7)
+└── archive/<card-id>.json         # auto-archived done cards (history preserved)
 ```
 
 Card record (conceptual):
@@ -57,8 +60,14 @@ Card record (conceptual):
 ```text
 [REFERENCE]
 {
-  id, task_ref, state,            // state in {triage,todo,ready,running,blocked,done}
-  reason,                          // required when state = blocked (KAN-5)
+  id, task_ref, state,              // state in {triage,todo,ready,running,blocked,done}
+  reason,                            // required when state = blocked (KAN-5)
+  assignee: String | null,           // role/profile assigned to run this task
+  priority: "low"|"medium"|"high"|"critical"|null,
+  skills: String[],                  // skill IDs injected into the execution session context
+  workspace_kind: "local"|"remote"|"ssh"|null,  // where the task executes
+  workspace_path: String | null,     // local dir path or SSH remote path for execution
+  max_retries: u8,                   // max retry attempts on failure; 0 = no retry (default)
   history[ {from, to, actor, at, reason} ],  // KAN-7 traceability
   created_at, updated_at
 }
@@ -142,6 +151,66 @@ Card delegation field:
 ```
 
 A hard cap (default: 10) prevents infinite delegation chains. When `requestDepth` reaches the cap, the next delegation attempt fails with `DelegationDepthExceeded`; the card transitions to `blocked` with that reason. The cap is configurable in the workspace config.
+
+### 4.6 Run log
+
+Each execution attempt on a `running` card is logged as a `KanbanRun` record. Multiple runs can exist per card (retries, delegation chains). The run log is the source of truth for execution history — distinct from the card's state-machine transitions.
+
+```text
+[REFERENCE]
+KanbanRun {
+  id: String,
+  card_id: String,
+  session_key: String,          // the isolated session key for this run (§ l2-scheduler §4.9)
+  agent_role: String | null,    // which role/profile is executing
+  status: "running"|"done"|"error"|"timeout"|"blocked",
+  outcome: String | null,       // short natural-language summary of the result
+  error: String | null,         // error description on failure
+  started_at: i64,              // Unix ms
+  ended_at: i64 | null,
+  last_heartbeat_at: i64 | null // written periodically; used by stale-run detection (§4.5)
+}
+```
+
+Storage: `<ws>/kanban/runs/<card-id>/<run-id>.json`
+
+```text
+[REFERENCE]
+KANBAN_IPC_TIMEOUT_MS = 20_000   // board API response deadline for IPC operations
+```
+
+### 4.7 Event log and comments
+
+Two append-only log types provide observability and collaboration context for each card.
+
+**KanbanEvent** — audit trail of significant actions on the card:
+
+```text
+[REFERENCE]
+KanbanEvent {
+  id: String,
+  card_id: String,
+  run_id: String | null,   // set when the event is scoped to a specific run
+  kind: String,            // "state_changed"|"skill_applied"|"retry_triggered"|"comment_added"
+  payload: JSON | null,    // kind-specific data; e.g. {from, to} for state_changed
+  created_at: i64          // Unix ms
+}
+```
+
+**KanbanComment** — human or agent annotations on the card:
+
+```text
+[REFERENCE]
+KanbanComment {
+  id: String,
+  card_id: String,
+  author: String,     // role name or "user"
+  body: String,       // Markdown text
+  created_at: i64     // Unix ms
+}
+```
+
+Both logs are stored alongside the card and move with it on archival (`archive/events/`, `archive/comments/`).
 
 ## 5. Drawbacks & Alternatives
 

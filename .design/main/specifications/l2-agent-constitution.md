@@ -73,6 +73,7 @@ read_when:
 ```
 
 Key principle themes:
+
 - Be genuinely helpful, not performative.
 - Have opinions; give recommendations, not just options.
 - Be resourceful before asking; search before interrupting.
@@ -94,6 +95,7 @@ read_when:
 Two sections:
 
 **Agent identity** — set during bootstrap and refined by the user:
+
 ```plaintext
 ## Identity
 - Name:      (assigned during bootstrap)
@@ -102,6 +104,7 @@ Two sections:
 ```
 
 **User profile** — built over time by the agent as it learns about the user:
+
 ```plaintext
 ## User Profile
 - Name:
@@ -128,6 +131,7 @@ read_when:
 Free-form cheat sheet the agent builds: SSH aliases, workspace-specific paths, known environment quirks, patterns that have proven useful. Not credentials — those stay in `.env`.
 
 Example entries:
+
 ```plaintext
 ### SSH
 - home-server → 192.168.1.100, user: admin
@@ -149,6 +153,7 @@ read_when:
 A list of tasks for the agent to check proactively on each heartbeat schedule fire. **An empty file (or comments only) suppresses all heartbeat calls** — the scheduler skips the heartbeat action entirely when HEARTBEAT.md is empty.
 
 When populated, entries are simple task lines:
+
 ```plaintext
 - Check for stalled tasks in the kanban board
 - Summarize unread messages
@@ -168,6 +173,7 @@ read_when:
 ```
 
 Read exactly once per workspace. Guides the agent through the initial setup ceremony:
+
 1. Learn the agent's name, role, and vibe from the user.
 2. Update `PROFILE.md` identity block with learned values.
 3. Open and explain `SOUL.md` together with the user.
@@ -178,6 +184,7 @@ The agent must not skip the deletion step. If BOOTSTRAP.md is present at session
 ### 4.7 Load order
 
 When loading a session, the agent reads constitution files as follows:
+
 1. Check for BOOTSTRAP.md — if present, run bootstrap ritual (§4.6) and stop normal load.
 2. Load SOUL.md (always).
 3. Load PROFILE.md and MEMORY.md (when `read_when` conditions match current context).

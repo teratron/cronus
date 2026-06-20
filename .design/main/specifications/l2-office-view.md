@@ -1,6 +1,6 @@
 # Office View
 
-**Version:** 1.0.0
+**Version:** 1.0.1
 **Status:** Stable
 **Layer:** implementation
 **Implements:** l1-office-visualization.md
@@ -88,6 +88,81 @@ Office operations conform to the CLI grammar standard (see `l2-cli.md` §4.4).
 | inspect a node | `cronus office inspect <node-id>` | `/office inspect <id>` | `office.inspect(nodeId) -> NodeDetail` |
 
 The view is primarily `show`/`building`; `inspect` drills into an agent (role, current task, memory summary) or a task (card detail). Layout edits happen via the app's drag interactions, persisted to `layout.json`.
+
+### 4.6 3D visualization subprocess architecture
+
+The spatial floor render (§4.2) runs as a dedicated web application in a separate subprocess rather than embedding 3D in the main Tauri shell. A second subprocess bridges the desktop app's IPC to the renderer's WebSocket API.
+
+#### Subprocess layout
+
+```
+Process 1 — 3D renderer (React + Three.js):
+  source: <state>/office/renderer/   (extracted from bundle at first use)
+  config: <state>/office/renderer/.env
+  port:   configurable, default 3000
+  PID:    <state>/office/renderer.pid
+
+Process 2 — WebSocket gateway adapter:
+  bundled with the desktop application
+  port:   configurable, default 18989
+  PID:    <state>/office/adapter.pid
+```
+
+#### Lifecycle
+
+```text
+[REFERENCE]
+Setup (one-time):
+  1. Extract renderer sources into <state>/office/renderer/
+  2. Run npm install in renderer directory
+  3. Write .env (PORT, HOST, NEXT_PUBLIC_GATEWAY_URL, OFFICE_MODEL)
+
+Start:
+  1. Spawn adapter subprocess → write adapter.pid → health probe
+  2. Spawn renderer subprocess → write renderer.pid → health probe (GET / on renderer port)
+
+Stop:
+  1. SIGTERM adapter → await exit (5 s timeout, then SIGKILL)
+  2. SIGTERM renderer → await exit (5 s timeout, then SIGKILL)
+  3. Remove PID files
+```
+
+#### Status model
+
+```text
+[REFERENCE]
+OfficeVisualizationStatus {
+  sourcesReady: bool,
+  dependenciesInstalled: bool,
+  adapterRunning: bool,
+  rendererRunning: bool,
+  running: bool,              // = adapterRunning && rendererRunning
+  rendererPort: u16 | null,
+  portInUse: bool,            // true if the renderer port is occupied by another process
+  wsUrl: String | null,       // WebSocket URL the desktop connects to
+  error: String | null,
+  remoteUrl: String | null,   // populated in remote mode (SSH probe)
+  remoteSource: String | null // host identifier for the remote renderer
+}
+```
+
+#### Remote (SSH) mode
+
+When the workspace is remote, the desktop probes the remote host for a running renderer service before spawning local subprocesses:
+
+```text
+[REFERENCE]
+probe_remote(host: &str, port: u16) -> Option<OfficeVisualizationStatus>:
+  GET http://{host}:{port}/status   timeout 5 s
+  on 200 OK with { running: true }: populate remoteUrl and remoteSource, return status
+  on timeout / error: return None
+```
+
+If found, the desktop opens a WebSocket connection to the remote renderer directly. If not found, the user is offered to start the renderer on the remote host.
+
+#### PID file management
+
+Each subprocess writes its PID on startup and removes it on clean shutdown. On restart: read PID from file, check whether the process is alive, remove the stale PID and restart if not. Stale PIDs from crashes are cleared automatically on the next start.
 
 ## 5. Drawbacks & Alternatives
 
