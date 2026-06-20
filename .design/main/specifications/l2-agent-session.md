@@ -1,6 +1,6 @@
 # Agent Session Loop
 
-**Version:** 1.0.1
+**Version:** 1.0.2
 **Status:** Stable
 **Layer:** implementation
 **Implements:** l1-orchestration.md, l1-routing.md
@@ -273,6 +273,63 @@ Post-turn hooks run as background tasks after the model's response is delivered.
 | `episodic_indexer` | Extracts episodic memory candidates from the turn and queues them for the memory store |
 
 Post-turn hooks are fire-and-forget; failures are logged at WARN and do not surface to the user.
+
+### 4.8 Text loop detection
+
+When a model gets stuck in a repetitive output pattern (e.g., printing the same explanation, calling the same tool with the same arguments), the loop detector identifies the stall and injects a recovery prompt:
+
+```text
+[REFERENCE]
+TEXT_LOOP_BUFFER_SIZE   = 6    // sliding window of recent assistant steps to compare
+TEXT_LOOP_TRIGGER_COUNT = 3    // consecutive near-identical steps that trip detection
+TEXT_LOOP_MAX_RECOVERY  = 2    // max recovery injections per turn before giving up
+
+REPEATED_STEP_THRESHOLD = 3    // consecutive identical action signatures → nudge
+
+normalizeForLoopDetection(text: String) -> String:
+  // Lowercase, collapse whitespace, strip punctuation variants → canonical form
+  // for comparison. Two steps that produce the same normalized form are "identical".
+
+detectTextLoop(recent_steps: Vec<String>) -> bool:
+  normalized = recent_steps.map(normalizeForLoopDetection)
+  // Check whether the last TEXT_LOOP_TRIGGER_COUNT steps are all equivalent.
+  return normalized[−TEXT_LOOP_TRIGGER_COUNT..].all_equal()
+```
+
+Recovery behavior:
+
+1. **Mild recovery** (`RECOVERY_PROMPT_MILD`): inject as a new user message asking the model to try a different approach. Fired on first detection.
+2. **Strong recovery** (`RECOVERY_PROMPT_STRONG`): more directive prompt instructing the model to stop its current approach and take an explicit alternative step. Fired on subsequent detections.
+3. After `TEXT_LOOP_MAX_RECOVERY` recovery injections in a single turn, the loop is treated as non-recoverable; the turn is terminated with an `Interrupted` stop signal.
+
+The `REPEATED_STEP_THRESHOLD` guard is a complementary check for action-signature repetition (same tool name + same argument hash), independent of text normalization.
+
+### 4.9 Goal re-entry cap
+
+When a turn is driven by an active goal (autonomous `/goal` execution), the main-loop re-entry counter bounds the total number of model re-entries per turn to prevent a never-satisfiable goal condition from burning tokens indefinitely:
+
+```text
+[REFERENCE]
+MAX_GOAL_REACT = 12
+
+goalReentryLoop(goal: Goal, turn_context: &mut TurnContext):
+  for react_count in 0..MAX_GOAL_REACT:
+    outcome = runTurn(turn_context)
+    if outcome is Satisfied(goal): return outcome
+    if outcome is Interrupted: return outcome
+    if goal.evaluate(outcome) == NotMet:
+      turn_context.append(nextGoalStep(goal, outcome))
+    // continue to next re-entry
+  // cap reached
+  return HardStop {
+    reason: "goal_react_cap_exceeded",
+    message_to_user: "Goal not satisfied after {MAX_GOAL_REACT} attempts. Stopping.",
+  }
+```
+
+`MAX_GOAL_REACT` (12) is higher than the plugin hook's `MAX_PRE_REACT` (3) because main-session goals are structurally larger tasks with more steps.
+
+The cap is per-turn, not per-goal: a goal that spans multiple user turns accumulates re-entries independently across each turn.
 
 ## 5. Drawbacks & Alternatives
 

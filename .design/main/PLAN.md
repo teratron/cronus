@@ -1,13 +1,13 @@
 # Implementation Plan
 
-**Version:** 1.7.0
+**Version:** 1.9.0
 **Generated:** 2026-06-20
 **Based on:** .design/main/INDEX.md v1.0.0
 **Status:** Active
 
 ## Overview
 
-Implementation plan for Cronus from 59 Stable specifications (19 L1 concepts + 40 L2 implementations). Phases follow a **growth order**: the agent grows like a sprout from a seed.
+Implementation plan for Cronus from 64 Stable specifications (19 L1 concepts + 45 L2 implementations). Phases follow a **growth order**: the agent grows like a sprout from a seed.
 
 - **Seed = the library** (`crates/core` + `crates/nodus` runtime) — Phases 1–2.
 - **Stem = the CLI** — Phase 3, the first usable surface, emerging straight from the seed.
@@ -74,9 +74,11 @@ Execution mode: **Parallel** (C3); tracks grouped by file independence. Critical
 - [ ] **Code Graph** ([l2-codegraph.md](specifications/l2-codegraph.md)) [L2] — tree-sitter extraction, SQLite + FTS5 + sqlite-vec embeddings, RRF fusion, auto-index (depends on memory-store)
 - [ ] **Model Router** ([l2-model-router.md](specifications/l2-model-router.md)) [L2]
 - [ ] **Model Error Recovery** ([l2-model-error-recovery.md](specifications/l2-model-error-recovery.md)) [L2] — error taxonomy, classification pipeline, credential pool (depends on model-router)
-- [ ] **Agent Session Loop** ([l2-agent-session.md](specifications/l2-agent-session.md)) [L2] — TurnContext, IterationBudget, ContextEngine interface, tool-call loop seams, KV-cache stability, oversized-result summarizer, stop hooks, InterruptFence, post-turn hooks (depends on model-router + context-router)
-- [ ] **Agent Autonomy** ([l2-agent-autonomy.md](specifications/l2-agent-autonomy.md)) [L2] — autonomy ladder, SecurityPolicy gate, CommandRiskLevel classifier, ActionTracker rolling cap, approval gate lifecycle (depends on agent-session + tool-security + scheduler)
-- [ ] **Context Management** ([l2-context-management.md](specifications/l2-context-management.md)) [L2] — adaptive token budget, 8-step trim cascade, LLM-driven compaction, _protected messages (depends on agent-session + model-router)
+- [ ] **Agent Session Loop** ([l2-agent-session.md](specifications/l2-agent-session.md)) [L2] — TurnContext, IterationBudget, ContextEngine interface, tool-call loop seams, KV-cache stability, oversized-result summarizer, stop hooks, InterruptFence, post-turn hooks; text loop detection, goal re-entry cap (depends on model-router + context-router)
+- [ ] **Agent Autonomy** ([l2-agent-autonomy.md](specifications/l2-agent-autonomy.md)) [L2] — autonomy ladder, SecurityPolicy gate, CommandRiskLevel classifier, ActionTracker rolling cap, approval gate lifecycle; ApprovalRecord manager (create/register separation, 15s grace period) (depends on agent-session + tool-security + scheduler)
+- [ ] **Inbox** ([l2-inbox.md](specifications/l2-inbox.md)) [L2] — SQLite inter-actor inbox, send+drain pipeline, GC_TTL_MS=7d, MAX_DRAIN_PER_TURN=100, InboxArrived bus event, synthetic user message injection (depends on agent-session + storage)
+- [ ] **Session Checkpoint** ([l2-session-checkpoint.md](specifications/l2-session-checkpoint.md)) [L2] — three-file hierarchy (checkpoint/memory/notes.md), section-budgeted reads, fork-agent prefix-cache parity write, boundary invariant, system reminders, progress reconcile, auto-memory triggers (depends on agent-session + memory-store + agent-registry)
+- [ ] **Context Management** ([l2-context-management.md](specifications/l2-context-management.md)) [L2] — adaptive token budget, 8-step trim cascade, LLM-driven compaction, _protected messages; context engine registry (ContextEngineHostCapability, per_turn/thread_bootstrap projection, runtime modes) (depends on agent-session + model-router)
 - [ ] **Context Router** ([l2-context-router.md](specifications/l2-context-router.md)) [L2]
 - [ ] **Workspace Management** ([l2-workspace-management.md](specifications/l2-workspace-management.md)) [L2]
 - [ ] **Agent Constitution** ([l2-agent-constitution.md](specifications/l2-agent-constitution.md)) [L2] — per-workspace identity files (SOUL/PROFILE/MEMORY/HEARTBEAT/BOOTSTRAP), bootstrap ritual (depends on workspace-management + memory-store)
@@ -87,11 +89,13 @@ Execution mode: **Parallel** (C3); tracks grouped by file independence. Critical
 
 - [ ] **Role Catalog** ([l2-role-catalog.md](specifications/l2-role-catalog.md)) [L2]
 - [ ] **Kanban Board** ([l2-kanban-board.md](specifications/l2-kanban-board.md)) [L2]
-- [ ] **Scheduler** ([l2-scheduler.md](specifications/l2-scheduler.md)) [L2]
+- [ ] **Scheduler** ([l2-scheduler.md](specifications/l2-scheduler.md)) [L2] — recurrence + cron + webhooks + event-driven triggers; cron isolated session execution (session key, model preflight, run log, delivery dispatch, failure notification)
 - [ ] **Budget Engine** ([l2-budget-engine.md](specifications/l2-budget-engine.md)) [L2] — hierarchical budget policies, cost events, hard-stop enforcement, monthly reset (depends on roles + kanban)
-- [ ] **Execution Workspace** ([l2-execution-workspace.md](specifications/l2-execution-workspace.md)) [L2] — isolated execution environments, no-remote-git contract, finalize write-back gate (depends on security + kanban)
+- [ ] **Execution Workspace** ([l2-execution-workspace.md](specifications/l2-execution-workspace.md)) [L2] — isolated execution environments, no-remote-git contract, finalize write-back gate; git worktree lifecycle (slug naming, boot sequence, isPristine, reset+prune, events) (depends on security + kanban)
 - [ ] **Quality Pipeline** ([l2-quality-pipeline.md](specifications/l2-quality-pipeline.md)) [L2]
 - [ ] **Extension Registry** ([l2-extension-registry.md](specifications/l2-extension-registry.md)) [L2] — skills / MCP / plugins, sandboxed; skill generation (depends on roles + security + workflow runtime)
+- [ ] **Plugin Hooks** ([l2-plugin-hooks.md](specifications/l2-plugin-hooks.md)) [L2] — actor.preStop/postStop ReAct loops, ActorMatcher filter, aggregated decision, file hooks auto-discovery, sequential external plugin loading, HookEvent observability (depends on extension-registry + agent-session)
+- [ ] **Agent Registry** ([l2-agent-registry.md](specifications/l2-agent-registry.md)) [L2] — built-in and custom agent catalog, permission layer stack, fork-agent checkpoint-writer contract, generate-from-description API, default agent resolution (depends on role-catalog + tool-security + model-router + session-checkpoint)
 - [ ] **Learning Loop** ([l2-learning-loop.md](specifications/l2-learning-loop.md)) [L2] — post-turn background review fork, skill package format, curator (depends on extension-registry + memory-store + agent-session)
 - [ ] **Tool Security** ([l2-tool-security.md](specifications/l2-tool-security.md)) [L2] — two-layer defense: static skill scanner (8 categories) + runtime tool guard (10 threat categories, approval escalation, hard-blocked patterns)
 
@@ -123,6 +127,7 @@ Execution mode: **Parallel** (C3); tracks grouped by file independence. Critical
 *Self-healing, backup, error reporting, telemetry.*
 
 - [ ] **Doctor** ([l2-doctor.md](specifications/l2-doctor.md)) [L2]
+- [ ] **Config Hot-Reload** ([l2-config-hotreload.md](specifications/l2-config-hotreload.md)) [L2] — file-watcher with bounded backoff+polling fallback, prefix-keyed reload plan, subsystem action dispatch, skills snapshot invalidation (depends on doctor + scheduler + extension-registry)
 - [ ] **Backup** ([l2-backup.md](specifications/l2-backup.md)) [L2]
 - [ ] **GitHub Issue Reporting** ([l2-github-issue.md](specifications/l2-github-issue.md)) [L2]
 - [ ] **Telemetry** ([l1-telemetry.md](specifications/l1-telemetry.md)) [L1] — opt-in program metrics (implementation light)

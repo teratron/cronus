@@ -1,6 +1,6 @@
 # Agent Autonomy
 
-**Version:** 1.0.0
+**Version:** 1.0.1
 **Status:** Stable
 **Layer:** implementation
 **Implements:** l1-security.md, l1-orchestration.md
@@ -187,6 +187,59 @@ ApprovalRequest {
 | set level | `cronus agent autonomy set --level <supervised\|semi\|auto>` | `/agent autonomy set …` | `agent.autonomy.set_level(level) -> void` |
 | set hourly cap | `cronus agent autonomy set --max-actions-per-hour <N>` | `/agent autonomy set …` | `agent.autonomy.set_cap(n) -> void` |
 | view action counts | `cronus agent autonomy status` | `/agent autonomy status` | `agent.autonomy.status() -> ActionTrackerStatus` |
+
+### 4.8 Approval record manager
+
+The approval manager tracks in-flight and recently-resolved approval records. Separating record *creation* from *registration* (async wait) avoids a race between the approval UI dispatching a decision and the command being retried before the manager is ready:
+
+```text
+[REFERENCE]
+RESOLVED_ENTRY_GRACE_MS = 15_000   // keep resolved records 15 s post-decision
+
+ApprovalRecord {
+  id:                          String,            // UUID
+  request:                     ApprovalRequest,   // the parked tool call (see §4.6)
+  created_at_ms:               u64,
+  expires_at_ms:               u64,
+
+  // Optional caller-binding fields (prevent replay by a different client)
+  requested_by_conn_id?:       String,
+  requested_by_device_id?:     String,
+  requested_by_client_id?:     String,
+  requested_by_device_token?:  bool,
+
+  // Set when the decision arrives
+  resolved_at_ms?:             u64,
+  decision?:                   ApprovalDecision,   // "allow" | "deny"
+  consumed_decision?:          ApprovalDecision,   // set when the consuming call reads it (single-use)
+  resolved_by?:                String,             // identity string of the approver
+}
+```
+
+Lifecycle operations:
+
+```text
+[REFERENCE]
+ApprovalManager {
+  // Synchronous: generate a new record (no async state yet)
+  create(request: ApprovalRequest, timeout_ms: u64) -> ApprovalRecord
+
+  // Async: register record and return a future that resolves with the decision.
+  // Idempotent: if the same id is already pending, returns the SAME future.
+  // Error: if the id is already resolved, panics (caller bug).
+  register(record: ApprovalRecord, timeout_ms: u64) -> Future<ApprovalDecision?>
+
+  // Accept a decision (from the UI or background bypass).
+  resolve(id: String, decision: ApprovalDecision, resolved_by: Option<String>) -> bool
+
+  // Called internally after TTL elapses.
+  expire(id: String) -> void
+}
+```
+
+After `resolve()` is called, the entry stays in the manager for `RESOLVED_ENTRY_GRACE_MS` (15 s) before being removed. This window allows a `register()` call that races with the decision (e.g. the command is retried before the future is polled) to find the already-resolved record and return the decision immediately rather than blocking.
+
+The `consumed_decision` field is set when the tool call reads the decision, preventing a second tool-call attempt from replaying an already-consumed approval ID.
 
 ## 5. Drawbacks & Alternatives
 

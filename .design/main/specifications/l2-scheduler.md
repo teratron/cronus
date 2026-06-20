@@ -1,6 +1,6 @@
 # Scheduler
 
-**Version:** 1.0.2
+**Version:** 1.0.3
 **Status:** Stable
 **Layer:** implementation
 **Implements:** l1-scheduler-model.md
@@ -255,6 +255,91 @@ Every event-driven fire appends an entry to the audit log:
 [REFERENCE]
 { timestamp, schedule_id, trigger_type: "event", event_kind, counter_value, outcome: "fired" | "dedup_suppressed" | "counter_incremented" }
 ```
+
+### 4.9 Cron isolated session execution
+
+Each fired scheduled job runs in a **dedicated, isolated session** rather than sharing the agent's main interactive session. This keeps cron execution from interfering with the user's live conversation and allows job-specific model and tool configuration.
+
+#### Session key
+
+```text
+[REFERENCE]
+cron_session_key(workspace_id: String, schedule_id: String, fire_at_ms: u64) -> String:
+  "cron:{workspace_id}:{schedule_id}:{fire_at_ms}"
+```
+
+The key is deterministic: the same schedule fired at the same `fire_at_ms` always maps to the same session key. Combined with the idempotency key from §4.7, this prevents duplicate session creation under restart conditions.
+
+#### Model preflight
+
+Before spawning the session, the scheduler verifies that the designated model is reachable:
+
+```text
+[REFERENCE]
+CronModelPreflightResult: "ok" | "unavailable" | "auth_error"
+
+preflight(job: CronJob) -> CronModelPreflightResult:
+  provider = resolveProvider(job.model_override ?? workspace.default_model)
+  result = provider.probe(timeout_ms = 5_000)
+  if result == ok: return "ok"
+  if result is auth failure: return "auth_error"
+  return "unavailable"
+```
+
+On `"unavailable"`: fall back through the model fallback cascade (see `l2-model-error-recovery.md §4.1`).
+On `"auth_error"`: skip this fire and emit `CronModelAuthAlert`; the job is not retried until the next scheduled fire.
+
+#### Run timeout
+
+```text
+[REFERENCE]
+CronJob.run_timeout_secs: u32   // default 3600 (1 hour); 0 = unlimited
+```
+
+If the session is still running after `run_timeout_secs`, the session is aborted and the run is recorded as `timed_out`. The next scheduled fire starts fresh.
+
+#### Run log
+
+Every execution is appended to a per-schedule run log:
+
+```text
+<ws>/schedules/<schedule_id>/runs.jsonl
+```
+
+Each line (JSON):
+
+```text
+[REFERENCE]
+{ run_id, session_key, started_at_ms, ended_at_ms?, status: "running"|"ok"|"error"|"timed_out"|"blocked",
+  model, fire_at_ms, idempotency_key, error_summary? }
+```
+
+The run log is pruned to the last `N` entries (default 100) when the scheduler reloads on startup, preventing unbounded growth.
+
+#### Delivery dispatch
+
+On successful completion, the session's final reply is dispatched to the job's configured delivery targets:
+
+```text
+[REFERENCE]
+CronDeliveryTarget:
+  | { kind: "announce" }         // no delivery; result is silently discarded
+  | { kind: "session", session_key: String }  // inject result into another session as a message
+```
+
+The `"session"` target injects the result via the Inbox system (see `l2-inbox.md`), allowing a background cron result to surface in a named conversation session.
+
+#### Failure notification
+
+```text
+[REFERENCE]
+CronFailurePolicy {
+  notify_on: "error" | "timed_out" | "blocked" | "all",
+  alert_delivery: CronDeliveryTarget,   // where to send the alert
+}
+```
+
+When a run ends in a failure state matching `notify_on`, a `CronRunFailedAlert` message is dispatched to `alert_delivery`. The alert includes: `schedule_id`, `schedule_name`, `status`, `error_summary`, `started_at_ms`, `ended_at_ms`.
 
 ## 5. Drawbacks & Alternatives
 

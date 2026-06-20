@@ -1,6 +1,6 @@
 # Context Management
 
-**Version:** 1.0.0
+**Version:** 1.0.1
 **Status:** Stable
 **Layer:** implementation
 **Implements:** l1-orchestration.md
@@ -142,6 +142,104 @@ Context management runs automatically as a prologue step in the session loop; th
 | Compaction occurred | Structured log at INFO: `{used} -> {new_used} tokens, {older_count} messages summarized` |
 | Trim applied | Structured log at INFO: `Trimmed to {n} tokens ({m} messages)` |
 | Budget computed | Per-turn metric: `{configured, context_length, effective_budget}` |
+
+### 4.6 Context engine registry
+
+The context management system is pluggable. The built-in compaction engine (§4.3) is always registered as the default; plugins may register alternative engines that implement a richer assembly strategy.
+
+#### Engine host capabilities
+
+Before an engine can serve an operation, the host advertises which capabilities it supports. An engine declares the subset it requires:
+
+```text
+[REFERENCE]
+ContextEngineHostCapability:
+  | "bootstrap"                   // initial context assembly at session start
+  | "assemble-before-prompt"      // pre-turn assembly before each model call
+  | "after-turn"                  // post-turn hook after model response
+  | "maintain"                    // long-running background maintenance
+  | "compact"                     // summarization / compaction
+  | "runtime-llm-complete"        // engine may make LLM calls internally
+  | "thread-bootstrap-projection" // persistent backend thread reuse (see ContextEngineProjection)
+
+ContextEngineHostRequirements {
+  required_capabilities: Vec<ContextEngineHostCapability>,
+  unsupported_message?:  String,   // guidance shown if host cannot satisfy requirements
+}
+```
+
+If the host cannot satisfy an engine's `required_capabilities`, the engine selection falls back to the built-in compaction engine and a WARNING is logged.
+
+#### AssembleResult
+
+The return value of the engine's `assemble()` call:
+
+```text
+[REFERENCE]
+AssembleResult {
+  messages:          Vec<Message>,  // ordered messages sent to the model
+  estimated_tokens:  u32,
+
+  // Controls what the pre-turn overflow precheck uses as the authoritative token count.
+  // "assembled"              (default) — use estimated_tokens of the assembled list.
+  // "preassembly_may_overflow" — take max(assembled_estimate, raw_session_history_estimate).
+  //   Use when the engine's assembled view can hide an overflow still present in the
+  //   underlying transcript (e.g. a windowed engine where older turns are compressed
+  //   but the full history would overflow if replayed verbatim).
+  prompt_authority?: "assembled" | "preassembly_may_overflow",
+
+  // Optional context projection lifecycle.
+  context_projection?: ContextEngineProjection,
+
+  // Optional system-prompt additions from the engine (prepended to runtime system prompt).
+  system_prompt_addition?: String,
+}
+```
+
+#### Context engine projection
+
+```text
+[REFERENCE]
+ContextEngineProjection {
+  // "per_turn" (default) — rebuild and send full context on every turn.
+  // "thread_bootstrap"    — inject assembled context once for this epoch, then reuse the
+  //                         backend thread until epoch changes.
+  mode: "per_turn" | "thread_bootstrap",
+
+  epoch?:       String,   // stable identifier; backend thread is rotated when epoch changes
+  fingerprint?: String,   // optional diagnostic fingerprint of the projected context payload
+}
+```
+
+`"thread_bootstrap"` is for provider backends that maintain a persistent processing thread (e.g. stateful inference servers). The host injects the assembled context once when the epoch is first seen, then reuses the thread — avoiding full-context re-encoding on every turn. The epoch must change whenever the assembled context changes materially (e.g. after compaction, after a tool-set rebuild).
+
+#### Runtime modes
+
+```text
+[REFERENCE]
+ContextEngineRuntimeMode: "normal" | "fallback" | "degraded"
+  // "normal"    — selected engine running as configured
+  // "fallback"  — configured engine failed; built-in compaction engine substituted
+  // "degraded"  — even built-in engine is partially disabled (trim-only, no LLM compaction)
+```
+
+The current mode is exposed in `HotReloadStatus` (see `l2-config-hotreload.md §4.6`) and the health diagnostics endpoint.
+
+#### Registration and initialization
+
+```text
+[REFERENCE]
+// Built-in engine always available; never requires explicit registration.
+ensureContextEnginesInitialized():
+  if already_initialized: return
+  register("legacy", BuiltInCompactionEngine)   // safe fallback for all operations
+  initialized = true
+
+// Plugin API: called during plugin load
+api.registerContextEngine(id: String, factory: ContextEngineFactory)
+```
+
+Registration is once-per-process (idempotent init guard). The built-in `"legacy"` engine is always the fallback; it cannot be unregistered.
 
 ## 5. Drawbacks & Alternatives
 

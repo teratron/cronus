@@ -1,6 +1,6 @@
 # Execution Workspace
 
-**Version:** 1.0.0
+**Version:** 1.0.1
 **Status:** Stable
 **Layer:** implementation
 **Implements:** l1-orchestration.md, l1-storage-model.md
@@ -159,6 +159,131 @@ For `ssh` provider, `cwd/` is a local staging area; the remote path is stored in
 | finalize | `cronus workspace finalize <workspace-id>` | `/workspace finalize <id>` | `workspace.finalize(id) -> FinalizeResult` |
 | abandon | `cronus workspace abandon <workspace-id>` | `/workspace abandon <id>` | `workspace.abandon(id) -> void` |
 | cleanup | `cronus workspace cleanup [--dry-run]` | `/workspace cleanup …` | `workspace.runCleanup(dryRun?) -> CleanupReport` |
+
+### 4.9 Git worktree lifecycle (worktree provider)
+
+This section specifies the concrete implementation of the `worktree` provider type.
+
+#### Naming convention
+
+```text
+[REFERENCE]
+MAX_NAME_ATTEMPTS = 26
+
+makeWorktreeInfo(name?: String) -> Info:
+  root = <state>/worktrees/<project_id>/
+  fs.makeDirectory(root, recursive=true)
+  base = name ? slugify(name) : ""  // lowercase-kebab, strip non-[a-z0-9], collapse dashes
+
+  for attempt in 0..MAX_NAME_ATTEMPTS:
+    slug = (attempt == 0 AND base != "") ? base : Slug.create()
+    branch = "<tool>/<slug>"          // e.g. "agent/charming-fox"
+    directory = root + "/" + slug
+    if directory exists on disk: continue
+    if git branch "refs/heads/<branch>" exists: continue
+    return Info { name: slug, branch, directory }
+
+  throw NameGenerationFailedError
+```
+
+The `<tool>` prefix in the branch name identifies the owning component and namespaces worktree branches from hand-crafted development branches.
+
+#### Boot sequence
+
+```text
+[REFERENCE]
+createFromInfo(info: Info, start_command?: String):
+  1. setup(info):
+       git worktree add --no-checkout -b <info.branch> <info.directory>
+       project.addSandbox(project_id, info.directory)  // register with security sandbox
+
+  2. boot(info, start_command?):
+       git reset --hard                          // populate from HEAD
+       BootstrapRuntime.run(info.directory)      // init workspace state tier
+       runStartScripts(info.directory):
+         a. project.commands.start (from project config)
+         b. start_command (per-worktree override, runs after project command)
+       publish worktree.ready (name, branch) via GlobalBus
+```
+
+If `git reset --hard` fails, `worktree.failed { message }` is published and the boot sequence aborts; the workspace stays registered but unusable.
+
+#### isPristine check
+
+Used by the workflow runtime to decide whether to keep or reclaim an isolated worktree after an agent turn:
+
+```text
+[REFERENCE]
+isPristine(directory: String, base: String) -> bool:
+  status = git status --porcelain  (in directory)
+  if exit-code != 0: return false
+  if status.text.trim() != "": return false      // uncommitted changes
+  current = git rev-parse HEAD  (in directory)
+  return current.text.trim() == base             // HEAD hasn't moved
+```
+
+A worktree is kept only when the agent succeeded AND the worktree is non-pristine (i.e., the agent produced changes).
+
+#### Reset lifecycle
+
+The `reset` operation brings a worktree back to a clean state against the project's default branch. Used when a failed task needs to be re-run in the same worktree slot:
+
+```text
+[REFERENCE]
+reset(directory: String):
+  1. Fetch the remote default branch (if remote-tracking ref).
+  2. git reset --hard <default_branch_ref>  (in worktree)
+  3. sweep(worktree_path):
+       result = git clean -ffdx
+       if result.code != 0:
+         entries = parseFailedRemovePaths(result.stderr)
+         if entries != []:
+           prune(root, entries)   // rm -rf each locked file individually
+           git clean -ffdx        // retry once after pruning locked files
+  4. git submodule update --init --recursive --force
+  5. git submodule foreach --recursive git reset --hard
+  6. git submodule foreach --recursive git clean -fdx
+  7. Verify: git status --porcelain must be empty after reset.
+  8. Run project start scripts in the reset worktree (fork-in-scope).
+```
+
+The prune-and-retry pattern handles file-system lock contention (common on Windows where antivirus or indexer may hold files briefly).
+
+#### Path canonicalization
+
+Before any worktree lookup, paths are canonicalized:
+
+```text
+[REFERENCE]
+canonical(path: String) -> String:
+  abs = Path.resolve(path)
+  real = fs.realPath(abs)  // resolve symlinks; fall back to abs on error
+  norm = Path.normalize(real)
+  return (platform == "win32") ? norm.toLowerCase() : norm
+```
+
+Case-insensitive comparison on Windows ensures that `C:\Users\X\worktrees\abc` and `c:\users\x\worktrees\abc` are treated as the same path.
+
+#### Removal
+
+```text
+[REFERENCE]
+remove(directory: String) -> bool:
+  1. git worktree list --porcelain to find the entry.
+  2. If entry not found but directory exists: stopFsmonitor + rm -rf directory.
+  3. git fsmonitor--daemon stop (in worktree, if it exists).
+  4. git worktree remove --force <path>.
+  5. rm -rf <path>.
+  6. git branch -D <branch>.
+  7. return true.
+```
+
+Events:
+
+| Event | Payload | When |
+| --- | --- | --- |
+| `worktree.ready` | `{ name, branch }` | Boot sequence completed successfully. |
+| `worktree.failed` | `{ message }` | `git reset --hard` failed or bootstrap errored. |
 
 ## 5. Drawbacks & Alternatives
 
