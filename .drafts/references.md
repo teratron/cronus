@@ -17,6 +17,7 @@
 - <https://github.com/paperclipai/paperclip>
 - <https://github.com/pewdiepie-archdaemon/odysseus>
 - <https://github.com/aporb/agentic-os>
+- <https://github.com/earendil-works/pi>
 
 ## Spec-Driven Development
 

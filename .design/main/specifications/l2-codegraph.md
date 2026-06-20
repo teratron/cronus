@@ -1,6 +1,6 @@
 # Code Graph
 
-**Version:** 1.0.0
+**Version:** 1.0.1
 **Status:** Stable
 **Layer:** implementation
 **Implements:** l1-storage-model.md
@@ -193,6 +193,336 @@ The embedding model is configurable and can be swapped via the extension registr
 | show symbol + edges | `cronus codegraph show <id>` | `/codegraph show <id>` | `codegraph.get(id) -> CodeSymbol` |
 | purge index | `cronus codegraph purge` | `/codegraph purge` | `codegraph.purge() -> void` |
 | index stats | `cronus codegraph status` | `/codegraph status` | `codegraph.stats() -> IndexStats` |
+
+### 4.8 Three-pass extraction pipeline
+
+The extraction pipeline runs in three sequential passes, each processing a different media type.
+Code files never go to the LLM semantic extractor; only documents, papers, and images do.
+
+#### Pass 1 — Code structure (local, no API calls)
+
+Grammar-based parsers extract AST nodes (functions, classes, imports, call-graph edges) locally.
+Workers run in parallel processes to bypass single-threaded execution limits and achieve genuine
+concurrency. SQL files receive deterministic extraction: tables, views, foreign keys, and JOIN
+relationships are extracted without heuristic inference.
+
+#### Pass 2 — Audio and video (local, no API calls)
+
+Audio and video files are transcribed locally with a bundled speech-to-text model. The transcription
+prompt is seeded with the top god-nodes from Pass 1 output (most-connected symbols) to focus the
+transcript on the codebase domain rather than generic speech. Transcripts are cached by content
+hash; re-runs skip already-processed media files entirely.
+
+#### Pass 3 — Documents, papers, images (LLM subagents, costs tokens)
+
+Markdown files, PDFs, and images are dispatched to parallel LLM subagents. Each subagent reads a
+batch of files and returns a structured JSON fragment: nodes, edges, and hyperedges. Fragments are
+merged into the unified graph after all subagents complete. Before dispatch, the semantic cache is
+consulted; only files without a valid cache entry are sent to the LLM.
+
+If the corpus contains only code files, Pass 3 is skipped entirely.
+
+### 4.9 Confidence taxonomy and hyperedges
+
+Every edge carries a confidence label. The label is stored on the edge and drives graph analysis
+(god-node filtering, surprising-connection scoring, question generation).
+
+```text
+[REFERENCE]
+EXTRACTED   (score 1.0)   — relationship explicitly present in source: import statement,
+                            direct call, explicit inheritance declaration.
+
+INFERRED    (score ∈ {0.95, 0.85, 0.75, 0.65, 0.55}) — model-reasoned relationship:
+              0.95 — near-certain (explicit cross-file reference, one plausible target)
+              0.85 — strong evidence (naming + context align)
+              0.75 — reasonable (contextual but not explicit)
+              0.65 — weak (naming similarity only)
+              0.55 — speculative
+
+AMBIGUOUS   — uncertain; flagged in analysis reports for manual review.
+              AMBIGUOUS edges generate "What is the exact relationship between A and B?"
+              questions and are prioritised in surprising-connection ranking.
+```
+
+**Hyperedges** represent group relationships connecting three or more nodes simultaneously (e.g.,
+a design pattern that couples several components). They are stored in a separate table from binary
+edges and cannot be reduced to a set of pairwise relationships.
+
+```text
+[REFERENCE]
+hyperedge { id, relation, source_file, participant_ids: [id, ...] }
+-- Stored in: codegraph_hyperedges table
+-- Never flattened to binary edges; queried separately.
+```
+
+### 4.10 Dual-layer extraction cache
+
+Two cache layers with different invalidation semantics prevent unnecessary re-extraction.
+
+**AST cache** (versioned by extractor version)
+
+Stores the output of the local grammar-based extractor. Cache entries are namespaced by extractor
+version (`cache/ast/v{version}/`) so that bug fixes in the extractor correctly invalidate stale
+results from the previous release. Stale version directories are swept lazily on first use.
+
+**Semantic cache** (unversioned)
+
+Stores the output of LLM-subagent extraction. Not version-namespaced: re-extracting on every
+release would rebill tokens for unchanged files. Stored under `cache/semantic/`.
+
+**Shared properties of both layers:**
+
+```text
+[REFERENCE]
+Cache key:     SHA256(body_content + "\x00" + relative_path_lowercase)
+               For .md files: body_content = file_content with YAML frontmatter stripped.
+               Frontmatter changes (review dates, tags) do not invalidate semantic cache.
+
+Stat fastpath: before full SHA256, consult (abs_path → {size, mtime_ns, hash}) index.
+               Skip SHA256 when size AND mtime_ns match the recorded entry.
+               Index is loaded once per process, flushed atomically at exit.
+
+Atomic write:  write to tmp file in same directory → os.replace(tmp, target).
+               Prevents torn reads when two processes update the same cache entry.
+
+Portable storage: absolute source_file paths are relativized to the workspace root before
+               write; re-anchored to the absolute path when loaded. Cache entries are
+               therefore portable across machines and checkout directories.
+
+Cache structure:
+  cache/ast/v{version}/{hash}.json    — AST entries (version-scoped)
+  cache/semantic/{hash}.json          — semantic entries (content-keyed only)
+  cache/stat-index.json               — stat fastpath index
+
+Override: CRONUS_CODEGRAPH_OUT env var to redirect output/cache directory
+          (useful for worktrees or shared-output setups).
+```
+
+### 4.11 Community detection
+
+Graph nodes are clustered into communities to reveal subsystem boundaries and improve god-node
+ranking, deduplication scoring, and analysis surfacing. No embeddings are needed — the semantic
+similarity edges already in the graph provide the similarity signal directly.
+
+```text
+[REFERENCE]
+Algorithm:  Leiden (preferred) → Louvain fallback if Leiden unavailable.
+            PYTHONHASHSEED = 0 pinned for deterministic partition results across runs.
+
+resolution: float, default 1.0
+            > 1.0 → more, smaller communities
+            < 1.0 → fewer, larger communities
+
+Hub exclusion:
+  exclude_hubs_percentile (optional) — nodes whose degree exceeds this percentile
+  are excluded from partitioning. After partition, hubs are re-attached to their
+  majority-vote neighbour community. Prevents super-hubs from pulling unrelated
+  subsystems into the same community.
+
+Oversized community splitting:
+  MAX_COMMUNITY_FRACTION = 0.25   — communities > 25% of graph nodes are split
+  MIN_SPLIT_SIZE         = 10     — only split if community has at least this many nodes
+
+  Second pass:
+  COHESION_SPLIT_THRESHOLD = 0.05 — re-split communities with cohesion below this
+  COHESION_SPLIT_MIN_SIZE  = 50   — only cohesion-split if community has at least this many nodes
+  (handles doc-hub nodes that bridge otherwise-unrelated subsystems)
+
+cohesion_score(community) = actual_intra_edges / (n * (n-1) / 2)
+
+Community ID stability:
+  IDs are remapped after each run to maximize overlap with the previous assignment
+  (greedy one-to-one matching by intersection size, then fresh IDs for unmatched,
+  deterministic tie-break by size desc + lexical node order).
+  Without remapping, identical groupings appear as massive ID churn in diff tools.
+```
+
+### 4.12 Entity deduplication pipeline
+
+LLM extraction can assign different labels to the same real-world concept across batches
+(e.g., `AuthManager`, `AuthenticationManager`, `auth_mgr`). This pipeline merges such
+near-duplicate entities into a single canonical node before community detection.
+
+The pipeline runs after graph construction and before clustering. Order matters: a cleaner
+graph produces better community assignments.
+
+```text
+[REFERENCE]
+ENTROPY_THRESHOLD  = 2.5    // bits/char; labels below this are too ambiguous to auto-merge
+LSH_THRESHOLD      = 0.7    // MinHash candidate-pair threshold
+MERGE_THRESHOLD    = 92.0   // Jaro-Winkler normalized_similarity × 100
+COMMUNITY_BOOST    = 5.0    // score bonus for pairs sharing a Leiden community ID
+```
+
+**Step 1 — Exact normalization**
+Lowercase + collapse non-alphanumeric runs to a space (Unicode NFKC). Identical normalized
+labels within the same source file merge immediately. Cross-file matches fall through to fuzzy.
+
+**Step 2 — Entropy gate**
+Labels with < ENTROPY_THRESHOLD bits/char Shannon entropy are skipped. Short ambiguous names
+(`"AI"`, `"DB"`, `"x"`) are too risky to auto-merge.
+
+**Step 3 — MinHash/LSH blocking**
+3-gram character shingles, 128 permutations, LSH threshold 0.7. Generates candidate pairs
+in O(n) rather than O(n²). Operates in sub-second at 10 k nodes.
+
+**Step 4 — Jaro-Winkler verification**
+Each candidate pair is verified at ≥ MERGE_THRESHOLD. Guards (any guard hit → skip merge):
+
+- Cross-file long labels (≥ 12 chars): plain Jaro (no prefix bonus) to prevent false positives
+  from names that share a prefix but differ in a distinguishing token.
+- Prefix-extension pairs (`parseConfig` / `parseConfigFile`): never merged regardless of score.
+- Labels with differing embedded digit runs: numbered siblings, not duplicates.
+- `rationale` and `document` node types: not label-merged across source files (boilerplate risk).
+- Short label pairs: blocked unless same-length and single-char substitution.
+
+**Step 5 — Community boost**
+Pairs where both nodes share a Leiden community ID receive +COMMUNITY_BOOST to score.
+Same-community membership is a strong signal that the nodes belong to the same subsystem.
+
+**Step 6 — Union-Find merge**
+Confirmed pairs feed a Union-Find structure. Connected components → each component merged
+into one canonical node. Winner: shortest ID without chunk suffix. Edges rewired to survivor;
+self-loops dropped.
+
+**Step 7 — Optional LLM tiebreaker**
+Ambiguous pairs (score 75–92) are batched in groups of 30 for LLM yes/no judgment.
+Off by default; enables more aggressive deduplication at small token cost.
+
+**Exclusions:**
+
+- Code symbols (AST-extracted): identity is the fully-qualified path; same-named symbols in
+  different files are always distinct.
+- Cross-project deduplication is not supported; labels coincide across projects by chance.
+
+### 4.13 Graph analysis
+
+#### God nodes
+
+Top-N most-connected entities in the graph. Excluded from ranking:
+
+- File-level hub nodes (filename == label; accumulate import/contains edges mechanically)
+- AST method stubs (label starts with `.` and ends with `()`)
+- Concept nodes (empty source_file or no file extension)
+- Built-in/stdlib type names (`str`, `int`, `Path`, `Optional`, `Counter`, etc.)
+- Common JSON schema key names (`name`, `id`, `type`, `version`, `dependencies`, etc.)
+
+#### Surprising connections
+
+Cross-file edges ranked by composite surprise score:
+
+```text
+[REFERENCE]
+score components (additive):
+  confidence weight:    AMBIGUOUS=3, INFERRED=2, EXTRACTED=1
+  cross file-type:      +2 (code↔paper, code↔image — non-obvious coupling)
+  cross-repo:           +2 (different top-level directory)
+  cross-community:      +1 (Leiden says structurally distant)
+  peripheral→hub:       +1 (min-degree ≤ 2 node reaching max-degree ≥ 5 node)
+  semantically_similar_to: score × 1.5 (conceptual links with no structural edge)
+
+Suppressed: INFERRED "calls"/"uses" edges that cross language families or connect
+code to a doc file — these are resolver artefacts, not real architecture.
+```
+
+#### Graph diff
+
+```text
+[REFERENCE]
+graph_diff(G_old, G_new) -> {
+  new_nodes:      [{id, label}],
+  removed_nodes:  [{id, label}],
+  new_edges:      [{source, target, relation, confidence}],
+  removed_edges:  [{source, target, relation, confidence}],
+  summary:        "3 new nodes, 5 new edges, 1 node removed",
+}
+```
+
+#### Import cycle detection
+
+```text
+[REFERENCE]
+1. Collapse symbol-level nodes to file via source_file attribute.
+2. Build directed file-level graph from "imports_from" and "re_exports" edges only.
+3. Find simple cycles bounded by max_cycle_length (default 5) to prevent combinatorial explosion.
+4. Deduplicate rotations: normalize by starting from the lexicographically smallest file.
+5. Sort by length (shortest = tightest coupling) then return top-N.
+```
+
+**Suggested questions** (generated automatically from graph signals)
+
+| Signal | Question template |
+| --- | --- |
+| AMBIGUOUS edge | "What is the exact relationship between `A` and `B`?" |
+| Bridge node (high betweenness) | "Why does `X` connect `Community A` to `Community B`?" |
+| God node with ≥ 2 INFERRED edges | "Are the N inferred relationships involving `X` actually correct?" |
+| Weakly-connected nodes (degree ≤ 1) | "What connects `X`, `Y`, `Z` to the rest of the system?" |
+| Low-cohesion community (score < 0.15, ≥ 5 nodes) | "Should `Module` be split into smaller, more focused modules?" |
+
+### 4.14 Affected subgraph analysis
+
+Given a seed entity, traverse incoming dependency edges to find all entities that would be
+affected by a change to the seed — useful for impact analysis before refactoring.
+
+```text
+[REFERENCE]
+DEFAULT_AFFECTED_RELATIONS = {
+  "calls", "references", "imports", "imports_from", "re_exports",
+  "inherits", "extends", "implements", "uses", "mixes_in", "embeds",
+}
+
+AffectedHit { node_id: String, depth: u32, via_relation: String }
+
+affected_nodes(graph, seed_id, relations, depth=2) -> Vec<AffectedHit>
+  // BFS over incoming edges of types in `relations`, depth-limited.
+
+Seed resolution (first match wins, ambiguous multi-match → null):
+  1. Exact node ID
+  2. Exact label (Unicode NFC, case-folded)
+  3. Bare name — strip trailing "()" from callable labels before match
+  4. Exact source_file path
+  5. Substring of label (contains match)
+```
+
+### 4.15 Global multi-project graph
+
+When operating across multiple workspaces, individual project graphs are merged into a global
+graph stored in the user home directory for cross-project queries.
+
+```text
+[REFERENCE]
+Locations:
+  ~/.cronus/global-graph.json     — merged graph (NetworkX node-link format)
+  ~/.cronus/global-manifest.json  — per-repo metadata
+
+Node prefixing: all nodes from project P receive ID "{repo_tag}:{original_id}"
+to prevent cross-project ID collisions.
+
+External library nodes (source_file is empty): deduplicated by label across projects —
+the same stdlib/framework concept becomes a single node in the global graph, with edges
+from all projects that reference it.
+
+Skip-if-unchanged: manifest stores source_hash (first 16 hex chars of SHA256 of the
+source graph.json). global_add() is a no-op if the hash matches the stored value.
+
+Manifest repo entry: { added_at, source_path, node_count, edge_count, source_hash }
+
+Corrupt manifest recovery: on JSON parse error, rename to
+manifest.corrupt.{unix_timestamp} and start fresh — prevents a corrupt file from
+blocking all global queries. Error is surfaced to stderr, not silently swallowed.
+
+Operations:
+  global_add(source_path, repo_tag)  -> { nodes_added, nodes_removed, skipped }
+  global_remove(repo_tag)            -> nodes_removed
+  global_list()                      -> manifest repos dict
+```
+
+## Document History
+
+| Version | Change |
+| --- | --- |
+| 1.0.1 | Added §4.8–§4.15: three-pass pipeline, confidence taxonomy, dual-layer cache, community detection, entity deduplication, graph analysis, affected subgraph, global multi-project graph |
+| 1.0.0 | Initial spec |
 
 ## 5. Drawbacks & Alternatives
 

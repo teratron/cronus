@@ -1,6 +1,6 @@
 # Security
 
-**Version:** 1.0.5
+**Version:** 1.0.6
 **Status:** Stable
 **Layer:** implementation
 **Implements:** l1-security.md
@@ -484,6 +484,93 @@ This design enforces SEC-4 (data vs telemetry) by construction: the telemetry pa
 built from the allowlist above; user content cannot appear because no collection path
 touches it. The endpoint validates against the allowlist server-side — any unlisted field
 is dropped rather than stored, providing defense-in-depth.
+
+### 4.10 Pre-parse safety guards
+
+#### File size cap (memory-bomb prevention)
+
+Any data file loaded for graph construction or analysis must be size-checked before
+parsing. Passing a multi-GiB file directly to a JSON parser can exhaust process memory
+before a single node is read.
+
+```text
+[REFERENCE]
+DATA_FILE_SIZE_CAP_BYTES = 512 * 1024 * 1024  // 512 MiB default
+
+Configurable via environment variable with optional unit suffix:
+  CRONUS_MAX_DATA_BYTES=<N>      // plain bytes
+  CRONUS_MAX_DATA_BYTES=<N>MB    // mebibytes (N × 1 048 576)
+  CRONUS_MAX_DATA_BYTES=<N>GB    // gibibytes (N × 1 073 741 824)
+
+Enforcement:
+  1. Before any parse: stat the file, compare st_size to cap.
+  2. On breach: raise SizeCapExceeded { path, size_bytes, cap_bytes } — never
+     attempt to read, never log partial content.
+  3. On stat error: allow parse to proceed (caller's path/existence checks surface
+     clearer errors in that case).
+```
+
+#### Path containment guard
+
+Paths for index and graph output files must resolve inside the designated output
+directory. Symlinks and `..` traversals are resolved before comparison.
+
+```text
+[REFERENCE]
+validate_output_path(path, base_dir):
+  resolved = path.resolve()
+  base     = base_dir.resolve()
+  if not base.exists():
+    raise OutputDirMissing { base }   // index not yet built
+  if not resolved.is_relative_to(base):
+    raise PathEscapesBase { path, base }
+  return resolved
+```
+
+#### Metadata recursive sanitization
+
+Graph node metadata accepted from external sources must be sanitized before storage
+or export to prevent stored-XSS in rendered graph views.
+
+```text
+[REFERENCE]
+sanitize_metadata(value):
+  string  → strip_control_chars(U+0000–U+001F, U+007F)
+            + html_escape(& < > " ')
+            + cap(512 chars)
+  list    → sanitize_metadata(each item), cap(50 items)
+  dict    → sanitize_metadata(key) + sanitize_metadata(value), drop empty keys
+  int / float / bool / null → pass through unchanged
+  other   → coerce to string, then apply string rule
+```
+
+#### DNS rebind TOCTOU prevention
+
+Standard SSRF guards validate a URL's resolved IP, but a naive validate-then-connect
+sequence allows DNS rebinding: the hostname resolves to a public IP during validation
+and a private IP (e.g., `169.254.169.254`) during the actual TCP connect.
+
+Prevention: resolve DNS exactly once, validate the resulting IP, then connect directly
+to that validated IP — never re-resolve the hostname at connect time.
+
+```text
+[REFERENCE]
+resolve_and_connect(host, port, server_name):
+  addrs = dns.resolve(host, port)              // single resolution only
+  for addr in addrs:
+    if is_private_or_reserved(addr.ip):
+      raise SSRFBlocked { host, addr.ip }
+  // Connect to the validated IP, not to `host`
+  // (connecting to `host` would trigger a second DNS lookup)
+  conn = tcp.connect(addr.ip, port)
+  // TLS handshake uses original hostname for SNI + certificate validation
+  if tls_required:
+    conn = tls.wrap(conn, server_hostname=server_name)
+  return conn
+
+redirect_handler: every redirect target re-validated through the same pipeline.
+                  Prevents open-redirect SSRF (http→file://, http→internal).
+```
 
 ## 5. Drawbacks & Alternatives
 
