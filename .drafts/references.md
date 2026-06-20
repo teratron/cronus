@@ -45,7 +45,7 @@
 
 ## UI/UX
 
-- tauri приложения: <https://madewithtauri.com/>
+- tauri приложения: <https://madewithtauri.com>
 - tauri приложения: <https://github.com/tauri-apps/awesome-tauri>
 - <https://github.com/agmmnn/tauri-ui>
 - <https://github.com/shadcn-ui/ui>

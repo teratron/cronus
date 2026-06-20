@@ -1,6 +1,6 @@
 # Model Router
 
-**Version:** 1.0.2
+**Version:** 1.0.3
 **Status:** Stable
 **Layer:** implementation
 **Implements:** l1-routing.md
@@ -318,6 +318,173 @@ reset_boost(candidate):
 #### Exploration (bandit)
 
 5% of requests (configurable `exploration_rate`) route to random candidates. Exploration is disabled in incident mode.
+
+### 4.9 Hardware-Fit Layer
+
+The `FIT` decision node in §4.1 is implemented as a hardware-fit evaluator that maps each on-device candidate to a `FitLevel` and selects the best `RunMode`.
+
+#### FitLevel taxonomy
+
+```text
+[REFERENCE]
+Level    | Condition                                    | Routing behaviour
+─────────────────────────────────────────────────────────────────────────────
+Perfect  | GPU mode; recommended_ram ≤ available VRAM  | Always route local
+Good     | GPU mode tight, or CPU offload with headroom | Route local
+Marginal | Minimum met but tight; CPU-only always here  | Route local only when no cloud candidate and policy allows degraded
+TooTight | required_mem > available mem                 | Skip local → cloud cascade
+```
+
+`Perfect` is only achievable in GPU mode. `CpuOffload` caps at `Good`. `CpuOnly` always caps at `Marginal`.
+
+#### RunMode taxonomy
+
+```text
+[REFERENCE]
+Mode             | Description                                              | TPS factor
+─────────────────────────────────────────────────────────────────────────────────────────
+Gpu              | All weights in VRAM                                      | 1.0
+TensorParallel   | Weights sharded across multiple same-model GPUs          | 0.9
+MoeOffload       | MoE experts in RAM, active experts loaded per-token      | 0.8
+CpuOffload       | Weights in RAM; hot layers in VRAM                       | 0.5
+CpuOnly          | Weights in RAM; no GPU                                   | 0.3
+```
+
+`CpuOffload` is skipped on unified-memory platforms (Apple Silicon, NVIDIA Grace/ATS): the GPU and CPU share the same physical pool, so there is no distinct offload path.
+
+#### TPS estimation
+
+Bandwidth-based (preferred when GPU bandwidth is known):
+
+```text
+[REFERENCE]
+max_tps = bandwidth_GB_s / model_size_GB × 0.55 × run_mode_factor
+model_size_GB = params_B × bytes_per_param(quantization)
+```
+
+Fixed-constant fallback when GPU bandwidth is unknown:
+
+```text
+[REFERENCE]
+Backend    | tok/s constant
+─────────────────────────
+Metal/MLX  | 250
+Metal/llama.cpp | 160
+CUDA       | 220
+ROCm       | 180
+CpuArm     | 90
+CpuX86     | 70
+Ascend     | 390
+```
+
+#### Memory estimation
+
+```text
+[REFERENCE]
+memory_total_GB = model_weights + kv_cache + overhead(0.5 GB)
+
+model_weights = params_B × bpp(quantization)
+
+kv_cache (precise, when n_layers/n_kv_heads/head_dim known):
+  bytes = 2 × n_layers × n_kv_heads × head_dim × context × dtype_bytes
+  kv_cache_GB = bytes / 1_073_741_824
+
+kv_cache (fallback):
+  kv_cache_GB = 0.000008 × params_B × context × kv_quant_scale
+
+kv_quant_scale: fp16=1.0, fp8=0.5, q8_0=0.5, q4_0=0.25, TurboQuant≈0.17
+```
+
+KV cache context cap for planning: `min(model_advertised_context, 8192)` — the full advertised window is used for actual inference but a capped estimate avoids inflating planning budgets for 128k+ models.
+
+#### FitLevel thresholds
+
+```text
+[REFERENCE]
+GPU path:      Perfect if recommended_GB ≤ available; Good if available ≥ required × 1.2; else Marginal
+CpuOffload:    Good if available ≥ required × 1.2; else Marginal
+CpuOnly:       Always Marginal
+
+VRAM pressure penalty (GPU mode):
+  utilization 50–80% → no penalty (sweet spot)
+  utilization 80–90% → fit_score penalty −30 pts
+  utilization > 90%  → linear cache-thrash penalty, floor 0.30
+```
+
+### 4.10 Per-Use-Case Scoring Weights
+
+When multiple on-device candidates qualify (FitLevel ≥ Good), composite score = Σ(weight_i × score_i) over four dimensions, with weights tuned per use-case.
+
+#### Score dimensions (0–100 each)
+
+```text
+[REFERENCE]
+quality  — base_quality + quant_quality_penalty + generation_bonus
+           generation_bonus = (gen - 1.0) × 3.0, capped +9 (gen 4.0)
+           quant penalties: F16/Q8_0=0, Q6_K=−1, Q5_K_M=−2, Q4_K_M=−5, Q3_K_M=−8, Q2_K=−12
+
+speed    — derived from TPS estimate, normalized to [0,100]
+           optimal range ≈ 25–60 tok/s maps to high scores
+
+fit      — VRAM/RAM utilization sweet spot 50–80% = 100
+           < 50%  → 60–100 (under-utilised)
+           80–90% → 70 (light pressure)
+           > 90%  → 50 (cache thrash risk)
+
+context  — model_context_tokens vs requested, capped at 8 192 for KV planning
+```
+
+#### Weight table
+
+```text
+[REFERENCE]
+Use case    | quality | speed | fit   | context
+────────────────────────────────────────────────
+General     | 0.45    | 0.30  | 0.15  | 0.10
+Coding      | 0.50    | 0.20  | 0.15  | 0.15
+Reasoning   | 0.55    | 0.15  | 0.15  | 0.15
+Chat        | 0.40    | 0.35  | 0.15  | 0.10
+Multimodal  | 0.50    | 0.20  | 0.15  | 0.15
+Embedding   | 0.30    | 0.40  | 0.20  | 0.10
+```
+
+Use-case inference priority: explicit tag on task > `use_case` field in model catalog > name heuristics (e.g. "code" in name → Coding; "deepseek-r1" → Reasoning; "embed"/"bge" → Embedding).
+
+### 4.11 Hardware Planning Protocol
+
+When the selected model is `TooTight` or the user requests a fit report, the router produces a `PlanEstimate` — not a hard error — so the user can act.
+
+#### Plan structure
+
+```text
+[REFERENCE]
+PlanEstimate {
+  model_name, provider, quantization, context, kv_quant,
+  current: { fit_level, run_mode, estimated_tps },  // current hardware status
+
+  run_paths: [                                        // evaluated in preference order
+    { path: Gpu,        feasible, minimum: HW, recommended: HW, estimated_tps, fit_level, notes },
+    { path: CpuOffload, feasible, minimum: HW, recommended: HW, estimated_tps, fit_level, notes },
+    { path: CpuOnly,    feasible, minimum: HW, recommended: HW, estimated_tps, fit_level, notes },
+  ],
+
+  upgrade_deltas: [                                   // gaps vs current hardware
+    { resource, add_GB, target_fit, description },    // e.g. "+4.2 GB VRAM -> Good"
+  ],
+
+  kv_alternatives: [                                  // "what-if" memory savings table
+    { kv_quant, memory_required_GB, kv_cache_GB, savings_fraction, supported, note },
+  ],
+}
+
+HardwareEstimate { vram_gb, ram_gb, cpu_cores }
+```
+
+Preference order for preferred path: Gpu → CpuOffload → CpuOnly. `CpuOffload` is `feasible: false` on unified-memory systems (Apple Silicon, NVIDIA Grace).
+
+#### TurboQuant gating
+
+TurboQuant KV compression (~0.34 bytes/element vs 2.0 for fp16) is gated on vLLM + CUDA. It only compresses full-attention layers in hybrid architectures (models that mix self-attention with linear/Mamba-style state-space layers see partial savings proportional to their full-attention fraction). Always shown in the `kv_alternatives` table; marked `supported: false` on non-CUDA backends with an explanatory note.
 
 ## 5. Drawbacks & Alternatives
 

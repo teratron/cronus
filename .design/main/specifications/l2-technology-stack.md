@@ -1,6 +1,6 @@
 # Technology Stack
 
-**Version:** 1.0.0
+**Version:** 1.0.1
 **Status:** Stable
 **Layer:** implementation
 **Implements:** l1-architecture.md
@@ -75,6 +75,142 @@ A cross-platform autonomous product must pick technologies that (a) let one core
 | LibSQL + vector | sqlite-vec (vectors) + libSQL/PG (sync) | Turso rewriting on Rust with no vector engine yet |
 | candle/mistral.rs on mobile GPU | llama.cpp via FFI; iOS Metal / Android CPU | candle won't build on Android / no iOS GPU; mistral.rs has no mobile target |
 | Turborepo | moon / Nx | Turborepo does not manage Rust (RFC #683) |
+
+### 4.4 Local LLM Provider Catalog
+
+Six local inference providers are supported. Detection runs as parallel thread-scoped probes (timeout 800 ms); model name stems are normalised to lowercase for deduplication.
+
+#### Provider table
+
+```text
+[REFERENCE]
+Provider           | Protocol        | Default endpoint        | Notes
+──────────────────────────────────────────────────────────────────────────────────────────
+Ollama             | REST /api/*     | http://localhost:11434  | OLLAMA_HOST env override; IPv6→IPv4 fallback; wildcard bind (0.0.0.0/[::]) rejected
+llama.cpp          | REST /v1/*      | http://localhost:8080   | GGUF format; Metal/CUDA/ROCm/Vulkan/SYCL/CPU backends
+MLX                | REST /v1/*      | http://localhost:8080   | Apple Silicon only; mlx-4bit / mlx-8bit formats
+vLLM               | REST /v1/*      | http://localhost:8000   | CUDA only; AWQ/GPTQ/SafeTensors; TurboQuant KV (research)
+LM Studio          | REST /v1/*      | http://localhost:1234   | Desktop GUI; OpenAI-compat endpoint
+Docker Model Runner| REST /engines/* | http://localhost:12434  | Container-based; GPU pass-through
+```
+
+`OllamaProvider` preferentially tries `localhost`; falls back to `127.0.0.1` for hosts where `localhost` resolves to `::1` while Ollama listens on IPv4 only.
+
+#### GpuBackend taxonomy
+
+```text
+[REFERENCE]
+Backend | Platform             | Notes
+──────────────────────────────────────────────────────────────────────────
+Cuda    | NVIDIA discrete      | Primary; TurboQuant, TensorParallel
+Metal   | Apple unified memory | MLX-native; no separate CpuOffload path
+Rocm    | AMD discrete         |
+Vulkan  | Cross-platform       | Fallback when no first-class driver
+Sycl    | Intel Arc            |
+CpuArm  | ARM CPU              | Mobile / Apple CPU fallback
+CpuX86  | x86 CPU              |
+Ascend  | Huawei NPU           |
+```
+
+GPU detection cascade: nvidia-smi (extended addressing mode → standard fallback) → rocm-smi → sysfs → Windows WMI (PowerShell → wmic fallback) → AMD APU unified → NVIDIA ATS → Intel Arc → Apple Silicon → Ascend NPU → Vulkan fallback. Multi-vendor results are de-duplicated; discrete GPUs preferred over APU/integrated.
+
+#### Special platform notes
+
+```text
+[REFERENCE]
+Apple Silicon         — total_ram_gb is used as the VRAM pool (unified memory).
+                        Available RAM via vm_stat: (free + inactive + purgeable) × page_size (16 KB on Apple Silicon).
+                        CpuOffload is infeasible (skip, mark not available).
+
+NVIDIA Grace/DGX Spark — addressing_mode=ATS → unified_memory=true; VRAM = /proc/meminfo total.
+
+AMD Ryzen AI MAX      — unified_memory=true; VRAM = total DIMM sum via Win32_PhysicalMemory
+                         (not AdapterRAM, which is capped ~4 GB by 32-bit BIOS field).
+
+WMI AdapterRAM        — 32-bit field; falls back to GPU name heuristic for VRAM estimation
+                         when reported value is ≤ 4 GB for known high-VRAM cards.
+```
+
+### 4.5 Quantization System
+
+Quantization is orthogonal to provider: any GGUF-capable provider can serve any GGUF quant; MLX providers serve only MLX formats; vLLM serves AWQ/GPTQ/SafeTensors.
+
+#### Weight quantization formats
+
+```text
+[REFERENCE]
+GGUF standard hierarchy (best quality → most compressed):
+  Q8_0 → Q6_K → Q5_K_M → Q4_K_M → Q3_K_M → Q2_K
+
+MLX hierarchy:
+  mlx-8bit → mlx-4bit
+
+Pre-quantized formats (fixed bit-width, no dynamic re-quant):
+  AWQ-4bit, AWQ-8bit, GPTQ-Int4, GPTQ-Int8, AutoRound-4bit, AutoRound-8bit
+
+Unquantized:
+  F32, F16, BF16
+
+Unalike-distrib variants (UD-Q*_K_XL/L/M/S):
+  Same bpp as base format; different importance weighting per layer.
+```
+
+#### Quantization parameters table
+
+```text
+[REFERENCE]
+Format      | bytes/param | speed multiplier | quality penalty
+─────────────────────────────────────────────────────────────
+F16 / BF16  | 2.00        | 0.60             |  0
+Q8_0        | 1.05        | 0.80             |  0
+Q6_K        | 0.80        | 0.95             | -1
+Q5_K_M      | 0.68        | 1.00             | -2
+Q4_K_M      | 0.58        | 1.15             | -5
+Q4_0        | 0.58        | 1.15             | -5
+Q3_K_M      | 0.48        | 1.25             | -8
+Q2_K        | 0.37        | 1.35             |-12
+mlx-4bit    | 0.55        | 1.15             | -4
+mlx-8bit    | 1.00        | 0.85             |  0
+AWQ-4bit    | 0.50        | 1.20             | -3
+AWQ-8bit    | 1.00        | 0.85             |  0
+GPTQ-Int4   | 0.50        | 1.20             | -3
+GPTQ-Int8   | 1.00        | 0.85             |  0
+
+speed multiplier: applied to base tok/s constant; < 1.0 = slower than Q5_K_M baseline
+quality penalty:  additive offset on 0–100 quality score
+```
+
+#### Best-quant-for-budget algorithm
+
+```text
+[REFERENCE]
+best_quant_for_budget(params_B, budget_GB, context, hierarchy):
+  for quant in hierarchy:                            // best quality first
+    mem = params_B × bpp(quant) + kv_cache(context) + 0.5 GB overhead
+    if mem ≤ budget_GB: return (quant, mem)          // first that fits
+  // Nothing fits at full context: try half context
+  for quant in hierarchy:
+    mem = params_B × bpp(quant) + kv_cache(context/2) + 0.5 GB overhead
+    if mem ≤ budget_GB: return (quant, mem)
+  return TooTight                                    // no option fits
+```
+
+#### KV cache quantization
+
+Orthogonal to weight quantization; trades context-window memory for quality.
+
+```text
+[REFERENCE]
+KV format  | bytes/element | Runtime support
+───────────────────────────────────────────────────────────────
+fp16       | 2.0           | All runtimes (default)
+fp8        | 1.0           | vLLM; llama.cpp fp8-enabled builds
+q8_0       | 1.0           | llama.cpp --cache-type-k q8_0
+q4_0       | 0.5           | llama.cpp --cache-type-k q4_0 (quality drop)
+TurboQuant | ~0.34         | vLLM + CUDA only; compresses full-attention layers only
+```
+
+`TurboQuant` savings for hybrid architectures (models mixing self-attention with linear/state-space layers) are proportional to the full-attention fraction; the linear/Mamba layers remain at fp16.
 
 ## 5. Drawbacks & Alternatives
 
