@@ -1,6 +1,6 @@
 # Implementation Plan
 
-**Version:** 2.0.0
+**Version:** 2.1.0
 **Generated:** 2026-06-20
 **Based on:** .design/main/INDEX.md v1.0.0
 **Status:** Active
@@ -70,7 +70,7 @@ Execution mode: **Parallel** (C3); tracks grouped by file independence. Critical
 
 *Memory, routing, and workspace management. Each lands with its CLI commands.*
 
-- [ ] **Memory Store** ([l2-memory-store.md](specifications/l2-memory-store.md)) [L2] — SQLite + sqlite-vec + FTS5 + tags, archivist curator; trust scoring (asymmetric feedback, TRUST_MIN_SEARCH=0.3, retrieval_count), shallow entity links (seed of deferred graph), HRR phase encoding (model-free vector fallback, SNR capacity guard)
+- [ ] **Memory Store** ([l2-memory-store.md](specifications/l2-memory-store.md)) [L2] — SQLite + sqlite-vec + FTS5 + tags, archivist curator; trust scoring (asymmetric feedback, TRUST_MIN_SEARCH=0.3, retrieval_count), shallow entity links (seed of deferred graph), HRR phase encoding (model-free vector fallback, SNR capacity guard); Bellman propagation (gamma=0.9, alpha=0.1, max_depth=2, 1h temporal credit window), session chaining (2h window, Continuation links), VerificationState weight ladder (Untested=0.30 → ValidatedCrossProject=1.00)
 - [ ] **Memory Encryption** ([l2-memory-encryption.md](specifications/l2-memory-encryption.md)) [L2] — AES-256-GCM per-chunk encryption, Argon2id KDF, OS keychain key storage, transactional rotation (depends on memory-store + security)
 - [ ] **Code Graph** ([l2-codegraph.md](specifications/l2-codegraph.md)) [L2] — tree-sitter extraction, SQLite + FTS5 + sqlite-vec embeddings, RRF fusion, auto-index (depends on memory-store)
 - [ ] **Model Router** ([l2-model-router.md](specifications/l2-model-router.md)) [L2] — local-first, difficulty/cost routing, fallback cascade, semantic cache; semantic router pool (embedding encoder + tolerance threshold, cost-optimal selection)
@@ -130,7 +130,8 @@ Execution mode: **Parallel** (C3); tracks grouped by file independence. Critical
 - [ ] **Doctor** ([l2-doctor.md](specifications/l2-doctor.md)) [L2]
 - [ ] **Config Hot-Reload** ([l2-config-hotreload.md](specifications/l2-config-hotreload.md)) [L2] — file-watcher with bounded backoff+polling fallback, prefix-keyed reload plan, subsystem action dispatch, skills snapshot invalidation (depends on doctor + scheduler + extension-registry)
 - [ ] **Backup** ([l2-backup.md](specifications/l2-backup.md)) [L2]
-- [ ] **GitHub Issue Reporting** ([l2-github-issue.md](specifications/l2-github-issue.md)) [L2]
+- [ ] **GitHub Issue Reporting** ([l2-github-issue.md](specifications/l2-github-issue.md)) [L2] — consent + scrub + dedup pipeline, GitHub issue filing; error fingerprinting (BLAKE3 normalized hash, cross-episode dedup, prior-resolution surfacing)
+- [ ] **Self-Improvement** ([l2-self-improvement.md](specifications/l2-self-improvement.md)) [L2] — calibration buckets (overconfidence metric, verified-ratio warning), mistake log (project/category/files), should-have-asked (trigger→question→answer), ask-backs (at-most-one-pending per project via partial UNIQUE INDEX), reasoning templates (task_type+domain → JSON steps, dream cycle extracted), brief surface (5-signal join at task start, cross-project mode) (depends on memory-store + learning-loop + agent-session + github-issue)
 - [ ] **Telemetry** ([l1-telemetry.md](specifications/l1-telemetry.md)) [L1] — opt-in program metrics (implementation light)
 - [ ] **Agent Migration** ([l2-agent-migration.md](specifications/l2-agent-migration.md)) [L2] — migration manifest v1, two-layer import (archives vs memory candidates), staged apply, source adapters (depends on memory-store + extension-registry + backup)
 

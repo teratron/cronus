@@ -1,6 +1,6 @@
 # Memory Store
 
-**Version:** 1.0.1
+**Version:** 1.0.2
 **Status:** Stable
 **Layer:** implementation
 **Implements:** l1-memory-model.md
@@ -51,7 +51,7 @@ CREATE TABLE memory_item (
   id TEXT PRIMARY KEY,
   scope TEXT, type TEXT, content TEXT,
   validity_scope TEXT,                  -- Forever|Domain|Project|Workaround
-  verification TEXT,                    -- Untested|Tested|Confirmed|Stable
+  verification TEXT,                    -- Untested|TestsPass|Merged|StableNoRevert|ValidatedCrossProject
   utility REAL,
   trust_score REAL DEFAULT 0.5,         -- reliability in [0,1]; see §4.6
   helpful_count INTEGER DEFAULT 0,      -- accumulated positive feedback
@@ -109,6 +109,23 @@ A bundled employee role that owns the asynchronous consolidation cycle, run on a
 | distill | extract repeated patterns into reusable skills |
 | reconcile | mark contradictions `invalid_at` (supersede) |
 | prune | delete expired low-utility rows and stale sessions |
+
+#### Verification state weights
+
+Each verification level applies a multiplicative weight to learned `utility` during recall fusion — unverified outcomes rank lower than those confirmed by external signals.
+
+| State | Trigger | Weight |
+| --- | --- | --- |
+| `Untested` | capture path (default) | 0.30 |
+| `TestsPass` | test-runner hook records a passing run | 0.60 |
+| `Merged` | git merge commit references the episode | 0.80 |
+| `StableNoRevert` (< 30 days) | `Merged` with no revert after stability window | 0.85 |
+| `StableNoRevert` (≥ 30 days) | same, beyond 30-day stability threshold | 0.95 |
+| `ValidatedCrossProject` | multiple distinct projects cite as success-template | 1.00 |
+
+Transitions are time-based (`StableNoRevert`), event-based (test hooks, merge commits), or dream-cycle-based (`ValidatedCrossProject` surfaces via the `templates` phase).
+
+The `verify_advance` dream phase promotes `Merged` episodes past the stability threshold into `StableNoRevert`. Default stability window: **30 days**.
 
 ### 4.5 Deferred: relationship graph
 
@@ -284,6 +301,86 @@ snr_estimate(dim: usize, n_items: usize) -> f64:
 ```
 
 When the archivist's `prune` stage runs, it checks `snr_estimate(HRR_DIM, n_items)`. If SNR < 2.0, low-trust + low-utility items are eligible for pruning ahead of schedule to restore capacity headroom.
+
+### 4.9 Bellman propagation
+
+Utility scores are not just updated on direct feedback — they propagate through the episode similarity graph. When episode A is marked helpful, nearby episodes (similar content, same session, or explicitly related) receive a discounted utility boost via a Bellman-style credit assignment. This surfaces items that tend to co-occur with successful outcomes even if they were not the directly retrieved item.
+
+#### Constants
+
+```text
+[REFERENCE]
+BELLMAN_GAMMA                   = 0.9    // discount factor per hop
+BELLMAN_ALPHA                   = 0.1    // learning rate for utility updates
+BELLMAN_MAX_PROPAGATION_DEPTH   = 2      // maximum hops in the similarity graph
+BELLMAN_PROPAGATION_THRESHOLD   = 0.5    // minimum cosine similarity to propagate to
+BELLMAN_TEMPORAL_CREDIT_WINDOW_H = 1     // lookback window for same-session credit (hours)
+BELLMAN_DECAY_RATE_PER_DAY      = 0.01   // baseline utility decay for unused episodes
+```
+
+#### Propagation algorithm
+
+```text
+[REFERENCE]
+propagate(source_id: &str, feedback: f32):
+  source_utility = memory_item[source_id].utility
+  new_utility    = source_utility + ALPHA * (feedback - source_utility)
+  UPDATE memory_item SET utility = new_utility WHERE id = source_id
+
+  neighbors = similarity_search(source_id, threshold=PROPAGATION_THRESHOLD,
+                                depth=MAX_PROPAGATION_DEPTH)
+  for (neighbor_id, sim, depth) in neighbors:
+    discount     = GAMMA ** depth
+    propagated   = ALPHA * discount * sim * feedback
+    UPDATE memory_item SET utility = utility + propagated WHERE id = neighbor_id
+
+  // Temporal credit: episodes retrieved in the same session window also benefit
+  recent_ids = list_by_session_window(source_id, TEMPORAL_CREDIT_WINDOW_H)
+  for neighbor_id in recent_ids:
+    propagated = ALPHA * GAMMA * feedback
+    UPDATE memory_item SET utility = utility + propagated WHERE id = neighbor_id
+```
+
+#### Decay
+
+On each propagation run (typically scheduled daily), episodes that have not been retrieved recently have their utility reduced:
+
+```text
+[REFERENCE]
+new_utility = old_utility * (1.0 - DECAY_RATE_PER_DAY)
+```
+
+The scope-aware decay rates in §4.4 (via `validity_scope`) override this baseline for fact items; Bellman decay applies to the episode utility signal.
+
+### 4.10 Session chaining
+
+Episodes that belong to the same logical work session are automatically linked to one another via `related_episodes`. The session is detected heuristically: two episodes for the same project within a **2-hour window** are considered part of the same session.
+
+#### Session key
+
+```text
+[REFERENCE]
+SESSION_LINK_WINDOW_HOURS = 2   // auto-link window for same-project episodes
+```
+
+When a new episode is captured:
+
+1. Look back at episodes for the same project within the last 2 hours.
+2. For each match, add a `RelatedEpisode { id, relationship: Continuation }` link on the new episode.
+3. Optionally assign a shared `session_id` UUID to the cluster so retrieval can group them.
+
+This feeds the Bellman temporal credit window: propagation uses the linked episodes to award credit to items that were co-retrieved in the same session, even if only one received explicit feedback.
+
+#### Relationship types
+
+| Relationship | Meaning |
+| --- | --- |
+| `Continuation` | Same task, next step in the same session |
+| `Prerequisite` | This episode was needed before the other |
+| `Alternative` | Different approach to the same problem |
+| `Related` | Loosely related (explicit manual link) |
+
+Continuation links are created automatically by session chaining. The other types are created explicitly by the session pipeline when the agent expresses the relationship.
 
 ## 5. Drawbacks & Alternatives
 

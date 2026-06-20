@@ -37,7 +37,7 @@ Local registry of specifications for this workspace.
 | [l2-tui.md](specifications/l2-tui.md) | Layer 3: terminal UI frontend | Stable | 2 | 1.0.0 |
 | [l2-app-ui.md](specifications/l2-app-ui.md) | Layer 4: desktop/web/mobile application UI/UX (incl. theming + localization) | Stable | 2 | 1.1.0 |
 | [l2-filesystem-layout.md](specifications/l2-filesystem-layout.md) | OS-native filesystem layout: tiers, trees, DB placement, memory paths | Stable | 2 | 1.0.0 |
-| [l2-memory-store.md](specifications/l2-memory-store.md) | Memory store: SQLite + sqlite-vec + FTS5 + tags, archivist curator; trust scoring (asymmetric +0.05/−0.10, TRUST_MIN_SEARCH=0.3), shallow entity links (memory_entity + junction), HRR phase encoding (model-free, SNR-guarded) | Stable | 2 | 1.0.1 |
+| [l2-memory-store.md](specifications/l2-memory-store.md) | Memory store: SQLite + sqlite-vec + FTS5 + tags, archivist curator; trust scoring (asymmetric +0.05/−0.10, TRUST_MIN_SEARCH=0.3), shallow entity links (memory_entity + junction), HRR phase encoding (model-free, SNR-guarded); Bellman propagation (gamma=0.9, alpha=0.1, max_depth=2, threshold=0.5), session chaining (2h window, Continuation links), VerificationState weights (0.30→1.00) | Stable | 2 | 1.0.2 |
 | [l2-workspace-management.md](specifications/l2-workspace-management.md) | Desktop tab UX, creation form, kebab naming, template→state, manager bootstrap | Stable | 2 | 1.0.0 |
 | [l2-kanban-board.md](specifications/l2-kanban-board.md) | Board storage, transitions, auto-archival store, execution semantics (atomic checkout, monitor scheduling, delegation depth) | Stable | 2 | 1.0.1 |
 | [l2-scheduler.md](specifications/l2-scheduler.md) | Friendly recurrence + raw cron, per-workspace storage, firing, routine execution policy (concurrency, catch-up, idempotency, webhooks), event-driven triggers (threshold counter, singleflight dedup); cron isolated session execution (session key isolation, model preflight, run log, delivery dispatch, failure notification) | Stable | 2 | 1.0.3 |
@@ -52,7 +52,7 @@ Local registry of specifications for this workspace.
 | [l2-doctor.md](specifications/l2-doctor.md) | Health check suite, safe-repair vs escalate, crash recovery, extensible check registry, doctor command | Stable | 2 | 1.0.1 |
 | [l2-security.md](specifications/l2-security.md) | Secret storage, gitignore defaults, egress gate, execution sandbox, audit log, SSRF protection (scheme+link-local+private-IP guard), internal tool loopback (startup token, require_admin); config integrity shields (three-state lock, SHA-256 seal, drift detection) | Stable | 2 | 1.0.2 |
 | [l2-sandbox-policy.md](specifications/l2-sandbox-policy.md) | Sandbox network egress: deny-by-default named entries (endpoint rules + binary allowlists), isolation tiers (restricted/balanced/open), preset catalog, PolicyContext agent visibility, access failure classification | Stable | 2 | 1.0.0 |
-| [l2-github-issue.md](specifications/l2-github-issue.md) | Consent + scrub + dedup pipeline, GitHub issue filing, report commands | Stable | 2 | 1.0.0 |
+| [l2-github-issue.md](specifications/l2-github-issue.md) | Consent + scrub + dedup pipeline, GitHub issue filing, report commands; error fingerprinting (BLAKE3 hash of normalized error text, cross-episode dedup, occurrence count, prior-resolution surfacing) | Stable | 2 | 1.0.1 |
 | [l2-backup.md](specifications/l2-backup.md) | State-tier backup minus secrets/cache, restore-by-copy, backup commands | Stable | 2 | 1.0.0 |
 | [l2-dashboard.md](specifications/l2-dashboard.md) | Statistics metrics + sources, per-office + home aggregate, dashboard command | Stable | 2 | 1.0.0 |
 | [l2-workflow-runtime.md](specifications/l2-workflow-runtime.md) | In-tree Rust runtime crate (lexer/parser/validator/executor/transpiler), in-process, subsystem-bound; port architecture | Stable | 2 | 1.2.0 |
@@ -77,9 +77,10 @@ Local registry of specifications for this workspace.
 | [l2-session-checkpoint.md](specifications/l2-session-checkpoint.md) | Session context-window checkpoint: three-file hierarchy (checkpoint/memory/notes.md), section-budgeted reads, fork-agent prefix-cache parity write, boundary invariant, system reminders (loop/stop/continue), progress reconcile, auto-memory triggers | Stable | 2 | 1.0.0 |
 | [l2-plugin-hooks.md](specifications/l2-plugin-hooks.md) | Runtime plugin hook system: actor.preStop/postStop ReAct loops (MAX_PRE_REACT=3/MAX_POST_REACT=3), ActorMatcher filter, aggregated decision, file hooks auto-discovery, sequential external plugin loading, HookEvent observability, fail-forward error handling | Stable | 2 | 1.0.0 |
 | [l2-config-hotreload.md](specifications/l2-config-hotreload.md) | Configuration hot-reload: file watcher with bounded backoff + polling fallback, prefix-keyed ConfigReloadPlan (restart/hot/none rules), subsystem-scoped actions, skills snapshot invalidation, no-op detection | Stable | 2 | 1.0.0 |
+| [l2-self-improvement.md](specifications/l2-self-improvement.md) | Agent self-improvement: calibration buckets (overconfidence=1−verified/declared, warn below 50%), mistake log (by project/category/files), should-have-asked (trigger→question→answer), ask-backs (at-most-one-pending per project via partial UNIQUE INDEX), reasoning templates (task_type+domain → steps, dream cycle extracted), brief surface (5-signal join at task start, cross-project mode) | Stable | 2 | 1.0.0 |
 
 ## Meta Information
 
 - **Maintainer**: Core Team
 - **Last Updated**: 2026-06-20
-- **Spec Count**: 65 (19 L1 + 46 L2)
+- **Spec Count**: 66 (19 L1 + 47 L2)
