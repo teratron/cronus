@@ -1,6 +1,6 @@
 # Model Router
 
-**Version:** 1.0.0
+**Version:** 1.0.1
 **Status:** Stable
 **Layer:** implementation
 **Implements:** l1-routing.md
@@ -87,10 +87,78 @@ Routing commands conform to the CLI grammar standard (see `l2-cli.md` §4.4).
 | show policy | `cronus route policy` | `/route policy` | `router.policy() -> Policy` |
 | explain a routing decision | `cronus route explain "<task>"` | `/route explain …` | `router.explain(task) -> Decision` |
 
+### 4.6 Semantic router pool
+
+The difficulty threshold in §4.1 uses a cheap heuristic (prompt length, token count, task tags). For workloads with a catalog of candidate models where cost varies significantly, a lightweight semantic router can replace or supplement the heuristic by predicting each model's accuracy on the current prompt and selecting the cheapest option that meets a tolerance threshold.
+
+#### Router pool configuration
+
+```text
+[REFERENCE]
+RouterPoolConfig {
+  routing: RouterPoolRouting {
+    // Routing algorithm:
+    // "prefill" — use a fine-tuned checkpoint to predict P(correct) via prefill encoding.
+    method: "prefill",
+
+    // Path to the fine-tuned router checkpoint (relative to state dir or absolute).
+    checkpoint: String,
+
+    // Accuracy-cost tolerance: how far below the best-accuracy model's score a
+    // cheaper model may fall and still be selected. 0.20 = 20 percentage points.
+    tolerance: f32,   // default 0.20
+
+    // Embedding model used to encode prompts for the checkpoint.
+    encoder: String,              // e.g. a small open-weights encoder
+
+    // Runtime backend for running the encoder.
+    encoder_backend: "transformers" | "onnx",
+  },
+
+  models: Vec<RouterPoolModelEntry>,
+}
+
+RouterPoolModelEntry {
+  name:                    String,
+  display_name:            String,
+  litellm_model:           String,          // provider-prefixed model ID for API calls
+  cost_per_m_input_tokens: f64,             // USD per million input tokens
+  cost_per_m_output_tokens: f64,            // USD per million output tokens
+  api_base:                String,          // endpoint URL for this model
+}
+```
+
+When the on-device runtime is used for the managed inference endpoint, the virtual hostname `https://inference.local/v1` maps to the local inference process, decoupling the policy file from the actual host address.
+
+#### Selection algorithm
+
+```text
+[REFERENCE]
+select_model(prompt, pool_config) -> RouterPoolModelEntry:
+  embedding = encoder.encode(prompt)
+  scores    = checkpoint.predict(embedding)  // P(correct) per model, same order as pool_config.models
+
+  best_p    = max(scores)
+  threshold = best_p - pool_config.routing.tolerance
+
+  candidates = [(model, score) for (model, score) in zip(models, scores) if score >= threshold]
+
+  // Among candidates, pick the cheapest by estimated total cost
+  // (input cost dominates for most routing workloads, so rank on input cost as primary signal)
+  return min(candidates, key = model.cost_per_m_input_tokens)
+```
+
+If the checkpoint is unavailable or the pool config is absent, the router falls back to the heuristic difficulty estimator (§4.1).
+
+#### Configuration location
+
+`RouterPoolConfig` is stored in `<state>/router-pool.json` (alongside `routing.json`). The catalog in `models.json` is the source for the full model list; `router-pool.json` references a subset of those models that are candidates for semantic routing.
+
 ## 5. Drawbacks & Alternatives
 
 - **Difficulty estimation cost:** a wrong estimate mis-tiers; mitigated by the fallback cascade catching failures.
 - **Local capability ceiling:** on-device models cap at smaller sizes; local-first yields to cloud when hardware-fit fails (honest about limits).
+- **Semantic router cold-start:** the encoder must load on first use; add to the warm-up sequence to avoid latency on the first request.
 - **Alternative — always cloud:** rejected as default; loses privacy/cost benefits of the personal-server model.
 
 ## Canonical References

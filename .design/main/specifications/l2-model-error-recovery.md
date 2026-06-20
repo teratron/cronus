@@ -1,6 +1,6 @@
 # Model Error Recovery
 
-**Version:** 1.0.0
+**Version:** 1.0.1
 **Status:** Stable
 **Layer:** implementation
 **Implements:** l1-routing.md, l1-doctor.md
@@ -192,11 +192,78 @@ impl CredentialPool {
 
 Terminal auth reasons that immediately mark a credential `Dead` (no cooldown retry): token invalidated, token revoked, invalid grant (refresh token rejected), refresh token reused.
 
+### 4.6 Provider health probe
+
+Before a turn begins — and whenever the model router advances the fallback cascade (§4.4) — the provider is probed to confirm it is reachable and able to serve requests. This prevents wasting turn latency on a provider that is already known-dead.
+
+#### ProviderHealthStatus
+
+```text
+[REFERENCE]
+ProviderHealthStatus {
+  ok:            bool,             // true = provider is healthy and ready
+  probed:        bool,             // true = a network probe was attempted (false = cached/skipped)
+  provider_label: String,          // human-readable provider name for display
+  endpoint:      String,           // probe target URL
+  detail:        String,           // diagnostic detail (empty on ok)
+
+  // Failure category when ok = false:
+  // "unreachable"  — no network path (DNS failure, connection refused, timeout)
+  // "unhealthy"    — reachable but returning errors (5xx, model not loaded)
+  // "unauthorized" — reachable but credentials rejected (401/403)
+  failure_label:  Option<"unreachable" | "unhealthy" | "unauthorized">,
+
+  // Multi-hop display label: identifies which leg of a proxy chain this probe covers.
+  // E.g. "vLLM backend" when the user-facing endpoint is a frontend proxy.
+  probe_label:   Option<String>,
+
+  // Sub-probes for multi-hop architectures: the top-level probe is the user-facing
+  // endpoint; subprobes are its backend components. Each follows the same schema.
+  subprobes:     Vec<ProviderHealthStatus>?,
+}
+```
+
+#### Multi-hop probing
+
+When the configured endpoint is a proxy or aggregator (e.g. an on-device gateway proxying to a local inference backend), a single probe at the proxy surface cannot pinpoint whether the proxy itself or a backend component is the failure point. Subprobes solve this:
+
+```text
+[REFERENCE]
+ProbeResult {
+  surface: ProviderHealthStatus,      // top-level: what the client sees
+  subprobes: [
+    ProviderHealthStatus { probe_label: "inference backend", ... },
+    ProviderHealthStatus { probe_label: "auth sidecar", ... },
+  ]
+}
+```
+
+`probe_label` in each subprobe carries a human-readable component name so the Doctor health report can display exactly which hop in the chain is failing.
+
+#### Context window discovery on model switch
+
+When the fallback cascade advances to a different model, the new model's context window must be re-probed to avoid feeding an incorrect `effective_budget` to the context engine:
+
+```text
+[REFERENCE]
+DEFAULT_CONTEXT_WINDOW: u32 = 131_072  // fallback when discovery is not possible
+
+resolve_context_window(provider, model) -> u32:
+  match provider:
+    "ollama"  → warm_model(model); probe_ollama_context_window(model)
+    "vllm"    → GET /v1/models → extract max_model_len for this model
+    "cloud"   → DEFAULT_CONTEXT_WINDOW  // cloud providers do not expose this via API
+    _         → DEFAULT_CONTEXT_WINDOW
+```
+
+On discovery failure (probe error, model not found), `DEFAULT_CONTEXT_WINDOW` is used and a WARNING is logged. The session continues — a conservative context window is safer than aborting the turn.
+
 ## 5. Drawbacks & Alternatives
 
 - **Large pattern list maintenance:** providers change error messages; patterns drift. Mitigated by using narrow provider-specific phrases rather than generic words.
 - **Heuristic context overflow (large session + generic 400):** may trigger unnecessary compression on unrelated errors. Justified: a wasted compress is cheaper than a hard abort on a recoverable overflow.
 - **SSL alert → Timeout, not ContextOverflow:** a large session with an SSL alert would otherwise trigger compression incorrectly. SSL patterns must run before the disconnect heuristic.
+- **Health probe latency:** adding a probe before each turn adds round-trip latency. Mitigated by caching probe results per provider with a short TTL (e.g. 30s) and skipping the probe when the last result was `ok`.
 - **Alternative — single retry with no classification:** loses all adaptive recovery (compression, rotation, cascade); rejected.
 
 ## Canonical References

@@ -1,13 +1,13 @@
 # Implementation Plan
 
-**Version:** 1.9.0
+**Version:** 2.0.0
 **Generated:** 2026-06-20
 **Based on:** .design/main/INDEX.md v1.0.0
 **Status:** Active
 
 ## Overview
 
-Implementation plan for Cronus from 64 Stable specifications (19 L1 concepts + 45 L2 implementations). Phases follow a **growth order**: the agent grows like a sprout from a seed.
+Implementation plan for Cronus from 65 Stable specifications (19 L1 concepts + 46 L2 implementations). Phases follow a **growth order**: the agent grows like a sprout from a seed.
 
 - **Seed = the library** (`crates/core` + `crates/nodus` runtime) — Phases 1–2.
 - **Stem = the CLI** — Phase 3, the first usable surface, emerging straight from the seed.
@@ -50,7 +50,8 @@ Execution mode: **Parallel** (C3); tracks grouped by file independence. Critical
 - [ ] **Technology Stack** ([l2-technology-stack.md](specifications/l2-technology-stack.md)) [L2] — toolchain (Rust, Vite/React 19, Tauri v2)
 - [ ] **Filesystem Layout** ([l2-filesystem-layout.md](specifications/l2-filesystem-layout.md)) [L2] — OS-native path resolver, state bootstrap
 - [ ] **Core Library** ([l2-core-library.md](specifications/l2-core-library.md)) [L2] — engine crate, public contract, durable state
-- [ ] **Security** ([l2-security.md](specifications/l2-security.md)) [L2] — secret store, gitignore, redaction, egress gate, sandbox, SSRF guard, internal tool loopback
+- [ ] **Security** ([l2-security.md](specifications/l2-security.md)) [L2] — secret store, gitignore, redaction, egress gate, sandbox, SSRF guard, internal tool loopback; config integrity shields (three-state lock, SHA-256 seal, drift detection)
+- [ ] **Sandbox Policy** ([l2-sandbox-policy.md](specifications/l2-sandbox-policy.md)) [L2] — deny-by-default network egress (named entries + binary allowlists), isolation tiers (restricted/balanced/open), preset catalog, PolicyContext, access failure classification (depends on security)
 - [ ] **Multi-User Auth** ([l2-multi-user-auth.md](specifications/l2-multi-user-auth.md)) [L2] — bcrypt passwords, session tokens, TOTP 2FA, privilege map, admin promote/demote, reserved sentinel usernames (depends on security)
 
 ## Phase 2 — Seed II: Workflow Runtime (`crates/nodus`)
@@ -72,8 +73,8 @@ Execution mode: **Parallel** (C3); tracks grouped by file independence. Critical
 - [ ] **Memory Store** ([l2-memory-store.md](specifications/l2-memory-store.md)) [L2]
 - [ ] **Memory Encryption** ([l2-memory-encryption.md](specifications/l2-memory-encryption.md)) [L2] — AES-256-GCM per-chunk encryption, Argon2id KDF, OS keychain key storage, transactional rotation (depends on memory-store + security)
 - [ ] **Code Graph** ([l2-codegraph.md](specifications/l2-codegraph.md)) [L2] — tree-sitter extraction, SQLite + FTS5 + sqlite-vec embeddings, RRF fusion, auto-index (depends on memory-store)
-- [ ] **Model Router** ([l2-model-router.md](specifications/l2-model-router.md)) [L2]
-- [ ] **Model Error Recovery** ([l2-model-error-recovery.md](specifications/l2-model-error-recovery.md)) [L2] — error taxonomy, classification pipeline, credential pool (depends on model-router)
+- [ ] **Model Router** ([l2-model-router.md](specifications/l2-model-router.md)) [L2] — local-first, difficulty/cost routing, fallback cascade, semantic cache; semantic router pool (embedding encoder + tolerance threshold, cost-optimal selection)
+- [ ] **Model Error Recovery** ([l2-model-error-recovery.md](specifications/l2-model-error-recovery.md)) [L2] — error taxonomy, classification pipeline, credential pool; provider health probe (ProviderHealthStatus, multi-hop subprobes, context window discovery) (depends on model-router)
 - [ ] **Agent Session Loop** ([l2-agent-session.md](specifications/l2-agent-session.md)) [L2] — TurnContext, IterationBudget, ContextEngine interface, tool-call loop seams, KV-cache stability, oversized-result summarizer, stop hooks, InterruptFence, post-turn hooks; text loop detection, goal re-entry cap (depends on model-router + context-router)
 - [ ] **Agent Autonomy** ([l2-agent-autonomy.md](specifications/l2-agent-autonomy.md)) [L2] — autonomy ladder, SecurityPolicy gate, CommandRiskLevel classifier, ActionTracker rolling cap, approval gate lifecycle; ApprovalRecord manager (create/register separation, 15s grace period) (depends on agent-session + tool-security + scheduler)
 - [ ] **Inbox** ([l2-inbox.md](specifications/l2-inbox.md)) [L2] — SQLite inter-actor inbox, send+drain pipeline, GC_TTL_MS=7d, MAX_DRAIN_PER_TURN=100, InboxArrived bus event, synthetic user message injection (depends on agent-session + storage)

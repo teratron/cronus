@@ -45,12 +45,13 @@ Local registry of specifications for this workspace.
 | [l2-office-view.md](specifications/l2-office-view.md) | Office projection sources, graph+spatial render, home building overview, office command surface | Stable | 2 | 1.0.0 |
 | [l2-orchestration.md](specifications/l2-orchestration.md) | Delegation via board, messaging, context isolation, judge+budget /goal loop, adaptive topology; agent tier hierarchy (Chat/Reasoning/Worker), static loader validation, MAX_SPAWN_DEPTH=3, toolkit action ranking | Stable | 2 | 1.0.1 |
 | [l2-role-catalog.md](specifications/l2-role-catalog.md) | Preset catalog + hired instances, role definition format, custom roles, hire/fire, adapter protocol (integration levels, fat/thin context, config revisions) | Stable | 2 | 1.0.1 |
-| [l2-model-router.md](specifications/l2-model-router.md) | Model selection: local-first, difficulty/cost, fallback cascade, semantic cache, routing commands | Stable | 2 | 1.0.1 |
-| [l2-model-error-recovery.md](specifications/l2-model-error-recovery.md) | Error taxonomy (FailoverKind), priority classification pipeline, retry/compress/rotate/fallback loop, credential pool | Stable | 2 | 1.0.0 |
+| [l2-model-router.md](specifications/l2-model-router.md) | Model selection: local-first, difficulty/cost, fallback cascade, semantic cache, routing commands; semantic router pool (embedding-based, tolerance-threshold, cost-optimal selection) | Stable | 2 | 1.0.1 |
+| [l2-model-error-recovery.md](specifications/l2-model-error-recovery.md) | Error taxonomy (FailoverKind), priority classification pipeline, retry/compress/rotate/fallback loop, credential pool; provider health probe (ProviderHealthStatus, multi-hop subprobes, context window discovery) | Stable | 2 | 1.0.1 |
 | [l2-agent-session.md](specifications/l2-agent-session.md) | Turn skeleton: TurnContext, IterationBudget, ContextEngine interface, prologue steps; tool-call loop seams, KV-cache stability, oversized-result summarizer, stop hooks, InterruptFence, post-turn hooks; text loop detection (TEXT_LOOP_TRIGGER_COUNT=3, mild/strong recovery), goal re-entry cap (MAX_GOAL_REACT=12) | Stable | 2 | 1.0.2 |
 | [l2-context-router.md](specifications/l2-context-router.md) | Memory/rules/session routing, most-specific-first, session continue/retire | Stable | 2 | 1.0.0 |
 | [l2-doctor.md](specifications/l2-doctor.md) | Health check suite, safe-repair vs escalate, crash recovery, extensible check registry, doctor command | Stable | 2 | 1.0.1 |
-| [l2-security.md](specifications/l2-security.md) | Secret storage, gitignore defaults, egress gate, execution sandbox, audit log, SSRF protection (scheme+link-local+private-IP guard), internal tool loopback (startup token, require_admin) | Stable | 2 | 1.0.1 |
+| [l2-security.md](specifications/l2-security.md) | Secret storage, gitignore defaults, egress gate, execution sandbox, audit log, SSRF protection (scheme+link-local+private-IP guard), internal tool loopback (startup token, require_admin); config integrity shields (three-state lock, SHA-256 seal, drift detection) | Stable | 2 | 1.0.2 |
+| [l2-sandbox-policy.md](specifications/l2-sandbox-policy.md) | Sandbox network egress: deny-by-default named entries (endpoint rules + binary allowlists), isolation tiers (restricted/balanced/open), preset catalog, PolicyContext agent visibility, access failure classification | Stable | 2 | 1.0.0 |
 | [l2-github-issue.md](specifications/l2-github-issue.md) | Consent + scrub + dedup pipeline, GitHub issue filing, report commands | Stable | 2 | 1.0.0 |
 | [l2-backup.md](specifications/l2-backup.md) | State-tier backup minus secrets/cache, restore-by-copy, backup commands | Stable | 2 | 1.0.0 |
 | [l2-dashboard.md](specifications/l2-dashboard.md) | Statistics metrics + sources, per-office + home aggregate, dashboard command | Stable | 2 | 1.0.0 |
@@ -81,4 +82,4 @@ Local registry of specifications for this workspace.
 
 - **Maintainer**: Core Team
 - **Last Updated**: 2026-06-20
-- **Spec Count**: 64 (19 L1 + 45 L2)
+- **Spec Count**: 65 (19 L1 + 46 L2)

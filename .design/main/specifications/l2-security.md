@@ -1,6 +1,6 @@
 # Security
 
-**Version:** 1.0.1
+**Version:** 1.0.2
 **Status:** Stable
 **Layer:** implementation
 **Implements:** l1-security.md
@@ -139,6 +139,73 @@ Certain internal tools (e.g. privilege escalation, config write) additionally re
 3. Tool execution.
 
 A valid token does not bypass `require_admin`; the two checks are independent.
+
+### 4.6 Config integrity shields
+
+Certain configuration files (routing policy, sandbox policy, workspace constitution files) must not be tampered with by the sandboxed agent or any process running inside the execution environment. The integrity shield mechanism enforces this through a three-state lock model backed by OS-native write protection and a SHA-256 content seal.
+
+#### Shield states
+
+```text
+[REFERENCE]
+ShieldsMode: "mutable_default" | "locked" | "temporarily_unlocked"
+
+// "mutable_default"      — initial state; files are writable by the host process.
+// "locked"               — shields are up; files are read-only + sealed.
+// "temporarily_unlocked" — shields are down for a bounded time window; auto-restore pending.
+```
+
+#### Shields up (locking)
+
+When shields are raised on a file:
+
+1. Write the file contents (host-side, before locking).
+2. Set file permission to read-only (`chmod 444` on Unix; read-only attribute on Windows).
+3. Apply OS-native immutability (`chattr +i` on Linux; `chflags uchg` on macOS; read-only + system attribute on Windows) to prevent deletion or overwrite even by elevated privilege without first removing the flag.
+4. Compute and store a SHA-256 hex digest of the file content as the content seal.
+
+```text
+[REFERENCE]
+ShieldsState {
+  shields_down:         bool?,                    // true while temporarily unlocked
+  shields_down_at:      Timestamp?,
+  shields_down_timeout: u64?,                     // seconds until auto-restore; 0 = manual only
+  shields_down_reason:  String?,
+  chattr_applied:       bool?,                    // whether OS immutability flag was successfully set
+  file_hashes:          Map<String, String>?,     // path → SHA-256 hex digest (the content seal)
+  updated_at:           Timestamp?,
+}
+```
+
+#### Shields down (temporary unlock)
+
+Shields may be lowered temporarily to allow a trusted host-side update (e.g. config rotation):
+
+1. Remove the OS immutability flag.
+2. Restore write permission.
+3. If `shields_down_timeout > 0`, start a timer; on expiry, automatically re-raise shields.
+4. Re-raising recomputes the SHA-256 seal from the updated file content.
+
+**Security invariant:** the sandboxed agent process cannot lower or raise its own shields. Shield control is exclusively a host-process operation; the agent has no elevated privilege to modify OS immutability flags. This prevents an agent from using a shield-manipulation exploit to tamper with its own policy files.
+
+#### Drift detection
+
+When shields are verified (by the Doctor health check or on startup), each sealed file's current SHA-256 is compared to the stored seal. A mismatch indicates content drift — the file was modified while supposedly locked:
+
+```text
+[REFERENCE]
+HASH_ISSUE_PATTERNS = [
+  "content drifted",              // seal mismatch: stored hash ≠ current hash
+  "sha256sum failed",             // hash computation error
+  "sha256sum output unparsable",  // unexpected output format from hash tool
+  "no seal recorded",             // file is locked but has no stored hash
+]
+
+isHashVerificationIssue(msg: String) -> bool:
+  HASH_ISSUE_PATTERNS.any(p => msg.contains(p))
+```
+
+A drift event is logged at ERROR and included in the Doctor health report with severity `Critical`. The host process is notified; the recommended recovery is to restore the file from backup (see `l2-backup.md`) and re-raise shields.
 
 ## 5. Drawbacks & Alternatives
 
