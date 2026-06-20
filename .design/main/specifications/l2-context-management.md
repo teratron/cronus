@@ -1,6 +1,6 @@
 # Context Management
 
-**Version:** 1.0.2
+**Version:** 1.0.3
 **Status:** Stable
 **Layer:** implementation
 **Implements:** l1-orchestration.md
@@ -52,6 +52,7 @@ compute_input_token_budget(
 ```
 
 Rules:
+
 - **Explicit user budget:** honoured exactly, only clamped to the model's window when that window is known. Never further capped by `hard_max` (user's deliberate choice wins).
 - **Auto (not explicit, window known):** `min(floor(context_length * headroom), hard_max)` — fills up to 85% of the model's window, capped at 200k so very large windows don't send pathologically large prompts.
 - **Auto (not explicit, window unknown):** use `configured` if set, else `default` (conservative 6k). **Do not scale off an unproven window.**
@@ -92,6 +93,7 @@ maybe_compact(session, endpoint_url, model, messages) -> (messages, context_leng
 ```
 
 Algorithm:
+
 1. Estimate token usage. If `usage / context_length < 0.85`, skip.
 2. If fewer than 4 conversation turns, skip (not worth compacting).
 3. Split conversation at midpoint: `older = convo[:n//2]`, `recent = convo[n//2:]`.
@@ -128,6 +130,7 @@ The session history is updated in-place after compaction; the summary message ca
 ### 4.4 Message protection
 
 Any message with `_protected: true` is excluded from the trim cascade entirely. This flag is set on:
+
 - The "active document" message injected when the user has a document open for editing.
 - Other caller-defined must-keep injections.
 
@@ -300,6 +303,149 @@ Tools listed in `PRUNE_PROTECTED_TOOLS` bypass this function entirely.
    compaction LLM call (§4.3).
 5. **Reassembly:** the compaction summary replaces the older portion; the recent tail is
    appended unchanged to produce the final message list.
+
+### 4.8 Compaction trigger and file-operation tracking
+
+#### Compaction trigger
+
+```text
+[REFERENCE]
+shouldCompact(contextTokens, contextWindow, settings):
+  if not settings.enabled: return false
+  return contextTokens > contextWindow - settings.reserveTokens
+
+CompactionSettings {
+  enabled:           bool,    // default: true
+  reserveTokens:     u32,     // default: 16_384  — headroom for the response
+  keepRecentTokens:  u32,     // default: 20_000  — minimum tokens kept unconditionally
+}
+```
+
+The trigger fires when the available response headroom (`reserveTokens`) would be consumed
+by the current context — earlier than the 85% threshold described in §4.3, because
+`reserveTokens` is a fixed token count, not a percentage. Both thresholds may coexist in
+different code paths; `reserveTokens` guards the hard boundary.
+
+`keepRecentTokens` (20 000) establishes a floor: even if shouldCompact fires, the most
+recent `keepRecentTokens` worth of messages are never compacted away — they become the
+preserved tail without going through the compaction LLM call.
+
+#### File-operation tracking across compactions
+
+Each compaction pass accumulates a `CompactionDetails` record that tracks which files the
+agent has interacted with during the compacted portion of the session. This data is
+preserved in the compaction entry and carried forward so later compactions can produce
+richer summaries that reference previously-read or previously-modified files.
+
+```text
+[REFERENCE]
+CompactionDetails {
+  readFiles:     Vec<String>,   // files read but NOT modified (read-only access)
+  modifiedFiles: Vec<String>,   // files written or edited (union of write + edit ops)
+}
+
+// Extraction — called on each assistant message before compaction:
+extractFileOpsFromMessage(message):
+  for block in message.content where block.type == "toolCall":
+    path = block.arguments["path"]
+    switch block.name:
+      "read"  → fileOps.read.add(path)
+      "write" → fileOps.written.add(path)
+      "edit"  → fileOps.edited.add(path)
+
+computeFileLists(fileOps):
+  modified = fileOps.written ∪ fileOps.edited
+  readOnly = fileOps.read - modified   // exclude re-read of modified files
+  return { readFiles: sorted(readOnly), modifiedFiles: sorted(modified) }
+```
+
+File lists are formatted as XML tags when injected into the summarization prompt:
+
+```text
+[REFERENCE]
+<read-files>
+path/to/file1
+path/to/file2
+</read-files>
+<modified-files>
+path/to/file3
+</modified-files>
+```
+
+### 4.9 Tool output truncation constants
+
+Tool outputs can individually dominate context. Two independent limits apply;
+whichever is hit first determines the cut point. Lines are never partially included:
+
+```text
+[REFERENCE]
+DEFAULT_MAX_LINES    = 2_000        // line count ceiling for any single tool output
+DEFAULT_MAX_BYTES    = 50 * 1_024   // 50 KB byte ceiling
+GREP_MAX_LINE_LENGTH = 500          // max chars per grep match line (excess is dropped)
+
+TruncationResult {
+  content:               String,
+  truncated:             bool,
+  truncatedBy:           "lines" | "bytes" | null,
+  totalLines:            u32,
+  totalBytes:            u32,
+  outputLines:           u32,
+  outputBytes:           u32,
+  lastLinePartial:       bool,
+  firstLineExceedsLimit: bool,
+  maxLines:              u32,
+  maxBytes:              u32,
+}
+```
+
+Two truncation strategies are used depending on the tool:
+
+- **`truncateHead`** (file reads): keep the first N lines/bytes — the beginning of a file is
+  typically the most informative (imports, declarations, schema).
+- **`truncateTail`** (bash/shell output): keep the last N lines/bytes — shell commands often
+  emit a summary or result at the end; earlier lines may be verbose progress output.
+
+#### Summarization serialization constants
+
+When serializing a conversation for the summarization LLM call, tool results are further
+truncated to keep the summarization request within a manageable token budget:
+
+```text
+[REFERENCE]
+TOOL_RESULT_MAX_CHARS = 2_000   // per tool result in serialized summarization input
+                                 // (separate from TOOL_OUTPUT_MAX_CHARS used in compaction)
+
+truncateForSummary(text, maxChars = TOOL_RESULT_MAX_CHARS):
+  if text.length <= maxChars: return text
+  truncated_chars = text.length - maxChars
+  return text[:maxChars] + "\n\n[... {truncated_chars} more characters truncated]"
+
+serializeConversation(messages):
+  // Converts AgentMessage[] to plain text; prevents the summarization model from
+  // treating the content as a conversation to continue.
+  [User]: {text}
+  [Assistant thinking]: {thinking}
+  [Assistant]: {text}
+  [Assistant tool calls]: {name}({k}={v}, ...)
+  [Tool result]: {truncateForSummary(text)}
+```
+
+The summarization system prompt is a fixed constant injected as the system message
+for the summarization LLM call:
+
+```text
+[REFERENCE]
+SUMMARIZATION_SYSTEM_PROMPT =
+  "You are a context summarization assistant. Your task is to read a conversation
+   between a user and an AI assistant, then produce a structured summary following
+   the exact format specified.
+
+   Do NOT continue the conversation. Do NOT respond to any questions in the
+   conversation. ONLY output the structured summary."
+```
+
+This prevents the summarization model from mistakenly generating the next turn of the
+conversation instead of a summary.
 
 ## 5. Drawbacks & Alternatives
 

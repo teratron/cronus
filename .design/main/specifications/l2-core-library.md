@@ -1,6 +1,6 @@
 # Core Library (Foundation)
 
-**Version:** 1.1.1
+**Version:** 1.1.2
 **Status:** Stable
 **Layer:** implementation
 **Implements:** l1-architecture.md
@@ -236,6 +236,61 @@ impl SessionId {
 
 Cross-entity operations (e.g., "which messages belong to session X") use the unbranded
 string form only at persistence boundaries; all in-memory code uses the branded type.
+
+### 4.7 Thinking level taxonomy
+
+Model calls that support extended reasoning take a `ThinkingLevel` that controls how much
+internal computation the model is allowed before producing visible output. The level is
+an enum with six ordered steps from disabled to maximum budget:
+
+```text
+[REFERENCE]
+ThinkingLevel: "off" | "minimal" | "low" | "medium" | "high" | "xhigh"
+
+Mapping to provider-side budget (illustrative — actual token counts may vary by model):
+  "off"     — reasoning disabled; no thinking tokens allocated
+  "minimal" — very short internal scratchpad (lowest cost, fastest)
+  "low"     — brief reasoning pass
+  "medium"  — balanced reasoning for most tasks
+  "high"    — extended reasoning for complex multi-step problems
+  "xhigh"   — maximum reasoning budget; slowest and most expensive
+```
+
+The current thinking level is stored per-session as a `ThinkingLevelChangeEntry` in the
+session JSONL file (see `l2-agent-session.md §4.15`). On reload, the level is replayed
+from the entry sequence so the session continues with the same reasoning mode. Extensions
+may subscribe to `thinking_level_select` events to react when the user or another
+extension changes the level mid-session.
+
+The thinking level is also a `prepareNextTurn` output (see `l2-agent-session.md §4.14`):
+a hook may raise or lower the level for a specific turn based on the complexity of the
+task at hand without permanently changing the session-level default.
+
+#### CustomAgentMessages extensibility
+
+The message taxonomy accepted by the agent loop is extensible at the type level via
+declaration merging. Extension authors augment the `CustomAgentMessages` interface to
+declare their custom message variants without modifying the core type:
+
+```text
+[REFERENCE]
+// Core declaration (in agent-core types.ts):
+interface CustomAgentMessages {}   // empty by default; augmented by extensions
+
+// Extension augmentation:
+declare module "@cronus/agent-core" {
+  interface CustomAgentMessages {
+    "my_extension/status_update": { level: string; text: string }
+  }
+}
+// Now "my_extension/status_update" is a valid custom message customType.
+// The agent loop passes it through convertToLlm() for provider formatting.
+```
+
+This allows the TypeScript compiler (and Rust trait implementations) to enforce that
+handlers for `"custom"` messages handle all declared subtypes exhaustively. Unknown
+`customType` values are treated as opaque blobs by the core and forwarded without
+transformation.
 
 ## 5. Drawbacks & Alternatives
 

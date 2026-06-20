@@ -1,6 +1,6 @@
 # Extension Registry
 
-**Version:** 1.0.8
+**Version:** 1.0.9
 **Status:** Stable
 **Layer:** implementation
 **Implements:** l1-extensions.md
@@ -751,6 +751,189 @@ to the same byte-exact state as after the first install.
 
 One new file `targets/<id>.ts` implementing `AgentTarget` + one entry in `ALL_TARGETS`.
 No changes to the installer orchestrator or the MCP server itself.
+
+### 4.15 Skill name validation constraints
+
+Skill names are machine-readable identifiers surfaced in TUI pickers, `/help` output,
+and tool call registrations. They follow a strict validation rule enforced at load time:
+
+```text
+[REFERENCE]
+MAX_NAME_LENGTH        = 64
+MAX_DESCRIPTION_LENGTH = 1_024
+
+validateName(name):
+  // Allowed character set: lowercase ASCII letters, digits, hyphens
+  // Pattern: ^[a-z0-9]+(-[a-z0-9]+)*$
+  //   - Only lowercase a-z, 0-9, and '-'
+  //   - No consecutive hyphens ("--" is rejected)
+  //   - Must not start or end with '-'
+  //   - Max 64 characters
+  return name.length <= MAX_NAME_LENGTH
+      && /^[a-z0-9][a-z0-9-]*[a-z0-9]$/.test(name)   // or single-char /^[a-z0-9]$/
+      && !name.includes("--")
+```
+
+A skill that fails `validateName` is rejected at activation with a `SkillNameError` and
+not added to the registry. Other skills in the same directory are unaffected.
+
+#### SKILL.md discovery algorithm
+
+Skill packs are discovered recursively from one or more root directories. The discovery
+algorithm determines whether a directory is a skill root or a container of standalone
+`.md` skill files:
+
+```text
+[REFERENCE]
+discover(dir, rootDir):
+  if dir contains "SKILL.md":
+    // This directory is a self-contained skill.
+    // Load SKILL.md as the skill definition; do NOT recurse into subdirs.
+    return [load_skill(dir / "SKILL.md")]
+
+  // No SKILL.md — treat loose .md files as individual skills.
+  skills = []
+  for file in dir.list():
+    if file is a .md file and name not in IGNORE_FILE_NAMES:
+      skills.push(load_skill(file))
+    elif file is a directory:
+      skills.extend(discover(file, rootDir))   // recurse to find nested SKILL.md packs
+
+  return skills
+
+IGNORE_FILE_NAMES = [".gitignore", ".ignore", ".fdignore"]
+```
+
+The rule is: **SKILL.md stops recursion**. A directory that contains `SKILL.md` is a
+single skill unit — it may have sub-files (e.g., `references/`) but those are not
+themselves skills. Without `SKILL.md`, the directory is a container and its `.md`
+children are each individual skills.
+
+### 4.16 Extension event taxonomy
+
+Extensions subscribe to the runtime via an event bus. The full event taxonomy spans
+session lifecycle, agent lifecycle, model changes, user interactions, and per-tool hooks.
+
+#### Session lifecycle events
+
+| Event type | Fired when | Can cancel? |
+| --- | --- | --- |
+| `resources_discover` | After `session_start` to collect extra resource paths | No — returns additional paths |
+| `session_start` | Session is started, loaded, or reloaded | No |
+| `session_before_switch` | Before switching to another session | Yes (`cancel: true`) |
+| `session_before_fork` | Before forking a session | Yes (`cancel: true`, `skipConversationRestore: true`) |
+| `session_before_compact` | Before context compaction | Yes; or return a full `CompactionResult` to replace default compaction |
+| `session_compact` | After context compaction completes | No |
+| `session_before_tree` | Before navigating the session tree | Yes |
+| `session_tree` | After tree navigation | No |
+| `session_shutdown` | Before extension teardown (quit, reload, session replace) | No |
+
+#### Agent lifecycle events
+
+| Event type | Description | Result |
+| --- | --- | --- |
+| `before_agent_start` | After user submits prompt, before inner loop | May inject a custom message or replace the system prompt |
+| `agent_start` | Inner loop starts | None |
+| `agent_end` | Inner loop exits; carries final `messages` | None |
+| `turn_start` | Start of each provider call; carries `turnIndex` and timestamp | None |
+| `turn_end` | End of each provider call; carries `message` and `toolResults` | None |
+| `message_start` | A message object is created (user / assistant / tool-result) | None |
+| `message_update` | Token-by-token streaming update for assistant messages | None |
+| `message_end` | Message is finalized | May replace the finalized message (same role required) |
+| `context` | Before provider call; carries current `messages[]` | May return a replacement `messages[]` |
+| `before_provider_request` | Provider payload assembled, before HTTP send | May replace the payload |
+| `after_provider_response` | Provider response received, before stream consumed | None |
+
+#### Tool and interaction events
+
+| Event type | Description | Result |
+| --- | --- | --- |
+| `tool_execution_start` | Tool begins executing | None |
+| `tool_execution_update` | Partial/streaming tool output | None |
+| `tool_execution_end` | Tool finishes; carries `result` and `isError` | None |
+| `tool_call` | Before a named tool executes (typed per built-in tool) | `{ block?, reason? }` — block prevents execution; mutate `event.input` in place to patch arguments |
+| `tool_result` | After a named tool executes (typed per built-in tool) | `{ content?, details?, isError? }` — field-by-field override |
+| `model_select` | User or extension selects a model | None |
+| `thinking_level_select` | User or extension selects a thinking level | None |
+| `user_bash` | User executes `!cmd` or `!!cmd` prefix | May supply custom `operations` or a full `BashResult` replacement |
+| `input` | User input received, before agent processing | `{ action: "continue" \| "transform" \| "handled" }` |
+| `project_trust` | Project-trust check for this working directory | `{ trusted: "yes" \| "no" \| "undecided", remember? }` |
+
+#### Project trust requiring local config
+
+The following project-local configuration resources require an explicit trust decision
+before they are loaded. Untrusted projects have access to built-in skills and global
+extensions only:
+
+```text
+[REFERENCE]
+TRUST_REQUIRING_RESOURCES = [
+  "settings.json",    // project-local settings override
+  "extensions",       // project-local extension directory
+  "skills",           // project-local skill packs
+  "prompts",          // project-local system prompt fragments
+  "themes",           // project-local TUI themes
+  "SYSTEM.md",        // project system prompt
+  "APPEND_SYSTEM.md", // project system prompt appendix
+]
+```
+
+Trust decisions are stored in a per-user trust file (outside the project directory).
+Write operations on the trust file are protected by a file-system lock (10 retry attempts,
+20 ms delay) to prevent corruption from concurrent processes.
+
+#### ExtensionContext (context passed to all handlers)
+
+```text
+[REFERENCE]
+ExtensionContext {
+  ui:              ExtensionUIContext,   // select, confirm, input, notify, setStatus, ...
+  mode:            "tui" | "rpc" | "json" | "print",
+  hasUI:           bool,                // true when dialog-capable UI is available
+  cwd:             String,
+  sessionManager:  ReadonlySessionManager,
+  modelRegistry:   ModelRegistry,
+  model:           Model?,
+  isIdle():        bool,
+  isProjectTrusted(): bool,
+  signal:          AbortSignal?,        // current abort signal (undefined when idle)
+  abort():         void,
+  hasPendingMessages(): bool,
+  shutdown():      void,
+  getContextUsage(): ContextUsage?,
+  compact(opts?):  void,
+  getSystemPrompt(): String,
+}
+```
+
+ExtensionCommandContext (for user-initiated slash command handlers) extends this with
+session control methods: `newSession`, `fork`, `navigateTree`, `switchSession`, `reload`.
+
+#### Extension tool registration
+
+Extensions register tools with a structured definition that includes LLM prompt snippets,
+per-tool execution mode, and custom TUI renderers:
+
+```text
+[REFERENCE]
+ToolDefinition<TParams, TDetails, TState> {
+  name:             String,
+  label:            String,   // human-readable, shown in TUI
+  description:      String,   // shown to the LLM
+  promptSnippet?:   String,   // one-line snippet for "Available tools" section in system prompt
+  promptGuidelines?: String[], // bullet points appended to system prompt Guidelines section
+  parameters:       TSchema,  // TypeBox schema; validated before execute() is called
+  renderShell?:     "default" | "self",
+  prepareArguments?: (raw_args) -> TParams,   // compatibility shim before schema validation
+  executionMode?:   "sequential" | "parallel",
+  execute(toolCallId, params, signal?, onUpdate?, ctx): Promise<AgentToolResult<TDetails>>,
+  renderCall?:   (args, theme, ctx) -> Component,
+  renderResult?: (result, opts, theme, ctx) -> Component,
+}
+```
+
+Custom tools not providing `promptSnippet` are omitted from the "Available tools" section
+of the default system prompt; the LLM learns about them only from the tool schema itself.
 
 ## 5. Drawbacks & Alternatives
 

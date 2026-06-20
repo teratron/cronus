@@ -1,6 +1,6 @@
 # Agent Session Loop
 
-**Version:** 1.0.5
+**Version:** 1.0.6
 **Status:** Stable
 **Layer:** implementation
 **Implements:** l1-orchestration.md, l1-routing.md
@@ -678,11 +678,128 @@ The prologue's sanitization pass (§4.4 step 2) detects abandoned blocks and ski
 rather than treating them as pending work, preventing a spurious assistant-prefill request
 that would try to complete a cancelled operation.
 
+### 4.14 Two-level agent loop
+
+The agent execution model uses two nested loops that separate stable long-horizon control
+(outer) from per-turn steering (inner):
+
+```text
+[REFERENCE]
+outer loop (follow-up):
+  while true:
+    result = inner_loop(context, config)
+    follow_ups = config.getFollowUpMessages(result.messages)
+    if follow_ups is None or empty: break
+    context.messages += follow_ups   // inject after agent would stop; re-enter inner loop
+
+inner loop (turn + steering):
+  while true:
+    steerings = config.getSteeringMessages(context.messages)
+    context.messages += steerings   // inject mid-run before provider call
+
+    assistant_msg = streamAssistantResponse(context, config)
+
+    if config.shouldStopAfterTurn(assistant_msg): break
+    if assistant_msg has no tool calls: break
+
+    tool_results = executeToolCalls(assistant_msg.toolCalls, config)
+    context.messages += [assistant_msg, tool_results]
+
+    if all(r.terminate for r in tool_results): break   // §4.15
+```
+
+#### Hook responsibilities
+
+| Hook | Phase | Purpose |
+| --- | --- | --- |
+| `getSteeringMessages` | Before each provider call (inner) | Inject mid-run guidance messages without user interaction |
+| `getFollowUpMessages` | After inner loop exits (outer) | Inject next prompt; re-enters inner loop when non-empty |
+| `shouldStopAfterTurn` | After each turn (inner) | Extension-supplied stop condition checked after every model response |
+| `prepareNextTurn` | Between turns | Replace context, model, or thinking level for the next iteration |
+| `transformContext` | Before provider call | Prune or inject messages at the `AgentMessage[]` level |
+| `convertToLlm` | Before provider call | Convert `AgentMessage[]` → provider `Message[]` (custom message types) |
+
+`getFollowUpMessages` enables autonomous re-looping (the outer loop): the agent runs to
+completion, the hook injects a follow-up, and the inner loop restarts — without the user
+sending a new message. Returning `None` or an empty list exits the outer loop.
+
+`prepareNextTurn` receives the outcome of the current turn and may return a new context,
+model ref, or thinking level for the next turn. This enables per-turn adaptive model
+switching (e.g., upgrading to a reasoning model mid-sequence when complexity increases).
+
+#### API key resolution per call
+
+`getApiKey` is resolved once per provider call (not cached at session start). This
+handles expiring OAuth tokens: each turn fetches the freshest credentials available.
+
+### 4.15 Session entry taxonomy and tree structure
+
+Sessions are stored as append-only JSONL files where every entry has a stable `id` and
+a `parentId` pointing to the preceding entry. This forms a tree that enables branching
+(forks), tree navigation, and branch summarization.
+
+#### Entry types
+
+| Type | In LLM context | Description |
+| --- | --- | --- |
+| `message` | Yes | An `AgentMessage` (user / assistant / tool-result) |
+| `custom_message` | Yes (as user msg) | Extension-injected message with `display` flag for TUI rendering |
+| `compaction` | Yes (summary) | Compaction result: `summary`, `firstKeptEntryId`, `tokensBefore`, `details?`, `fromHook?` |
+| `branch_summary` | Yes | Summary for a pruned branch when navigating the tree |
+| `thinking_level_change` | No | Records a user-changed thinking level; replayed to restore state |
+| `model_change` | No | Records a user-changed model; replayed to restore state |
+| `custom` | No | Extension-private data store (NOT sent to LLM); used to persist extension state across reloads |
+| `label` | No | User bookmark: `targetId` + `label` string |
+| `session_info` | No | Session metadata (e.g., user-defined display name) |
+
+`CustomEntry` (`type: "custom"`) is explicitly excluded from LLM context. Extensions use it
+to persist internal state across session reloads by scanning entries for their `customType`
+on startup. `CustomMessageEntry` (`type: "custom_message"`) is included — it is converted
+to a user-role message in `buildSessionContext()`.
+
+#### Context reconstruction (buildSessionContext)
+
+Given a leaf entry ID, the runtime walks the tree from leaf to root, collecting the path.
+Compaction entries on the path define the context boundary:
+
+```text
+[REFERENCE]
+buildSessionContext(entries, leafId?):
+  path = walk_to_root(leaf)   // ordered root → leaf
+
+  // Extract last known state from path
+  thinkingLevel = last thinking_level_change on path (or "off")
+  model = last model_change or last assistant message's {provider, modelId}
+  compaction = last compaction entry on path (or null)
+
+  // Assemble messages
+  if compaction present:
+    emit compactionSummaryMessage(compaction.summary)
+    emit messages from firstKeptEntryId up to (not including) compaction entry
+    emit messages after compaction entry
+  else:
+    emit all message/custom_message/branch_summary entries on path
+```
+
+#### Session migration
+
+Stored sessions carry a `version` field; the runtime migrates on load:
+
+```text
+[REFERENCE]
+CURRENT_SESSION_VERSION = 3
+
+v1 → v2: add id/parentId tree structure to all entries
+          (assign short random 8-hex ids, chain parentId sequentially)
+v2 → v3: rename role "hookMessage" → "custom" in message entries
+```
+
 ## 5. Drawbacks & Alternatives
 
 - **Independent subagent budgets:** total iterations may exceed the parent's cap. Justified — a subagent solving a delegation should not penalize the parent's own remaining turns.
 - **Fixed protect_first_n/last_n defaults:** simple and predictable; context engines may override via the interface.
 - **Alternative — share budget across parent and all subagents:** makes delegation unpredictable and hard to debug; rejected.
+- **Two-level loop vs. single flat loop:** the outer follow-up level enables autonomous chaining without user input; the inner steering level enables per-turn injection without re-entering the outer loop. Separating these two concerns prevents coupling between horizon-length autonomy and within-turn guidance.
 
 ## Canonical References
 

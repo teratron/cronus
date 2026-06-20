@@ -1,6 +1,6 @@
 # Orchestration
 
-**Version:** 1.0.2
+**Version:** 1.0.3
 **Status:** Stable
 **Layer:** implementation
 **Implements:** l1-orchestration.md
@@ -257,6 +257,155 @@ generate_agent(description: String, model?: ModelRef) -> AgentDefinition:
 
 Generated agents receive a `source: "generated"` tag; the quality pipeline scans them
 before the orchestrator uses them for the first time.
+
+### 4.9 Tool terminate batch semantics
+
+Each tool's `execute()` call may return an optional `terminate` hint that signals the
+agent loop to stop after the current tool batch without issuing another model call.
+
+```text
+[REFERENCE]
+AgentToolResult {
+  content:    Vec<TextContent | ImageContent>,
+  details:    T,
+  terminate?: bool,   // hint: agent should stop after this batch
+}
+```
+
+**Batch rule**: `terminate` causes an early stop only when **all** tools in the current
+batch return `terminate: true`. A single tool returning `terminate: false` (or not
+setting the field) allows the batch to complete normally and the agent loop to continue.
+
+This prevents a sub-task tool from prematurely halting the agent when it is invoked in
+parallel with other tools that have not yet completed their work. The all-or-nothing
+check ensures every concurrently-running tool has completed before the loop decides to
+stop.
+
+```text
+[REFERENCE]
+executeToolCalls(tool_calls, config) -> ToolResultMessage[]:
+  results = run_in_configured_mode(tool_calls)   // sequential or parallel per §4.10
+  hasMoreWork = not all(r.terminate == true for r in results)
+  if not hasMoreWork:
+    // signal outer loop to break — no further model call
+    mark_terminate_batch()
+  return results
+```
+
+### 4.10 Agent loop configuration hooks
+
+The agent loop exposes a set of configuration hooks that allow callers (orchestrator,
+TUI, extension layer) to customise execution without touching the loop's core logic.
+Hooks cover: tool pre/post-processing, stop conditions, and per-turn context mutation.
+
+```text
+[REFERENCE]
+AgentLoopConfig {
+  // Tool lifecycle
+  beforeToolCall(tool_name, args, signal) -> BeforeToolCallResult?
+    // Run before every tool execution. Return { block: true, reason: string }
+    // to prevent the tool from running and return an error result to the model.
+    // Mutation of args in place is the mechanism for argument patching.
+
+  afterToolCall(tool_name, args, result) -> AfterToolCallResult?
+    // Run after every tool execution. Return a partial override object:
+    //   { content?, details?, isError?, terminate? }
+    // Fields are applied field-by-field (no deep merge). Omit a field to keep the
+    // tool's original value. Use to inject structured details, mask errors, or force
+    // terminate semantics.
+
+  // Stop control
+  shouldStopAfterTurn(assistant_message) -> bool
+    // Called after each model response, before checking for tool calls.
+    // Return true to exit the inner loop after the current turn.
+
+  // Context preparation
+  prepareNextTurn(context, outcome) -> PreparedTurn?
+    // Called between inner loop iterations. May return a new context, model ref,
+    // or thinking level for the next provider call. Enables mid-run adaptive model
+    // switching without restarting the session.
+
+  transformContext(messages) -> AgentMessage[]
+    // Called before every provider call. Prune, reorder, or inject messages at the
+    // AgentMessage[] level. The returned list replaces the current context for this
+    // provider call only — persistent context is unchanged.
+
+  convertToLlm(messages) -> ProviderMessage[]
+    // Convert AgentMessage[] to the provider's wire format. Required when custom
+    // message types (see CustomAgentMessages) exist in the context; the provider
+    // SDK cannot handle unknown role types.
+
+  // Message injection
+  getSteeringMessages(messages) -> AgentMessage[]
+    // Return messages to inject before the next provider call (inner loop).
+    // Empty list = no injection. Called every turn so the hook can decide
+    // dynamically whether steering is needed.
+
+  getFollowUpMessages(result_messages) -> AgentMessage[]?
+    // Return messages to inject after the inner loop exits (outer loop).
+    // Non-empty = re-enter inner loop with injected messages appended.
+    // None or empty = outer loop exits.
+
+  // Authentication
+  getApiKey(provider_id) -> string?
+    // Called before each provider request. Returning a fresh key handles
+    // expiring OAuth tokens without restarting the session.
+}
+
+BeforeToolCallResult { block?: bool, reason?: string }
+
+AfterToolCallResult {
+  content?:   Vec<TextContent | ImageContent>,
+  details?:   T,
+  isError?:   bool,
+  terminate?: bool,
+  // Each field independently overrides the tool's original value.
+  // Absent fields preserve the original.
+}
+```
+
+#### Tool execution modes
+
+Tool execution mode governs whether tools in a batch run sequentially or in parallel:
+
+```text
+[REFERENCE]
+ToolExecutionMode: "sequential" | "parallel"
+
+Resolution order (first match wins):
+  1. Per-tool executionMode on the tool definition (ToolDefinition.executionMode)
+  2. Global AgentLoopConfig.toolExecution.mode
+  3. Default: "sequential"
+
+When mixing modes in one batch:
+  Tools declared "parallel" may run concurrently with each other.
+  Tools declared "sequential" (or defaulting to it) run one at a time, in order.
+  A "sequential" tool that is batched with "parallel" tools waits for the parallel
+  group to finish before it executes (serialized after the parallel group).
+```
+
+#### File-mutation queue (multi-agent safety)
+
+When multiple agents operate in the same working directory, concurrent writes to the
+same file corrupt content. Each write/edit operation acquires a per-file serialization
+lock before touching the filesystem:
+
+```text
+[REFERENCE]
+withFileMutationQueue(filePath, fn):
+  // Resolve real path to handle symlinks (two paths → same file)
+  key = realpath(filePath)    // or resolved path if file not yet created
+  queue = fileMutationQueues.get(key) ?? Promise.resolve()
+  // Chain fn after the current queue head — operations for different files run in parallel
+  fileMutationQueues.set(key, queue.then(fn))
+  await current_queue_head   // blocks until previous operation on this file completes
+  return fn()                // exclusive access window
+  // After fn: release the slot; remove key if no further waiters
+```
+
+The queue is process-global (shared across all concurrent tool invocations) and uses
+path canonicalization to treat symlinks to the same file as the same key. Operations
+targeting different files are never blocked by each other.
 
 ## 5. Drawbacks & Alternatives
 
