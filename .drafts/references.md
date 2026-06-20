@@ -17,7 +17,6 @@
 - <https://github.com/paperclipai/paperclip>
 - <https://github.com/pewdiepie-archdaemon/odysseus>
 - <https://github.com/aporb/agentic-os>
-- <https://www.agentik-os.com/>
 
 ## Spec-Driven Development
 
@@ -42,7 +41,6 @@
 - <https://github.com/cjpais/Handy>
 - <https://github.com/shadcn/improve>
 - <https://github.com/nvidia/skillspector>
-- `pnpm i fallow`
 
 ## UI/UX
 

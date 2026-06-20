@@ -1,6 +1,6 @@
 # Memory Store
 
-**Version:** 1.0.5
+**Version:** 1.0.6
 **Status:** Stable
 **Layer:** implementation
 **Implements:** l1-memory-model.md
@@ -637,6 +637,256 @@ Entry format:
 
 The index is rebuilt after every successful Extract, Dream, or Forget operation.
 ```
+
+### 4.14 Bi-temporal metadata model
+
+[ADDED] Explicit separation of world time (when knowledge became true) from system time
+(when it was recorded), enabling point-in-time history queries without conflating the two
+clocks. This extends the `valid_at` / `invalid_at` columns in §4.1 with a transaction-time
+axis and supersession tracking.
+
+#### Timestamp model
+
+```text
+[REFERENCE]
+TemporalMetadata {
+  valid_at:      Timestamp,          // when the fact became true in the world
+  invalid_at:    Option<Timestamp>,  // when it ceased to be true (None = still valid)
+  created_at:    Timestamp,          // when this record entered the system
+  superseded_at: Option<Timestamp>,  // when this record was replaced by a newer version
+  commit_hash:   Option<String>,     // code snapshot at time of knowledge capture
+  version_tag:   Option<String>,     // release tag at time of knowledge capture
+}
+```
+
+Two distinct time axes:
+
+- **Valid time** (`valid_at`/`invalid_at`): "was this fact true in the world at time T?"
+- **Transaction time** (`created_at`/`superseded_at`): "was this record the authoritative
+  version in the system at time T?"
+
+The distinction matters when a fact is captured late (e.g. a bug found days after it was
+introduced) or corrected retroactively.
+
+#### Point-in-time query methods
+
+```text
+[REFERENCE]
+is_current() -> bool:
+  match invalid_at {
+    None          => true,
+    Some(t) => t > now(),
+  }
+
+was_valid_at(time: Timestamp) -> bool:
+  valid_at <= time
+  && match invalid_at {
+    None    => true,
+    Some(t) => t > time,
+  }
+
+was_current_at(time: Timestamp) -> bool:
+  created_at <= time
+  && match superseded_at {
+    None    => true,
+    Some(t) => t > time,
+  }
+
+invalidate():    invalid_at    = now()
+supersede():     superseded_at = now()
+```
+
+#### MEM-6 compliance
+
+`invalid_at` + `superseded_at` are the non-destructive contradiction mechanism required by
+MEM-6. When the archivist's `reconcile` stage detects a contradiction between two facts, it
+calls `supersede()` on the older record and writes a new one — no hard deletes. This
+preserves the full history for audit and rollback.
+
+#### Schema integration
+
+The §4.1 schema already carries `valid_at` and `invalid_at`. Add `created_at` (auto-set on
+insert) and `superseded_at` (nullable, set by reconcile):
+
+```sql
+-- [REFERENCE] additions to memory_item
+ALTER TABLE memory_item ADD COLUMN created_at INTEGER NOT NULL DEFAULT (unixepoch());
+ALTER TABLE memory_item ADD COLUMN superseded_at INTEGER;
+ALTER TABLE memory_item ADD COLUMN commit_hash TEXT;
+ALTER TABLE memory_item ADD COLUMN version_tag TEXT;
+```
+
+The `superseded_at` index accelerates the common "current version only" filter:
+
+```sql
+CREATE INDEX idx_memory_superseded ON memory_item(superseded_at)
+  WHERE superseded_at IS NULL;
+```
+
+### 4.15 Typed memory kind taxonomy
+
+[ADDED] Structured memory kind variants replace the untyped `type TEXT` column. Each variant
+carries only the fields meaningful to its domain, making pattern-matching exhaustive and
+field access type-safe. Five kinds cover the full project-knowledge space.
+
+#### MemoryKind enum
+
+```text
+[REFERENCE]
+MemoryKind:
+  ArchitecturalDecision {
+    decision:               String,
+    rationale:              String,
+    alternatives_considered: Option<Vec<String>>,
+    stakeholders:           Vec<String>,          // e.g. ["backend-team", "security"]
+  }
+  DebugContext {
+    problem_description:  String,
+    root_cause:           Option<String>,
+    solution:             String,
+    symptoms:             Vec<String>,
+    related_errors:       Vec<String>,
+  }
+  KnownIssue {
+    description:  String,
+    severity:     IssueSeverity,   // Critical | High | Medium | Low | Info
+    workaround:   Option<String>,
+    tracking_id:  Option<String>,  // issue tracker reference
+  }
+  Convention {
+    name:          String,
+    description:   String,
+    pattern:       Option<String>,      // positive example
+    anti_pattern:  Option<String>,      // negative example
+  }
+  ProjectContext {
+    topic:        String,
+    description:  String,
+    tags:         Vec<String>,
+  }
+```
+
+Kind storage: the `type` column stores the discriminant name
+(`architectural_decision`, `debug_context`, `known_issue`, `convention`, `project_context`)
+for SQL filtering; the full structured payload is stored in a JSON `kind_data` column.
+
+#### MemorySource typed provenance
+
+Replaces the untyped `provenance TEXT` column with a sum type that encodes the full
+origin chain:
+
+```text
+[REFERENCE]
+MemorySource:
+  UserProvided      { author: Option<String> }
+  CodeExtracted     { file_path: String }
+  ConversationDerived { session_id: String }
+  ExternalDoc       { url: String }
+  GitHistory        { commit_hash: String }
+```
+
+Storage: discriminant in `provenance_kind TEXT`, payload in `provenance_data JSON`.
+
+#### MemoryNode confidence
+
+A `confidence: f32 ∈ [0.0, 1.0]` field records extraction certainty at write time.
+Distinct from `trust_score` (§4.6), which accumulates over feedback cycles:
+
+- `confidence` is set once at write time by the extracting agent or user.
+- `trust_score` starts at 0.5 and drifts based on outcome signals.
+
+Recall fusion weight:
+
+```text
+recall_score = vec_similarity * w_vec
+             + fts_bm25 * w_fts
+             + (trust_score * confidence) * w_trust   // product of both reliability signals
+             + utility * w_utility
+```
+
+### 4.16 Code node links and auto-invalidation
+
+[ADDED] Memories may be explicitly bound to specific code-graph nodes. When the bound node
+changes (signature, delete, rename), the memory is automatically flagged for review or
+invalidation rather than silently becoming stale.
+
+#### CodeLink structure
+
+```text
+[REFERENCE]
+CodeLink {
+  node_id:    String,            // stable code-graph node identifier
+  node_type:  LinkedNodeType,    // Function | Class | Module | File | Variable |
+                                  // Import | Interface | Trait
+  relevance:  f32,               // [0.0, 1.0] — how tightly bound this memory is to
+                                  // the node (1.0 = about nothing else)
+  line_range: Option<(u32, u32)>, // specific lines within the file, if known
+}
+```
+
+A memory may have zero or more `CodeLink` entries. Zero = general project knowledge.
+Multiple links = spans several nodes (e.g. "the interaction between auth() and session()").
+
+Schema:
+
+```sql
+-- [REFERENCE]
+CREATE TABLE memory_code_link (
+  memory_id  TEXT REFERENCES memory_item(id),
+  node_id    TEXT NOT NULL,
+  node_type  TEXT NOT NULL,
+  relevance  REAL NOT NULL DEFAULT 1.0,
+  line_start INTEGER,
+  line_end   INTEGER,
+  PRIMARY KEY (memory_id, node_id)
+);
+```
+
+Graph proximity recall: when the agent is focused on a specific code node (e.g. editing a
+function), memories with `CodeLink.node_id = <current node>` receive a `graph_proximity`
+boost in recall fusion:
+
+```text
+[REFERENCE]
+graph_score(memory, active_node_ids: &[String]) -> f32:
+  if active_node_ids.is_empty() || memory.code_links.is_empty() { return 0.0 }
+  max(memory.code_links
+    .filter(|l| active_node_ids.contains(&l.node_id))
+    .map(|l| l.relevance))
+
+recall_score += graph_score * w_graph   // w_graph = 0.2 (configurable)
+```
+
+#### Auto-invalidation on code change
+
+When the code watcher (file-change events) detects a change to a file referenced by
+`CodeLink.node_id`, the archivist schedules a review pass using the change type to
+determine urgency:
+
+```text
+[REFERENCE]
+CodeChangeType → SuggestedAction, confidence:
+  Deleted          → Invalidate   (1.0)   // node gone; memory is almost certainly stale
+  SignatureChanged  → Review      (0.9)   // contract changed; likely stale
+  MajorRefactor    → Review      (0.8)   // semantics may have changed
+  MinorEdit        → None        (0.0)   // formatting/comments; memory still valid
+  Renamed          → Update      (0.7)   // memory content valid, code link path stale
+  Moved            → Update      (0.7)   // same as rename
+
+MemoryReviewSuggestion {
+  memory_id:        MemoryId,
+  reason:           String,         // human-readable description of the code change
+  suggested_action: SuggestedAction,
+  confidence:       f32,
+}
+```
+
+The archivist's `reconcile` stage reads the pending review queue and either:
+
+- **Invalidate** at confidence ≥ 0.9: calls `temporal.invalidate()` automatically.
+- **Review** at 0.5–0.9: surfaces to the user with a diff of the code change before acting.
+- **Update** at 0.7: prompts the agent to refresh the `CodeLink.node_id` / `line_range`.
+- **None**: discards the suggestion without action.
 
 ## 5. Drawbacks & Alternatives
 
