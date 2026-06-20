@@ -70,7 +70,7 @@ Execution mode: **Parallel** (C3); tracks grouped by file independence. Critical
 
 *Memory, routing, and workspace management. Each lands with its CLI commands.*
 
-- [ ] **Memory Store** ([l2-memory-store.md](specifications/l2-memory-store.md)) [L2]
+- [ ] **Memory Store** ([l2-memory-store.md](specifications/l2-memory-store.md)) [L2] — SQLite + sqlite-vec + FTS5 + tags, archivist curator; trust scoring (asymmetric feedback, TRUST_MIN_SEARCH=0.3, retrieval_count), shallow entity links (seed of deferred graph), HRR phase encoding (model-free vector fallback, SNR capacity guard)
 - [ ] **Memory Encryption** ([l2-memory-encryption.md](specifications/l2-memory-encryption.md)) [L2] — AES-256-GCM per-chunk encryption, Argon2id KDF, OS keychain key storage, transactional rotation (depends on memory-store + security)
 - [ ] **Code Graph** ([l2-codegraph.md](specifications/l2-codegraph.md)) [L2] — tree-sitter extraction, SQLite + FTS5 + sqlite-vec embeddings, RRF fusion, auto-index (depends on memory-store)
 - [ ] **Model Router** ([l2-model-router.md](specifications/l2-model-router.md)) [L2] — local-first, difficulty/cost routing, fallback cascade, semantic cache; semantic router pool (embedding encoder + tolerance threshold, cost-optimal selection)

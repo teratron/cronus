@@ -37,7 +37,7 @@ Local registry of specifications for this workspace.
 | [l2-tui.md](specifications/l2-tui.md) | Layer 3: terminal UI frontend | Stable | 2 | 1.0.0 |
 | [l2-app-ui.md](specifications/l2-app-ui.md) | Layer 4: desktop/web/mobile application UI/UX (incl. theming + localization) | Stable | 2 | 1.1.0 |
 | [l2-filesystem-layout.md](specifications/l2-filesystem-layout.md) | OS-native filesystem layout: tiers, trees, DB placement, memory paths | Stable | 2 | 1.0.0 |
-| [l2-memory-store.md](specifications/l2-memory-store.md) | Memory store: SQLite + sqlite-vec + FTS5 + tags, archivist curator, graph deferred | Stable | 2 | 1.0.0 |
+| [l2-memory-store.md](specifications/l2-memory-store.md) | Memory store: SQLite + sqlite-vec + FTS5 + tags, archivist curator; trust scoring (asymmetric +0.05/−0.10, TRUST_MIN_SEARCH=0.3), shallow entity links (memory_entity + junction), HRR phase encoding (model-free, SNR-guarded) | Stable | 2 | 1.0.1 |
 | [l2-workspace-management.md](specifications/l2-workspace-management.md) | Desktop tab UX, creation form, kebab naming, template→state, manager bootstrap | Stable | 2 | 1.0.0 |
 | [l2-kanban-board.md](specifications/l2-kanban-board.md) | Board storage, transitions, auto-archival store, execution semantics (atomic checkout, monitor scheduling, delegation depth) | Stable | 2 | 1.0.1 |
 | [l2-scheduler.md](specifications/l2-scheduler.md) | Friendly recurrence + raw cron, per-workspace storage, firing, routine execution policy (concurrency, catch-up, idempotency, webhooks), event-driven triggers (threshold counter, singleflight dedup); cron isolated session execution (session key isolation, model preflight, run log, delivery dispatch, failure notification) | Stable | 2 | 1.0.3 |

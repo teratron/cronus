@@ -58,3 +58,4 @@
 - пример GUI: <https://github.com/spacedriveapp/spacedrive>
 - пример GUI: <https://github.com/CapSoftware/Cap>
 - пример GUI: <https://github.com/janhq/jan>
+- пример GUI: <https://github.com/mountain-loop/yaak>
