@@ -77,6 +77,37 @@ The runtime resolves these paths through a single path resolver. Cache and logs 
         └── dashboard/    #   Dashboard state.
 ```
 
+## Source Layout (development)
+
+The repository is a polyglot monorepo: a Rust workspace for the engine and binaries, an apps layer for the shell, and a JS/TS package layer for the UI. Dependencies point inward to `core`.
+
+```plaintext
+cronus/
+├── crates/                 # Rust workspace
+│   ├── core/               # engine library (orchestration, memory, scheduler, routers, quality, board, office)
+│   ├── nodus/              # workflow-language runtime (lexer/parser/validator/executor/transpiler); core depends on it
+│   ├── cli/                # `cronus` binary
+│   └── tui/                # `cronus-tui` binary
+├── apps/
+│   └── desktop/            # Tauri v2 shell (desktop + mobile thin client)
+└── packages/
+    └── ui/                 # React 19 + Vite frontend (office view, board, dashboard, editor)
+```
+
+The workflow runtime is an in-tree, self-contained Rust crate (`crates/nodus`) consumed by `crates/core` (extractable to its own repository later). Cargo owns Rust builds/caching; pnpm + the polyglot runner sequence the JS and Tauri builds.
+
+## Visualization Stubs
+
+The repository's `.release/` directory is a temporary visualization sandbox holding empty stubs of both tiers:
+
+```plaintext
+.release/
+├── program/   # Stub of the immutable program tier.
+└── state/     # Stub of the mutable state tier (example office: workspaces/default).
+```
+
+> These stubs exist to discuss and visualize the layout; they are not a build artifact and do not ship.
+
 ## Memory Levels
 
 Memory is organized into four scopes; the router reads from most specific to least specific and writes to the scope a fact belongs to:
@@ -212,34 +243,3 @@ One command surface is exposed across the CLI and the TUI (and a matching librar
 | `cronus route explain "<task>"` | `/route explain …` | Explain which model a task would route to |
 
 > Default model routing is local-first (prefer an on-device model when capable; fall back to cloud).
-
-## Source Layout (development)
-
-The repository is a polyglot monorepo: a Rust workspace for the engine and binaries, an apps layer for the shell, and a JS/TS package layer for the UI. Dependencies point inward to `core`.
-
-```plaintext
-cronus/
-├── crates/                 # Rust workspace
-│   ├── core/               # engine library (orchestration, memory, scheduler, routers, quality, board, office)
-│   ├── nodus/              # workflow-language runtime (lexer/parser/validator/executor/transpiler); core depends on it
-│   ├── cli/                # `cronus` binary
-│   └── tui/                # `cronus-tui` binary
-├── apps/
-│   └── desktop/            # Tauri v2 shell (desktop + mobile thin client)
-└── packages/
-    └── ui/                 # React 19 + Vite frontend (office view, board, dashboard, editor)
-```
-
-The workflow runtime is an in-tree, self-contained Rust crate (`crates/nodus`) consumed by `crates/core` (extractable to its own repository later). Cargo owns Rust builds/caching; pnpm + the polyglot runner sequence the JS and Tauri builds.
-
-## Visualization Stubs
-
-The repository's `.release/` directory is a temporary visualization sandbox holding empty stubs of both tiers:
-
-```plaintext
-.release/
-├── program/   # Stub of the immutable program tier.
-└── state/     # Stub of the mutable state tier (example office: workspaces/default).
-```
-
-These stubs exist to discuss and visualize the layout; they are not a build artifact and do not ship.
