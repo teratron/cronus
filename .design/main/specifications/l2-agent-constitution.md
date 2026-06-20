@@ -1,6 +1,6 @@
 # Agent Constitution
 
-**Version:** 1.0.2
+**Version:** 1.0.3
 **Status:** Stable
 **Layer:** implementation
 **Implements:** l1-office-model.md, l1-memory-model.md
@@ -373,6 +373,82 @@ project-context.md is NOT for:
 ```
 
 The project context document is loaded as persistent_facts by all agents at activation time. It is authored collaboratively and updated whenever a non-obvious fact surfaces during development. Each entry should be self-explanatory without reading the referenced code.
+
+### 4.13 Multi-platform rule distribution
+
+Agent constitutions and skill rules must work across multiple host platforms (Claude Code, Codex, IDE extensions, MCP clients). The distribution pattern keeps a single canonical source and deploys thin, platform-specific adapters from it — so a rule change propagates everywhere by updating one file.
+
+#### Canonical source
+
+The authoritative rule content lives in one location:
+
+```text
+[REFERENCE]
+Canonical source: <ws>/constitution/SOUL.md (for workspace-scoped persona)
+                  skills/<skill-name>/SKILL.md (for deployable skill rules)
+
+Properties of the canonical source:
+  - Platform-agnostic Markdown — no host-specific syntax
+  - Mode-marker annotations for intensity filtering (e.g. [[lite]], [[ultra]])
+  - Single source of truth for all adapter copies
+  - Human-editable; the agent may append but never silently overwrite
+```
+
+#### Adapter types
+
+Each host platform receives the canonical rules via the appropriate adapter:
+
+| Adapter type | Target host | Mechanism | Example path |
+| --- | --- | --- | --- |
+| Skill plugin | Plugin-capable hosts | Skills directory + lifecycle hooks | `skills/<name>/SKILL.md` |
+| Extension manifest | Extension-based hosts | `extension.json` auto-discovers skills + commands | `gemini-extension.json` |
+| Instruction-only copy | Rules-file hosts | Copy rule text to host-specific path | `.cursor/rules/`, `.clinerules/` |
+| Steering rules | Steering-file hosts | Copy to steering directory | `.kiro/steering/<name>.md` |
+| MCP prompt/tool | MCP clients | Serve rule via MCP prompt or tool interface | `mcp-server/index.js` |
+| AGENTS.md | Multi-agent hosts | Drop-in file auto-loaded by host | `AGENTS.md` at repo root |
+
+#### Alignment verification
+
+When the canonical source changes, all adapter copies must be re-synced. An alignment check catches drift before it causes platform-specific behavior divergence:
+
+```text
+[REFERENCE]
+Alignment check procedure:
+
+1. Compute a hash of the canonical source (SOUL.md or skill SKILL.md).
+2. For each adapter copy, compute the same hash on its rule content section
+   (stripping host-specific wrapper/frontmatter).
+3. Report any adapter whose hash differs from the canonical hash.
+4. Copies that cannot be auto-synced (e.g. host-injected wrapper) report drift
+   with the changed lines — not a hard failure, but a required human review.
+
+Run: node scripts/check-rule-copies.js
+Output: "N adapters in sync. M adapters drifted: [list]"
+```
+
+The alignment check runs as part of the pre-commit hook and the CI/CD quality gate. Drifted adapters do not block the commit but produce a visible warning.
+
+#### Mode-marker filtering
+
+The canonical skill file may carry mode-specific sections that get filtered per adapter at load time:
+
+```text
+[REFERENCE]
+Mode marker syntax in SKILL.md / SOUL.md:
+
+  [[lite]]   — include this line/section only when mode=lite or broader
+  [[full]]   — include this line/section only when mode=full or broader (default)
+  [[ultra]]  — include this line/section only when mode=ultra
+
+Filtering rules:
+  - Lines with no marker: always included (universal rules)
+  - Lines with [[lite]]:  included in lite, full, and ultra
+  - Lines with [[full]]:  included in full and ultra only
+  - Lines with [[ultra]]: included in ultra only
+  - Frontmatter (YAML block): always stripped before delivery
+```
+
+This allows a single SKILL.md to express the full behavior spectrum without maintaining separate files per mode.
 
 ## 5. Drawbacks & Alternatives
 

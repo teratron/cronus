@@ -1,6 +1,6 @@
 # Self-Improvement
 
-**Version:** 1.0.2
+**Version:** 1.0.3
 **Status:** Stable
 **Layer:** implementation
 **Implements:** l1-memory-model.md
@@ -489,6 +489,89 @@ MILESTONES.md entry format:
 
 **What's next:** One sentence — what the next milestone builds on top of this.
 ```
+
+### 4.10 Behavior gate verification
+
+Retrospectives measure what was built. Behavior gate verification measures whether the system's rules are actually being followed — a separate concern. The gates probe specific behaviors that the constitutions, specs, and activation sequences are supposed to produce, and classify each probe as pass or fail.
+
+#### Separation of concerns: measurement vs gates
+
+```text
+[REFERENCE]
+Two distinct probe types:
+
+Measurement probes (always pass, record data):
+  - Code LOC generated per task
+  - Cost (API tokens, USD) per phase
+  - Latency (wall-clock time) per phase
+  - Iteration count per mission
+  These are recorded for retrospective trend analysis; they never block execution.
+
+Gate probes (must pass, fail blocks quality signal):
+  - Rule adherence: does the agent apply the decision ladder before generating code?
+  - Error handling: does production-path code use Result/Option, not unwrap?
+  - Scope discipline: does the discuss-phase capture deferred ideas without acting on them?
+  - Verification completeness: does the verifier write VERIFICATION.md even on clean passes?
+  These return pass/fail and are part of the quality pipeline.
+```
+
+#### Behavior probe specification
+
+Each gate probe is a named, deterministic check with an explicit pass condition:
+
+```text
+[REFERENCE]
+Probe format:
+---
+probe: <name>
+description: <what behavior is being verified>
+pass_condition: <observable outcome that indicates the rule was followed>
+fail_indicator: <observable outcome that indicates the rule was violated>
+grader: <script name or heuristic description>
+---
+
+Examples:
+
+probe: error-handling-no-unwrap
+description: Production-path Rust code must not use unwrap() or panic!() on Result/Option
+pass_condition: grep finds 0 matches for .unwrap() in crates/ excluding #[cfg(test)]
+fail_indicator: .unwrap() found in non-test production code
+grader: grep -rn '\.unwrap()' crates/ --include='*.rs' | grep -v '#\[cfg(test)\]'
+
+probe: discuss-phase-scope
+description: Discuss-phase must capture out-of-scope ideas in Deferred section, not implement them
+pass_condition: CONTEXT.md has a <deferred> section when out-of-scope ideas surfaced
+fail_indicator: CONTEXT.md has no <deferred> section despite known out-of-scope discussion
+grader: check CONTEXT.md for <deferred> tag presence
+
+probe: verifier-writes-report
+description: Verifier must write VERIFICATION.md even when all items pass
+pass_condition: VERIFICATION.md exists after every execute-phase completes
+fail_indicator: Execute-phase has SUMMARY.md files but no VERIFICATION.md
+grader: file existence check in planning directory
+```
+
+#### Scorecard format
+
+After a milestone or major phase set, the behavior gates produce a scorecard:
+
+```text
+[REFERENCE]
+Behavior gate scorecard:
+
+Gate probes                             result
+─────────────────────────────────────────────
+error-handling-no-unwrap                PASS
+discuss-phase-scope                     PASS
+verifier-writes-report                  FAIL  ← 2 phases missing VERIFICATION.md
+decision-ladder-applied                 PASS
+comment-ledger-markers-have-triggers    PASS  (3 rot-risk markers flagged)
+
+Gates: 4/5 passed. 1 failed — see escalation.
+Measurement: median LOC=48, cost=$0.23/phase, latency=4.2min/phase.
+```
+
+The scorecard is appended to the milestone retrospective (§4.9). Failed gates require a correction entry in the mistake log (§4.2) before the milestone is marked `Complete`.
 
 ## 5. Drawbacks & Alternatives
 

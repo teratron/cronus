@@ -1,6 +1,6 @@
 # Quality Pipeline
 
-**Version:** 1.1.4
+**Version:** 1.1.5
 **Status:** Stable
 **Layer:** implementation
 **Implements:** l1-quality-standards.md
@@ -504,6 +504,144 @@ verified-at: YYYY-MM-DD
 ```
 
 The verifier must write `VERIFICATION.md` even if every item passes — a `status: passed` file is the gate signal that the orchestrator uses to advance the phase.
+
+### 4.13 Decision ladder for code generation
+
+When an agent generates code, it evaluates a strict ordered ladder of options and stops at the **first rung that holds**. This prevents over-engineering: if a platform already ships a solution, writing custom code violates the rule.
+
+```text
+[REFERENCE]
+Decision ladder (evaluated top to bottom, stops at first true rung):
+
+  Rung 1 — YAGNI: Does this need to exist at all?
+    If the requirement is speculative, never-triggered, or serves a use case not yet demonstrated:
+    skip it. Do not build for hypothetical future needs.
+
+  Rung 2 — Stdlib: Does the standard library of the project's language ship this?
+    Use the stdlib function. Name it explicitly. Do not rewrite what ships with the language.
+
+  Rung 3 — Platform native: Does the runtime, browser, or OS provide this natively?
+    Use the native feature. Importing a dependency to do what the platform already does is an error.
+
+  Rung 4 — Already-installed dependency: Does a dependency already installed in the project do this?
+    Use it. Installing a new dependency to do what an existing one does is an error.
+
+  Rung 5 — One-liner: Can this be expressed in one line within the project's idioms?
+    Write one line. Do not extract a helper for a one-line operation.
+
+  Rung 6 — Minimum viable implementation: Write the minimum code that correctly solves the problem.
+    Correctness is non-negotiable. Minimal means: no unused parameters, no extra abstraction layers,
+    no speculative flexibility.
+
+Hard exceptions (never apply the ladder):
+  - Input validation at system boundaries
+  - Error handling on production paths
+  - Security invariants (secrets, auth, egress)
+  - Tests and quality gates
+```
+
+When two rungs both hold, take the **higher rung** (simpler option). The ladder is reflexive — applied before writing, not as a post-hoc review.
+
+### 4.14 Over-engineering audit
+
+The over-engineering audit is a **deletion-focused** specialized review. It runs orthogonally to correctness, security, and performance reviews — its sole question is: "what can be removed or simplified while preserving correct behavior?"
+
+#### Deletion finding vocabulary
+
+Every finding in an over-engineering audit uses one of five tags. The tag determines the replacement path:
+
+| Tag | Meaning | Replacement |
+| --- | --- | --- |
+| `delete:` | Dead code, unused flexibility, speculative feature with no current caller | No replacement — just delete |
+| `stdlib:` | Hand-rolled function that the language's standard library already ships | Name the stdlib function |
+| `native:` | Dependency or custom code doing what the runtime/OS/browser provides natively | Name the native feature |
+| `yagni:` | Abstraction with exactly one implementation (interface, wrapper, indirection) | Inline the single implementation |
+| `shrink:` | Same logic expressible in fewer lines with no behavior change | Show the shorter form |
+
+#### Single-file audit output format
+
+```text
+[REFERENCE]
+Per-finding format (single file):
+  L<line>: <tag> <what>. <replacement>.
+
+Examples:
+  L45: stdlib: custom base64 encoder. Use Buffer.from(x).toString('base64').
+  L112: yagni: TokenStore interface has one implementation (JwtTokenStore). Inline it.
+  L203: delete: isFeatureFlagEnabled() is always-false; feature shipped in v0.3. Delete.
+  L278: shrink: 14-line merge sort on a list that is always ≤5 items. Use arr.sort().
+
+Final line:
+  net: -<N> lines possible.
+
+If nothing to remove:
+  Lean already. Ship.
+```
+
+#### Whole-repo audit output format
+
+```text
+[REFERENCE]
+Per-finding format (multi-file):
+  <tag> <what to cut>. <replacement>. [path:line]
+
+Ranked: largest line reduction first.
+
+Final line:
+  net: -<N> lines, -<M> deps possible.
+```
+
+#### Audit scope boundaries
+
+The over-engineering audit does NOT review:
+
+- Correctness (handled by adversarial review, §4.11)
+- Security (handled by security gate)
+- Performance (handled by performance audit)
+- Test coverage (a test for an unused function is reviewed under `delete:`, not coverage)
+
+When a finding overlaps with correctness (removing it might break behavior), the audit marks it `delete: (verify no callers before removing)` — not a finding to act on immediately but a signal for human review.
+
+### 4.15 Comment ledger convention
+
+Intentional simplifications made by applying the decision ladder (§4.13) should be marked in-code with a structured comment. This prevents future developers from treating deliberate minimalism as ignorance, and makes known ceilings machine-harvestable.
+
+#### Comment format
+
+```text
+[REFERENCE]
+Format: <comment-marker> cronus: <ceiling description>, <upgrade trigger>
+
+Examples (by language):
+  # cronus: global lock, per-account locks if throughput > 1000 req/s
+  // cronus: naive O(n²) sort, switch to TimSort if list ever exceeds 100 items
+  -- cronus: single-table query, add index if EXPLAIN ANALYZE shows seq scan
+  <!-- cronus: inline CSS, extract to stylesheet if reused in >2 components -->
+
+Rules:
+  - The comment-marker prefix (# // -- <!--) prevents grep from matching prose.
+  - <ceiling description>: the known limitation — why this is intentionally simple.
+  - <upgrade trigger>: the observable condition that should prompt revisiting.
+    Use measurable thresholds: "if X > N", "when feature Y lands", "before v2.0".
+    Avoid vague triggers: "if needed", "when performance matters", "someday".
+  - A marker with no trigger is tracked as ROT RISK — it marks code that may need
+    attention but has no clear condition to evaluate.
+```
+
+#### Ledger harvest
+
+The audit subsystem can scan a project for all `cronus:` markers and produce a ledger:
+
+```text
+[REFERENCE]
+Ledger format (per marker found):
+  <file>:<line>, <ceiling>. trigger: <trigger>.
+
+Summary line:
+  <N> markers, <M> with no trigger (rot risk).
+```
+
+The ledger is a snapshot of all known ceilings in a project. It differs from the mistake log (§4.2 in l2-self-improvement.md) in scope: the ledger covers intentional design choices; the mistake log covers errors that already hurt.
 
 ## 5. Drawbacks & Alternatives
 

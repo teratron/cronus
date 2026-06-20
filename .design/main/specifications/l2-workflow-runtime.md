@@ -1,6 +1,6 @@
 # Workflow Runtime
 
-**Version:** 1.2.1
+**Version:** 1.2.2
 **Status:** Stable
 **Layer:** implementation
 **Implements:** l1-workflow-language.md
@@ -201,6 +201,108 @@ At a HALT point:
 ```
 
 A HALT is not a failure — it is the workflow correctly recognizing that the next step needs human intent. The agent should be specific about what it needs, not ask an open-ended question.
+
+### 4.7 Platform-native capability lookup
+
+Before a workflow step generates new code or recommends installing a dependency, the runtime checks a platform-native capability table. If the platform already ships a solution, the step uses it instead of generating custom code or adding a dependency.
+
+#### Lookup principle
+
+The lookup is applied at code-generation time using the decision ladder (see l2-quality-pipeline.md §4.13): standard library and platform-native capabilities are preferred over third-party dependencies, which are preferred over custom implementation. The lookup table makes this concrete — it maps common "thing I think I need" patterns to "what the platform already ships."
+
+#### Lookup table (selected entries by domain)
+
+```text
+[REFERENCE]
+Platform-native capability table (non-exhaustive; extend per project ecosystem):
+
+HTML elements:
+  You think you need: date picker widget library
+  Platform ships: <input type="date">
+
+  You think you need: accessible modal dialog library
+  Platform ships: <dialog> element (built-in open/close, focus trap, ::backdrop)
+
+  You think you need: lazy image loading library
+  Platform ships: <img loading="lazy">
+
+CSS capabilities:
+  You think you need: responsive typography library
+  Platform ships: clamp() (e.g. font-size: clamp(1rem, 2.5vw, 2rem))
+
+  You think you need: dark-mode detection library
+  Platform ships: @media (prefers-color-scheme: dark) CSS media query
+
+JavaScript / Browser APIs:
+  You think you need: uuid library
+  Platform ships: crypto.randomUUID()
+
+  You think you need: deep-clone utility
+  Platform ships: structuredClone()
+
+  You think you need: custom event bus
+  Platform ships: EventTarget + addEventListener/dispatchEvent
+
+Node.js stdlib:
+  You think you need: mkdirp (recursive mkdir)
+  Platform ships: fs.mkdirSync(path, { recursive: true })
+
+  You think you need: rimraf (recursive delete)
+  Platform ships: fs.rmSync(path, { recursive: true, force: true })
+
+  You think you need: dotenv for loading .env
+  Platform ships: --env-file flag (Node ≥ 20.6)
+
+Python stdlib:
+  You think you need: requests for simple GET
+  Platform ships: urllib.request.urlopen() or http.client
+
+  You think you need: dateutil for ISO date parsing
+  Platform ships: datetime.fromisoformat()
+
+  You think you need: path manipulation library
+  Platform ships: pathlib.Path
+
+Rust stdlib / ecosystem:
+  You think you need: custom error type boilerplate
+  Platform ships: thiserror (already in Cronus dependencies)
+
+  You think you need: custom serialization
+  Platform ships: serde (already in Cronus dependencies)
+
+  You think you need: custom async runtime
+  Platform ships: tokio (already in Cronus dependencies)
+
+SQL / Database:
+  You think you need: manual pagination loop
+  Platform ships: LIMIT n OFFSET m
+
+  You think you need: running totals via application code
+  Platform ships: SUM() OVER (ORDER BY ...) window function
+
+  You think you need: deduplication via application Set
+  Platform ships: SELECT DISTINCT or GROUP BY
+```
+
+#### Lookup gate in workflow execution
+
+When a workflow step would install a new dependency or generate more than 20 lines of new code:
+
+```text
+[REFERENCE]
+Pre-generation check:
+  1. Identify the capability being requested (from the step's action field).
+  2. Check the platform-native table for the current project's ecosystem.
+  3. If a native match is found:
+     → Use the native solution. Log: "native: used <feature> instead of custom code."
+  4. If no native match, check existing project dependencies.
+     → If an installed dependency handles it: use it. Log: "dep: used <pkg>.<method>."
+  5. Only if neither check finds a match: generate new code or recommend a new dependency.
+
+The check is advisory — it logs the recommendation but does not block execution.
+Workflow authors can mark a step `skip-native-check: true` when a custom implementation
+is intentional (e.g., performance-critical hot path with benchmarks to justify it).
+```
 
 ## 5. Drawbacks & Alternatives
 

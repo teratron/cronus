@@ -1,6 +1,6 @@
 # Mission Mode
 
-**Version:** 1.0.1
+**Version:** 1.0.2
 **Status:** Stable
 **Layer:** implementation
 **Implements:** l1-orchestration.md
@@ -300,6 +300,63 @@ completed: YYYY-MM-DD
 ```
 
 The `requires/provides/affects` graph enables future planner agents to detect what prior plans built and whether they need to load earlier summaries for context. The `requirements-completed` field is mandatory: it must copy every requirement ID from the plan's own `requirements` frontmatter field so that coverage can be verified across the entire phase.
+
+### 4.11 Operation mode ladder
+
+Missions can run at multiple intensity levels, controlling how aggressively the agent applies simplification, verification depth, and context loading. The active mode persists for the duration of the session and is resolved from three sources in priority order.
+
+#### Intensity levels
+
+| Mode | Behavior |
+| --- | --- |
+| `lite` | Minimal overhead — plan quickly, execute with reduced verification depth. Use for low-stakes or well-understood tasks. |
+| `full` | Default mode — full discuss-phase, complete planning, all quality gates. Balanced cost and thoroughness. |
+| `ultra` | Maximum rigor — extended adversarial review, goal-backward verification with multiple passes, exhaustive must_haves coverage. Use for high-stakes or novel work. |
+| `off` | Disable mission mode — the agent runs as a standard session without structured planning or execution phases. |
+
+#### Resolution hierarchy
+
+The active mode is resolved at session start using a three-source priority chain:
+
+```text
+[REFERENCE]
+Mode resolution order (first source that provides a value wins):
+
+  1. Environment variable: CRONUS_MISSION_MODE=lite|full|ultra|off
+     Set by CI/CD pipelines, launch scripts, or per-session shell exports.
+     Highest priority — overrides all other sources.
+
+  2. Workspace config file: <ws>/config.json → { "missionMode": "full" }
+     Set by the user once per workspace. Survives session restarts.
+     Mid-priority — overrides the compiled default but not the env var.
+
+  3. Compiled default: full
+     Always available. No setup required — missions work out-of-box.
+```
+
+The agent reads the resolved mode at session start and applies it to all phases (discuss/plan/execute/verify) for the current session. The mode does not auto-advance or escalate mid-mission unless explicitly changed.
+
+#### Flag file state tracking
+
+The active mission mode is written to a flag file so that status line renderers and hooks can read it without running the full resolution chain:
+
+```text
+[REFERENCE]
+Flag file: <ws>/.mission-mode
+Content: plain text, one of: lite | full | ultra | off | (empty = no mission active)
+
+Write events:
+  - Written when a mission starts (contains the resolved mode for this run)
+  - Updated when the user changes mode mid-session (/mission mode ultra)
+  - Cleared (or written "off") when a mission completes or is aborted
+
+Read by:
+  - Status line hook: renders [MISSION], [MISSION:FULL], [MISSION:ULTRA] etc.
+  - Pre-phase hooks: may skip expensive steps when mode is lite
+  - Resume logic: verifies the persisted mode matches the current config before re-entering
+```
+
+The flag file is the cross-session state signal — it lets peripheral tooling observe mission state without importing core logic.
 
 ## 5. Drawbacks & Alternatives
 
