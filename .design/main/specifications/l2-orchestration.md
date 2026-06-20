@@ -1,6 +1,6 @@
 # Orchestration
 
-**Version:** 1.0.0
+**Version:** 1.0.1
 **Status:** Stable
 **Layer:** implementation
 **Implements:** l1-orchestration.md
@@ -16,6 +16,8 @@ The concrete coordination mechanics: how the orchestrator delegates via assigned
 - [l1-office-model.md](l1-office-model.md) - Roles and adaptive staffing the orchestrator delegates to (concrete role catalog specified separately).
 - [l2-quality-pipeline.md](l2-quality-pipeline.md) - Gate results the orchestrator requires before `done`.
 - [l2-cli.md](l2-cli.md) - `/goal`, `plan`, `task`, `run`, `status` entry points.
+- [l2-agent-autonomy.md](l2-agent-autonomy.md) - Approval gate that governs high-impact orchestrator decisions and agent hires.
+- [l2-trigger-triage.md](l2-trigger-triage.md) - Triage hands `SpawnOrchestrator` decisions to this layer's goal-execution loop.
 
 ## 1. Motivation
 
@@ -85,11 +87,78 @@ The `/goal` entry point is the autonomy trigger; planning/execution reuse existi
 | view run progress | `cronus status` | `/status` | `orchestrator.status() -> RunStatus` |
 | stop a run | `cronus goal stop` | `/goal stop` | `orchestrator.stop() -> void` |
 
+### 4.6 Agent tier hierarchy
+
+Agents are classified into three tiers at definition time. The tier determines the allowed toolsets, iteration budget defaults, and workspace scope.
+
+```text
+[REFERENCE]
+AgentTier: "chat" | "reasoning" | "worker"
+
+AgentDefinition {
+  name:             String,
+  tier:             AgentTier,
+  role_id:          Option<String>,          // links to a hired role in the role catalog
+  toolsets:         Vec<String>,             // declared toolset names
+  iteration_budget: Option<u32>,             // overrides tier default
+  workspace_scope:  "session" | "execution" | "isolated",
+}
+```
+
+| Tier | Typical use | Default iteration budget | Toolset restrictions | Workspace scope |
+| --- | --- | --- | --- | --- |
+| `chat` | Short interactive turns, clarifications, brief Q&A | 10 | Read-only tools only; `shell` and `code_execution` forbidden | `session` |
+| `reasoning` | Planning, analysis, multi-step problem decomposition | 50 | All tools except `code_execution`; `shell` allowed read-only | `session` or `execution` |
+| `worker` | Full implementation, file editing, command execution | 90 | All toolsets; must have an execution workspace | `execution` or `isolated` |
+
+#### Static loader validation
+
+At agent definition load time (extension registry activation, workspace bootstrap), each `AgentDefinition` is validated against its tier:
+
+- `chat` agents declaring `shell` or `code_execution` toolsets are rejected with a hard load error.
+- `worker` agents without an `execution` or `isolated` workspace scope are rejected.
+- Unknown toolset names are rejected (no implicit fallback).
+
+Validation failures are logged as `AgentDefinitionError` and prevent the agent from being loaded. They do not affect other agents in the same workspace.
+
+#### Runtime spawn depth limit
+
+Agents can spawn sub-agents, which can spawn further sub-agents, but the chain is capped:
+
+```text
+[REFERENCE]
+MAX_SPAWN_DEPTH: u32 = 3
+```
+
+When an agent at depth 3 attempts to spawn a child, the call returns `MaxSpawnDepthError` to the parent. The error is surfaced in the parent's tool result and logged. The orchestrator is always at depth 0; its direct delegates are at depth 1, and so on.
+
+#### Toolkit action ranking
+
+When a `reasoning` or `worker` agent has a large tool catalog (> 50 entries), an action-ranking pass narrows the effective tool list before each provider call:
+
+```text
+[REFERENCE]
+rank_tools(task_description: &str, tools: &[ToolDefinition], top_n: u32) -> Vec<ToolDefinition>:
+  scores = []
+  for tool in tools:
+    verb_score  = verb_overlap(task_description, tool.name)   // CPU-only: match leading verb
+    token_score = token_overlap(task_description, tool.description)  // unigram overlap
+    scores.push((tool, verb_score + token_score))
+  scores.sort_by(|a, b| b.score.partial_cmp(&a.score))
+  return scores[..top_n].map(|s| s.tool)
+```
+
+- **Default `top_n`**: 20.
+- **Ranking is CPU-only** (no LLM call): verb detection extracts the leading verb from the task description and checks if it appears in the tool name; token overlap counts shared unigrams between the task description and the tool's one-line description.
+- Ranked tools are placed first in the tool list sent to the provider; remaining tools are omitted.
+- Action ranking runs only when the catalog exceeds the threshold; smaller catalogs are sent in full.
+
 ## 5. Drawbacks & Alternatives
 
 - **Judge model choice:** too weak a judge mis-confirms; too strong is costly. Mitigated by making the judge model configurable.
 - **Mailbox overhead:** message passing adds bookkeeping; justified for coherent multi-agent hand-offs.
 - **Alternative — orchestrator executes trivial tasks itself:** rejected; it erodes ORC-1 clarity. Trivial work still goes through a (cheap) role.
+- **MAX_SPAWN_DEPTH = 3:** arbitrary but prevents runaway recursion; configurable via workspace config for teams that need deeper delegation chains.
 
 ## Canonical References
 

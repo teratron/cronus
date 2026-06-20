@@ -1,13 +1,13 @@
 # Implementation Plan
 
-**Version:** 1.6.0
+**Version:** 1.7.0
 **Generated:** 2026-06-20
 **Based on:** .design/main/INDEX.md v1.0.0
 **Status:** Active
 
 ## Overview
 
-Implementation plan for Cronus from 55 Stable specifications (19 L1 concepts + 36 L2 implementations). Phases follow a **growth order**: the agent grows like a sprout from a seed.
+Implementation plan for Cronus from 59 Stable specifications (19 L1 concepts + 40 L2 implementations). Phases follow a **growth order**: the agent grows like a sprout from a seed.
 
 - **Seed = the library** (`crates/core` + `crates/nodus` runtime) — Phases 1–2.
 - **Stem = the CLI** — Phase 3, the first usable surface, emerging straight from the seed.
@@ -70,9 +70,12 @@ Execution mode: **Parallel** (C3); tracks grouped by file independence. Critical
 *Memory, routing, and workspace management. Each lands with its CLI commands.*
 
 - [ ] **Memory Store** ([l2-memory-store.md](specifications/l2-memory-store.md)) [L2]
+- [ ] **Memory Encryption** ([l2-memory-encryption.md](specifications/l2-memory-encryption.md)) [L2] — AES-256-GCM per-chunk encryption, Argon2id KDF, OS keychain key storage, transactional rotation (depends on memory-store + security)
+- [ ] **Code Graph** ([l2-codegraph.md](specifications/l2-codegraph.md)) [L2] — tree-sitter extraction, SQLite + FTS5 + sqlite-vec embeddings, RRF fusion, auto-index (depends on memory-store)
 - [ ] **Model Router** ([l2-model-router.md](specifications/l2-model-router.md)) [L2]
 - [ ] **Model Error Recovery** ([l2-model-error-recovery.md](specifications/l2-model-error-recovery.md)) [L2] — error taxonomy, classification pipeline, credential pool (depends on model-router)
-- [ ] **Agent Session Loop** ([l2-agent-session.md](specifications/l2-agent-session.md)) [L2] — TurnContext, IterationBudget, ContextEngine interface (depends on model-router + context-router)
+- [ ] **Agent Session Loop** ([l2-agent-session.md](specifications/l2-agent-session.md)) [L2] — TurnContext, IterationBudget, ContextEngine interface, tool-call loop seams, KV-cache stability, oversized-result summarizer, stop hooks, InterruptFence, post-turn hooks (depends on model-router + context-router)
+- [ ] **Agent Autonomy** ([l2-agent-autonomy.md](specifications/l2-agent-autonomy.md)) [L2] — autonomy ladder, SecurityPolicy gate, CommandRiskLevel classifier, ActionTracker rolling cap, approval gate lifecycle (depends on agent-session + tool-security + scheduler)
 - [ ] **Context Management** ([l2-context-management.md](specifications/l2-context-management.md)) [L2] — adaptive token budget, 8-step trim cascade, LLM-driven compaction, _protected messages (depends on agent-session + model-router)
 - [ ] **Context Router** ([l2-context-router.md](specifications/l2-context-router.md)) [L2]
 - [ ] **Workspace Management** ([l2-workspace-management.md](specifications/l2-workspace-management.md)) [L2]
@@ -96,7 +99,8 @@ Execution mode: **Parallel** (C3); tracks grouped by file independence. Critical
 
 *Coordination protocol that ties subsystems into an autonomous office.*
 
-- [ ] **Orchestration** ([l2-orchestration.md](specifications/l2-orchestration.md)) [L2] — delegation, /goal+judge+budget, briefings, adaptive topology
+- [ ] **Orchestration** ([l2-orchestration.md](specifications/l2-orchestration.md)) [L2] — delegation, /goal+judge+budget, briefings, adaptive topology, agent tier hierarchy (Chat/Reasoning/Worker), MAX_SPAWN_DEPTH=3, toolkit action ranking
+- [ ] **Trigger Triage** ([l2-trigger-triage.md](specifications/l2-trigger-triage.md)) [L2] — TriggerEnvelope intake pipeline, 4-outcome classifier (local CPU + cloud + rule fallback), dedup cache (depends on orchestration + scheduler + agent-session)
 - [ ] **Mission Mode** ([l2-mission-mode.md](specifications/l2-mission-mode.md)) [L2] — two-phase autonomous goal execution: PRD generation → user checkpoint → story-verified loop with max-iterations circuit-breaker (depends on orchestration + kanban + tool-security)
 - [ ] **Deep Research** ([l2-deep-research.md](specifications/l2-deep-research.md)) [L2] — iterative Think→Plan→Search→Extract→Synthesize engine, date-grounding, untrusted content wrapping, max_rounds circuit breaker (depends on orchestration + tool-security + context-management)
 

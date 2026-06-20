@@ -43,11 +43,11 @@ Local registry of specifications for this workspace.
 | [l2-scheduler.md](specifications/l2-scheduler.md) | Friendly recurrence + raw cron, per-workspace storage, firing, routine execution policy (concurrency, catch-up, idempotency, webhooks), event-driven triggers (threshold counter, singleflight dedup) | Stable | 2 | 1.0.2 |
 | [l2-quality-pipeline.md](specifications/l2-quality-pipeline.md) | Per-language toolchain map (incl. JS/TS structural analysis), local/pre-commit/CI gate runner, check command surface | Stable | 2 | 1.1.0 |
 | [l2-office-view.md](specifications/l2-office-view.md) | Office projection sources, graph+spatial render, home building overview, office command surface | Stable | 2 | 1.0.0 |
-| [l2-orchestration.md](specifications/l2-orchestration.md) | Delegation via board, messaging, context isolation, judge+budget /goal loop, adaptive topology | Stable | 2 | 1.0.0 |
+| [l2-orchestration.md](specifications/l2-orchestration.md) | Delegation via board, messaging, context isolation, judge+budget /goal loop, adaptive topology; agent tier hierarchy (Chat/Reasoning/Worker), static loader validation, MAX_SPAWN_DEPTH=3, toolkit action ranking | Stable | 2 | 1.0.1 |
 | [l2-role-catalog.md](specifications/l2-role-catalog.md) | Preset catalog + hired instances, role definition format, custom roles, hire/fire, adapter protocol (integration levels, fat/thin context, config revisions) | Stable | 2 | 1.0.1 |
 | [l2-model-router.md](specifications/l2-model-router.md) | Model selection: local-first, difficulty/cost, fallback cascade, semantic cache, routing commands | Stable | 2 | 1.0.1 |
 | [l2-model-error-recovery.md](specifications/l2-model-error-recovery.md) | Error taxonomy (FailoverKind), priority classification pipeline, retry/compress/rotate/fallback loop, credential pool | Stable | 2 | 1.0.0 |
-| [l2-agent-session.md](specifications/l2-agent-session.md) | Turn skeleton: TurnContext, IterationBudget, pluggable ContextEngine interface, prologue steps | Stable | 2 | 1.0.0 |
+| [l2-agent-session.md](specifications/l2-agent-session.md) | Turn skeleton: TurnContext, IterationBudget, ContextEngine interface, prologue steps; tool-call loop seams (ToolSource/ProgressReporter/TurnObserver/CheckpointStrategy), KV-cache stability, oversized-result summarizer circuit breaker, stop hooks, InterruptFence, post-turn background hooks | Stable | 2 | 1.0.1 |
 | [l2-context-router.md](specifications/l2-context-router.md) | Memory/rules/session routing, most-specific-first, session continue/retire | Stable | 2 | 1.0.0 |
 | [l2-doctor.md](specifications/l2-doctor.md) | Health check suite, safe-repair vs escalate, crash recovery, extensible check registry, doctor command | Stable | 2 | 1.0.1 |
 | [l2-security.md](specifications/l2-security.md) | Secret storage, gitignore defaults, egress gate, execution sandbox, audit log, SSRF protection (scheme+link-local+private-IP guard), internal tool loopback (startup token, require_admin) | Stable | 2 | 1.0.1 |
@@ -67,9 +67,13 @@ Local registry of specifications for this workspace.
 | [l2-context-management.md](specifications/l2-context-management.md) | Adaptive input-token budget (85% headroom, 200k hard-max), 8-step trim cascade with `_protected` messages, LLM-driven compaction at 85% threshold, tool message sanitization | Stable | 2 | 1.0.0 |
 | [l2-agent-migration.md](specifications/l2-agent-migration.md) | Source-neutral migration manifest v1: two-layer model (archives vs memory candidates), staged apply (dry-run→backup→archives→review→skills→skip_secrets), source adapters | Stable | 2 | 1.0.0 |
 | [l2-deep-research.md](specifications/l2-deep-research.md) | Iterative Think→Plan→Search→Extract→Synthesize engine: date-grounding, ResearchPlan (sub-questions + success criteria), untrusted content wrapping, max_rounds circuit breaker, `_protected` report | Stable | 2 | 1.0.0 |
+| [l2-agent-autonomy.md](specifications/l2-agent-autonomy.md) | Autonomy ladder (supervised/semi_autonomous/autonomous), CommandRiskLevel classifier, SecurityPolicy gate matrix, ActionTracker rolling hourly cap, approval gate lifecycle (10-min TTL, background bypass) | Stable | 2 | 1.0.0 |
+| [l2-trigger-triage.md](specifications/l2-trigger-triage.md) | Trigger intake pipeline: TriggerEnvelope normalization, 4-outcome TriageDecision (Drop/Notify/SpawnReactor/SpawnOrchestrator), local CPU classifier + cloud fallback + rule fallback, dedup cache, rate limiting | Stable | 2 | 1.0.0 |
+| [l2-codegraph.md](specifications/l2-codegraph.md) | In-workspace code intelligence index: language extraction (tree-sitter grammars), SQLite symbols + FTS5 + sqlite-vec embeddings, RRF fusion, auto-index on first use, incremental mtime updates | Stable | 2 | 1.0.0 |
+| [l2-memory-encryption.md](specifications/l2-memory-encryption.md) | Per-chunk AES-256-GCM encryption for the memory store: Argon2id KDF from user credentials, OS keychain key storage, transactional key rotation, key lifecycle (session/workspace delete/lock) | Stable | 2 | 1.0.0 |
 
 ## Meta Information
 
 - **Maintainer**: Core Team
 - **Last Updated**: 2026-06-20
-- **Spec Count**: 55 (19 L1 + 36 L2)
+- **Spec Count**: 59 (19 L1 + 40 L2)

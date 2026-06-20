@@ -1,6 +1,6 @@
 # Agent Session Loop
 
-**Version:** 1.0.0
+**Version:** 1.0.1
 **Status:** Stable
 **Layer:** implementation
 **Implements:** l1-orchestration.md, l1-routing.md
@@ -16,6 +16,7 @@ The concrete structure of a single agent turn: the per-turn context object that 
 - [l2-context-router.md](l2-context-router.md) - Memory/session context injected in the turn prologue.
 - [l2-model-error-recovery.md](l2-model-error-recovery.md) - Error taxonomy and recovery actions per iteration.
 - [l2-learning-loop.md](l2-learning-loop.md) - Post-turn review hook gated by `should_review_memory`.
+- [l2-agent-autonomy.md](l2-agent-autonomy.md) - `ActionTracker` and approval gate interact with the `action_budget_stop` hook (§4.7).
 
 ## 1. Motivation
 
@@ -133,10 +134,145 @@ The `protect_first_n` and `protect_last_n` fields are in addition to the system 
 ### 4.5 Loop exit conditions
 
 The tool-calling loop terminates when:
+
 - The model returns a final answer (no pending tool calls).
 - `IterationBudget.consume()` returns `false` (budget exhausted).
 - An error is classified as non-retryable and no fallback is available.
 - A stop signal (user interrupt, timeout) is received.
+
+### 4.6 Tool-call loop engine
+
+The tool-calling loop is structured around four pluggable seams that allow testing and extension without modifying the core loop.
+
+#### Seams
+
+```text
+[REFERENCE]
+ToolSource
+  // Provides the tool catalog for the session. Built once at session start.
+  // Rebuilt only on explicit extension install/uninstall, never mid-turn.
+  tools() -> Vec<ToolDefinition>
+  reload()  // called by extension registry on activation/deactivation
+
+ProgressReporter
+  // Receives streaming tokens and tool events for display.
+  on_token(text: &str)
+  on_tool_start(tool_name: &str, params: &ToolParams)
+  on_tool_end(tool_name: &str, result: &ToolResult)
+
+TurnObserver
+  // Post-tool-call observation hook (used by the learning loop).
+  observe(tool_name: &str, result_summary: &str, duration_ms: u64)
+
+CheckpointStrategy
+  // Decides when to persist turn state to disk.
+  should_checkpoint(tool_calls_since_last: u32, elapsed_ms: u64) -> bool
+  // Default: every 10 tool calls OR every 60 seconds, whichever comes first.
+```
+
+#### KV-cache stability
+
+The system prompt (persona, workspace rules, skill preambles) is built **once per session** at session start and kept identical for all turns. It is never modified after construction. Dynamic context — memory recalls, updated card state, injected tool results — is added as `role: "user"` messages so that the immutable system-prompt prefix remains intact in the provider's KV cache. This avoids full-context re-encoding on every turn.
+
+The `ToolSource` catalog follows the same rule: it is built once and only rebuilt on explicit extension changes, not on each tool call. New tools added mid-session by extension installs take effect at the next turn boundary.
+
+#### Oversized result summarizer
+
+When a tool result exceeds `OVERSIZED_RESULT_THRESHOLD` tokens (default: 8 000), the loop detours to a summarizer sub-agent before passing the result to the main model:
+
+```text
+[REFERENCE]
+oversized_result_handler(tool_name, result, threshold):
+  if token_count(result) <= threshold:
+    return result
+  summary = summarizer_subagent.run(
+    prompt  = "Summarize the following tool result for {tool_name}:",
+    content = result,
+    budget  = 500 tokens
+  )
+  return summary
+```
+
+**Circuit breaker**: after 3 consecutive summarizer failures (timeout, model error, output exceeds budget), the loop stops calling the summarizer for this turn and instead truncates the raw result to `threshold` tokens with a prepended warning:
+
+```text
+[REFERENCE]
+"[RESULT TRUNCATED: summarizer unavailable after 3 attempts. Showing first {threshold} tokens.]"
+```
+
+The circuit breaker resets at the start of the next turn.
+
+#### Missing-command self-healing
+
+If the model produces a tool call for a name not present in the current `ToolSource` catalog, the loop attempts self-healing before returning an error:
+
+1. Check whether a known skill provides the missing tool name (skill registry lookup).
+2. If found: auto-activate the skill, reload the `ToolSource`, re-execute the tool call.
+3. If not found: return a structured `ToolNotFoundResult { tool_name, available_tools_hint }` so the model can recover gracefully.
+
+Self-healing is attempted at most once per missing tool name per turn; a second miss for the same name returns the error immediately.
+
+### 4.7 Turn lifecycle hooks
+
+#### Stop hooks (inline, before the model sees results)
+
+Stop hooks run synchronously within the tool-calling loop and can terminate the turn early:
+
+```text
+[REFERENCE]
+StopHook: (context: &TurnContext, budget: &IterationBudget) -> Option<StopSignal>
+
+StopSignal {
+  reason:          "budget_exhausted" | "max_iter" | "action_cap_exceeded" | "interrupt",
+  message_to_user: String,    // displayed to the user
+  remaining:       Option<u32>,
+}
+```
+
+Built-in stop hooks:
+
+| Hook | Trigger | Signal reason |
+| --- | --- | --- |
+| `budget_stop` | `IterationBudget.consume()` returns `false` | `budget_exhausted` |
+| `max_iter_stop` | Model-context iteration ceiling derived from context window | `max_iter` |
+| `action_budget_stop` | `ActionTracker.record()` returns `ActionCapError` | `action_cap_exceeded` |
+
+When any stop hook fires, the loop breaks immediately and `StopSignal.message_to_user` is returned as the turn's final response.
+
+#### InterruptFence
+
+A shared `Arc<AtomicBool>` is checked synchronously before three operations in each loop iteration:
+
+1. Tool execution (before the tool is called).
+2. Sub-agent spawn (before creating the child `TurnContext`).
+3. Provider API call (before sending the prompt).
+
+```text
+[REFERENCE]
+InterruptFence { flag: Arc<AtomicBool> }
+
+impl InterruptFence {
+  check() -> Result<(), Interrupted>
+    // Returns Err(Interrupted) if the flag is set.
+  signal()
+    // Set by the user interrupt handler (Ctrl-C / TUI stop button).
+}
+```
+
+When `check()` returns `Err`, the current operation is abandoned and the turn exits with `Interrupted` status. The fence is **cleared** (reset to `false`) at the start of each new turn so that a subsequent turn can proceed normally.
+
+#### Post-turn hooks (background, after response is sent)
+
+Post-turn hooks run as background tasks after the model's response is delivered. They do not block the turn or affect the response.
+
+| Hook | Function |
+| --- | --- |
+| `archivist` | Writes a condensed turn summary to the session archive (`<ws>/sessions/<session_id>/archive.jsonl`) |
+| `learning_loop` | Triggers the skill-review pipeline; gated by `TurnContext.should_review_memory` |
+| `cost_log` | Appends token cost to the workspace budget ledger (`<ws>/budget/ledger.jsonl`) |
+| `episodic_indexer` | Extracts episodic memory candidates from the turn and queues them for the memory store |
+
+Post-turn hooks are fire-and-forget; failures are logged at WARN and do not surface to the user.
 
 ## 5. Drawbacks & Alternatives
 
