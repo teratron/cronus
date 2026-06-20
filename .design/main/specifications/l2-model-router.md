@@ -1,6 +1,6 @@
 # Model Router
 
-**Version:** 1.0.3
+**Version:** 1.0.4
 **Status:** Stable
 **Layer:** implementation
 **Implements:** l1-routing.md
@@ -485,6 +485,102 @@ Preference order for preferred path: Gpu → CpuOffload → CpuOnly. `CpuOffload
 #### TurboQuant gating
 
 TurboQuant KV compression (~0.34 bytes/element vs 2.0 for fp16) is gated on vLLM + CUDA. It only compresses full-attention layers in hybrid architectures (models that mix self-attention with linear/Mamba-style state-space layers see partial savings proportional to their full-attention fraction). Always shown in the `kv_alternatives` table; marked `supported: false` on non-CUDA backends with an explanatory note.
+
+### 4.12 Post-Processing Action Pipeline
+
+After primary model output is produced, an optional post-processing step routes the output through a configurable LLM provider to refine, reformat, or expand it before delivery to the user.
+
+#### RAII finish guard
+
+Any async processing pipeline must notify the coordinator when it finishes — including failure or panic paths. Wrap coordinator notification in a drop guard:
+
+```text
+[REFERENCE]
+struct FinishGuard(AppHandle);
+
+impl Drop for FinishGuard {
+    fn drop(&mut self) {
+        if let Some(coordinator) = self.0.try_state::<Coordinator>() {
+            coordinator.notify_finished();
+        }
+    }
+}
+// Instantiate at the top of the processing function; coordinator is always notified.
+```
+
+#### Prompt template system
+
+Post-processing prompts are templates containing a `${output}` placeholder. At runtime, strip the placeholder and send the primary output as the user message — do not interpolate it into the system prompt:
+
+```text
+[REFERENCE]
+build_system_prompt(template):
+  return template.replace("${output}", "").trim()
+
+// Primary output → user message (never into system prompt).
+// Rationale: prevents prompt injection when output contains LLM control sequences.
+```
+
+#### Output sanitization
+
+Strip invisible Unicode characters from LLM output before storing or displaying it:
+
+```text
+[REFERENCE]
+strip_invisible(s):
+  remove: U+200B (zero-width space), U+200C (zero-width non-joiner),
+          U+200D (zero-width joiner),  U+FEFF (BOM / zero-width no-break space)
+
+These are sometimes inserted by LLMs as padding artefacts and can corrupt
+clipboard pastes or downstream text processing.
+```
+
+#### Structured output schema
+
+When the post-processor must return structured data, use the `json_schema` response format with `strict: true`:
+
+```text
+[REFERENCE]
+response_format: {
+    type: "json_schema",
+    json_schema: {
+        name:   "result_schema",
+        strict: true,
+        schema: { ... }    // JSON Schema object
+    }
+}
+// Supported by OpenAI-compatible endpoints.
+// For providers that do not support it: fall back to prompt-based JSON extraction.
+```
+
+#### Provider-specific authentication
+
+```text
+[REFERENCE]
+Anthropic provider:
+  x-api-key: <api_key>
+  anthropic-version: 2023-06-01
+  (NOT Authorization: Bearer)
+
+All other providers (OpenAI, OpenRouter, Groq, Cerebras, …):
+  Authorization: Bearer <api_key>
+
+Detection: use the provider's stable ID from the catalog, not URL pattern matching.
+```
+
+#### Reasoning model configuration
+
+For providers and models that support extended thinking, attach optional reasoning config fields; skip them entirely (via `skip_serializing_if = "Option::is_none"`) for models that do not:
+
+```text
+[REFERENCE]
+ChatCompletionRequest:
+  reasoning_effort: Option<String>       // "low"|"medium"|"high"  (o-series style)
+  reasoning:        Option<{             // alternative providers' reasoning field
+    effort:  Option<String>,
+    exclude: Option<bool>,
+  }>
+```
 
 ## 5. Drawbacks & Alternatives
 

@@ -1,6 +1,6 @@
 # Core Library (Foundation)
 
-**Version:** 1.0.0
+**Version:** 1.1.0
 **Status:** Stable
 **Layer:** implementation
 **Implements:** l1-architecture.md
@@ -87,6 +87,86 @@ graph TD
 - Per-agent budget checks before each wake; overspend auto-pauses (circuit breaker).
 - Goal completion gated by an independent judge before the loop may stop.
 - Checkpointing + context reconstruction for long-horizon runs.
+
+### 4.5 Manager Pattern & Resource Guards
+
+Stateful subsystems (model inference, session context, history, audio) are organized as **managers**: independent structs wrapped in `Arc<T>`, registered in the application state container at startup, and accessed by any handler via a shared reference.
+
+#### `Arc<T>` manager pattern
+
+```text
+[REFERENCE]
+// At startup:
+let model_manager = Arc::new(ModelManager::new(...));
+app.manage(model_manager);
+
+// In any handler:
+let mm = app.state::<Arc<ModelManager>>();
+mm.load_model(model_id).await?;
+```
+
+Managers are initialized once in a defined order. Later managers may hold `Arc` references to earlier ones. All domain logic lives inside a manager; no domain logic lives in handler glue code.
+
+#### RAII loading guard
+
+When a manager transitions to a "loading" state, wrap the transition in a guard struct that resets the state on drop — ensuring atomic cleanup even if the work panics or returns early:
+
+```text
+[REFERENCE]
+struct LoadingGuard<'a>(&'a Manager);
+
+impl Drop for LoadingGuard<'_> {
+    fn drop(&mut self) {
+        self.0.is_loading.store(false, Ordering::SeqCst);
+    }
+}
+
+fn load_model(&self, id: &str) -> Result<()> {
+    self.is_loading.store(true, Ordering::SeqCst);
+    let _guard = LoadingGuard(self);    // cleared on ANY exit path
+    // ... loading work ...
+    Ok(())
+}
+```
+
+#### Idle watcher thread
+
+When a manager holds a heavy resource (e.g., a model occupying VRAM), spawn a background thread that polls `last_activity` and releases the resource after a configurable inactivity timeout:
+
+```text
+[REFERENCE]
+idle_watcher(manager_ref, poll_interval = 10 s):
+  loop:
+    sleep(poll_interval)
+    if resource_loaded AND now - last_activity > inactivity_timeout:
+      manager_ref.unload_resource()
+
+InactivityTimeout enum: Never | Immediately | Sec15 | Min2 | Min5 | Min10 | Min15 | Hour1
+
+last_activity is updated by every successful use of the resource.
+```
+
+#### Backend enum for polymorphic dispatch
+
+Support multiple interchangeable implementations (e.g., different inference engines) using an enum rather than `dyn Trait`, to avoid heap allocation and retain ownership clarity:
+
+```text
+[REFERENCE]
+enum LoadedBackend {
+    EngineA(EngineAState),
+    EngineB(EngineBState),
+    // New backend = new variant; callers use match, not dyn dispatch.
+}
+
+impl LoadedBackend {
+    fn run(&mut self, input: &Input) -> Result<Output> {
+        match self {
+            Self::EngineA(e) => e.run(input),
+            Self::EngineB(e) => e.run(input),
+        }
+    }
+}
+```
 
 ## 5. Drawbacks & Alternatives
 

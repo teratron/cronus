@@ -1,6 +1,6 @@
 # Security
 
-**Version:** 1.0.7
+**Version:** 1.0.8
 **Status:** Stable
 **Layer:** implementation
 **Implements:** l1-security.md
@@ -622,6 +622,46 @@ If an agent encounters a credential value during file reads (not an audit findin
 - Stop the current operation if it would cause the value to be propagated.
 - Surface a security note to the user: credential type + file:line only.
   Example: "Found what appears to be a live API key at config/secrets.ts:12 — recommend rotation."
+```
+
+### 4.12 API Key Redaction Pattern
+
+Sensitive credentials stored in settings structures are wrapped in a newtype whose `Debug` implementation prints only key names, never values. This prevents API keys from appearing in logs, panic traces, and debug output even when the containing struct is `{:?}` formatted.
+
+```text
+[REFERENCE]
+struct SecretMap(HashMap<String, String>);
+
+impl fmt::Debug for SecretMap {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        let redacted: HashMap<&String, &str> =
+            self.0.keys().map(|k| (k, "[REDACTED]")).collect();
+        write!(f, "{:?}", redacted)
+    }
+}
+// Output: SecretMap { "openai": "[REDACTED]", "anthropic": "[REDACTED]" }
+// Key names are visible for diagnostics; values are never emitted.
+```
+
+Apply the pattern to every `HashMap<provider_id, secret>` field in settings. Do NOT store plaintext secrets in any struct that derives or implements `Display` / `Debug` without the redaction wrapper.
+
+#### Platform feature availability guard
+
+Some platform-specific APIs advertise availability but abort the process when called on early OS versions (e.g., calling a framework method that shipped in a later OS release). Guard such features by deferring the capability check to the first actual call site, not at startup:
+
+```text
+[REFERENCE]
+Availability guard pattern:
+  // Check at the call site, not at process start
+  if os_version() < FEATURE_MINIMUM_VERSION {
+      return Err("Feature requires OS X.Y or later");
+  }
+  call_platform_api()
+
+Rationale: calling platform APIs at startup on an incompatible OS version can emit
+  SIGABRT before any error handler is in place, producing a silent crash-at-launch.
+  Deferring the check to first use allows the rest of the app to start normally and
+  surface a clean error message to the user.
 ```
 
 ## 5. Drawbacks & Alternatives

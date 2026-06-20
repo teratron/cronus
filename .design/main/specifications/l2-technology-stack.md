@@ -1,6 +1,6 @@
 # Technology Stack
 
-**Version:** 1.0.1
+**Version:** 1.0.2
 **Status:** Stable
 **Layer:** implementation
 **Implements:** l1-architecture.md
@@ -211,6 +211,73 @@ TurboQuant | ~0.34         | vLLM + CUDA only; compresses full-attention layers 
 ```
 
 `TurboQuant` savings for hybrid architectures (models mixing self-attention with linear/state-space layers) are proportional to the full-attention fraction; the linear/Mamba layers remain at fp16.
+
+### 4.6 Audio Processing Stack
+
+Voice input features require a dedicated audio pipeline separate from the inference stack. The following components apply when Cronus implements voice/speech input.
+
+#### Sample rate requirement
+
+Speech recognition models require **16 000 Hz mono audio**. The pipeline must resample from any device-native rate to 16 kHz before passing audio to the model; never assume the microphone outputs at 16 kHz.
+
+#### VAD pipeline
+
+Voice Activity Detection gates the stream to avoid sending silence or noise to the model:
+
+```text
+[REFERENCE]
+Pipeline:
+  microphone → cpal stream
+             → resampler (rubato → 16 000 Hz, mono)
+             → VAD (ONNX model via ORT)
+             → SmoothedVad (sliding-window temporal smoothing)
+             → audio buffer
+             → STT model
+
+SmoothedVad averages VAD scores over a short window to prevent rapid on/off
+switching at speech boundaries (hysteresis effect).
+```
+
+#### Audio I/O libraries
+
+```text
+[REFERENCE]
+cpal   — cross-platform audio I/O (device enumeration, capture + playback streams)
+rubato — high-quality async resampler; arbitrary ratio; converts device rate → 16 000 Hz
+rodio  — audio playback for UI feedback sounds (confirmation tones, error sounds)
+```
+
+#### Platform-specific output mute during recording
+
+Mute the system output while recording to prevent microphone feedback bleed:
+
+```text
+[REFERENCE]
+Windows → Win32 COM: IMMDeviceEnumerator → IAudioEndpointVolume.SetMute()
+          CoInitializeEx per thread; silent on failure (not all drivers expose the interface)
+
+Linux   → try backends in order, stop on first success:
+          1. wpctl set-mute @DEFAULT_AUDIO_SINK@ 1   (PipeWire)
+          2. pactl set-sink-mute @DEFAULT_SINK@ 1    (PulseAudio)
+          3. amixer set Master mute                  (ALSA)
+          Silent on failure; does not block recording
+
+macOS   → osascript: "set volume output muted true"
+          Silent on failure
+```
+
+#### Stream lifecycle
+
+```text
+[REFERENCE]
+On-demand mode:   open stream when recording starts; close immediately when done.
+                  Releases the microphone between sessions (privacy default).
+
+Lazy-close mode:  keep stream alive for a configurable idle timeout after recording stops.
+                  Reduces stream re-open latency for high-frequency short-burst usage.
+
+Default idle timeout: STREAM_IDLE_TIMEOUT = 30 s
+```
 
 ## 5. Drawbacks & Alternatives
 
