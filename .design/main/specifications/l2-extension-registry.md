@@ -1,6 +1,6 @@
 # Extension Registry
 
-**Version:** 1.0.2
+**Version:** 1.0.3
 **Status:** Stable
 **Layer:** implementation
 **Implements:** l1-extensions.md
@@ -99,6 +99,10 @@ plugin.json {
   entry: { backend: "<filename>" },
   dependencies?: ["pkg>=version"],
   min_version?: String,           // minimum Cronus version required
+  commands?:    String,          // commands directory; default: "./commands/"
+  agents?:      String,          // agents directory; default: "./agents/"
+  hooks?:       String | Object, // path to hooks.json or inline config; default: "./hooks/hooks.json"
+  mcpServers?:  String | Object, // path to .mcp.json or inline MCP server config (see §4.12)
   meta?: {
     tools: [
       {
@@ -131,6 +135,36 @@ plugin.json {
 **Localization:** `description_i18n` provides locale-keyed descriptions; the UI falls back to `description` when the current locale is absent.
 
 **Compatibility:** `min_version` is checked at install time; incompatible plugins are blocked from activation with a clear version error.
+
+### 4.6 Component auto-discovery
+
+When a plugin activates, the registry discovers its components in two passes.
+
+**Default directories** (always scanned; relative to `<plugin-root>/`):
+
+```
+<plugin-root>/
+├── commands/          # .md files → slash commands
+├── agents/            # .md files → agent definitions
+├── skills/            # subdirectories each containing SKILL.md → skill triggers
+└── hooks/
+    └── hooks.json     # tool-event hook configuration (§4.10 in l2-plugin-hooks.md)
+```
+
+Subdirectory nesting creates namespaces: `commands/ci/lint.md` → command `lint` in namespace `ci`, listed as `/lint (plugin:<name>:ci)`.
+
+**Manifest path overrides**: `plugin.json` `commands`/`agents`/`hooks`/`mcpServers` fields (§4.5) specify alternate paths. These are merged with default discoveries; an entry found in a default location is never overridden by a manifest path.
+
+**Path rules**: all paths are relative, must start with `./`, must not contain `../`, use forward slashes. Absolute paths and traversal are rejected at activation.
+
+#### `${PLUGIN_ROOT}` path variable
+
+`${PLUGIN_ROOT}` expands to the plugin's absolute on-disk directory at session start. Use it in:
+- Hook `command` fields: `"bash ${PLUGIN_ROOT}/scripts/validate.sh"`
+- MCP server `command` and `args` fields
+- Environment variable values in MCP server `env` blocks
+
+Never use hardcoded absolute paths; `${PLUGIN_ROOT}` is the single portable reference across installs, platforms, and users.
 
 ### 4.7 Remote skill catalog
 
@@ -223,6 +257,112 @@ Conforms to the CLI grammar standard (see `l2-cli.md` §4.4).
 | generate skill | `cronus skill generate` | `/skill generate` | `ext.generateSkills() -> Extension[]` |
 
 `mcp`/`skill` are convenience sub-commands over the same registry (`ext`).
+
+### 4.9 Skill definition format (SKILL.md)
+
+A skill is a directory in the plugin's `skills/` subtree containing a `SKILL.md` file. The YAML frontmatter defines the trigger; the body is instruction content injected into the agent's context when the trigger fires.
+
+```text
+[REFERENCE]
+SKILL.md YAML frontmatter:
+  name:        String   // kebab-case skill identifier
+  description: String   // trigger description — concrete phrases, tasks, or file patterns
+                        // that should activate this skill; include negative examples
+                        // (when NOT to activate) to sharpen precision
+  version:     String   // semver: "1.0.0"
+```
+
+Directory layout:
+
+```
+skills/
+└── my-skill/
+    ├── SKILL.md          # frontmatter + instruction body
+    └── references/       # optional reference files cited in SKILL.md
+```
+
+### 4.10 Agent definition format
+
+Agent definitions in the plugin's `agents/` directory are `.md` files. The YAML frontmatter declares identity and tool access; the body becomes the system prompt.
+
+```text
+[REFERENCE]
+agents/<name>.md frontmatter:
+  name:        String    // kebab-case, 3–50 chars, alphanumeric + hyphens,
+                         //   starts and ends with alphanumeric
+  description: String
+    // Triggering conditions + 2–4 usage examples:
+    // "Use this agent when <conditions>. Examples:
+    //  <example>
+    //  Context: <scenario>
+    //  user: \"<user request>\"
+    //  assistant: \"<how to respond and launch this agent>\"
+    //  <commentary>why this agent fires</commentary>
+    //  </example>"
+    // Be specific about when NOT to use the agent.
+  model:       inherit | sonnet | opus | haiku   // default: inherit
+  color:       blue | cyan | green | yellow | magenta | red
+  tools?:      String[]   // restrict to minimum required tools;
+                          //   omit = all tools available
+                          //   read-only:       ["Read","Grep","Glob"]
+                          //   code generation: ["Read","Write","Grep"]
+```
+
+System prompt conventions (body text):
+
+- Second person: "You are …", "You will …"
+- Structure: Core Responsibilities → Analysis Process → Quality Standards → Output Format → Edge Cases
+- Keep under 3 000 characters
+
+### 4.11 Command definition format
+
+Slash commands in the plugin's `commands/` directory are `.md` files. The body is an instruction **to the agent** (not a message to the user).
+
+```text
+[REFERENCE]
+commands/<name>.md YAML frontmatter:
+  description?:               String   // shown in /help; ≤ 60 chars
+  allowed-tools?:             Array    // e.g. ["Read", "Bash(git:*)"]
+  model?:                     inherit | sonnet | opus | haiku
+  argument-hint?:             String   // e.g. "[pr-number] [priority]"
+  disable-model-invocation?:  bool     // default: false
+
+Dynamic tokens in the body:
+  $ARGUMENTS           // all user-provided arguments as a single string
+  $1, $2, …           // individual positional arguments
+  @<path>              // include file contents inline at that point
+  !`<bash command>`    // execute bash and inline the stdout (dynamic context)
+  ${PLUGIN_ROOT}       // plugin-root-relative path for scripts and templates
+```
+
+Naming: verb-noun (`review-pr`, `generate-docs`); one responsibility per command; complex multi-step flows delegate to an agent definition (§4.10).
+
+### 4.12 MCP server transport variants
+
+The `connect` configuration in `.mcp.json` or the `mcpServers` manifest field accepts four transport variants:
+
+```text
+[REFERENCE]
+// stdio — local process; communicates via stdin/stdout
+{ "command": "${PLUGIN_ROOT}/servers/my-server",
+  "args": ["--config", "${PLUGIN_ROOT}/config.json"],
+  "env":  { "DB_URL": "${DB_URL}" } }
+
+// sse — hosted endpoint with OAuth (auth flow handled by Cronus)
+{ "type": "sse", "url": "https://mcp.example.com/sse" }
+
+// http — REST endpoint with token-based auth
+{ "type": "http", "url": "https://api.example.com/mcp",
+  "headers": { "Authorization": "Bearer ${API_TOKEN}" } }
+
+// ws — WebSocket endpoint for real-time / streaming
+{ "type": "ws", "url": "wss://mcp.example.com/ws",
+  "headers": { "Authorization": "Bearer ${TOKEN}" } }
+```
+
+**Tool naming**: registered MCP tools are prefixed as `mcp__<plugin-name>_<server-name>__<tool-name>`. Commands pre-allow specific tools via `allowed-tools`; prefer explicit names over wildcard `__*` grants.
+
+**Security**: use HTTPS/WSS only; reference credentials via environment variables (`${MY_API_KEY}`); document required env vars in the plugin README.
 
 ## 5. Drawbacks & Alternatives
 

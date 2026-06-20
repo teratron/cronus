@@ -1,6 +1,6 @@
 # Plugin Hook System
 
-**Version:** 1.0.0
+**Version:** 1.0.1
 **Status:** Stable
 **Layer:** implementation
 **Implements:** l1-extensions.md
@@ -279,6 +279,202 @@ HookEvent.ReActMaxReached {
 ```
 
 All events are published on the workspace event bus; subscribers (TUI, telemetry) may react without coupling to hook execution.
+
+### 4.10 Tool-event hooks (plugin-facing API)
+
+Sections §4.1–§4.9 define hook injection points at **actor-turn granularity** (preStop/postStop ReAct loops, bus events). This section defines a complementary **tool-call granularity** hook API: plugins declare hooks in `hooks/hooks.json` that fire at individual tool calls, session boundaries, and user input events.
+
+#### Event taxonomy
+
+| Event | When | Primary use |
+| --- | --- | --- |
+| `PreToolUse` | Before a tool executes | Validate, approve, modify input |
+| `PostToolUse` | After a tool completes | Feedback, logging |
+| `Stop` | Before main agent stops | Completeness verification |
+| `SubagentStop` | Before a subagent stops | Subagent task validation |
+| `SessionStart` | Session opens | Context loading, env initialization |
+| `SessionEnd` | Session closes | Cleanup, state persistence |
+| `UserPromptSubmit` | User submits input | Context injection, prompt augmentation |
+| `PreCompact` | Before context compaction | Mark critical context to preserve |
+| `Notification` | Agent emits notification | Logging, reactions |
+
+#### Two hook execution models
+
+**Prompt-based hooks** (preferred for reasoning-intensive checks): an LLM evaluates the hook condition from a natural-language prompt. Supported on `PreToolUse`, `Stop`, `SubagentStop`, `UserPromptSubmit`.
+
+**Command hooks** (preferred for fast, deterministic checks): a script or binary runs to completion and emits a JSON response. Supported on all events.
+
+```text
+[REFERENCE]
+HookDef (command): { "type": "command", "command": String, "timeout": Number }
+                   // default timeout: 60 s
+
+HookDef (prompt):  { "type": "prompt",  "prompt": String,  "timeout": Number }
+                   // default timeout: 30 s
+```
+
+All matching hooks for a given event run **in parallel**; design hooks for independence — they do not see each other's output and their execution order within a parallel group is non-deterministic.
+
+#### hooks.json format
+
+```text
+[REFERENCE]
+hooks/hooks.json:
+{
+  "description": String,    // optional
+  "hooks": {
+    "<EventName>": [
+      {
+        "matcher": String,  // tool matcher; see Matcher syntax below
+        "hooks":   [HookDef...]
+      }
+    ]
+  }
+}
+```
+
+#### Matcher syntax
+
+```text
+Exact:    "Write"                  // one tool
+OR:       "Read|Write|Edit"        // any listed tool
+Wildcard: "*"                      // all tools
+Regex:    "mcp__.*__delete.*"      // pattern match (case-sensitive)
+```
+
+#### Hook input (JSON on stdin, all events)
+
+```text
+[REFERENCE]
+{
+  session_id:      String,
+  transcript_path: String,
+  cwd:             String,
+  permission_mode: "ask" | "allow",
+  hook_event_name: String
+  // Event-specific additions:
+  // PreToolUse / PostToolUse:  tool_name, tool_input, tool_result (PostToolUse only)
+  // UserPromptSubmit:          user_prompt
+  // Stop / SubagentStop:       reason
+}
+```
+
+#### Hook output
+
+```text
+[REFERENCE]
+// Standard (all events):
+{ continue: bool, suppressOutput: bool, systemMessage: String }
+
+// PreToolUse: permission decision
+{
+  hookSpecificOutput: {
+    permissionDecision: "allow" | "deny" | "ask",
+    updatedInput?: Object   // optional field-level modification of tool_input
+  },
+  systemMessage: String
+}
+
+// Stop / SubagentStop: completion decision
+{ decision: "approve" | "block", reason: String, systemMessage: String }
+```
+
+Exit codes: `0` = success (stdout shown in transcript), `2` = blocking error (stderr fed to agent), other = non-blocking error.
+
+#### Environment variables (command hooks)
+
+```text
+$PLUGIN_ROOT           // Plugin directory — use for all intra-plugin file references
+$CLAUDE_PROJECT_DIR    // Project working directory
+$CLAUDE_ENV_FILE       // SessionStart only: write "export K=v" to persist env vars
+```
+
+#### Session-load constraint
+
+Tool-event hooks load once at session start. Unlike file hooks (§4.6), they do not hot-reload; a session restart is required after configuration changes.
+
+#### Conditional activation
+
+A hook may no-op when its feature flag is absent:
+
+```text
+[REFERENCE]
+// Flag-file activation:
+if [ ! -f "$PLUGIN_ROOT/.enable-strict-mode" ]; then exit 0; fi
+
+// Config-file activation:
+enabled=$(jq -r '.strictMode // false' "$CLAUDE_PROJECT_DIR/.cronus/plugin-config.json")
+if [ "$enabled" != "true" ]; then exit 0; fi
+```
+
+Document the activation mechanism in the plugin README.
+
+### 4.11 Rule evaluation engine
+
+Policy-based command hooks implement a declarative rule engine instead of ad-hoc scripting, providing composable, auditable policy enforcement.
+
+#### Schema
+
+```text
+[REFERENCE]
+Rule {
+  name:         String
+  enabled:      bool
+  event:        String        // target hook event
+  tool_matcher: String?       // optional; §4.10 matcher syntax
+  conditions:   Condition[]   // ALL must match (AND semantics)
+  action:       "block" | "warn"
+  message:      String
+}
+
+Condition {
+  field:    "command" | "file_path" | "content" | "new_string"
+            | "old_string" | "reason" | "transcript" | "user_prompt"
+  operator: "regex_match" | "contains" | "equals"
+             | "not_contains" | "starts_with" | "ends_with"
+  pattern:  String
+}
+```
+
+#### Evaluation algorithm
+
+```text
+[REFERENCE]
+evaluate_rules(rules, input) -> HookResponse:
+  blocking = rules where enabled AND matches(rule, input) AND action == "block"
+  warning  = rules where enabled AND matches(rule, input) AND action == "warn"
+
+  if blocking not empty:
+    msg = join("\n\n", ["[{name}]\n{message}" for r in blocking])
+    if event == "Stop":
+      return { decision:"block", reason:msg, systemMessage:msg }
+    elif event in ["PreToolUse","PostToolUse"]:
+      return { hookSpecificOutput:{permissionDecision:"deny"}, systemMessage:msg }
+    else:
+      return { systemMessage:msg }
+
+  if warning not empty:
+    return { systemMessage: join("\n\n", warning messages) }
+
+  return {}   // no match → allow
+
+matches(rule, input) -> bool:
+  if rule.tool_matcher AND tool not in matcher: return false
+  if rule.conditions is empty: return false   // rules require at least one condition
+  return ALL(check_condition(c, input) for c in rule.conditions)
+```
+
+Compile regex patterns eagerly; LRU-cache 128 slots suffices for typical policy files.
+
+### 4.12 Hook security model
+
+Command hooks execute arbitrary scripts that receive unvalidated external input. Apply defense-in-depth:
+
+- **Validate inputs**: parse stdin with a JSON tool; check field formats before use; emit exit 2 JSON on unexpected values.
+- **Path safety**: reject `..` in file paths; deny writes to `.env`, secret files, or paths outside the project root.
+- **Quote all bash variables**: unquoted variables allow injection — always `echo "$file_path"`, never `echo $file_path`.
+- **Set timeouts**: `"timeout"` is mandatory on every hook entry. Command hooks < 10 s; offload slow work to `PostToolUse` or `SessionEnd`.
+- **Never log sensitive data**: hooks must not write user content, credentials, or file contents to stdout/stderr.
 
 ## 5. Drawbacks & Alternatives
 
