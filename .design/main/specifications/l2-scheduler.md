@@ -1,6 +1,6 @@
 # Scheduler
 
-**Version:** 1.0.1
+**Version:** 1.0.2
 **Status:** Stable
 **Layer:** implementation
 **Implements:** l1-scheduler-model.md
@@ -183,6 +183,78 @@ Webhook validation:
 3. If valid, dispatch the routine as a one-shot run with `idempotencyKey = sha256(raw_body)`.
 
 The signing key is stored in the OS keychain under the same mechanism as `l2-security.md §4.1`; it is never logged or exported. Webhook triggers share the same concurrency and catch-up policies as cron triggers.
+
+### 4.8 Event-driven task triggers
+
+In addition to time-based schedules, a task can be configured to fire when an observed metric or signal crosses a threshold. Event-driven triggers share the same dispatch path as cron triggers but replace `cronExpression` with an event definition.
+
+#### EventTrigger format
+
+```text
+[REFERENCE]
+EventTrigger {
+  trigger_type: "event",
+  event_kind: String,         // named event class, e.g. "card_status_changed"
+  event_filter: JSON?,        // optional match predicate applied to the event payload
+  trigger_count: u32,         // fire when counter reaches this threshold (default 1)
+  counter_key: String?,       // key used to accumulate count; None = each event counts as 1
+  reset_on_fire: bool,        // reset counter to 0 after firing (default true)
+  dedup_window_sec: u32,      // singleflight window: suppress duplicate fires within this period (default 0 = off)
+  dedup_cache_key: String?,   // key for the singleflight cache; defaults to (schedule_id, event_kind)
+}
+```
+
+The `trigger_count` pattern lets an event accumulate before firing. For example, a task with `trigger_count = 5` on `event_kind = "tool_call_blocked"` fires once every five consecutive blocks — useful for rate-anomaly detection without firing on every isolated incident.
+
+#### Counter increment
+
+The counter is incremented in the schedule's durable state on each matching event:
+
+```text
+[REFERENCE]
+on_event(event):
+  if not matches(event, trigger.event_filter):
+    return
+  counter = load_counter(trigger.counter_key ?? schedule_id)
+  counter += 1
+  if counter >= trigger.trigger_count:
+    maybe_fire(schedule, event)
+    if trigger.reset_on_fire:
+      counter = 0
+  store_counter(trigger.counter_key ?? schedule_id, counter)
+```
+
+Counter state is persisted in `schedules/<id>/counter.json` alongside the schedule file, using the same atomic-write protocol as auth state.
+
+#### Singleflight dedup cache
+
+When multiple events arrive simultaneously (e.g. a burst of `card_status_changed` events from a batch operation), the dedup cache prevents duplicate fires within the `dedup_window_sec` window:
+
+```text
+[REFERENCE]
+singleflight_cache: HashMap<String, Instant>
+  key = dedup_cache_key ?? "{schedule_id}:{event_kind}"
+  if cache[key] exists and elapsed < dedup_window_sec:
+    log "Event trigger suppressed (singleflight dedup)"
+    return
+  cache[key] = now()
+  dispatch(schedule)
+```
+
+The cache is in-memory, per-process. On process restart, the window resets — a short burst immediately after restart can re-fire. This is acceptable for the use case (dedup is best-effort, not idempotency).
+
+#### Interaction with routine policies
+
+Event-triggered fires reuse the same `concurrencyPolicy` and `catchUpPolicy` fields as cron-triggered fires. An event-driven task with `concurrencyPolicy = "coalesce_if_active"` will merge into an already-running instance rather than spawning a second one.
+
+#### Audit trail
+
+Every event-driven fire appends an entry to the audit log:
+
+```text
+[REFERENCE]
+{ timestamp, schedule_id, trigger_type: "event", event_kind, counter_value, outcome: "fired" | "dedup_suppressed" | "counter_incremented" }
+```
 
 ## 5. Drawbacks & Alternatives
 

@@ -1,13 +1,13 @@
 # Implementation Plan
 
-**Version:** 1.5.0
-**Generated:** 2026-06-19
+**Version:** 1.6.0
+**Generated:** 2026-06-20
 **Based on:** .design/main/INDEX.md v1.0.0
 **Status:** Active
 
 ## Overview
 
-Implementation plan for Cronus from 51 Stable specifications (19 L1 concepts + 32 L2 implementations). Phases follow a **growth order**: the agent grows like a sprout from a seed.
+Implementation plan for Cronus from 55 Stable specifications (19 L1 concepts + 36 L2 implementations). Phases follow a **growth order**: the agent grows like a sprout from a seed.
 
 - **Seed = the library** (`crates/core` + `crates/nodus` runtime) — Phases 1–2.
 - **Stem = the CLI** — Phase 3, the first usable surface, emerging straight from the seed.
@@ -50,7 +50,8 @@ Execution mode: **Parallel** (C3); tracks grouped by file independence. Critical
 - [ ] **Technology Stack** ([l2-technology-stack.md](specifications/l2-technology-stack.md)) [L2] — toolchain (Rust, Vite/React 19, Tauri v2)
 - [ ] **Filesystem Layout** ([l2-filesystem-layout.md](specifications/l2-filesystem-layout.md)) [L2] — OS-native path resolver, state bootstrap
 - [ ] **Core Library** ([l2-core-library.md](specifications/l2-core-library.md)) [L2] — engine crate, public contract, durable state
-- [ ] **Security** ([l2-security.md](specifications/l2-security.md)) [L2] — secret store, gitignore, redaction, egress gate, sandbox
+- [ ] **Security** ([l2-security.md](specifications/l2-security.md)) [L2] — secret store, gitignore, redaction, egress gate, sandbox, SSRF guard, internal tool loopback
+- [ ] **Multi-User Auth** ([l2-multi-user-auth.md](specifications/l2-multi-user-auth.md)) [L2] — bcrypt passwords, session tokens, TOTP 2FA, privilege map, admin promote/demote, reserved sentinel usernames (depends on security)
 
 ## Phase 2 — Seed II: Workflow Runtime (`crates/nodus`)
 
@@ -72,6 +73,7 @@ Execution mode: **Parallel** (C3); tracks grouped by file independence. Critical
 - [ ] **Model Router** ([l2-model-router.md](specifications/l2-model-router.md)) [L2]
 - [ ] **Model Error Recovery** ([l2-model-error-recovery.md](specifications/l2-model-error-recovery.md)) [L2] — error taxonomy, classification pipeline, credential pool (depends on model-router)
 - [ ] **Agent Session Loop** ([l2-agent-session.md](specifications/l2-agent-session.md)) [L2] — TurnContext, IterationBudget, ContextEngine interface (depends on model-router + context-router)
+- [ ] **Context Management** ([l2-context-management.md](specifications/l2-context-management.md)) [L2] — adaptive token budget, 8-step trim cascade, LLM-driven compaction, _protected messages (depends on agent-session + model-router)
 - [ ] **Context Router** ([l2-context-router.md](specifications/l2-context-router.md)) [L2]
 - [ ] **Workspace Management** ([l2-workspace-management.md](specifications/l2-workspace-management.md)) [L2]
 - [ ] **Agent Constitution** ([l2-agent-constitution.md](specifications/l2-agent-constitution.md)) [L2] — per-workspace identity files (SOUL/PROFILE/MEMORY/HEARTBEAT/BOOTSTRAP), bootstrap ritual (depends on workspace-management + memory-store)
@@ -96,6 +98,7 @@ Execution mode: **Parallel** (C3); tracks grouped by file independence. Critical
 
 - [ ] **Orchestration** ([l2-orchestration.md](specifications/l2-orchestration.md)) [L2] — delegation, /goal+judge+budget, briefings, adaptive topology
 - [ ] **Mission Mode** ([l2-mission-mode.md](specifications/l2-mission-mode.md)) [L2] — two-phase autonomous goal execution: PRD generation → user checkpoint → story-verified loop with max-iterations circuit-breaker (depends on orchestration + kanban + tool-security)
+- [ ] **Deep Research** ([l2-deep-research.md](specifications/l2-deep-research.md)) [L2] — iterative Think→Plan→Search→Extract→Synthesize engine, date-grounding, untrusted content wrapping, max_rounds circuit breaker (depends on orchestration + tool-security + context-management)
 
 ## Phase 7 — Leaf: TUI
 
@@ -119,6 +122,7 @@ Execution mode: **Parallel** (C3); tracks grouped by file independence. Critical
 - [ ] **Backup** ([l2-backup.md](specifications/l2-backup.md)) [L2]
 - [ ] **GitHub Issue Reporting** ([l2-github-issue.md](specifications/l2-github-issue.md)) [L2]
 - [ ] **Telemetry** ([l1-telemetry.md](specifications/l1-telemetry.md)) [L1] — opt-in program metrics (implementation light)
+- [ ] **Agent Migration** ([l2-agent-migration.md](specifications/l2-agent-migration.md)) [L2] — migration manifest v1, two-layer import (archives vs memory candidates), staged apply, source adapters (depends on memory-store + extension-registry + backup)
 
 ## Backlog
 
