@@ -1,6 +1,6 @@
 # Agent Constitution
 
-**Version:** 1.0.1
+**Version:** 1.0.2
 **Status:** Stable
 **Layer:** implementation
 **Implements:** l1-office-model.md, l1-memory-model.md
@@ -253,6 +253,126 @@ Does / does-NOT-do contract:
 ```
 
 The does/does-NOT-do contract is particularly valuable when the agent is running scheduled tasks autonomously — it limits the blast radius of any misfire without requiring the user to be present.
+
+### 4.10 Agent activation sequence
+
+Every agent role (analyst, architect, dev, reviewer, planner) follows the same eight-step activation sequence. This ensures consistent persona adoption, fact loading, and config resolution regardless of which role is activating.
+
+```text
+[REFERENCE]
+Activation sequence (execute in strict order):
+
+Step 1: Resolve the agent/workflow block
+  Run: resolve_customization(skill_root, key="agent"|"workflow")
+  On failure, manually merge the three customization files in base → team → user order
+  (see §4.11 for merge rules).
+
+Step 2: Execute activation_steps_prepend
+  Run each entry in {agent.activation_steps_prepend} in order.
+  These steps execute before persona adoption.
+
+Step 3: Adopt persona
+  Embody the role's core identity from the SKILL.md overview.
+  Layer the resolved customization on top:
+    - {agent.role}             → additional responsibility
+    - {agent.identity}         → how to present
+    - {agent.communication_style} → how to speak
+    - {agent.principles}       → operating constraints
+  Do not break character until the user explicitly dismisses the persona.
+
+Step 4: Load persistent_facts
+  Treat every entry in {agent.persistent_facts} as foundational session context.
+  Entries prefixed "file:" are paths/globs under project_root — load referenced contents.
+  All other entries are literal facts.
+
+Step 5: Load config
+  Load {project_root}/_bmad/bmm/config.yaml (or workspace equivalent). Resolve:
+    - {user_name}              → name for greetings
+    - {communication_language} → all responses in this language
+    - {document_output_language} → output artifacts in this language
+    - {planning_artifacts}     → output location
+    - {project_knowledge}      → additional context paths/globs
+
+Step 6: Greet the user
+  Address {user_name} by name in {communication_language}.
+  Lead the greeting with {agent.icon} — the icon prefix identifies the active persona
+  throughout the session. Continue prefixing every response with {agent.icon}.
+
+Step 7: Execute activation_steps_append
+  Run each entry in {agent.activation_steps_append} in order.
+  Confirm every prepend and append entry executed before continuing.
+
+Step 8: Dispatch or present menu
+  If the user's opening message clearly maps to a menu item, skip the menu and
+  dispatch directly. Otherwise render {agent.menu} as a numbered table:
+    Code | Description | Action
+  Wait for user input. Accept a number, a menu code, or a fuzzy match.
+  Clarify only when two or more items are genuinely close — one question, not a ritual.
+```
+
+The icon prefix convention is binding for the full session: every response the agent sends opens with `{agent.icon} **{agent.name}:**` so the active persona is unambiguous in multi-agent conversations.
+
+### 4.11 Customization resolution (three-file merge)
+
+Agent and workflow behavior is controlled by a three-layer configuration merge. Each layer narrows or extends the layer below it; user preferences always win over team defaults, which always win over skill defaults.
+
+```text
+[REFERENCE]
+Merge order (base → team → user):
+
+  1. {skill_root}/customize.toml          — skill defaults (authored by skill developer)
+  2. {project_root}/_config/custom/{skill_name}.toml  — team overrides (checked into repo)
+  3. {project_root}/_config/custom/{skill_name}.user.toml  — personal overrides (gitignored)
+
+Merge rules:
+  - Scalars:   later file wins (override)
+  - Tables:    deep-merge (later file adds/overrides keys; other keys preserved)
+  - Arrays keyed by "code" or "id":
+      matching entry → replace in place
+      new entry      → append
+  - All other arrays: append
+```
+
+A missing file is silently skipped. The merge produces one resolved config block that the agent reads as a single object.
+
+#### Four-layer system config resolver
+
+When resolving the full agent registry (all agents/skills in a workspace), the resolver applies a four-layer merge instead of three, separating installer-base from team-wide overrides:
+
+```text
+[REFERENCE]
+  Layer 1: _config/config.toml          — installer base, team-scoped defaults
+  Layer 2: _config/config.user.toml     — installer base, user-scoped defaults
+  Layer 3: _config/custom/config.toml   — team overrides (post-install, checked in)
+  Layer 4: _config/custom/config.user.toml — personal overrides (post-install, gitignored)
+
+Agent entries are keyed by agent "code":
+  { code, name, title, icon, description, module, team }
+```
+
+The four-layer structure allows team leads to distribute a baseline in layers 1–2 while allowing project-specific tuning in layer 3 and individual preferences in layer 4 — all without merge conflicts.
+
+### 4.12 Project context document
+
+The project context document (`project-context.md`) is an AI-rules document that lives at the project root. It records **unobvious implementation details** that an LLM cannot infer from reading the code — things that would surprise a capable developer on first contact with the codebase.
+
+```text
+[REFERENCE]
+project-context.md purpose:
+  - Critical patterns that deviate from language/framework defaults
+  - Hidden invariants (non-obvious ordering, initialization constraints)
+  - Active technical debt that affects adjacent development
+  - Tribal knowledge: decisions that look wrong but are intentional
+  - Anti-patterns to avoid (with a one-line reason)
+  - Environment and toolchain quirks specific to this project
+
+project-context.md is NOT for:
+  - Standard library/framework documentation
+  - Things evident from reading the code
+  - Outdated decisions that have been reversed
+```
+
+The project context document is loaded as persistent_facts by all agents at activation time. It is authored collaboratively and updated whenever a non-obvious fact surfaces during development. Each entry should be self-explanatory without reading the referenced code.
 
 ## 5. Drawbacks & Alternatives
 

@@ -1,6 +1,6 @@
 # Quality Pipeline
 
-**Version:** 1.1.2
+**Version:** 1.1.3
 **Status:** Stable
 **Layer:** implementation
 **Implements:** l1-quality-standards.md
@@ -349,6 +349,95 @@ Result location schema:
 
 The skill scanner (`l2-tool-security.md §4.13`) uses the same SARIF schema for
 skill-level findings, so both streams can be merged in a single CI SARIF upload.
+```
+
+### 4.10 Capability contract (spec kernel)
+
+Every feature or capability added to Cronus (or to a user project managed by Cronus) is described in a five-field spec kernel. The kernel is the minimal, complete statement of intent; implementation details live in the architecture spine and code, not here.
+
+```text
+[REFERENCE]
+Spec kernel fields (required in order):
+
+Why:
+  The force behind this work — pain, opportunity, vision mandate, or obligation.
+  One concise paragraph. Answers "why build this at all?"
+
+Capabilities:
+  One or more capability entries in CAP-N format (see below).
+
+Constraints:
+  Non-negotiables that bend the design before any implementation choice is made.
+  Each constraint is a fact the implementation must accept, not a preference.
+
+Non-goals:
+  At least one entry required. Explicit out-of-scope signals to prevent scope creep
+  and preserve the spec's clarity. "Not a goal" is as important as what is a goal.
+
+Success signal:
+  A concrete, observable world-change moment. Not a metric dashboard —
+  the specific event that, when it occurs, unambiguously confirms the work delivered value.
+```
+
+#### CAP-N capability format
+
+Each capability entry carries three sub-fields:
+
+```text
+[REFERENCE]
+CAP-{N}: {capability name}
+  Intent:  WHAT this capability does — not HOW (no implementation).
+           Written as a verb phrase from the user's perspective.
+  Success: A testable criterion. Must be verifiable without reading code;
+           written as "Given … When … Then …" or an equivalent observable outcome.
+```
+
+Capabilities are numbered monotonically (CAP-1, CAP-2, …). Numbers are stable — once assigned, a CAP-N id is never reused or renumbered. If a capability is removed, its id is retired with a "Removed: reason" note.
+
+### 4.11 Adversarial review protocol
+
+The adversarial review protocol runs as an independent quality gate on any artifact (spec, architecture spine, diff, user story, plan document). Its role is to surface problems the primary author is too close to see — missing requirements, hidden assumptions, untestable success criteria, scope ambiguities.
+
+#### Single-reviewer (general)
+
+The reviewer adopts a cynical, skeptical posture: it assumes problems exist and looks for what is missing, not just what is wrong.
+
+```text
+[REFERENCE]
+Adversarial review procedure:
+  1. Receive the artifact. Identify its type (spec, diff, plan, story, etc.).
+  2. Review with extreme skepticism. Find at least 10 issues — missing items count.
+  3. Present findings as a Markdown list with one-line descriptions.
+  4. HALT if zero findings are produced — zero is a signal of insufficient analysis,
+     not a signal of a perfect artifact. Re-analyze or escalate.
+```
+
+The 10-finding floor is a discipline check, not a target. On a high-quality artifact, 10 findings may be minor or low-confidence — that is expected and acceptable. The floor prevents premature sign-off.
+
+#### Parallel multi-lane review
+
+For high-stakes artifacts (architecture spines, security-sensitive plans, major spec revisions), dispatch three independent reviewers in parallel, each assigned a distinct analysis lens. Each reviewer writes a full finding report to a file and returns only a compact summary to the parent:
+
+```text
+[REFERENCE]
+Review lanes (run in parallel):
+
+Lane 1 — Blind Hunter:
+  Review the artifact as if seeing it for the first time with no context.
+  Find structural gaps, undefined terms, missing preconditions.
+
+Lane 2 — Edge Case Hunter:
+  Focus on boundary conditions, failure modes, and off-happy-path scenarios.
+  What happens when assumptions are violated?
+
+Lane 3 — Acceptance Auditor:
+  Evaluate whether the stated success criteria are actually testable.
+  Flag criteria that require reading source code, subjective judgment, or future knowledge to verify.
+
+Parent assembly:
+  - Surface critical + high findings first, one per line.
+  - Roll up medium + low findings as "N medium / M low findings — see <file>".
+  - Require an explicit acknowledgment or mitigation before proceeding.
 ```
 
 ## 5. Drawbacks & Alternatives

@@ -1,6 +1,6 @@
 # Orchestration
 
-**Version:** 1.0.3
+**Version:** 1.0.4
 **Status:** Stable
 **Layer:** implementation
 **Implements:** l1-orchestration.md
@@ -406,6 +406,90 @@ withFileMutationQueue(filePath, fn):
 The queue is process-global (shared across all concurrent tool invocations) and uses
 path canonicalization to treat symlinks to the same file as the same key. Operations
 targeting different files are never blocked by each other.
+
+### 4.11 Architecture spine format
+
+An architecture spine is an **invariants-only consistency contract** — the smallest set of decisions a future builder cannot read off compliant code. It does not describe the implementation; it binds what the implementation must not violate. Everything not in the spine is intentionally deferred.
+
+#### Altitude hierarchy
+
+Spines are authored at three altitudes, each scoping which level of detail they bind:
+
+| Altitude | Governs | Inherits |
+| --- | --- | --- |
+| `initiative` | Cross-feature constraints; keeps feature-level decisions in scope | — |
+| `feature` | Cross-epic constraints; keeps epic-level decisions in scope | initiative |
+| `epic` | Story-level constraints | feature, initiative |
+
+An epic-altitude spine is typically thin: mostly "Inherited Invariants" from its parent feature spine plus a small local Deferred section.
+
+#### AD-n invariant format
+
+Each decision carries three mandatory fields and optional tags:
+
+```text
+[REFERENCE]
+### AD-{n} — {decision title}
+
+- **Binds:** {capability IDs, unit IDs, areas, or "all"}
+- **Prevents:** {the divergence this decision stops}
+- **Rule:** {the enforceable constraint downstream must follow}
+```
+
+- IDs are stable and ascending; once assigned they are **never reused or renumbered** (a future builder may reference them in commit messages or issue bodies).
+- Tag `[ADOPTED]` when the decision records existing reality rather than a new choice. Adopted decisions require no approval; they document what is already true.
+- A decision that contradicts an inherited AD is a conflict to surface explicitly — not a silent override.
+
+#### Inherited invariants table
+
+When a spine inherits from a higher-altitude parent, it carries the parent's ADs/conventions/paradigm as read-only inherited invariants:
+
+```text
+[REFERENCE]
+| Inherited | From parent | Binds here |
+| {AD-id / convention} | {parent spine name} | {what it constrains in this scope} |
+```
+
+These entries are never renumbered or re-derived. A local decision that contradicts one must surface the conflict rather than overriding silently.
+
+#### Deferred section
+
+The Deferred section is the other half of the spine contract — it makes explicit what the spine intentionally does not decide and why:
+
+```text
+[REFERENCE]
+## Deferred
+
+- {decision}: {why it can wait or which altitude should own it}
+```
+
+A small Deferred section signals a lean, focused spine. Decisions with open questions belong in Deferred until enough information exists to make them ADs.
+
+#### Consistency conventions table
+
+Spines carry a `Consistency Conventions` table for concerns where independent builders would otherwise drift:
+
+```text
+[REFERENCE]
+| Concern | Convention |
+| Naming (entities, files, interfaces, events) | |
+| Data & formats (ids, dates, error shapes, envelopes) | |
+| State & cross-cutting (mutation, errors, logging, config, auth) | |
+```
+
+Only rows that bind are included; empty rows are omitted.
+
+#### Spine purpose variants
+
+```text
+[REFERENCE]
+purpose: build-substrate   // default: drives a real implementation (most spines)
+purpose: discussion        // exploration spine; not yet binding
+purpose: report            // post-hoc architecture review artifact
+purpose: deck              // presentation spine; not binding
+```
+
+Only `build-substrate` spines create real implementation obligations. Other purposes are informational artifacts that may later be promoted.
 
 ## 5. Drawbacks & Alternatives
 

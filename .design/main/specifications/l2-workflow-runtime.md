@@ -1,6 +1,6 @@
 # Workflow Runtime
 
-**Version:** 1.2.0
+**Version:** 1.2.1
 **Status:** Stable
 **Layer:** implementation
 **Implements:** l1-workflow-language.md
@@ -112,6 +112,95 @@ Schema and grammar are **data, not code**: the vocabulary schema and the formal 
 5. full command set + control flow (`?if`/`?switch`/`~retry`/`~map`/`!halt`/`!pause`).
 
 **Parity testing:** the reference implementation's sample workflows + lint cases form a golden corpus; the Rust crate must produce equivalent validation verdicts, execution results, and transpilation output. <!-- TBD: extract the reference test corpus into shared fixtures -->
+
+### 4.6 Step-file architecture for disciplined workflow execution
+
+Long multi-phase workflows are decomposed into step files — small, self-contained instruction documents, one per execution step. This architecture prevents context overflow, enforces sequential discipline, and keeps the executing agent focused on one unit of work at a time.
+
+#### JIT (just-in-time) loading
+
+Only the current step file is loaded into the agent's context at any moment. The full workflow is not pre-loaded:
+
+```text
+[REFERENCE]
+JIT loading rules:
+  - Load step N only when the agent is ready to begin step N.
+  - Unload (or deprioritize) step N-1 once step N begins.
+  - Never load step N+1 while step N is in progress.
+  - This keeps context token cost proportional to one step, not the whole workflow.
+```
+
+Loading the entire workflow upfront risks context saturation on long workflows and tempts the agent to "skip ahead" to later steps — both are failure modes this pattern prevents.
+
+#### Sequential enforcement
+
+Steps are executed in strict declared order. No skipping is allowed, even when a step appears to be a no-op for the current situation:
+
+```text
+[REFERENCE]
+Sequential enforcement rules:
+  - The agent must complete (or explicitly mark as skipped with a reason) each step
+    before loading the next.
+  - A step cannot be deferred — if it cannot be completed, the workflow HALTs.
+  - Workflow order is the author's intent; unilateral reordering is an error.
+```
+
+The rationale: steps often have side effects or populate context that later steps depend on implicitly. Skipping breaks the append-only chain.
+
+#### State tracking in frontmatter
+
+Workflow state (which steps have completed) is tracked in a YAML frontmatter header on the primary output document, not in conversation history:
+
+```text
+[REFERENCE]
+Frontmatter state block (on the workflow's primary output document):
+
+---
+stepsCompleted:
+  - step-01-init
+  - step-02-domain-analysis
+currentStep: step-03-competitive-landscape
+status: in-progress   # draft | in-progress | complete
+---
+```
+
+The frontmatter is the authoritative state source. On resume (session restart, context compaction), the agent reads the frontmatter to determine where to continue — conversation history is not reliable for this purpose.
+
+#### Append-only document building
+
+Workflow output documents are built incrementally. Each step appends its section to the document; earlier sections are never overwritten:
+
+```text
+[REFERENCE]
+Append-only rules:
+  - Each step writes exactly the section(s) it owns.
+  - Completed sections are read-only; the agent never edits them in a later step.
+  - The final document is the accumulation of all appended sections.
+  - [ASSUMPTION] tags mark content the agent generated without explicit input —
+    flagged for user review, not silently removed.
+```
+
+This rule makes partial output recoverable: if the workflow is interrupted mid-run, completed sections are already written and correct.
+
+#### HALT at menus and decision points
+
+When a step requires a choice the agent cannot make unilaterally, execution halts and the agent surfaces the decision to the user:
+
+```text
+[REFERENCE]
+HALT conditions:
+  - User choice required: multiple valid paths exist and the choice is not deterministic.
+  - Ambiguous input: a required input is missing or contradictory.
+  - External dependency not met: a prerequisite artifact does not exist yet.
+  - Constraint conflict: the work would violate a declared constraint.
+
+At a HALT point:
+  - The agent states the specific decision or information needed.
+  - The agent offers options if there are a small fixed set (≤4 recommended choices).
+  - The agent does NOT improvise past the HALT — it waits for the user to respond.
+```
+
+A HALT is not a failure — it is the workflow correctly recognizing that the next step needs human intent. The agent should be specific about what it needs, not ask an open-ended question.
 
 ## 5. Drawbacks & Alternatives
 

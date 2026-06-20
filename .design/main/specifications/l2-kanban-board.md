@@ -1,6 +1,6 @@
 # Kanban Board
 
-**Version:** 1.0.2
+**Version:** 1.0.3
 **Status:** Stable
 **Layer:** implementation
 **Implements:** l1-kanban-model.md
@@ -211,6 +211,87 @@ KanbanComment {
 ```
 
 Both logs are stored alongside the card and move with it on archival (`archive/events/`, `archive/comments/`).
+
+### 4.8 Sprint tracking status file
+
+When a workspace is organized around sprint/epic/story planning, the board state is supplemented by a machine-readable sprint status file. This file is the single source of truth for story and epic completion status; the kanban board reflects running execution, while the sprint status file reflects planning and delivery state.
+
+#### File structure
+
+```text
+[REFERENCE]
+sprint-status.yaml (stored at {planning_artifacts}/sprint-status.yaml):
+
+generated:    {ISO date}
+last_updated: {ISO date}
+project:      {project name}
+project_key:  {short identifier}
+tracking_system: file-system
+story_location:  {path to story files}
+
+development_status:
+  {epic-key}: {epic_status}
+  {story-key}: {story_status}
+  ...
+  {epic-key}-retrospective: optional | done
+
+action_items:
+  - epic:   {epic number}
+    action: {committed improvement from retrospective}
+    owner:  {role or name}
+    status: open | in-progress | done
+```
+
+#### Story key format
+
+Stories are named using a two-segment hierarchical key:
+
+```text
+[REFERENCE]
+Story key format:  {epic-number}-{story-number}-{slug}
+Examples:
+  1-1-user-authentication
+  1-2-account-management
+  2-3-llm-integration
+
+Epic key format:   epic-{epic-number}
+  e.g. epic-1, epic-2
+```
+
+The slug is a lowercase-hyphenated summary of the story. Key segments are stable once assigned; renaming the slug requires updating all references.
+
+#### Status values
+
+**Epic status:**
+
+| Value | Meaning |
+| --- | --- |
+| `backlog` | Epic not yet started |
+| `in-progress` | At least one story is in-progress or done |
+| `done` | All stories in the epic are completed |
+
+**Story status:**
+
+| Value | Meaning |
+| --- | --- |
+| `backlog` | Story exists only in the epic file; no story file created yet |
+| `ready-for-dev` | Story file created, all ACs defined; waiting for implementation |
+| `in-progress` | Developer actively working on implementation |
+| `review` | Implementation complete; ready for code review |
+| `done` | Story fully completed and reviewed |
+
+**Retrospective status:**
+
+| Value | Meaning |
+| --- | --- |
+| `optional` | Retrospective can be run but is not required |
+| `done` | Retrospective has been completed |
+
+#### Sequential story creation discipline
+
+Stories within an epic are created **one at a time**, sequentially. A developer creates the next story file only after the previous story reaches `done` — this allows each story's implementation to inform the next story's AC definition, incorporating real discoveries rather than planning assumptions.
+
+The code review step is a distinct phase: when a story reaches `review`, the review is performed in a fresh context (ideally by a different model or agent instance) to avoid the implementation bias of the author.
 
 ## 5. Drawbacks & Alternatives
 
