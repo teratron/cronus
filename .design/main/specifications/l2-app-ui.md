@@ -1,6 +1,6 @@
 # Application UI/UX Frontend (Desktop / Web / Mobile)
 
-**Version:** 1.2.0
+**Version:** 1.2.1
 **Status:** Stable
 **Layer:** implementation
 **Implements:** l1-architecture.md
@@ -295,6 +295,131 @@ Persisted (written to settings, survive restart):
 #### Shared trigger entry point
 
 All external triggers — shortcut handler, Unix signal handlers, and CLI remote-control arguments — funnel through a single dispatch function to the application state coordinator. This eliminates duplicated state logic and ensures consistent behavior regardless of trigger source.
+
+### 4.12 Per-provider system prompt dispatch
+
+Different model providers interpret instruction format and tone differently. The system
+prompt builder dispatches a provider-specific variant based on the resolved provider ID
+rather than a single universal text:
+
+```text
+[REFERENCE]
+build_system_prompt(provider_id: ProviderId, model_id: ModelId) -> String:
+  match provider_id:
+    "anthropic"               -> anthropic_prompt(model_id)
+    "openai" where is_o_series(model_id)  -> o_series_prompt()
+    "openai" where is_codex(model_id)     -> codex_prompt()
+    "openai"                  -> gpt_prompt()
+    "google"                  -> gemini_prompt()
+    "openrouter" where is_kimi(model_id)  -> kimi_prompt()
+    _                         -> default_prompt()
+```
+
+Each variant encodes provider-specific quirks (token budget, persona framing, XML vs
+plain-text delimiters, tool-calling guidance). The variants live in separate prompt
+modules; the dispatch function is the single decision point. Model IDs within a provider
+family may further branch (e.g., reasoning-heavy `o*` models vs standard `gpt-*`).
+
+### 4.13 XML structured environment context
+
+The environment block injected into the agent's system prompt at session start uses an
+XML envelope rather than prose. This provides stable machine-parseable landmarks that the
+model can reference across providers:
+
+```text
+[REFERENCE]
+<env>
+  <working_directory>/path/to/project</working_directory>
+  <worktree>/path/to/worktree-if-different</worktree>
+  <git_status>
+    <branch>main</branch>
+    <clean>true</clean>
+  </git_status>
+  <platform>macOS 14.2 / darwin x64</platform>
+  <date>2026-06-20T09:30:00Z</date>
+  <model>
+    <id>claude-sonnet-4-6</id>
+    <provider>anthropic</provider>
+  </model>
+</env>
+
+<available_references>
+  <reference>
+    <name>project-root</name>
+    <path>/path/to/project</path>
+    <description>Primary workspace</description>
+  </reference>
+  <!-- one <reference> per active reference directory -->
+</available_references>
+```
+
+The `<env>` block is emitted once at session start and kept stable for all turns (KV-cache
+stability — see `l2-agent-session.md §4.6`). Git status is captured at session start; it
+is not updated mid-session.
+
+### 4.14 MCP client connection and status
+
+The MCP client layer connects to each configured server via one of three transports and
+tracks connection state per server.
+
+#### Transport variants
+
+```text
+[REFERENCE]
+StdioTransport:    subprocess communicates via stdin/stdout
+                   → for local executables; lowest latency, no auth needed
+SSETransport:      hosted endpoint using Server-Sent Events with OAuth
+                   → for remote servers that use the OAuth-protected SSE variant
+StreamableHTTP:    hosted endpoint using streamable HTTP (MCP HTTP+SSE spec)
+                   → modern remote servers; stateless HTTP request + SSE response stream
+```
+
+DEFAULT_TIMEOUT = 30_000 ms applies to all remote transports; local stdio has no timeout.
+
+#### Client capabilities declared at connect
+
+```text
+[REFERENCE]
+CLIENT_OPTIONS.capabilities = {
+  roots: {}           // client exposes a roots list (workspace directories)
+  // explicitly NOT declared (pending standardization):
+  // sampling: {}     // server-initiated LLM calls
+  // elicitation: {}  // server-initiated user prompts
+  // tasks: {}        // long-running task management
+}
+
+The client always responds to ListRootsRequest with the current worktree directory:
+  roots: [{ uri: file:///path/to/worktree }]
+```
+
+#### Connection status states
+
+```text
+[REFERENCE]
+MCPStatus:
+  "connected"                — tools available; client is live
+  "disabled"                 — server is configured but disabled by the user
+  "failed" { error: String } — connection attempt errored; error message shown in UI
+  "needs_auth"               — OAuth flow required; browser open has been attempted
+  "needs_client_registration" { error: String }
+                             — OAuth server requires dynamic client registration
+                               before the auth flow can proceed
+
+The status for each configured server is exposed via the diagnostics endpoint and the
+_cronus/workspace/mcp ACP method (see l2-agent-session.md §4.10).
+```
+
+#### OAuth flow
+
+For servers that require OAuth (`SSETransport`, `StreamableHTTP`):
+
+1. The client starts the authorization flow and captures the pending transport in
+   `pending_oauth_transports: Map<server_name, Transport>`.
+2. A browser window opens to the authorization URL.
+3. The OAuth callback (local HTTP server on a fixed callback path) completes the flow
+   and resumes the pending transport.
+4. On success: status → `"connected"`; transport removed from pending map.
+5. On failure: status → `"needs_auth"` (retryable) or `"needs_client_registration"`.
 
 ## 5. Drawbacks & Alternatives
 

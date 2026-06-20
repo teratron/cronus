@@ -1,6 +1,6 @@
 # Context Management
 
-**Version:** 1.0.1
+**Version:** 1.0.2
 **Status:** Stable
 **Layer:** implementation
 **Implements:** l1-orchestration.md
@@ -240,6 +240,66 @@ api.registerContextEngine(id: String, factory: ContextEngineFactory)
 ```
 
 Registration is once-per-process (idempotent init guard). The built-in `"legacy"` engine is always the fallback; it cannot be unregistered.
+
+### 4.7 Tool-output compaction constants
+
+When the compaction engine rebuilds a message list, tool outputs are the single largest
+consumer of context tokens. The following constants govern tool-output handling during
+compaction and the size of the preserved recent-message tail.
+
+```text
+[REFERENCE]
+PRUNE_MINIMUM         = 20_000   // minimum token count before compaction is considered
+PRUNE_PROTECT         = 40_000   // tokens kept as the hard-protected recent-turn floor
+TOOL_OUTPUT_MAX_CHARS =  2_000   // max characters per tool output in the compacted list
+
+PRUNE_PROTECTED_TOOLS = ["skill"]
+// Tool outputs from listed tools are NEVER truncated during compaction.
+// Skill outputs provide structural agent instructions — truncating them silently
+// breaks the agent's operating model for the remainder of the session.
+
+MIN_PRESERVE_RECENT_TOKENS = 2_000
+MAX_PRESERVE_RECENT_TOKENS = 8_000
+preserveRecentBudget = min(MAX_PRESERVE_RECENT_TOKENS,
+                           max(MIN_PRESERVE_RECENT_TOKENS,
+                               floor(usable_tokens * 0.25)))
+// 25 % of the usable window, clamped to [2 000, 8 000].
+// Large-context models preserve recent turns without spending half the window on them.
+```
+
+#### Tool-output truncation format
+
+When a tool output exceeds `TOOL_OUTPUT_MAX_CHARS`, it is truncated with a standard
+annotation so the agent knows exactly how much was omitted and can request the full
+content via a re-read tool call if needed:
+
+```text
+[REFERENCE]
+truncateToolOutput(text, maxChars = TOOL_OUTPUT_MAX_CHARS):
+  if text.length <= maxChars:
+    return text
+  omitted = text.length - maxChars
+  return text[:maxChars] + "\n[Tool output truncated for compaction: omitted "
+         + omitted + " chars]"
+```
+
+Tools listed in `PRUNE_PROTECTED_TOOLS` bypass this function entirely.
+
+#### Compaction pass algorithm (turn-aware)
+
+1. **Completed compactions:** scan the message list for messages flagged `summary: true`
+   with no error marker — these are previously committed summary messages. They are
+   included in the preserved tail verbatim.
+2. **Turn partitioning:** partition the remaining messages into turns at each user-message
+   boundary that carries no compaction marker (`turns()`).
+3. **Recent tail selection:** binary-search the turn list from the tail inward
+   (`splitTurn()`) to find the minimum tail slice that fits within `preserveRecentBudget`.
+   Preserve that slice intact.
+4. **Older portion compaction:** for each message in the older portion, truncate tool
+   outputs to `TOOL_OUTPUT_MAX_CHARS` (skip protected tools), then feed the result to the
+   compaction LLM call (§4.3).
+5. **Reassembly:** the compaction summary replaces the older portion; the recent tail is
+   appended unchanged to produce the final message list.
 
 ## 5. Drawbacks & Alternatives
 

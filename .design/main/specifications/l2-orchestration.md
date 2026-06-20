@@ -1,6 +1,6 @@
 # Orchestration
 
-**Version:** 1.0.1
+**Version:** 1.0.2
 **Status:** Stable
 **Layer:** implementation
 **Implements:** l1-orchestration.md
@@ -152,6 +152,111 @@ rank_tools(task_description: &str, tools: &[ToolDefinition], top_n: u32) -> Vec<
 - **Ranking is CPU-only** (no LLM call): verb detection extracts the leading verb from the task description and checks if it appears in the tool name; token overlap counts shared unigrams between the task description and the tool's one-line description.
 - Ranked tools are placed first in the tool list sent to the provider; remaining tools are omitted.
 - Action ranking runs only when the catalog exceeds the threshold; smaller catalogs are sent in full.
+
+### 4.7 Permission ruleset evaluation
+
+Tool calls and agent actions that require user approval go through a ruleset evaluator.
+Rulesets are ordered lists of rules; **the last matching rule wins** (not the first).
+This allows coarse-grained allow/deny earlier in the list to be overridden by fine-grained
+rules appended by the current context.
+
+```text
+[REFERENCE]
+PermissionRule {
+  permission: Pattern,   // e.g. "fs:write:*"
+  pattern:    Pattern,   // e.g. "/home/**"
+  action:     "allow" | "deny" | "ask"
+}
+
+evaluate(permission: String, path: String, rulesets: Vec<Ruleset>) -> PermissionResult:
+  // merge rulesets in order; then findLast matching rule
+  merged = concat(rulesets)
+  rule = merged.findLast(|r|
+    Wildcard.match(permission, r.permission) AND Wildcard.match(path, r.pattern)
+  )
+  return rule?.action ?? "ask"   // default: ask the user
+
+// "ask" triggers an async approval cycle:
+PendingApproval {
+  id:       PermissionId,
+  info:     ApprovalRequest,
+  deferred: Deferred<void, RejectedError | CorrectedError>,
+}
+```
+
+#### Deferred async approval
+
+When `evaluate()` returns `"ask"`, a `Deferred` is created and the pending approval is
+registered. The agent suspends at the approval point; execution resumes when the user
+responds.
+
+```text
+[REFERENCE]
+request_approval(request: ApprovalRequest) -> Effect<void, RejectedError>:
+  deferred = Deferred.make()
+  pending_approvals.insert(request.id, { info: request, deferred })
+  yield* deferred.await()   // agent suspends here
+
+approve(id: PermissionId):
+  pending_approvals.remove(id)?.deferred.resolve(())
+
+reject(id: PermissionId):
+  pending_approvals.remove(id)?.deferred.reject(RejectedError)
+```
+
+#### Scope-based finalizer cleanup
+
+All pending approvals are registered in a scoped context. When the scope closes (session
+end, agent cancellation, turn abort), the finalizer rejects every unresolved Deferred:
+
+```text
+[REFERENCE]
+scope.finalizer:
+  for (id, entry) in pending_approvals.drain():
+    entry.deferred.reject(RejectedError { reason: "scope_closed" })
+```
+
+This prevents the agent from being permanently suspended waiting for an approval that
+will never arrive (e.g., after a client disconnects).
+
+### 4.8 Agent mode and on-demand generation
+
+#### Agent mode
+
+Every agent definition carries a `mode` that determines which messages it receives in a
+multi-agent session:
+
+```text
+[REFERENCE]
+AgentMode: "subagent" | "primary" | "all"
+
+"primary"  — receives the conversation from the user's perspective;
+             owns the session lifecycle; default for interactive agents.
+"subagent" — receives only the delegation request from its parent;
+             returns a structured result; never sees the full user history.
+"all"      — receives every message regardless of source; used for monitor/observer
+             roles that need full visibility (e.g., duplicate-PR detectors, audit agents).
+```
+
+`mode` is declared in the agent definition frontmatter (see `l2-extension-registry.md §4.10`).
+The orchestrator uses it when routing a delegation to select the correct message slice.
+
+#### On-demand agent generation
+
+When the orchestrator needs an agent for a task that has no pre-defined definition, it can
+generate one on demand from a description:
+
+```text
+[REFERENCE]
+generate_agent(description: String, model?: ModelRef) -> AgentDefinition:
+  // Issues a structured LLM call with the description as input.
+  // Returns a validated AgentDefinition (name, mode, tool access, system prompt).
+  // The generated definition is ephemeral — not persisted to the registry unless
+  // the user explicitly saves it via `cronus ext add --from-generated <id>`.
+```
+
+Generated agents receive a `source: "generated"` tag; the quality pipeline scans them
+before the orchestrator uses them for the first time.
 
 ## 5. Drawbacks & Alternatives
 

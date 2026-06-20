@@ -1,6 +1,6 @@
 # Agent Session Loop
 
-**Version:** 1.0.4
+**Version:** 1.0.5
 **Status:** Stable
 **Layer:** implementation
 **Implements:** l1-orchestration.md, l1-routing.md
@@ -603,6 +603,80 @@ Constants:
 An agent consuming too many tokens on structural lookups gets a narrower surface that
 preserves budget for high-value calls. The switch is transparent (tools simply disappear
 from `tools/list`); no notification is sent.
+
+### 4.12 Durable prompt admission
+
+A session that writes only to in-memory state before invoking the model loses work on
+crash or restart. The durable prompt admission pattern separates two explicit steps:
+
+1. **Admit**: persist the incoming prompt (user text + metadata) to the durable store
+   as a `session_input` row **before** scheduling model execution.
+2. **Execute**: schedule the model execution task; on crash, the pending row is visible
+   to the startup recovery pass and the task is re-queued automatically.
+
+```text
+[REFERENCE]
+admit_prompt(input: UserInput) -> SessionInput:
+  db.insert(session_input).values({
+    session_id: ..., content: input.text, metadata: ..., status: "pending"
+  })
+  schedule(SessionExecution.wake(session_id))
+
+startup_recovery():
+  for row in db.select(session_input).where(status: "pending"):
+    schedule(SessionExecution.wake(row.session_id))
+```
+
+Status lifecycle: `"pending"` → `"processing"` (execution task picks it up) →
+`"done"` (model response committed to history).
+
+**One model call per turn**: exactly one `llm.stream(request)` call is issued per
+provider turn. No implicit retry loops that would duplicate the `"processing"` write.
+If the model call fails, the row remains `"processing"` and the recovery path handles
+it on the next startup (for crashes) or the error-recovery path handles it within the
+session (for provider errors — see `l2-model-error-recovery.md`).
+
+### 4.13 Per-session runner lifecycle
+
+Each active session has at most one `Runner` — a scoped execution context that owns
+the in-flight model call, background jobs, and the interrupt signal for that session.
+Runners are stored in a process-level map keyed by session ID.
+
+```text
+[REFERENCE]
+RunnerMap: Map<SessionId, Runner>
+
+Runner {
+  on_idle:      () -> void   // turn complete: delete from RunnerMap; set status "idle"
+  on_busy:      () -> void   // turn started: set session status "busy"
+  on_interrupt: () -> void   // interrupt fence fired (user cancel)
+
+  ensure_running()           // create and insert runner if absent
+  start_shell()              // start the interactive shell subprocess in this runner's scope
+  cancel()                   // cancel background jobs + interrupt the runner
+  assert_not_busy()          // returns BusyError if a runner is already active
+}
+```
+
+`assert_not_busy()` is called before accepting a new prompt: two concurrent prompts for
+the same session would corrupt the message history. `BusyError` is surfaced to the caller
+(CLI/TUI/ACP) without aborting the in-flight turn.
+
+#### Orphaned tool-use cleanup
+
+When a turn is cancelled mid-execution, tool-call blocks that were opened but never
+completed are marked abandoned:
+
+```text
+[REFERENCE]
+abandoned tool_use block:
+  state.status   = "error"
+  state.metadata = { interrupted: true }
+```
+
+The prologue's sanitization pass (§4.4 step 2) detects abandoned blocks and skips them
+rather than treating them as pending work, preventing a spurious assistant-prefill request
+that would try to complete a cancelled operation.
 
 ## 5. Drawbacks & Alternatives
 

@@ -1,6 +1,6 @@
 # Extension Registry
 
-**Version:** 1.0.7
+**Version:** 1.0.8
 **Status:** Stable
 **Layer:** implementation
 **Implements:** l1-extensions.md
@@ -377,12 +377,23 @@ agents/<name>.md frontmatter:
     //  <commentary>why this agent fires</commentary>
     //  </example>"
     // Be specific about when NOT to use the agent.
+  mode:        "primary" | "subagent" | "all"   // default: "subagent"
+    // "primary"  — owns the session; receives user-facing messages
+    // "subagent" — receives only its delegation request; returns a structured result
+    // "all"      — receives every message; used for observer/monitor roles
+  hidden:      bool     // default: false; when true, agent is not shown in /help or picker UIs
+                        //   use for background agents that are invoked programmatically only
   model:       inherit | sonnet | opus | haiku   // default: inherit
-  color:       blue | cyan | green | yellow | magenta | red
-  tools?:      String[]   // restrict to minimum required tools;
-                          //   omit = all tools available
-                          //   read-only:       ["Read","Grep","Glob"]
-                          //   code generation: ["Read","Write","Grep"]
+  color:       blue | cyan | green | yellow | magenta | red | "<hex>"
+    // Named colors map to the theme palette; hex strings (e.g. "#E67E22") are also accepted
+  tools?:      Record<String, bool>   // tool-level allow/deny map; default: all tools enabled
+    // To deny all and allow specific tools:
+    //   tools: { "*": false, "github-search": true, "read": true }
+    // To allow all and deny specific tools:
+    //   tools: { "shell": false }
+    // Explicit Boolean false entries shadow the wildcard; explicit true entries re-enable.
+    // The old String[] form (["Read","Grep","Glob"]) is still accepted for backward
+    // compatibility and is treated as { "*": false, "Read": true, "Grep": true, "Glob": true }.
 ```
 
 System prompt conventions (body text):
@@ -401,6 +412,13 @@ commands/<name>.md YAML frontmatter:
   description?:               String   // shown in /help; ≤ 60 chars
   allowed-tools?:             Array    // e.g. ["Read", "Bash(git:*)"]
   model?:                     inherit | sonnet | opus | haiku
+                                       // or a fully-qualified provider/model string:
+                                       //   "<provider>/<model-id>" e.g. "openai/gpt-4.1"
+                                       // Provider-qualified IDs are resolved via the
+                                       // provider registry and fall back to inherit on error.
+  subtask?:                   bool     // default: false; when true, the command runs as a
+                                       // sub-session that returns to the caller on completion
+                                       // (suitable for short-lived, focused commands)
   argument-hint?:             String   // e.g. "[pr-number] [priority]"
   disable-model-invocation?:  bool     // default: false
 

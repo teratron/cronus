@@ -1,6 +1,6 @@
 # Core Library (Foundation)
 
-**Version:** 1.1.0
+**Version:** 1.1.1
 **Status:** Stable
 **Layer:** implementation
 **Implements:** l1-architecture.md
@@ -167,6 +167,75 @@ impl LoadedBackend {
     }
 }
 ```
+
+### 4.6 Typed prefixed ID system
+
+Every entity in the core that requires a stable, sortable identifier uses a **typed prefixed ID**:
+a short human-readable type prefix followed by a k-sortable body. The prefix makes the
+entity type visible in logs and databases without a schema lookup; the k-sortable body
+makes IDs usable as monotonic cursors.
+
+#### Prefix table
+
+| Entity | Prefix | Example |
+| --- | --- | --- |
+| Session | `ses` | `ses0r7k3mQp2…` |
+| Message | `msg` | `msg0r7k3mQp3…` |
+| Message part | `prt` | `prt0r7k3mQp4…` |
+| Permission | `per` | `per0r7k3mQp5…` |
+| Question | `que` | `que0r7k3mQp6…` |
+| Event | `evt` | `evt0r7k3mQp7…` |
+| Job | `job` | `job0r7k3mQp8…` |
+| Worktree | `wrk` | `wrk0r7k3mQp9…` |
+| Tool call | `tool` | `tool0r7k3m…` |
+| PTY | `pty` | `pty0r7k3mQpA…` |
+
+#### ID structure and generation
+
+```text
+[REFERENCE]
+ID format: <prefix> <body>   (no separator; prefix is 2–4 lowercase chars, body is 26 chars)
+
+Body encoding:
+  timestamp_ms × 0x1000 + monotonic_counter   → BigInt
+  BigInt is encoded as base-62 (digits 0–9 A–Z a–z), zero-padded to 26 chars
+
+Ascending (creation-order) ID:
+  BigInt = timestamp × 0x1000 + counter   → encodes lexicographically as creation time order
+
+Descending (reverse-order) ID:
+  BigInt = MAX_VALUE - (timestamp × 0x1000 + counter)
+  → encodes lexicographically as newest-first; useful for "latest items first" queries
+
+Monotonic guarantee:
+  lastTimestamp + counter pair ensures no two IDs are identical even within the same
+  millisecond (counter resets each time the millisecond advances).
+
+Factory functions:
+  ascending(entity_type, given?)  -> ID   // validate prefix if given; else generate new
+  descending(entity_type, given?) -> ID   // same; different sort encoding
+
+Validation: if a given ID does not start with the expected prefix, return an error.
+  This catches accidental entity-type mixups at the call site rather than the database.
+```
+
+#### Branded type usage
+
+IDs are **branded** at the type level so that a `SessionId` cannot be passed where a
+`MessageId` is expected:
+
+```rust
+// [REFERENCE]
+type SessionId  = Branded<String, "SessionId">;
+type MessageId  = Branded<String, "MessageId">;
+
+impl SessionId {
+    pub fn ascending(given: Option<&str>) -> Result<Self> { /* prefix: "ses" */ }
+}
+```
+
+Cross-entity operations (e.g., "which messages belong to session X") use the unbranded
+string form only at persistence boundaries; all in-memory code uses the branded type.
 
 ## 5. Drawbacks & Alternatives
 
