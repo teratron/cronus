@@ -4,20 +4,20 @@
 <!-- Maximum 100 lines. Agent updates AFTER each completed action. -->
 
 **Workspace:** main
-**Updated:** 2026-06-21 20:44
-**Phase:** 3 — Stem: CLI
+**Updated:** 2026-06-21 21:07
+**Phase:** 4 — Core Subsystems (Pending)
 **Status:** Active
 
 ## Current Position
 
-- **Task:** T-2T02 Done — per-invariant assertions WFL-1..9. 17 invariant tests + 26 parity tests + 83 unit tests = 126 total, 0 failures. Phase 2 definition-of-done met.
-- **Spec:** l2-workflow-runtime.md (Implements l1-workflow-language.md)
-- **Next Action:** Plan complete — author new scope via /magic.spec main (or /magic.status for a briefing)
+- **Task:** Phase 3 Done — all 8 tasks complete. `crates/cli` binary: clap 4, init/status/workflow (scaffold/validate/run/transpile). 13 unit tests + 6 integration smoke tests = 19 total, 0 failures. phase-3.md archived.
+- **Spec:** l2-cli.md §4, §4.4
+- **Next Action:** Run /magic.task to decompose Phase 4 (Core Subsystems: memory, model/context routers, workspace mgmt)
 
 ## Progress
 
 ```
-Overall: [1/3] ███░░░░░ 33%
+Overall: [3/9] ████░░░░░ 33%
 ```
 
 ## Recent Decisions

@@ -10,4 +10,7 @@ name = "cronus"
 path = "src/main.rs"
 
 [dependencies]
+clap = { workspace = true }
 cronus-core = { workspace = true }
+nodus = { workspace = true }
+serde_json = { workspace = true }
