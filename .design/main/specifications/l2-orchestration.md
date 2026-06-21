@@ -1,6 +1,6 @@
 # Orchestration
 
-**Version:** 1.0.11
+**Version:** 1.0.12
 **Status:** Stable
 **Layer:** implementation
 **Implements:** l1-orchestration.md
@@ -987,6 +987,64 @@ A skill evolution run (§4.15 of `l2-self-improvement.md`) may span many steps a
 **History log (`.planning/skill-training/{run-id}/history.json`):** Array of per-step records containing: epoch, step, action (accept/reject/skip), rollout scores, selection scores, timing per stage, and token counts per stage (prompt + completion + call count).
 
 **Secret policy:** The flattened config is written to `config.json` with API keys and endpoint credentials redacted. The runtime state and history logs never contain secrets.
+
+### 4.22 Post-eval recommendation engine
+
+When an eval run completes — successfully or with failure — a standalone LLM pass produces a recommendation report identifying what should change next: the skill document, the eval task files, both, or neither.
+
+**Trigger:** Every eval run (pass or fail) invokes the recommendation step. On failure, the step receives the error context (stderr, stdout, exit code) in place of a results file.
+
+**Inputs assembled in parallel:**
+
+- Skill document content (`SKILL.md`)
+- Eval framework file (`wazaEval.yaml` or equivalent)
+- Up to 8 task files from the eval directory (max 80 KB each, skipping the eval definition file)
+- Eval results JSON, or error context when the run failed
+
+**Recommendation decision tree:**
+
+| Outcome | Priority question | Likely recommendation |
+| --- | --- | --- |
+| Run succeeded | Are failures caused by weak eval probes or by skill deficiencies? | Change task files / Change skill / Both / Neither |
+| Run failed | What is the root cause of the command failure? | Fix the eval task files first, then skill if needed |
+
+**Output format:** Natural language markdown with sections: Recommendation, Evidence, Task File Changes, Skill File Changes, First Steps. If the model returns JSON, it is normalized to prose before saving.
+
+**Report file:** Written to `.planning/skill-training/{run-id}/recommendations/{skill-name}-{timestamp}.md`. The file is presented to the user on request; it is never opened automatically.
+
+**Failure handling:** If the LLM call fails or returns empty output, the recommendation step is skipped silently. It must never block eval results from surfacing.
+
+**Interpretation rule:** A "Change task files" recommendation means the skill behavior is correct but the eval probes are weak or misaligned. A "Change skill file" recommendation means the probes are valid but the skill instructions are deficient.
+
+### 4.23 Analysis result fingerprinting and staleness detection
+
+LLM-powered analysis passes (semantic quality analysis in §4.31 of `l2-quality-pipeline.md`, quality judge in §4.26) are expensive. Re-running identical analysis on unchanged inputs wastes tokens and time. Fingerprinting caches results and marks them stale exactly when the input changes.
+
+**Fingerprint computation:**
+
+```text
+fingerprint = SHA-256(document_text || NUL || json_serialize(custom_checks)) → hex
+```
+
+The NUL separator byte ensures a document ending with `[` cannot collide with a `custom_checks` array beginning with `]` — otherwise two distinct inputs would produce the same hash.
+
+**Cache entry format:**
+
+```json
+{
+  "fingerprint": "a3f9b2...e4c1",
+  "result_count": 3,
+  "analyzed_at": "2026-06-21T15:00:00Z"
+}
+```
+
+**Cache hit check:** Before dispatching an LLM analysis call, compute the fingerprint and compare to the stored entry. On match, return the cached result immediately.
+
+**Staleness trigger:** Any edit to the document (one or more characters changed) produces a new fingerprint, invalidating the cache entry. The orchestrator marks the prior result stale and queues re-analysis on the next trigger.
+
+**Scope:** One cache entry per (document URI, `custom_checks` config). Multiple documents analyzed simultaneously maintain independent caches.
+
+**Persistence:** Cache entries are held in memory for the session only. They are not persisted across restarts — analysis is re-run once per session per unique fingerprint.
 
 ## 5. Drawbacks & Alternatives
 

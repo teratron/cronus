@@ -1,6 +1,6 @@
 # Self-Improvement
 
-**Version:** 1.0.7
+**Version:** 1.0.8
 **Status:** Stable
 **Layer:** implementation
 **Implements:** l1-memory-model.md
@@ -890,6 +890,48 @@ The momentum update (§4.16) injects guidance into the skill document for the **
 | Location | `[slow-update]` section in SKILL.md | `.planning/skill-training/{run-id}/meta-skill.json` |
 | Effect | Prevents target from regressing known-good behaviors | Prevents optimizer from repeating ineffective edit strategies |
 | Gating | Force-injected (no gate) | Injected as context (no gate) |
+
+### 4.18 Analyze-fix-validate quality loop
+
+Before committing an evolved skill document to the training pipeline, a static semantic pass identifies structural quality defects that would persist or amplify under dynamic evaluation. The loop runs three phases sequentially.
+
+**Phase 1 — Analyze:** Run a combined semantic pass on the skill document; produce structured diagnostics. Categories:
+
+| Code | Description |
+| --- | --- |
+| `contradiction` | Two instructions conflict; agent behavior at their boundary is unpredictable |
+| `ambiguity` | A phrase allows multiple valid interpretations across rollouts |
+| `persona_inconsistency` | Tone, role, or expected behavior shifts incoherently across sections |
+| `cognitive_overload` | Nesting depth or competing priorities exceed a model's reliable attention window |
+| `coverage_gap` | An intent or error path left unaddressed forces the agent to guess |
+| `composition_conflict` | Conflict between this file and a file it imports via a markdown link |
+
+**Phase 2 — Fix:** Apply targeted edits that resolve each diagnostic. Fix constraints:
+
+- Each edit addresses exactly the diagnostic's `relevant_text`, not surrounding content.
+- Preserve overall structure, section order, and intent of the skill document.
+- If two diagnostics conflict, prefer the fix that maximizes cross-section consistency.
+- Do not add net-new sections or instructions absent in the original document.
+
+**Phase 3 — Validate:** Run the fixed skill through the evaluation pipeline (Rollout + Gate, §4.15 steps 1 and 6). Accept the fixed version only if the gate score is ≥ the pre-fix baseline score.
+
+**Diagnostic schema (one entry per finding):**
+
+```json
+{
+  "code": "contradiction",
+  "message": "\"Be concise\" conflicts with \"Provide detailed step-by-step explanations\".",
+  "analyzer": "semantic-analyzer",
+  "relevant_text": "Be concise.",
+  "suggestion": "Replace with: \"Be concise except for multi-step procedures, which require step-level detail.\""
+}
+```
+
+**Quality bar:** Report only findings with high confidence and material impact. Prefer precision over recall — an empty diagnostics list is valid and expected for well-structured skill documents.
+
+**Analysis cache:** Each result is keyed by the SHA-256 fingerprint of `skill_text + "\0" + serialized(custom_checks)`. A fingerprint match returns the cached result without an LLM call. The cache invalidates on any edit to the skill document (see §4.23 of `l2-orchestration.md`).
+
+**Loop trigger:** Runs before every Gate step (§4.15 step 6). May be disabled via `quality.static_analysis: false` in `config.json`.
 
 ## 5. Drawbacks & Alternatives
 
