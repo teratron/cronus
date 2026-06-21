@@ -1,20 +1,56 @@
 //! Workflow-language runtime: lexer, parser/AST, validator (+ lint), executor,
-//! transpiler. Self-contained crate that `cronus-core` depends on; extractable
-//! to its own repository later.
+//! and transpiler. A self-contained crate that `cronus-core` depends on and
+//! links in-process, so it runs everywhere the core runs with no external
+//! language process. Kept as its own crate (not fused into the core) so it can
+//! be extracted to a standalone repository later.
 //!
-//! Skeleton only — the behavior-preserving port is implemented in Phase 2
-//! (vertical slice: lexer -> parser -> transpiler -> executor -> validator).
+//! The crate is a behavior-preserving port of the reference workflow-language
+//! implementation, built as a vertical slice: lexer → parser → transpiler →
+//! executor → validator. The vocabulary lives in [`vocab`] as data, separate
+//! from the logic that consults it, so updating the language is a data change.
+//!
+//! ## Status
+//!
+//! Implemented: the crate scaffold, the builtin vocabulary [`vocab::Schema`],
+//! and the [`lexer`]. The parser, transpiler, executor, and validator modules
+//! exist as the layout the remaining front-end and runtime tracks fill in.
 
-/// Placeholder until the runtime port lands. Lets the crate build as a workspace
-/// member without yet exposing the (forthcoming) parse/validate/run API.
-pub fn placeholder() {}
+mod error;
+
+pub mod lexer;
+pub mod vocab;
+
+// Pipeline modules — filled by the remaining Phase-2 tracks. Declared now so
+// the module layout (and the dependency seams between stages) is fixed.
+mod ast;
+mod executor;
+mod parser;
+mod transpiler;
+mod validator;
+
+pub use error::{Error, Result, Span};
+pub use lexer::{Lexer, Token, TokenType};
+pub use vocab::Schema;
 
 #[cfg(test)]
 mod tests {
     use super::*;
 
     #[test]
-    fn crate_builds() {
-        placeholder();
+    fn public_surface_assembles() {
+        // The re-exported lexer + schema compose through the crate root.
+        let schema = Schema::builtin();
+        let tokens = Lexer::tokenize_str("LOG($out)").expect("tokenizes");
+        assert_eq!(tokens.first().map(|t| t.ty), Some(TokenType::CommandName));
+        assert!(schema.is_command(&tokens[0].value));
+    }
+
+    #[test]
+    fn errors_render_with_position() {
+        let err = Error::Parse {
+            span: Span::new(3, 7),
+            message: "unexpected token".to_string(),
+        };
+        assert_eq!(err.to_string(), "parse error at 3:7: unexpected token");
     }
 }

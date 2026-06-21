@@ -4,20 +4,20 @@
 <!-- Maximum 100 lines. Agent updates AFTER each completed action. -->
 
 **Workspace:** main
-**Updated:** 2026-06-21 10:32
+**Updated:** 2026-06-21 10:48
 **Phase:** 2 — Seed II: Workflow Runtime
 **Status:** Active
 
 ## Current Position
 
-- **Task:** Phase 2 decomposed — 12 tasks across 7 tracks (T-2A01 … T-2T02) in `tasks/phase-2.md`; ready to execute.
+- **Task:** T-2A01/A02/B01 Done — `crates/nodus` tokenization foundation (scaffold + vocab schema + lexer, 17 tests green, clippy clean, std-only). Next: T-2B02 (AST).
 - **Spec:** l2-workflow-runtime.md (Implements l1-workflow-language.md)
-- **Next Action:** Run /magic.run main to execute Phase 2 (crates/nodus runtime port)
+- **Next Action:** Continue /magic.run main — next: T-2B02 (AST node model)
 
 ## Progress
 
 ```
-Phase 2: [0/12] ░░░░░░░░ 0%
+Phase 2: [3/12] ▓▓░░░░░░ 25%
 ```
 
 ## Recent Decisions

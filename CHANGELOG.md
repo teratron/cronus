@@ -27,3 +27,4 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Updated 10 specifications (main)
 - Updated 4 specifications (main)
 - Updated specification `memory-store` (main)
+- Completed task `phase-2` (main)

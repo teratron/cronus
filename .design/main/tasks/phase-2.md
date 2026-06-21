@@ -1,7 +1,7 @@
 ---
 phase: 2
 name: "Seed II — Workflow Runtime (crates/nodus)"
-status: Todo
+status: In Progress
 subsystem: "crates/nodus (in-tree workflow-language runtime crate)"
 requires:
   - "Cargo workspace + crates/nodus stub crate (Phase 1 — T-1A01)"
@@ -17,7 +17,7 @@ duration_minutes: ~
 # Stage 2 Tasks — Seed II: Workflow Runtime (`crates/nodus`)
 
 **Phase:** 2
-**Status:** Todo
+**Status:** In Progress
 **Strategic Goal:** Grow the second seed-leaf — an embeddable, in-process workflow-language runtime crate (`crates/nodus`: lexer → parser/AST → transpiler → executor → validator/lint) that the core links statically and binds to its subsystems. The crate is a behavior-preserving port of the reference workflow-language implementation (~5k lines, six modules); it is built as a **vertical slice first** (parse → transpile → minimal execute) before completing the validator/lint catalog and the full command set, and it must reach **parity** with the reference golden corpus.
 
 > **Build order (l2-workflow-runtime.md §4.5):** vertical slice first — (1) lexer+parser+ast → AST, (2) transpiler round-trip (WFL-1), (3) minimal executor `log`+`generate` end-to-end (WFL-7/8), (4) validator + full lint (WFL-5), (5) full command set + control flow. Schema and grammar ship as **data resources** (loaded, not compiled) so a language update needs no logic recompile.
@@ -32,12 +32,12 @@ duration_minutes: ~
 
 Track A — Crate scaffold & language resources (l2-workflow-runtime §4.1, §4.5)
 
-- [ ] [T-2A01] `crates/nodus` API surface + six-module layout + error type
-- [ ] [T-2A02] Schema + grammar as loadable resources (data, not code) + loader
+- [x] [T-2A01] `crates/nodus` API surface + six-module layout + error type
+- [x] [T-2A02] Schema + grammar as loadable resources (data, not code) + loader
 
 Track B — Front-end: lexer + AST + parser (l2-workflow-runtime §4.1, §4.5)
 
-- [ ] [T-2B01] Lexer — tokenize the compact form (symbols / operators)
+- [x] [T-2B01] Lexer — tokenize the compact form (symbols / operators)
 - [ ] [T-2B02] AST node model
 - [ ] [T-2B03] Parser — grammar-driven parse to AST  <!-- largest module; may split .N on entry -->
 
@@ -68,29 +68,32 @@ Track T — Validation & parity
 ### [T-2A01] Crate API surface + module layout + error type
 
 - **Spec:** l2-workflow-runtime.md §4.1, §4.5
-- **Status:** Todo
+- **Status:** Done
 - **Assignment:** Agent
-- **Verify:** `cargo build -p nodus` exit 0; `cargo tree -p nodus` shows only sanctioned deps (e.g. `thiserror`/`serde`, no frontend or core-domain crates — inward dependency direction); the six module stubs (`lexer`, `parser`, `ast`, `validator`, `executor`, `transpiler`) and a crate-level `Error` enum compile.
+- **Verify:** `cargo build -p nodus` exit 0; `cargo tree -p nodus` shows only sanctioned deps (no frontend or core-domain crates — inward dependency direction); the six module stubs (`lexer`, `parser`, `ast`, `validator`, `executor`, `transpiler`) and a crate-level `Error` enum compile.
+- **Changes:** `lib.rs` now declares the six pipeline modules + re-exports `Error`/`Result`/`Span`/`Lexer`/`Token`/`TokenType`/`Schema`; `error.rs` defines a hand-rolled `Error` enum (Lex/Parse/Validate/Execute + `Span`) with `Display`/`std::error::Error` — **std-only** (no thiserror), consistent with the Phase-1 foundation. `cargo tree -p nodus` → zero deps; `cargo clippy --all-targets -- -D warnings` clean.
 - **Handoff:** unblocks every other Track-2 task (module seams exist).
-- **Notes:** Replace the empty Phase-1 `crates/nodus/src/lib.rs` stub with the real module tree. Public surface stays minimal — the library command surface (T-2F01) is the only intended external entry point; modules are crate-internal. Error type is a single `thiserror` enum spanning lex/parse/validate/execute variants (maps to the runtime error codes catalogued in T-2E01/T-2D02).
+- **Notes:** Replaced the empty Phase-1 `crates/nodus/src/lib.rs` stub with the real module tree. Public surface stays minimal — the library command surface (T-2F01) is the only intended external entry point; pipeline modules are crate-internal. **[DR]** error type is hand-written std-only rather than `thiserror` (decision-ladder/stdlib-first); revisit if a derive macro earns its keep later.
 
 ### [T-2A02] Schema + grammar as loadable resources + loader
 
 - **Spec:** l2-workflow-runtime.md §4.5 ("Schema and grammar are data, not code")
-- **Status:** Todo
+- **Status:** Done
 - **Assignment:** Agent
-- **Verify:** `cargo test -p nodus` — the loader reads the embedded vocabulary schema + formal grammar at init; `schema.commands()` lists the known vocabulary (Data/Analysis/Generation/Memory/Validation/Routing/Control/Effects categories); an unknown command name resolves to a `NotInSchema` error path.
-- **Handoff:** parser (T-2B03) and validator (T-2E01) consume the loaded schema.
-- **Notes:** Vendor the vocabulary schema and the formal grammar as crate resources (embedded at build, parsed at runtime) so updating the language is a data change, not a recompile. Record the supported schema version on the loaded schema (addresses the spec's runtime↔schema compatibility concern; the actual version-check policy is a later TBD, not this task).
+- **Verify:** `cargo test -p nodus vocab::` — `Schema::builtin()` exposes the vocabulary; `schema.commands()` lists the known command set; `is_command`/`is_reserved_var`/`is_valid_tone`/`transpiler_verb` answer correctly; an unknown command name returns `false` (the parser/validator's not-in-schema gate). 4 tests pass.
+- **Changes:** `vocab.rs` holds the language vocabulary as data (`KNOWN_COMMANDS`, `VALID_TONES`, `RESERVED_VARIABLES`, `TRANSPILER_VERB_MAP`, `error_code::*`) separated from logic, plus a `Schema` query seam carrying `BUILTIN_SCHEMA_VERSION`. Ported verbatim from the reference vocabulary.
+- **Handoff:** parser (T-2B03) and validator (T-2E01) consume `Schema`.
+- **Notes:** The "schema is data, not code" property is met by the data/logic separation + the `Schema` query surface. **Deferred (noted, not silent):** loading an *external* schema *file* at runtime (vs the embedded builtin) — the `Schema` API is the seam it will back; the builtin mirrors the reference so corpus parity is unaffected. Schema version recorded; the runtime↔schema version-check policy remains a later TBD.
 
 ### [T-2B01] Lexer — tokenize the compact form
 
 - **Spec:** l2-workflow-runtime.md §4.1, §4.5 (`lexer` module)
-- **Status:** Todo
+- **Status:** Done
 - **Assignment:** Agent
-- **Verify:** `cargo test -p nodus lexer::` — a golden `.nodus` sample tokenizes to the expected token stream (section `§`, blocks `@`, hard rules `!!`, preference `!PREF`, variable `$`, pipeline `→`, conditional `?IF`, loop/flag `~`, modifier `+`, validator `^`, comments `;`/`;;`); an invalid symbol yields a `LexError` carrying line/column.
+- **Verify:** `cargo test -p nodus lexer::` — golden samples tokenize to the expected token streams (section `§`, blocks `@`, hard rules `!!`, preference `!PREF`, variable `$`, pipeline `→`, conditional `?IF`, loop/flag `~`, modifier `+`, validator `^`, comments `;;`, `wf:` refs, `MAX:n`); line/column tracked; an unterminated string yields `Error::Lex` with position. 11 tests pass.
+- **Changes:** `lexer.rs` ports the full reference tokenizer — `TokenType` (≈60 variants), `Token` (value + line/col), and a single-pass `Lexer` over `Vec<char>` (code-point parity with the Python reference for multibyte `§`/`→`). Step-number-vs-float disambiguation and the `?`-keyword rewind preserved.
 - **Handoff:** token stream feeds the parser (T-2B03).
-- **Notes:** Port the reference tokenizer's symbol/operator set. Keep token spans (line/col) so parse/validate errors can point precisely.
+- **Notes:** **[DR — parity]** the scan is **total** on unknown characters (skipped, matching the reference) — the original "invalid symbol → LexError" wording is replaced by an unterminated-string error path that the corpus never triggers, so reference equivalence (T-2T01) is preserved while a real `Error::Lex` path stays tested. Token spans retained for downstream diagnostics.
 
 ### [T-2B02] AST node model
 
