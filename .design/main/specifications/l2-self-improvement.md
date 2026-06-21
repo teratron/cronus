@@ -1,6 +1,6 @@
 # Self-Improvement
 
-**Version:** 1.0.4
+**Version:** 1.0.5
 **Status:** Stable
 **Layer:** implementation
 **Implements:** l1-memory-model.md
@@ -691,6 +691,64 @@ After 20 or more completed phases, thresholds auto-calibrate from the observed d
 - `Stuck` threshold → 90th percentile, clamped to `Fast×10`
 
 Adaptive mode is noted in the milestone report. Without 20 samples, defaults apply.
+
+### 4.13 Learnings journal and session context recovery
+
+The mistake log (§4.2) captures errors after failures. The learnings journal captures lightweight one-line takeaways at the end of every session — including partial successes — so each session builds on prior work without re-deriving context.
+
+#### Learnings journal
+
+Written to `.planning/learnings.jsonl` (append-only; one JSON object per line):
+
+```json
+{
+  "session_id": "ses_abc123",
+  "timestamp": "2026-06-21T14:33:00Z",
+  "skill": "cronus mission",
+  "phase": "story-user-auth",
+  "pattern_matched": "config gate missing before wave launch",
+  "outcome": "success | failure | uncertain",
+  "lesson": "always run `cronus workspace check` before phase wave starts"
+}
+```
+
+The agent writes at most 3 learnings per session (one per major decision point). At brief-surface build time (§4.6), if 5 or more entries exist for the current workspace, the 3 most recent relevant ones are included.
+
+Learnings differ from mistakes: a mistake is a concrete error linked to a file and episode; a learning is a lightweight pattern that may record a success ("what worked") or a failure ("what to avoid").
+
+#### Session context recovery
+
+At the start of every skill invocation, the agent performs a context recovery scan:
+
+1. Read the latest 3 entries from `.planning/timeline.jsonl`.
+2. Read the last checkpoint file in `.planning/` if one exists.
+3. If a phase is `In Progress`, output a one-line welcome-back summary:
+
+```text
+Welcome back: phase "story-user-auth" in progress.
+Last skill: mission clarify (3 hours ago).
+Checkpoint: .planning/.continue-here.md (wave 2 paused at task 4/7).
+```
+
+This prevents re-deriving context already captured in the workspace.
+
+#### Timeline logging
+
+Every skill invocation appends to `.planning/timeline.jsonl`:
+
+```json
+{
+  "skill": "cronus mission",
+  "event": "started | completed",
+  "session_id": "ses_abc123",
+  "timestamp": "2026-06-21T14:30:00Z",
+  "duration_sec": 247,
+  "outcome": "success | failure | partial",
+  "phase": "story-user-auth"
+}
+```
+
+Timeline data feeds the flow score computation (§4.12): inter-skill gaps become `latency_score`; session duration becomes `duration_score`.
 
 ## 5. Drawbacks & Alternatives
 

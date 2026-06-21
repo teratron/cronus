@@ -1,6 +1,6 @@
 # Quality Pipeline
 
-**Version:** 1.1.8
+**Version:** 1.1.9
 **Status:** Stable
 **Layer:** implementation
 **Implements:** l1-quality-standards.md
@@ -917,6 +917,94 @@ Recommendation: create CONTEXT.md with mission, goals, and constraints before wa
 ```
 
 This warning is logged in the run log and surfaced at the next `cronus mission status`.
+
+### 4.22 Confidence calibration and mode gates
+
+Adversarial reviews (§4.8) surface findings, but not all findings deserve equal weight. A calibrated confidence scale and mode-specific display gates control what reaches the user — filtering noise while preserving signal.
+
+#### Confidence scale
+
+Every finding is assigned a confidence score 1–10:
+
+| Band | Meaning | `daily` mode | `comprehensive` mode |
+| --- | --- | --- | --- |
+| 9–10 | Verified by reading specific code; concrete exploit path | REPORT as `VERIFIED` | REPORT |
+| 7–8 | High-confidence pattern match; very likely correct | REPORT | REPORT |
+| 5–6 | Moderate; could be a false positive | SUPPRESS | REPORT with caveat |
+| 3–4 | Low confidence; pattern suspicious but may be fine | SUPPRESS | SUPPRESS |
+| 1–2 | Speculation | SUPPRESS (unless critical severity) | SUPPRESS |
+
+Mode is set in `config.json`:
+
+```json
+{ "quality": { "review_mode": "daily" } }
+```
+
+`daily` — zero-noise, report ≥7/10 only. `comprehensive` — capture-all, report ≥5/10 with caveat.
+
+#### Independent verification
+
+Findings at 5–7 confidence are elevated by running an independent verification sub-task with no prior context:
+
+```text
+Read code at {file}:{line} only. Do NOT use prior review context.
+Apply the hard-exclusion list (§4.23).
+Is there a real issue here? Score 1–10.
+Below 8 → explain why this is not real.
+```
+
+If the sub-task returns ≥8, the finding is promoted with `verification: independent`. If <8, it is discarded and logged to filter statistics.
+
+#### Filter statistics
+
+Every review reports how candidates narrowed to findings:
+
+```text
+Filter stats: 127 candidates → 34 hard-exclusion → 12 confidence-gate → 5 independent-verify → 6 reported
+```
+
+#### Fingerprinting for trend matching
+
+Each finding gets a stable fingerprint: `sha256(category + file + normalized_title)`.
+
+On subsequent reviews, fingerprints are matched against prior reports:
+
+- `↑ improving`: N fewer findings than last review
+- `↓ degrading`: N more findings
+- `→ stable`: fewer than 2 net changes
+
+Trend is included in the milestone retrospective (§4.9 of `l2-self-improvement.md`).
+
+### 4.23 Data sensitivity classification
+
+Security findings mean different things depending on what data is involved. A four-level classification ties findings to business impact and selects the appropriate incident response playbook.
+
+#### Sensitivity levels
+
+| Level | Definition | Examples |
+| --- | --- | --- |
+| `RESTRICTED` | Breach = legal liability | Passwords, credentials, payment data, PII, session tokens |
+| `CONFIDENTIAL` | Breach = business damage | API keys, proprietary business logic, user behavioral data |
+| `INTERNAL` | Breach = embarrassment | System logs, config details, stack traces in error messages |
+| `PUBLIC` | No impact if exposed | Marketing content, documentation, public APIs |
+
+Classification is recorded in SUMMARY.md frontmatter:
+
+```yaml
+data_sensitivity: RESTRICTED
+blast_radius: "AWS account full access; all S3 data; cost exfiltration possible"
+```
+
+#### Incident response playbook selection
+
+Each adversarial review finding (§4.8) auto-selects a playbook based on its category. The playbook is a `playbook:` field in the finding record — machine-readable, not prose:
+
+| Category | Playbook steps |
+| --- | --- |
+| Secret or credential leak | revoke → rotate → scrub-history → force-push → audit-exposure → check-abuse |
+| Missing webhook signature | assess-scope → prioritize-routes → implement-verification → test → deploy |
+| CVE in dependency | confirm-usage → patch → test → deploy (or: workaround + review-date if no patch) |
+| CI/CD script injection | identify-workflows → audit-checkout → fix-trigger → pin-actions → protect-CODEOWNERS |
 
 ## 5. Drawbacks & Alternatives
 

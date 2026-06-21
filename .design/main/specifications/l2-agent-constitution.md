@@ -1,6 +1,6 @@
 # Agent Constitution
 
-**Version:** 1.0.6
+**Version:** 1.0.7
 **Status:** Stable
 **Layer:** implementation
 **Implements:** l1-office-model.md, l1-memory-model.md
@@ -674,6 +674,112 @@ Each failed signal includes a one-line fix:
 - `prompt templates` → `cronus install --templates=standard`
 
 The checklist runs automatically on `cronus install` and on the first execution in a new workspace.
+
+### 4.18 Cognitive frame activation and preamble tiers
+
+Agent constitutions (§4.8) define persona. Skills define steps. A missing layer is the *cognitive frame* — the mental model a specialist activates before working. Frames scale better than checklists because they invoke latent knowledge; naming a framework activates the hundreds of sub-rules the model already has for it.
+
+#### Cognitive frames vs checklists
+
+| Approach | Example | Problem |
+| --- | --- | --- |
+| Checklist | "Check for string interpolation in SQL queries" | Misses novel patterns; enumerates the obvious |
+| Cognitive frame | "Apply the OWASP Injection lens — what patterns does it teach?" | Activates deep training knowledge; generalizes |
+
+The cognitive frame does not replace steps — it sets the mental posture before the steps run.
+
+#### Cognitive frame format
+
+Each skill or role entry in `AGENTS.md` (or the equivalent adapter) includes a `cognitive_frame:` field:
+
+```yaml
+- name: "security-auditor"
+  role: "Chief Security Officer"
+  cognitive_frame: >
+    Internalize the adversarial mindset: what is the real attack surface?
+    What patterns do professional penetration testers target first?
+    Apply genuine adversarial thinking — not a checklist.
+
+- name: "architecture-reviewer"
+  role: "Architecture reviewer"
+  cognitive_frame: >
+    Internalize: what are the hidden state machines here? Where are the
+    implicit assumptions that will break at 10× current load?
+    Apply engineering judgment, not a feature checklist.
+```
+
+#### Preamble tier hierarchy
+
+Skills run in a defined order based on tier. Lower tiers provide context for higher tiers:
+
+| Tier | Purpose | Examples |
+| --- | --- | --- |
+| 1 — Foundational | Workspace init, context recovery, config loading | workspace-check, learnings-journal, context-recovery |
+| 2 — Specialist | Domain-specific work with full context | mission-clarify, security-audit, arch-review |
+| 3 — Orchestration | Sequences tier-2 skills; requires all prior context | mission-run, multi-phase-research, autoplan |
+
+A tier-3 skill that runs before tier-1 completes will miss recovered context. The orchestrator enforces tier ordering.
+
+#### Taste decision gate
+
+Some choices are genuinely subjective (naming, visual design, scope boundaries). The agent flags these rather than resolving them autonomously:
+
+```text
+[TASTE] Two approaches are defensible:
+  A) Include mobile layout now — consistent with existing pages.
+  B) Defer mobile layout — outside this phase's P1 scope.
+  Recommendation: A (maintains consistency). Both are valid.
+  (Override: state your preference to proceed.)
+```
+
+Taste decisions are recorded in CONTEXT.md under `## Taste Decisions` — not in the main D-NN decision log, since they are not architectural.
+
+### 4.19 Writing style protocol
+
+Technical accuracy is necessary but not sufficient — prose that is accurate but jargon-heavy or impact-free fails to communicate. A writing style protocol makes agent prose consistent and actionable.
+
+#### Jargon glossing
+
+Technical terms are glossed on first use **per skill invocation**:
+
+```text
+Format: "Term (definition — what it means for you)"
+
+Correct: "Check for N+1 queries (database makes 1+N round-trips instead
+         of batching; causes slowdowns under load)."
+Incorrect: "Check for N+1 queries."
+```
+
+Glossing applies to: AskUserQuestion options, finding descriptions, plan rationale, decision records.  
+Glossing is skipped when: the user has demonstrated familiarity in this session; operation mode is `lite`.
+
+#### Outcome framing
+
+Every AskUserQuestion that presents options MUST include one concrete outcome sentence per option:
+
+```text
+Correct: "Option A ships 2 weeks faster but skips the migration rollback.
+         Option B adds 2 weeks but allows rollback in the first 30 days."
+Incorrect: "Do you want option A or B?"
+```
+
+Frame choices around **pain avoided** or **capability unlocked**, not around implementation mechanics.
+
+#### User-impact closure
+
+Findings and decisions end with what the user **sees, waits for, loses, or gains**:
+
+```text
+Correct: "This fix: users no longer see 'session expired' errors when switching tabs;
+         session stays alive for 8 hours."
+Incorrect: "This fix improves session handling."
+```
+
+#### Tone
+
+Builder-to-builder: concrete, direct, no hype. Active voice. Short sentences. Concrete nouns.
+
+Avoid: *delve*, *crucial*, *robust*, *comprehensive*, *nuanced*, *multifaceted*, *moreover*, *furthermore*, *pivotal*, *landscape*, *underscore*, *foster*, *showcase*, *intricate*, *vibrant*, *fundamental*.
 
 ## 5. Drawbacks & Alternatives
 

@@ -1,6 +1,6 @@
 # Orchestration
 
-**Version:** 1.0.7
+**Version:** 1.0.8
 **Status:** Stable
 **Layer:** implementation
 **Implements:** l1-orchestration.md
@@ -832,6 +832,61 @@ When the last foundation task completes, the orchestrator emits a checkpoint lin
 ```
 
 This line appears in the run log and the board card for the foundation phase.
+
+### 4.18 Drift check gate
+
+Plans are written against a specific codebase state. If files change between plan creation and execution, the plan's "Current state" excerpts may no longer match the live code — causing the executor to operate on wrong assumptions.
+
+#### Gate procedure
+
+The drift check runs as the **first action** before any plan executor starts:
+
+```bash
+git diff --stat {planned_at_sha}..HEAD -- {in_scope_paths}
+```
+
+`planned_at_sha` is recorded in the plan's YAML frontmatter when the plan is created:
+
+```yaml
+planned_at:
+  sha: "abc1234"
+  date: "2026-06-21"
+```
+
+If `git diff` returns non-empty output for any in-scope path, the executor reads the "Current state" excerpts from the plan and compares them to the live file at that path.
+
+**Match**: proceed — the drift is in unrelated lines.  
+**Diverge**: STOP and report:
+
+```text
+DRIFT DETECTED: Plan "plans/042-user-auth.md" was written against abc1234.
+Changed since planning: src/auth/middleware.ts (+23 -5)
+Current state excerpt DOES NOT match live code at src/auth/middleware.ts:47.
+Action: update the plan's Current state section before re-running.
+```
+
+#### Machine-checkable done criteria
+
+Plans include a `## Done Criteria` section with boolean queries — not prose:
+
+```markdown
+## Done Criteria
+- [ ] `cargo check` exits 0
+- [ ] `cargo test` exits 0; ≥N new tests exist
+- [ ] `grep -rn "{old_pattern}" src/` returns no matches
+- [ ] No files outside in-scope list modified (`git status --short`)
+- [ ] `plans/README.md` status row updated to `Done`
+```
+
+All criteria must hold before the executor marks the plan complete. If any criterion fails, the executor stops and reports which check failed with the actual command output.
+
+#### Self-contained context rule
+
+Plans MUST be self-contained. Forbidden references:
+
+- "as we discussed", "per our earlier decision", "see the previous session"
+
+Required: inline the relevant excerpts (file:line), the applicable convention, and the rationale. Plans must be executable by any agent, not only the one that wrote them.
 
 ## 5. Drawbacks & Alternatives
 
