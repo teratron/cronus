@@ -1,6 +1,6 @@
 # Mission Mode
 
-**Version:** 1.0.2
+**Version:** 1.0.3
 **Status:** Stable
 **Layer:** implementation
 **Implements:** l1-orchestration.md
@@ -357,6 +357,90 @@ Read by:
 ```
 
 The flag file is the cross-session state signal — it lets peripheral tooling observe mission state without importing core logic.
+
+### 4.12 Proposal artifact
+
+Before discussion and planning begin, a structured proposal captures the **why and what** of a change — its intent, scope, expected capabilities, and impact on existing subsystems. The proposal is the root node of the artifact dependency graph (§4.15 in l2-orchestration.md): all downstream artifacts (CONTEXT.md, PLAN.md, DECISION-*.md) draw from it.
+
+#### Proposal format
+
+```text
+[REFERENCE]
+proposal.md (stored at <ws>/planning/changes/<change-id>/proposal.md):
+
+---
+change-id: <slug>
+created: YYYY-MM-DD
+status: draft | ready | accepted | rejected
+mode: lite | full | ultra   # active operation mode when proposal was written
+---
+
+## Intent
+Why are we making this change? What problem does it solve?
+One paragraph. No jargon. Written for someone unfamiliar with the task.
+
+## Scope
+
+### In scope
+- What this change will deliver
+
+### Out of scope
+- What this change explicitly will NOT address (at least one entry required)
+
+## Approach
+Technical direction — the high-level "how". Not a full design, but enough to
+make the scope concrete. Reference existing architecture decisions (AD-n, D-NN) where relevant.
+
+## Capabilities
+
+### New capabilities
+- `<capability-id>`: One-line description of what this capability enables.
+
+### Modified capabilities (if any)
+- `<capability-id>`: What changes and why.
+
+## Impact
+Which Cronus subsystems are affected? List by spec name:
+- orchestration: ...
+- quality-pipeline: ...
+- agent-constitution: ...
+
+## Rollback plan
+(Required when mode = full or ultra. Optional for lite.)
+How do we revert if this change turns out to be wrong?
+What artifacts, files, or database entries would need to be undone?
+```
+
+#### Proposal lifecycle
+
+```text
+[REFERENCE]
+Proposal status transitions:
+
+  draft     — being written; not yet reviewed by user
+  ready     — agent has completed the proposal; awaiting user review
+  accepted  — user explicitly confirms; downstream work may begin
+  rejected  — user rejects; proposal archived with reason; no downstream artifacts created
+
+Transition rules:
+  - draft → ready: triggered when agent signals completion of the proposal turn
+  - ready → accepted: triggered by user confirmation (/mission confirm or explicit "accepted")
+  - ready → rejected: triggered by user rejection with reason
+  - accepted → (no further transitions): the proposal is immutable once accepted
+
+Proposal immutability:
+  Once accepted, proposal.md becomes read-only. If scope changes after acceptance,
+  a new change-id is created with a fresh proposal that references the prior one as context.
+  The prior proposal is NOT edited — changes are always additive, never retroactive.
+```
+
+#### Mode-specific proposal behavior
+
+| Mode | Scope section | Rollback required | Out-of-scope items |
+| --- | --- | --- | --- |
+| `lite` | Bullet list only | No | Skipped if none surfaced |
+| `full` | Bullets + brief explanation | Yes | At least 1 entry required |
+| `ultra` | Full paragraph + alternatives considered | Yes + tested | At least 3 entries, with rationale |
 
 ## 5. Drawbacks & Alternatives
 

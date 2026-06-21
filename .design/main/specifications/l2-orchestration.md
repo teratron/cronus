@@ -1,6 +1,6 @@
 # Orchestration
 
-**Version:** 1.0.5
+**Version:** 1.0.6
 **Status:** Stable
 **Layer:** implementation
 **Implements:** l1-orchestration.md
@@ -614,6 +614,174 @@ Auto-advance safety gate behavior:
 ```
 
 The continuation file is the mechanism that makes autonomous execution safe: the system can run unattended until it hits a decision point, then pause cleanly and wait for human input rather than making an autonomous choice at a fork.
+
+### 4.15 Artifact dependency graph
+
+A phase's work produces a set of artifacts. Instead of rigid sequential phase gates, the artifact dependency graph declares which artifacts enable which other artifacts — and leaves the execution layer free to produce them in any order that satisfies the declared dependencies. An artifact's `requires` is an enabler, not a blocker: if a dependency is already satisfied (or deliberately skipped for the current task type), downstream work can proceed without waiting.
+
+#### Artifact graph schema
+
+```text
+[REFERENCE]
+artifact-graph.yaml (per-workspace, stored at <ws>/planning/artifact-graph.yaml):
+
+name: <workspace-name>
+version: 1
+artifacts:
+  - id: <unique-id>
+    generates: <file-or-glob>       # what file this artifact produces
+    description: <one-line purpose>
+    requires: []                    # artifact IDs that must exist before this one can start
+    optional: false                 # true = skip silently when not needed (e.g. design for bugfix)
+    instruction: |
+      AI instructions for generating this artifact — injected into the executor's context.
+```
+
+#### Standard artifact chain
+
+The default Cronus artifact chain produces the following directed acyclic graph:
+
+```text
+[REFERENCE]
+context-md  ──→  plan-md  ──→  summary-md
+     │                │
+     └──→  decisions  └──→  verification-md
+
+context-md:
+  generates: CONTEXT.md
+  requires: []   # root node — no dependencies
+
+decisions:
+  generates: "decisions/DECISION-*.md"
+  requires: [context-md]
+  optional: true   # not needed for all task types
+
+plan-md:
+  generates: PLAN.md
+  requires: [context-md]
+
+summary-md:
+  generates: SUMMARY.md
+  requires: [plan-md]
+
+verification-md:
+  generates: VERIFICATION.md
+  requires: [summary-md]
+  optional: false   # always required before phase can reach Complete
+```
+
+#### Enabler vs. blocker semantics
+
+```text
+[REFERENCE]
+Enabler semantics:
+  - An artifact's requires[] lists what must exist, not what must run first.
+  - If a dependency artifact already exists (from a prior phase, prior run, or manual creation):
+    → the dependent artifact may start immediately.
+  - If a dependency artifact is marked optional=true and the current task type does not need it:
+    → skip it and treat its dependents as enabled anyway.
+  - If a dependency artifact is missing and NOT optional:
+    → the dependent artifact is blocked. Surface the gap to the user.
+
+Example (bug-fix shortcut):
+  - decisions: optional=true → skip for bugfix task type
+  - plan-md: requires [context-md] only → starts as soon as CONTEXT.md exists
+  - Result: bug fixes skip the decision-making phase without manual override
+```
+
+#### Artifact status tracking
+
+The graph's current state is tracked in a status file:
+
+```text
+[REFERENCE]
+planning/artifact-status.json:
+{
+  "schema": "cronus-orchestration",
+  "updated": "<ISO datetime>",
+  "artifacts": {
+    "context-md":       { "status": "complete", "path": "planning/CONTEXT.md" },
+    "decisions":        { "status": "skipped",  "reason": "task-type=bugfix" },
+    "plan-md":          { "status": "complete", "path": "planning/PLAN.md" },
+    "summary-md":       { "status": "pending",  "path": null },
+    "verification-md":  { "status": "pending",  "path": null }
+  }
+}
+
+Status values:
+  pending   — not yet started; dependencies not satisfied or not yet triggered
+  enabled   — dependencies satisfied; ready to produce
+  in-progress — currently being generated
+  complete  — file exists and passes validation
+  skipped   — optional artifact explicitly omitted for this run
+  failed    — generation was attempted and produced an invalid artifact
+```
+
+### 4.16 Change dependency metadata
+
+When a workspace contains multiple in-progress changes (parallel development, feature branches, staged migrations), each change declares its dependency relationships explicitly. This enables the orchestrator to detect conflicts before they happen and surface unblocked work clearly.
+
+#### Per-change metadata schema
+
+```text
+[REFERENCE]
+<ws>/planning/changes/<change-id>/.change.yaml:
+
+schema: cronus-orchestration
+created: <ISO date>
+
+# Dependency relationships
+dependsOn: []   # change IDs that must land in the base branch before this change can merge
+provides: []    # capability IDs or artifact IDs this change delivers
+requires: []    # capabilities or versions that must exist before this change is meaningful
+touches: []     # advisory: spec files or subsystem names this change modifies
+
+# Decomposition
+parent: null    # set to a change-id if this change was split from a larger change
+
+# Notes
+why: |
+  One-paragraph rationale for this change's existence.
+```
+
+#### Dependency validation rules
+
+```text
+[REFERENCE]
+Validation (run at plan-time and at archive-time):
+
+  Rule 1: No cycles.
+    A change may not declare dependsOn entries that (transitively) depend on itself.
+    Detection: topological sort; reject if cycle found.
+
+  Rule 2: dependsOn must be resolvable.
+    Each entry in dependsOn[] must be either:
+      (a) An active change ID in <ws>/planning/changes/, or
+      (b) A capability already present in the base branch's SUMMARY.md provides[] sections.
+    Unresolvable: hard error at plan time.
+
+  Rule 3: requires must be satisfiable.
+    Each entry in requires[] must match a provides[] from another active change or the base branch.
+    Unsatisfied: warning (not error) — the change may proceed but is flagged.
+
+  Rule 4: touches is advisory only.
+    Overlapping touches[] across parallel changes generates a warning:
+    "Changes A and B both touch 'wave-orchestration'. Verify they don't conflict."
+
+  Rule 5: Archive order.
+    A change cannot be archived (moved to Complete) before all its dependsOn changes are archived.
+    Attempting to archive out of order: HARD STOP with explanation.
+```
+
+#### Change DAG commands
+
+```text
+[REFERENCE]
+cronus change graph              # Visualize current change dependency DAG
+cronus change next               # List unblocked changes (no unsatisfied dependsOn)
+cronus change split <id>         # Decompose a large change into child changes
+cronus change status             # Show all changes with their dependency state
+```
 
 ## 5. Drawbacks & Alternatives
 

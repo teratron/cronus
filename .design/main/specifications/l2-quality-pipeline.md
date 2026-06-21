@@ -1,6 +1,6 @@
 # Quality Pipeline
 
-**Version:** 1.1.5
+**Version:** 1.1.6
 **Status:** Stable
 **Layer:** implementation
 **Implements:** l1-quality-standards.md
@@ -642,6 +642,133 @@ Summary line:
 ```
 
 The ledger is a snapshot of all known ceilings in a project. It differs from the mistake log (§4.2 in l2-self-improvement.md) in scope: the ledger covers intentional design choices; the mistake log covers errors that already hurt.
+
+### 4.16 Three-dimensional verification
+
+Three-dimensional verification evaluates implementation against a phase's intent across three independent, non-overlapping dimensions. The three-lane adversarial review (§4.11) asks "what could be wrong with this spec?" — three-dimensional verification asks "was this spec actually delivered?"
+
+#### The three dimensions
+
+| Dimension | Question | Scope |
+| --- | --- | --- |
+| **Completeness** | Was everything specified actually built? | All tasks done, all requirements implemented, all scenarios covered by tests |
+| **Correctness** | Was it built as specified? | Implementation matches spec intent, edge cases handled, error states match requirement text |
+| **Coherence** | Does everything fit together? | Design decisions reflected in code, naming consistent, no drift between artifacts |
+
+The three dimensions are independent — a phase can be complete but incorrect (all tasks checked, but behavior diverges from spec), or correct but incoherent (implementation is right but naming and structure contradict the design). Each dimension must pass independently.
+
+#### Dimension check protocols
+
+```text
+[REFERENCE]
+COMPLETENESS checks:
+  - All tasks in the plan's task list are marked done (no unchecked boxes)
+  - Each requirement in the phase's capability contract has identifiable corresponding code
+  - Each Given/When/Then scenario in the requirements has a test (or documented reason for absence)
+  - All SUMMARY.md `requirements-completed` IDs reference real requirements in the plan
+
+CORRECTNESS checks:
+  - Implementation behavior matches the requirement's WHEN/THEN clauses
+  - Error states specified in requirements are actually handled (not swallowed silently)
+  - Edge cases named in requirements are reachable in code
+  - SHALL requirements are always enforced; SHOULD requirements have documented exceptions
+
+COHERENCE checks:
+  - Architecture decisions (AD-n, D-NN) are traceable in the implementation
+  - Naming in code matches terminology in design documents (no renamed concepts)
+  - If design says "event-driven", code must not use polling (or document the deviation)
+  - No artifact claims something that other artifacts contradict
+```
+
+#### Three-dimensional output format
+
+```text
+[REFERENCE]
+VERIFICATION output sections:
+
+COMPLETENESS
+  ✓ All N tasks checked
+  ✓ All M requirements have corresponding code
+  ✗ Scenario "Timeout handling" has no test — [FAILED]
+  ⚠ Scenario "Empty list" has stub test — [UNCERTAIN]
+
+CORRECTNESS
+  ✓ Implementation behavior matches spec intent
+  ✗ Error state "invalid token" returns 500, spec requires 401 — [FAILED]
+  ⚠ Edge case "null user" is handled but not tested — [UNCERTAIN]
+
+COHERENCE
+  ✓ Design decisions reflected in code structure
+  ⚠ Design mentions "event bus" but implementation uses direct call — [UNCERTAIN]
+  ✗ Naming: spec says "workspace", code says "project" — [FAILED]
+
+SUMMARY
+  FAILED: N critical issues — must not archive without fixes
+  UNCERTAIN: M items — require human decision
+  Ready to archive: Yes | No | With acknowledgments
+```
+
+A phase cannot be archived (moved to `Complete`) if any dimension has a `FAILED` finding. `UNCERTAIN` findings require explicit user acknowledgment recorded in the VERIFICATION.md before archiving.
+
+### 4.17 RFC 2119 requirement language enforcement
+
+All requirements in capability contracts (§4.10), decision documents (D-NN), and user stories (prd.json) MUST use precise RFC 2119 modal verbs. Vague language ("should probably", "might", "ideally") is a validation error.
+
+#### RFC 2119 vocabulary and strength
+
+| Keyword | Strength | Obligation | Verification mapping |
+| --- | --- | --- | --- |
+| `SHALL` / `MUST` | Absolute | No deviation permitted | Violation → `FAILED` (BLOCKER) |
+| `SHALL NOT` / `MUST NOT` | Absolute prohibition | No exception permitted | Violation → `FAILED` (BLOCKER) |
+| `SHOULD` | Strong recommendation | Deviations require documented rationale | Violation → `UNCERTAIN` (WARNING) |
+| `SHOULD NOT` | Strong anti-recommendation | Same as above | Violation → `UNCERTAIN` (WARNING) |
+| `MAY` | Optional | Free choice | Absence → `VERIFIED` (no gap) |
+
+#### Validation rules
+
+```text
+[REFERENCE]
+RFC 2119 validation (applies to all spec-layer requirements):
+
+  Rule 1: Every requirement MUST contain at least one RFC 2119 keyword.
+    Error: "The system logs errors." → missing modal verb
+    Fix:   "The system SHALL log errors."
+
+  Rule 2: SHALL/MUST requirements map to FAILED findings on violation.
+    In three-dimensional verification: a SHALL clause not met in code is always FAILED, never UNCERTAIN.
+
+  Rule 3: SHOULD requirements with known deviations MUST document the rationale.
+    Format: "(SHOULD: <rationale for deviation>)" inline in code or design doc.
+
+  Rule 4: Scenario Given/When/Then blocks MUST use SHALL or MUST in the THEN clause.
+    Error: "THEN the user might see an error" → weak assertion
+    Fix:   "THEN the system SHALL return status 401 with error body"
+
+  Rule 5: MAY requirements are informational only; their absence is never a verification finding.
+```
+
+#### Well-formed requirement examples
+
+```text
+[REFERENCE]
+Good (SHALL):
+  The session manager SHALL invalidate all tokens on logout.
+  The executor SHALL write SUMMARY.md before marking a plan complete.
+
+Good (SHOULD with known exception):
+  The verifier SHOULD produce findings within 30 seconds. (SHOULD: allowed to exceed for repos >100k LOC)
+
+Good (MAY):
+  The user MAY provide a custom template for CONTEXT.md.
+
+Bad (no modal verb):
+  The system logs errors to the file.
+  → Fix: The system SHALL log errors to the designated log file.
+
+Bad (weak modal):
+  The agent should probably ask for confirmation before destructive actions.
+  → Fix: The agent MUST request explicit confirmation before any destructive action.
+```
 
 ## 5. Drawbacks & Alternatives
 

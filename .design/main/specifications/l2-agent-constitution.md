@@ -1,6 +1,6 @@
 # Agent Constitution
 
-**Version:** 1.0.3
+**Version:** 1.0.4
 **Status:** Stable
 **Layer:** implementation
 **Implements:** l1-office-model.md, l1-memory-model.md
@@ -449,6 +449,82 @@ Filtering rules:
 ```
 
 This allows a single SKILL.md to express the full behavior spectrum without maintaining separate files per mode.
+
+### 4.14 Profile delivery modes
+
+A **profile** selects which capabilities to distribute; a **delivery mode** controls which adapter types receive those capabilities. Together they let a workspace ship exactly the right set of rules to exactly the right tools, without manual per-platform editing.
+
+#### Profiles
+
+A profile is a named collection of skills and workflows. The workspace picks one:
+
+| Profile | Included capabilities |
+| --- | --- |
+| `minimal` | Core session start only — SOUL.md + PROFILE.md loaded, no skill injection |
+| `standard` | Core + workflow commands (propose, plan, apply, verify, archive) |
+| `full` | Standard + adversarial review, goal-backward verification, retrospective triggers |
+| `custom` | User-selected subset declared in workspace config |
+
+The profile determines which SKILL.md files are compiled into adapter outputs and which workflow commands are generated. Switching profiles regenerates all adapter files from the canonical source.
+
+#### Delivery modes
+
+Delivery mode controls which adapter file types are generated:
+
+| Mode | Generated adapters | Use when |
+| --- | --- | --- |
+| `skills` | Skills directory files only (`skills/*.md`) | Host supports skill-based context injection (Claude Code, Codex) |
+| `commands` | Command prompt files only (e.g., `.github/prompts/*.md`) | Host supports command-palette only (GitHub Copilot) |
+| `both` | Skills + commands (default) | Host supports both (most environments) |
+
+#### Installation scope
+
+```text
+[REFERENCE]
+Installation scope controls where adapter files are written:
+
+  global:  ~/.local/share/cronus/skills/  (user-level, shared across all projects)
+           Use when: you want Cronus skills available everywhere
+
+  project: <ws>/skills/  (workspace-local, versioned with the project)
+           Use when: project-specific persona or rules must not leak to other workspaces
+
+  both:    Install to project; symlink to global (requires explicit opt-in)
+           Use when: want local customization AND global availability
+```
+
+#### Profile config schema
+
+```text
+[REFERENCE]
+Profile configuration (in <ws>/config.json or global ~/.cronus/config.json):
+
+{
+  "profile": "standard",           // minimal | standard | full | custom
+  "delivery": "both",              // skills | commands | both
+  "installScope": "project",       // global | project | both
+  "customSkills": [],              // for profile=custom: list of skill IDs to include
+  "excludeSkills": []              // for any profile: skill IDs to omit
+}
+```
+
+#### Regeneration trigger
+
+When profile or delivery changes, all adapter files must be regenerated:
+
+```text
+[REFERENCE]
+cronus install --profile full --delivery both --scope project
+  → Reads canonical sources (SOUL.md, skills/*.md, workflows/*.md)
+  → Applies mode-marker filtering for current operation mode
+  → Writes all adapter files to the correct locations
+  → Runs alignment check (§4.13) to verify no drift
+
+cronus install --check
+  → Reads current adapter files
+  → Compares against current canonical sources
+  → Reports: "N adapters in sync. M adapters drifted."
+```
 
 ## 5. Drawbacks & Alternatives
 
