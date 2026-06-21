@@ -1,6 +1,6 @@
 # Quality Pipeline
 
-**Version:** 1.1.6
+**Version:** 1.1.7
 **Status:** Stable
 **Layer:** implementation
 **Implements:** l1-quality-standards.md
@@ -768,6 +768,74 @@ Bad (no modal verb):
 Bad (weak modal):
   The agent should probably ask for confirmation before destructive actions.
   → Fix: The agent MUST request explicit confirmation before any destructive action.
+```
+
+### 4.18 Complexity justification record
+
+The decision ladder (§4.13) and over-engineering audit (§4.14) mark violations but do not force removal — sometimes complexity is warranted. When a team accepts a violation, they MUST record a justification; otherwise the finding silently accumulates as tech debt.
+
+#### When to fill
+
+Fill a justification record when:
+
+- An over-engineering audit tags a dependency but the team decides to keep it.
+- A decision-ladder finding is marked `accepted-with-justification` rather than acted on.
+- A constitutional rule is explicitly overridden.
+
+#### Justification table format
+
+Add a `## Complexity Justifications` section to the relevant CONTEXT.md or PLAN.md:
+
+```markdown
+## Complexity Justifications
+
+| Violation | Why Needed | Simpler Alternative Rejected Because |
+|-----------|------------|--------------------------------------|
+| Added `serde` for a 3-field struct | Upstream crate requires `Serialize`; hand-rolling is error-prone at their API boundary | Would break upstream deserialization |
+| Four config layers instead of three | Security policy mandates per-environment secret isolation | Merging env/secret layers leaks secrets |
+```
+
+#### Rules
+
+1. The table is mandatory when a violation is accepted; absent table means the violation must be acted on.
+2. Each row covers exactly one violation (one dependency, one rule, one layer).
+3. "Simpler Alternative Rejected Because" must name a concrete reason.
+4. The table is reviewed in every over-engineering audit pass; rows are removed when the violation is resolved.
+5. Unresolved justifications older than one milestone are escalated in the retrospective.
+
+### 4.19 Independent test guarantee
+
+A story that cannot be tested in isolation creates a hidden dependency chain: failing story B blocks story A's verification even when A is functionally correct.
+
+#### Rule
+
+Every story-level scope block (proposal, task phase, kanban user story) MUST include an "Independent Test" field that describes:
+
+1. The specific action taken to test this story in isolation.
+2. The observable output that confirms it is complete.
+3. No dependency on other in-progress stories.
+
+#### Format
+
+```markdown
+## Story: [Name] (Priority: P1)
+
+**Description**: [What the user can do]
+
+**Independent Test**:
+  - Trigger: [e.g., "Run `cronus board list` with an empty workspace"]
+  - Expected: [e.g., "Outputs `No cards found.` and exits 0"]
+  - State reset: [e.g., "Delete `.planning/board.json` before each run"]
+```
+
+#### Verification gate
+
+Before a story enters `In Progress`, the planner confirms the Independent Test field is filled and non-circular. The reviewer verifies the described test was actually run (§4.12 VERIFICATION.md).
+
+Stories without a valid Independent Test field are blocked at the `In Progress` transition:
+
+```text
+BLOCKED: Story "[name]" has no Independent Test. Fill the field before execution begins.
 ```
 
 ## 5. Drawbacks & Alternatives

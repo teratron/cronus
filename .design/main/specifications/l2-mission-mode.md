@@ -1,6 +1,6 @@
 # Mission Mode
 
-**Version:** 1.0.3
+**Version:** 1.0.4
 **Status:** Stable
 **Layer:** implementation
 **Implements:** l1-orchestration.md
@@ -441,6 +441,78 @@ Proposal immutability:
 | `lite` | Bullet list only | No | Skipped if none surfaced |
 | `full` | Bullets + brief explanation | Yes | At least 1 entry required |
 | `ultra` | Full paragraph + alternatives considered | Yes + tested | At least 3 entries, with rationale |
+
+### 4.13 Spec persistence model
+
+Teams that update the PRD or encounter mid-mission discoveries face a choice: propagate changes forward into `plan.md` and `tasks.md`, absorb them back into `prd.json`, or keep all files as live sources. Each strategy has different drift risk and audit-trail properties.
+
+#### Three models
+
+| Model | Definition | Strengths | Risk |
+| --- | --- | --- | --- |
+| **Flow-forward** | New requirements add new task phases; previous phases are immutable | Full audit trail; old decisions preserved | Growing task file; some duplication |
+| **Flow-back** | Any artifact may be edited; changes reconciled manually | Fast iteration in early exploration | Drift between plan, PRD, and tasks |
+| **Living spec** | `prd.json` is the single source; `plan.md` and `tasks.md` regenerated from it | Consistency guaranteed | Implementation rationale not captured in PRD |
+
+#### Model selection
+
+```json
+{
+  "mission": {
+    "spec_persistence": "flow-forward"
+  }
+}
+```
+
+Default: `flow-forward`. Switching models mid-mission requires a manual migration step.
+
+#### Enforcement per model
+
+**Flow-forward**: the orchestrator refuses edits to task phases older than the current wave. New discoveries append a new phase at the end of `tasks.md`.
+
+**Flow-back**: agents warn when `prd.json` and `tasks.md` diverge by more than 20% of task count. A reconciliation command (`cronus mission reconcile`) surfaces the diff.
+
+**Living spec**: agents regenerate `plan.md` and `tasks.md` from `prd.json` on every mission start. Manual edits to those files are overwritten — the agent warns once if non-PRD content is detected.
+
+The default `flow-forward` matches Cronus's append-only archive principle: decisions are never rewritten, only superseded.
+
+### 4.14 Structured clarification protocol
+
+The discuss-phase (§4.8) captures decisions in CONTEXT.md via free-form agent reasoning. That works for architectural choices but leaves scope ambiguities unresolved until plan generation, where rework is costly. A structured clarification step runs before `plan.md` is written to surface questions the agent cannot answer alone.
+
+#### When it runs
+
+Clarification runs automatically at the end of the discuss phase, before plan generation. Triggered on demand with `cronus mission clarify`.
+
+#### Protocol
+
+The agent generates up to 7 clarifying questions from the PRD and CONTEXT.md content. Questions target:
+
+- Scope boundaries ("does this include mobile?")
+- Acceptance criteria ambiguity ("what counts as 'fast enough'?")
+- Dependency ownership ("who provides the auth token?")
+- Non-functional requirements (uptime, data retention)
+- Out-of-scope confirmation ("is X intentionally excluded?")
+
+Questions are written to `.planning/clarifications.md`:
+
+```markdown
+# Clarifications
+
+Status: pending | complete
+
+## Q1: [Question text]
+
+**Answer**: [User fills this in, or agent fills from PRD evidence]
+**Source**: user | prd | inferred
+**Locked**: true | false
+```
+
+The agent fills questions it can answer from the PRD (marking `source: prd`). User-facing questions remain `source: user` until answered. Plan generation does not begin until all non-locked questions either have an answer or are marked `skipped: true` with a rationale.
+
+#### Iteration
+
+Running `cronus mission clarify` after PRD edits appends new questions; answered questions are not re-asked. The planner treats `clarifications.md` as a locked input and MUST NOT contradict any `locked: true` answer.
 
 ## 5. Drawbacks & Alternatives
 

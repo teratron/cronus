@@ -1,6 +1,6 @@
 # Agent Constitution
 
-**Version:** 1.0.4
+**Version:** 1.0.5
 **Status:** Stable
 **Layer:** implementation
 **Implements:** l1-office-model.md, l1-memory-model.md
@@ -525,6 +525,94 @@ cronus install --check
   → Compares against current canonical sources
   → Reports: "N adapters in sync. M adapters drifted."
 ```
+
+### 4.15 Lifecycle hooks for workflow integration
+
+Adapters (§4.13) and profiles (§4.14) describe what to install, but not when to act. Lifecycle hooks let extensions declare side effects that run before or after core Cronus workflow commands without the core knowing about the extension.
+
+#### Hook declaration
+
+Extensions and profiles declare hooks in their manifest under a `hooks:` key:
+
+```yaml
+hooks:
+  after_spec:
+    command: cronus context refresh
+    optional: true
+    description: "Refresh agent context file after spec changes."
+  before_mission:
+    command: cronus git commit --scope=pre-mission
+    optional: true
+    prompt: "Commit outstanding changes before mission starts?"
+```
+
+`optional: true` — skip if the command exits non-zero or is unavailable. `prompt:` — ask the user before running; omit for silent hooks.
+
+#### Available hook points
+
+| Point | Fires |
+| --- | --- |
+| `before_spec` / `after_spec` | Before/after spec document creation or update |
+| `before_plan` / `after_plan` | Before/after plan generation |
+| `before_mission` / `after_mission` | Before/after a full mission run |
+| `before_task` / `after_task` | Before/after a single task execution |
+| `before_review` / `after_review` | Before/after a quality pipeline review pass |
+| `before_install` / `after_install` | Before/after `cronus install` |
+
+#### Execution order
+
+Multiple hooks registered for the same point run in declaration order (profile hooks before extension hooks). A non-optional hook that exits non-zero aborts the workflow at that point; optional hooks are logged and skipped.
+
+#### Hook environment
+
+```bash
+CRONUS_WORKSPACE=<path>      # current workspace root
+CRONUS_MODE=<lite|full|ultra>
+CRONUS_HOOK_POINT=<name>     # e.g. "after_spec"
+```
+
+Hooks MUST NOT write to `.design/` unless they are engine-improvement tools with explicit write permission.
+
+### 4.16 Managed-marker agent context injection
+
+The multi-platform adapter (§4.13) copies or generates adapter files (CLAUDE.md, AGENTS.md, etc.). A full overwrite destroys user customization. Managed markers solve this: the adapter writes only its section, demarcated by sentinel lines, leaving the rest of the file untouched.
+
+#### Marker format
+
+```
+<!-- CRONUS:START -->
+[Agent instructions managed by Cronus — do not edit this block manually]
+...generated content...
+<!-- CRONUS:END -->
+```
+
+The sentinel prefix is configurable per adapter in `config.json`:
+
+```json
+{
+  "adapters": {
+    "claude_md": {
+      "context_file": "CLAUDE.md",
+      "marker_prefix": "CRONUS"
+    }
+  }
+}
+```
+
+#### Injection rules
+
+1. **First install**: if the context file does not exist, the adapter creates it with only the managed block.
+2. **Update**: the adapter locates `<!-- {prefix}:START -->` and `<!-- {prefix}:END -->`, replaces the content between them, leaves everything outside untouched.
+3. **Mismatched sentinels**: if only one sentinel is found, the adapter emits a warning and aborts — no partial writes.
+4. **No sentinels in existing file**: the adapter appends the managed block at the end of the file.
+
+#### Manual section policy
+
+Content outside the managed block is the user's responsibility. The adapter NEVER reads, parses, or modifies it. Conflicts between the managed block and user content are the user's responsibility to resolve.
+
+#### Multi-file support
+
+A single install pass may inject into multiple context files (e.g., `CLAUDE.md` and `AGENTS.md`) using separate adapter entries with distinct `marker_prefix` values to avoid collisions.
 
 ## 5. Drawbacks & Alternatives
 

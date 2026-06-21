@@ -1,6 +1,6 @@
 # Kanban Board
 
-**Version:** 1.0.4
+**Version:** 1.0.5
 **Status:** Stable
 **Layer:** implementation
 **Implements:** l1-kanban-model.md
@@ -363,6 +363,56 @@ Identical to `type="auto"` but the executor writes the test first, confirms it f
 ```
 
 `gate="blocking"` on a checkpoint triggers writing `.planning/.continue-here.md` (see `l2-orchestration.md` §4.14). Execution halts until the user provides the `resume-signal`. Non-blocking checkpoints (`gate="advisory"`) emit a notice but do not halt execution.
+
+### 4.10 Priority-ordered story cards
+
+The board's phase-level grouping (§4.5) does not distinguish MVP work from nice-to-have work. Priority metadata on story cards enables the orchestrator to enforce cross-tier sequencing (see `l2-orchestration.md` §4.17) and gives the user a quick visual cue.
+
+#### Priority field
+
+```json
+{
+  "id": "card-007",
+  "type": "story",
+  "title": "User can log in with email and password",
+  "priority": "P1",
+  "independent_test": "Run `cronus login test@example.com password` against a seeded workspace; confirm exit 0 and token file written.",
+  "depends_on": [],
+  "status": "todo"
+}
+```
+
+Priority values:
+
+| Value | Meaning | Execution rule |
+| --- | --- | --- |
+| `P1` | MVP; launch-blocking | All P1 stories complete before any P2 starts |
+| `P2` | Important, not blocking | All P2 stories complete before any P3 starts |
+| `P3` | Nice-to-have | Deferred if capacity is constrained |
+
+#### Board display
+
+The TUI groups story cards under their priority tier within the current phase column:
+
+```
+Phase: story-auth
+  🎯 P1  User can log in          [In Progress]
+  🎯 P1  User can log out         [Todo]
+       P2  Password reset email   [Todo]
+       P3  Remember me checkbox   [Backlog]
+```
+
+`🎯` marks P1 cards. P3 cards move to Backlog automatically when the phase wave starts if capacity is below the P3 threshold in `config.json`.
+
+#### Story completion gate
+
+Before the orchestrator starts any P2 card, it confirms all P1 cards in the same phase are `Done`:
+
+```text
+✓ All P1 stories done — P2 stories may now begin.
+```
+
+Symmetrically for P2 → P3.
 
 ## 5. Drawbacks & Alternatives
 

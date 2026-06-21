@@ -1,6 +1,6 @@
 # Orchestration
 
-**Version:** 1.0.6
+**Version:** 1.0.7
 **Status:** Stable
 **Layer:** implementation
 **Implements:** l1-orchestration.md
@@ -782,6 +782,56 @@ cronus change next               # List unblocked changes (no unsatisfied depend
 cronus change split <id>         # Decompose a large change into child changes
 cronus change status             # Show all changes with their dependency state
 ```
+
+### 4.17 Foundational phase gate
+
+Plans that mix setup work (project scaffold, dependency wiring, infrastructure) with feature work (user-facing stories) risk cascading failures when story tasks start before the foundation is ready.
+
+**Gate rule**: a plan MUST declare at most one `phase: foundation` before any `phase: story` phases. No story task may enter `In Progress` while the foundation phase contains an incomplete task.
+
+#### Foundation phase in PLAN.md
+
+```yaml
+phases:
+  - id: foundation
+    type: foundation        # reserved type; pre-condition for all stories
+    wave: 1
+    tasks: [...]
+    gate: blocking          # ⚠️ CRITICAL: no story work begins until this phase is Done
+  - id: story-user-auth
+    type: story
+    priority: P1
+    wave: 2                 # only starts after foundation gate passes
+    depends_on: [foundation]
+    tasks: [...]
+```
+
+The orchestrator enforces: before spawning any wave-2 agent, it checks that all wave-1 (foundation) tasks carry `status: done`. If any remain, it emits:
+
+```text
+⚠️ FOUNDATION GATE: phase "foundation" has N incomplete task(s). Story work blocked.
+Remaining: <task-id-list>
+```
+
+#### Story prioritization
+
+Stories are ordered by `priority: P1 | P2 | P3`:
+
+- `P1` — MVP; must be done before any non-MVP story begins parallel execution.
+- `P2` — important but not launch-blocking.
+- `P3` — nice-to-have; deferred unless capacity allows.
+
+Within a priority tier, stories may run in parallel (respecting `depends_on`). Cross-tier parallelism is disallowed: all P1 stories must complete before any P2 story may begin.
+
+#### Foundation completion checkpoint
+
+When the last foundation task completes, the orchestrator emits a checkpoint line before releasing story waves:
+
+```text
+✓ Foundation phase complete — story implementation may now begin in parallel.
+```
+
+This line appears in the run log and the board card for the foundation phase.
 
 ## 5. Drawbacks & Alternatives
 
