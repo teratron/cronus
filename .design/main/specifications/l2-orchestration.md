@@ -1,6 +1,6 @@
 # Orchestration
 
-**Version:** 1.0.9
+**Version:** 1.0.10
 **Status:** Stable
 **Layer:** implementation
 **Implements:** l1-orchestration.md
@@ -921,6 +921,43 @@ context_sha: {git-sha-at-checkpoint-time}
 **WIP commit strategy (opt-in):** When `mission.checkpoint_push: true`, the executor also creates a local git commit with a `WIP: [cronus-cp]` prefix and the checkpoint YAML as the commit body. Before finalization, `cronus mission squash` collapses all `WIP: [cronus-cp]` commits into a single clean commit; non-WIP commits are preserved.
 
 **Push behavior:** WIP commits are local-only by default (`checkpoint_push: false`). Set `checkpoint_push: true` to push the WIP branch to the remote — useful for CI-monitored or pair sessions.
+
+### 4.20 Three-tier durability model
+
+Different orchestration tasks have different time horizons, fault-tolerance requirements, and result-delivery expectations. Collapsing them into a single primitive produces systems that are either too heavy (synchronous delegation for fire-and-forget work) or too fragile (scheduled jobs for tasks that need an immediate result).
+
+**Tier definitions:**
+
+| Tier | Name | Duration | Durability | Use when |
+| --- | --- | --- | --- | --- |
+| 1 | Delegation | Seconds–minutes | Non-durable (parent cancel = child cancel) | Parallel subtasks; parent waits for result before continuing |
+| 2 | Scheduled | Minutes–days | Durable (survives restart, not crash) | Background work; fire-and-forget; recurring maintenance |
+| 3 | Queue | Hours–indefinite | Durable + persistent (survives crash; audit trail) | Human-queued tasks; multi-agent work pools; async delivery |
+
+**Tier 1 — Delegation:**
+
+- Synchronous: parent blocks until the child returns a summary.
+- Isolated context + session: the child cannot read parent context or tool results.
+- Maximum concurrency: bounded (default: 3 parallel subtasks, configurable per goal).
+- Leaf vs orchestrator flag: leaf agents cannot re-delegate; orchestrators may spawn sub-workers.
+- Failure: child failure is reported to parent; parent decides retry vs abort.
+
+**Tier 2 — Scheduled:**
+
+- Persisted schedule definition (cron expression, duration interval, or ISO timestamp).
+- Hard interrupt: maximum run time enforced to prevent runaway jobs (default: 3 minutes).
+- Delivery target: session context, external channel (notifications), or file drop.
+- Per-job overrides: model, skill set, pre-run script, additional context injection.
+
+**Tier 3 — Queue:**
+
+- Durable storage (SQLite): survives crashes and restarts; board state is authoritative.
+- Dispatcher atomically claims tasks; reclaims stale claims after a configurable timeout.
+- Worker toolset is gated by the task's declared requirements (no ambient permission creep).
+- Isolation: board = hard boundary between offices; tenant = namespace within a board.
+- Audit trail: every claim, start, completion, and failure is recorded with timestamp.
+
+**Selection rule:** Choose the lowest tier that satisfies the durability requirement. Queue overhead (dispatch latency, storage, reclaim logic) is real — do not use Tier 3 when Tier 1 or Tier 2 suffices. Do not use Tier 1 for jobs longer than five minutes: parent context may exhaust before the child returns.
 
 ## 5. Drawbacks & Alternatives
 

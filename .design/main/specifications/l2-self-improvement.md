@@ -1,6 +1,6 @@
 # Self-Improvement
 
-**Version:** 1.0.5
+**Version:** 1.0.6
 **Status:** Stable
 **Layer:** implementation
 **Implements:** l1-memory-model.md
@@ -749,6 +749,55 @@ Every skill invocation appends to `.planning/timeline.jsonl`:
 ```
 
 Timeline data feeds the flow score computation (§4.12): inter-skill gaps become `latency_score`; session duration becomes `duration_score`.
+
+### 4.14 Skill activity tracking
+
+Skills and extensions accumulate over time. Without lifecycle management, dormant skills remain in the active pool, dilute discovery, slow loading, and create maintenance debt. Usage-based activity tracking automatically transitions each skill through active → stale → archived states.
+
+**Activity record:** One `.usage.json` file per skill, stored alongside `SKILL.md`.
+
+```json
+{
+  "skill_id": "deep-research",
+  "use_count": 42,
+  "view_count": 18,
+  "patch_count": 3,
+  "last_activity_at": "2026-06-21T15:30:00Z",
+  "state": "active",
+  "pinned": false
+}
+```
+
+**Metric definitions:**
+
+- `use_count`: incremented each time the skill is invoked.
+- `view_count`: incremented each time `SKILL.md` is read without invoking the skill.
+- `patch_count`: incremented each time any file in the skill's directory is modified.
+- `last_activity_at`: updated on any of the above events.
+
+**State machine:**
+
+| From | To | Trigger |
+| --- | --- | --- |
+| `active` | `stale` | No activity for 30 consecutive days |
+| `stale` | `archived` | No activity for 90 days since becoming stale |
+| `archived` | `active` | Any activity event (automatic reversal) |
+| `active` or `stale` | — | Never deleted (only archived) |
+| `pinned: true` | — | Pin prevents any state transition |
+
+**Curator sweep schedule:**
+
+- Hourly: detect newly idle skills; transition `active → stale` when `last_activity_at` > 30 days.
+- Daily: transition `stale → archived` when stale for more than 90 days with no activity since transition.
+- On demand: `cronus workspace curator` forces an immediate sweep.
+
+**Curator scope:** Only skills created or patched by agents in the current workspace. Bundled skills (shipped with Cronus) and hub-installed skills are excluded from curator management.
+
+**Discovery impact:**
+
+- `active`: included in the agentic readiness checklist (§4.17 of `l2-agent-constitution.md`) and automatic skill routing.
+- `stale`: listed in `cronus workspace check` with an "idle — consider archiving" notice; excluded from auto-routing.
+- `archived`: excluded from all discovery; accessible via `cronus skills list --include-archived`.
 
 ## 5. Drawbacks & Alternatives
 

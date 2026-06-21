@@ -1,6 +1,6 @@
 # Quality Pipeline
 
-**Version:** 1.1.10
+**Version:** 1.1.11
 **Status:** Stable
 **Layer:** implementation
 **Implements:** l1-quality-standards.md
@@ -1108,6 +1108,77 @@ Functional tests verify correctness; they cannot verify whether a prose output i
 **Gate behavior:** Any axis below 6 blocks finalization and emits the axis score with a one-line explanation from the judge. All axes ≥ 6 (with any below 8 as a warning) allows finalization to proceed; warnings surface in the review readiness dashboard (§4.24).
 
 **Opt-out:** `CRONUS_JUDGE=0` env var or `quality.judge_enabled: false` in `config.json` disables the judge pass.
+
+### 4.27 Analysis-first generation protocol
+
+Generating artifacts without first characterizing the domain, objectives, and audience produces generic outputs that fail to serve the actual need. A mandatory pre-generation analysis phase separates understanding from execution and makes the generation goal explicit and verifiable.
+
+**Protocol:** Before producing any significant artifact (spec section, plan, report, code scaffold, or test suite), the agent runs a five-dimension analysis and records results in the `## Analysis` block of CONTEXT.md.
+
+**Five dimensions:**
+
+| Dimension | Question | Output field |
+| --- | --- | --- |
+| Domain classification | What type of artifact is this? | `domain:` tag |
+| Objective identification | What will the reader or downstream agent be able to do after consuming this? (measurable) | 1–3 `objective:` bullets |
+| Audience model | Who is the primary consumer? What prior knowledge do they have? | `audience:` one-line |
+| Complexity assessment | How many independent concepts does this span? | `complexity: simple` (≤5) / `moderate` (≤8) / `complex` (9+) |
+| Data verbatim flag | Does the input contain statistics, quotes, or exact figures that must be preserved? | `verbatim_required: true\|false` |
+
+**CONTEXT.md `## Analysis` block format:**
+
+```yaml
+## Analysis
+domain: spec-section
+objectives:
+  - Reader can configure checkpoint behavior without reading source code
+  - Downstream planner can derive required config.json fields
+audience: implementation agent; familiar with YAML; unfamiliar with checkpoint internals
+complexity: moderate
+verbatim_required: false
+```
+
+**Generation rule:** The produced artifact must satisfy every listed objective. After generation the agent self-checks: "Does this output let the audience do each objective?"
+
+**Data verbatim rule (when `verbatim_required: true`):** Copy all statistics, quotes, exact figures, and named identifiers exactly as they appear in the source. No paraphrasing, no rounding, no synonym substitution. Source wording is authoritative.
+
+### 4.28 Systematic debugging methodology
+
+Debugging that begins with a code change before establishing a root cause produces patches that suppress symptoms while leaving the underlying fault active. A four-phase evidence-based protocol is required before any fix is written.
+
+**IRON LAW: No production code change may be made until the root cause is identified and stated.**
+
+**Phase 1 — Investigation (evidence gathering):**
+
+1. Read the full error output — complete stack trace, file, line, message, not just the headline.
+2. Reproduce consistently: can the failure be triggered with a specific, known input?
+3. Identify recent changes: `git diff`, dependency updates, configuration changes.
+4. Trace data flow upstream: where does the bad value originate?
+
+Completion signal: "I can reproduce this failure and I know which component is responsible."
+
+**Phase 2 — Pattern analysis:**
+
+1. Find working examples of similar code in the codebase.
+2. Compare the failing case against the working case, line by line.
+3. List every difference, no matter how small.
+4. Verify that all required dependencies (env vars, files, services) are present.
+
+**Phase 3 — Hypothesis testing:**
+
+1. State one hypothesis: "I believe X is the root cause because Y."
+2. Design a minimal test that isolates the hypothesis (fewest moving parts possible).
+3. Run the test and check whether it confirms or refutes the hypothesis.
+4. Refine the hypothesis and repeat from step 1 until confirmed.
+
+**Phase 4 — Fix and verify:**
+
+1. Fix at the source (where the bad value originates), not at the symptom (where it manifests).
+2. Run the original failing test — does it pass?
+3. Run the full test suite — no regressions?
+4. Commit with context: explain why this change addresses the root cause, not just what changed.
+
+**Anti-pattern:** Applying a sequence of plausible changes and hoping one works is random mutation, not debugging. Each change must be motivated by a stated, testable hypothesis.
 
 ## 5. Drawbacks & Alternatives
 
