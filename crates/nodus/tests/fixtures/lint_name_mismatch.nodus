@@ -1,0 +1,12 @@
+§wf:lint_name_mismatch v1.0
+;; The workflow name "lint_name_mismatch" intentionally differs from the
+;; filename used in parity tests ("wrong_filename.nodus") — triggers E012.
+
+§runtime: { core: schema.nodus }
+
+@in: { query }
+@out: $out
+@err: ESCALATE(human)
+
+@steps:
+  1. GEN($in.query) → $out

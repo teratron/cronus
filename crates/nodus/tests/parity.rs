@@ -1,0 +1,344 @@
+// Golden parity corpus: verifies semantic equivalence between our Rust runtime
+// and the reference workflow-language implementation for the same input corpus.
+// Each test loads a .nodus fixture and checks validation verdicts, execution
+// results, or transpilation shape against expected golden values.
+//
+// Conventions:
+//  - `codes()` extracts diagnostic codes from a `Vec<Diagnostic>` for easy assertion.
+//  - Execution tests use the built-in stub provider (real model calls are not made).
+//  - Transpilation tests check structure and section presence, not exact byte output.
+
+use nodus::{
+    parser::Parser,
+    transpiler::Transpiler,
+    validator::{Diagnostic, Severity, Validator},
+    workflows::{self, TranspileMode},
+};
+
+// ── Fixtures (embedded at compile time) ──────────────────────────────────────
+
+const SIMPLE_LOG: &str = include_str!("fixtures/simple_log.nodus");
+const TICKET_TRIAGE: &str = include_str!("fixtures/ticket_triage.nodus");
+const LINT_MISSING_RUNTIME: &str = include_str!("fixtures/lint_missing_runtime.nodus");
+const LINT_PUBLISH_BEFORE_VALIDATE: &str =
+    include_str!("fixtures/lint_publish_before_validate.nodus");
+const LINT_NAME_MISMATCH: &str = include_str!("fixtures/lint_name_mismatch.nodus");
+const UNTIL_QUALITY_LOOP: &str = include_str!("fixtures/until_quality_loop.nodus");
+
+// ── Helpers ───────────────────────────────────────────────────────────────────
+
+fn codes(diags: &[Diagnostic]) -> Vec<&str> {
+    diags.iter().map(|d| d.code.as_str()).collect()
+}
+
+fn parse_and_validate(source: &str, filename: &str) -> Vec<Diagnostic> {
+    let ast = Parser::parse(source).expect("fixture must parse");
+    Validator::validate(&ast, filename)
+}
+
+// ── Validation parity ─────────────────────────────────────────────────────────
+
+mod validation {
+    use super::*;
+
+    #[test]
+    fn simple_log_no_block_errors() {
+        let diags = parse_and_validate(SIMPLE_LOG, "simple_log.nodus");
+        let errors: Vec<_> = diags
+            .iter()
+            .filter(|d| d.severity == Severity::Error)
+            .collect();
+        assert!(
+            errors.is_empty(),
+            "expected no block-class errors for simple_log; got: {errors:?}"
+        );
+    }
+
+    #[test]
+    fn ticket_triage_no_block_errors() {
+        let diags = parse_and_validate(TICKET_TRIAGE, "ticket_triage.nodus");
+        let errors: Vec<_> = diags
+            .iter()
+            .filter(|d| d.severity == Severity::Error)
+            .collect();
+        assert!(
+            errors.is_empty(),
+            "expected no block-class errors for ticket_triage; got: {errors:?}"
+        );
+    }
+
+    #[test]
+    fn missing_runtime_yields_e001() {
+        let diags = parse_and_validate(LINT_MISSING_RUNTIME, "lint_missing_runtime.nodus");
+        assert!(
+            codes(&diags).contains(&"E001"),
+            "expected E001 for missing §runtime; got: {diags:?}"
+        );
+    }
+
+    #[test]
+    fn e001_absent_when_runtime_present() {
+        let diags = parse_and_validate(SIMPLE_LOG, "simple_log.nodus");
+        assert!(
+            !codes(&diags).contains(&"E001"),
+            "unexpected E001 when §runtime is present"
+        );
+    }
+
+    #[test]
+    fn publish_before_validate_yields_e005() {
+        let diags = parse_and_validate(
+            LINT_PUBLISH_BEFORE_VALIDATE,
+            "lint_publish_before_validate.nodus",
+        );
+        assert!(
+            codes(&diags).contains(&"E005"),
+            "expected E005 for PUBLISH before VALIDATE; got: {diags:?}"
+        );
+    }
+
+    #[test]
+    fn ticket_triage_validate_before_publish_no_e005() {
+        let diags = parse_and_validate(TICKET_TRIAGE, "ticket_triage.nodus");
+        assert!(
+            !codes(&diags).contains(&"E005"),
+            "unexpected E005: ticket_triage has VALIDATE before PUBLISH"
+        );
+    }
+
+    #[test]
+    fn name_mismatch_yields_e012() {
+        // The fixture declares §wf:lint_name_mismatch but the filename says otherwise.
+        let diags = parse_and_validate(LINT_NAME_MISMATCH, "wrong_filename.nodus");
+        assert!(
+            codes(&diags).contains(&"E012"),
+            "expected E012 for name/filename mismatch; got: {diags:?}"
+        );
+    }
+
+    #[test]
+    fn correct_filename_no_e012() {
+        let diags = parse_and_validate(LINT_NAME_MISMATCH, "lint_name_mismatch.nodus");
+        assert!(
+            !codes(&diags).contains(&"E012"),
+            "unexpected E012 when workflow name matches filename"
+        );
+    }
+
+    #[test]
+    fn no_err_handler_yields_w001() {
+        // lint_missing_runtime.nodus has no @err block.
+        let diags = parse_and_validate(LINT_MISSING_RUNTIME, "lint_missing_runtime.nodus");
+        assert!(
+            codes(&diags).contains(&"W001"),
+            "expected W001 for missing @err handler"
+        );
+    }
+
+    #[test]
+    fn w001_absent_when_err_handler_present() {
+        let diags = parse_and_validate(SIMPLE_LOG, "simple_log.nodus");
+        assert!(
+            !codes(&diags).contains(&"W001"),
+            "unexpected W001 when @err: ESCALATE(human) is declared"
+        );
+    }
+
+    #[test]
+    fn no_test_blocks_yields_w002() {
+        let diags = parse_and_validate(SIMPLE_LOG, "simple_log.nodus");
+        assert!(
+            codes(&diags).contains(&"W002"),
+            "expected W002 for workflow with no @test blocks"
+        );
+    }
+
+    #[test]
+    fn w002_absent_when_tests_present() {
+        let diags = parse_and_validate(TICKET_TRIAGE, "ticket_triage.nodus");
+        assert!(
+            !codes(&diags).contains(&"W002"),
+            "unexpected W002 when @test blocks exist"
+        );
+    }
+
+    #[test]
+    fn severity_ordering_error_lt_warning_lt_info() {
+        // The partial order must match the reference: Error < Warning < Info
+        // (lower = more severe).
+        assert!(
+            Severity::Error < Severity::Warning,
+            "Error must order strictly before Warning"
+        );
+        assert!(
+            Severity::Warning < Severity::Info,
+            "Warning must order strictly before Info"
+        );
+    }
+}
+
+// ── Transpilation parity ──────────────────────────────────────────────────────
+
+mod transpilation {
+    use super::*;
+
+    fn to_compact(source: &str) -> String {
+        let ast = Parser::parse(source).expect("fixture must parse");
+        Transpiler::to_nodus(&ast)
+    }
+
+    fn to_human(source: &str) -> String {
+        let ast = Parser::parse(source).expect("fixture must parse");
+        Transpiler::to_human(&ast)
+    }
+
+    #[test]
+    fn compact_round_trip_preserves_name() {
+        let compact = to_compact(SIMPLE_LOG);
+        let ast2 = Parser::parse(&compact).expect("compact form must re-parse");
+        assert_eq!(
+            ast2.header.as_ref().unwrap().name,
+            "simple_log",
+            "workflow name must survive compact round-trip"
+        );
+    }
+
+    #[test]
+    fn compact_includes_runtime_block() {
+        let compact = to_compact(SIMPLE_LOG);
+        assert!(
+            compact.contains("§runtime:"),
+            "compact output must include §runtime: block"
+        );
+    }
+
+    #[test]
+    fn compact_includes_steps_section() {
+        let compact = to_compact(SIMPLE_LOG);
+        assert!(
+            compact.contains("@steps:"),
+            "compact output must include @steps: section"
+        );
+    }
+
+    #[test]
+    fn human_includes_workflow_label() {
+        let human = to_human(SIMPLE_LOG);
+        assert!(
+            human.contains("WORKFLOW"),
+            "human form must include WORKFLOW section header"
+        );
+    }
+
+    #[test]
+    fn human_includes_steps_label() {
+        let human = to_human(SIMPLE_LOG);
+        assert!(
+            human.contains("STEPS"),
+            "human form must include STEPS section header"
+        );
+    }
+
+    #[test]
+    fn compact_ticket_triage_round_trip() {
+        let compact = to_compact(TICKET_TRIAGE);
+        let ast2 = Parser::parse(&compact).expect("compact form must re-parse");
+        assert_eq!(
+            ast2.header.as_ref().unwrap().name,
+            "ticket_triage",
+            "ticket_triage name must survive compact round-trip"
+        );
+    }
+
+    #[test]
+    fn transpile_mode_compact_via_library() {
+        let out = workflows::transpile(SIMPLE_LOG, TranspileMode::Compact)
+            .expect("library transpile compact must succeed");
+        assert!(
+            out.contains("§wf:simple_log"),
+            "library compact output must include §wf header"
+        );
+    }
+
+    #[test]
+    fn transpile_mode_human_via_library() {
+        let out = workflows::transpile(SIMPLE_LOG, TranspileMode::Human)
+            .expect("library transpile human must succeed");
+        assert!(!out.is_empty(), "human output must not be empty");
+        assert!(
+            out.contains("WORKFLOW"),
+            "library human output must include WORKFLOW section"
+        );
+    }
+}
+
+// ── Execution parity ──────────────────────────────────────────────────────────
+
+mod execution {
+    use super::*;
+    use nodus::executor::Status;
+
+    #[test]
+    fn simple_log_executes_ok() {
+        let result = workflows::run(SIMPLE_LOG, "simple_log.nodus", None)
+            .expect("simple_log must execute without block-class errors");
+        assert_eq!(
+            result.status,
+            Status::Ok,
+            "simple_log must return Status::Ok"
+        );
+        assert_eq!(
+            result.workflow, "wf:simple_log",
+            "workflow identifier must match the declared name"
+        );
+    }
+
+    #[test]
+    fn ticket_triage_executes_ok() {
+        let result = workflows::run(TICKET_TRIAGE, "ticket_triage.nodus", None)
+            .expect("ticket_triage must execute without block-class errors");
+        assert_eq!(
+            result.status,
+            Status::Ok,
+            "ticket_triage must return Status::Ok"
+        );
+    }
+
+    #[test]
+    fn until_quality_loop_executes_ok() {
+        let result = workflows::run(UNTIL_QUALITY_LOOP, "until_quality_loop.nodus", None)
+            .expect("until_quality_loop must execute without block-class errors");
+        assert_eq!(
+            result.status,
+            Status::Ok,
+            "bounded ~UNTIL loop must not abort the workflow"
+        );
+    }
+
+    #[test]
+    fn run_rejects_missing_runtime_with_e001() {
+        let err = workflows::run(LINT_MISSING_RUNTIME, "lint_missing_runtime.nodus", None)
+            .expect_err("run must fail fast when §runtime is absent");
+        assert!(!err.is_empty(), "rejection diagnostics must not be empty");
+        let got: Vec<_> = err.iter().map(|d| d.code.as_str()).collect();
+        assert!(
+            got.contains(&"E001"),
+            "expected E001 in rejection diagnostics; got: {got:?}"
+        );
+    }
+
+    #[test]
+    fn run_rejects_publish_before_validate_with_e005() {
+        let err = workflows::run(
+            LINT_PUBLISH_BEFORE_VALIDATE,
+            "lint_publish_before_validate.nodus",
+            None,
+        )
+        .expect_err("run must fail fast on PUBLISH before VALIDATE");
+        let got: Vec<_> = err.iter().map(|d| d.code.as_str()).collect();
+        assert!(
+            got.contains(&"E005"),
+            "expected E005 in rejection diagnostics; got: {got:?}"
+        );
+    }
+}

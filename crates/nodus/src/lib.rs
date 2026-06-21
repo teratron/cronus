@@ -22,16 +22,23 @@ pub mod lexer;
 pub mod parser;
 pub mod vocab;
 
-// Pipeline modules — filled by the remaining Phase-2 tracks. Declared now so
-// the module layout (and the dependency seams between stages) is fixed.
-mod executor;
-mod transpiler;
-mod validator;
+// Pipeline modules.
+pub mod executor;
+pub mod transpiler;
+pub mod validator;
+pub mod workflows;
 
 pub use error::{Error, Result, Span};
+pub use executor::{Executor, ModelProvider, RunResult, Status, StubProvider, Value};
 pub use lexer::{Lexer, Token, TokenType};
 pub use parser::Parser;
+pub use transpiler::Transpiler;
+pub use validator::{Diagnostic, Severity, Validator};
 pub use vocab::Schema;
+pub use workflows::{
+    TestReport, TestResult, TranspileMode, ValidationReport, run, run_with_provider, scaffold,
+    test, transpile,
+};
 
 #[cfg(test)]
 mod tests {

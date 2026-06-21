@@ -1,6 +1,6 @@
 # Workflow Runtime
 
-**Version:** 1.2.2
+**Version:** 1.2.3
 **Status:** Stable
 **Layer:** implementation
 **Implements:** l1-workflow-language.md
@@ -303,6 +303,135 @@ The check is advisory — it logs the recommendation but does not block executio
 Workflow authors can mark a step `skip-native-check: true` when a custom implementation
 is intentional (e.g., performance-critical hot path with benchmarks to justify it).
 ```
+
+### 4.8 Nodus language syntax and built-in vocabulary
+
+The nodus crate (`crates/nodus`) is the concrete runtime. A `.nodus` file carries a typed header, a schema-loading runtime block, reactive triggers, hard constraints, soft preferences, I/O declarations, a sequential step body, and optional test and macro blocks. The schema version embedded in the crate is **v0.4.5** (`BUILTIN_SCHEMA_VERSION`).
+
+#### File type sigils
+
+| Sigil | Kind |
+| --- | --- |
+| `§wf:name vX.Y` | Workflow — the primary executable file type |
+| `§schema:name vX.Y` | Vocabulary + rule schema |
+| `§config:name vX.Y` | Runtime configuration overlay |
+
+#### Section declarations
+
+| Keyword | Purpose |
+| --- | --- |
+| `§runtime: { core: … }` | Loads the named schema; `extends:` for overlays; `agents:` for named model bindings |
+| `@ON: cond → action` | Reactive trigger — workflow activates when condition holds |
+| `!!NEVER: …` / `!!ALWAYS: …` | Absolute hard constraints; executor halts on violation |
+| `!PREF: X OVER Y IF cond` | Soft preference — advisory; never overrides `!!` rules |
+| `@in: { field: type }` | Input declaration; `?` suffix marks optional; `= default` provides a fallback |
+| `@out: $var` | Output variable |
+| `@ctx: [a, b]` | Required context keys |
+| `@err: HANDLER` | Error handler invoked for uncaught step errors |
+| `@steps:` | Sequential numbered step body |
+| `@test: name { … }` | Inline test block with `input:` / `expected:` / `tags:` fields |
+| `@macro: name` | Reusable step-sequence macro |
+
+#### Step-line syntax
+
+```text
+N. COMMAND(args) +modifier=value ^validator ~flag → $pipeline_target
+```
+
+- `+key=value` — named modifier passed to the command
+- `^name` — output-validator rule attached to the step result
+- `~name` — flag extractor; populates a named sub-variable from the result
+- `→ $target` — pipeline target: step output stored as `$target` for downstream steps
+
+#### Control flow
+
+| Construct | Syntax |
+| --- | --- |
+| Conditional | `?IF cond → action` / `?ELIF cond → action` / `?ELSE → action` |
+| Iterator loop | `~FOR $var IN $collection … ~END` |
+| Bounded loop | `~UNTIL cond \| MAX:n … ~END` |
+| Parallel block | `~PARALLEL … ~JOIN → $target` |
+
+Conditional branches accept `!BREAK` (exit the enclosing loop), `!SKIP` (skip the current iteration), and `!OVERRIDE` (suppress a soft preference for this branch only).
+
+#### Built-in command vocabulary (schema v0.4.5)
+
+| Category | Commands |
+| --- | --- |
+| Memory & knowledge | `REMEMBER`, `RECALL`, `FORGET`, `QUERY_KB` |
+| Generation | `GEN`, `REFINE`, `TRANSLATE`, `SUMMARIZE`, `FILL`, `GENERATE_DOC` |
+| Analysis | `ANALYZE`, `SCORE`, `COMPARE`, `EXTRACT`, `FILTER`, `PARSE`, `PARSE_MD_HEADER`, `PARSE_INDEX` |
+| I/O & messaging | `FETCH`, `STORE`, `LOAD`, `APPEND`, `MERGE`, `PUBLISH`, `NOTIFY`, `LOG` |
+| Routing & control | `VALIDATE`, `ROUTE`, `ESCALATE`, `WAIT`, `TONE`, `DEBUG` |
+| Execution | `EXECUTE`, `SIMULATE`, `EXECUTE_TEST`, `TRANSPILE` |
+| Filesystem | `WRITE`, `READ_FILE`, `MKDIR`, `FILE_EXISTS`, `SCAN_DIR`, `MOVE`, `COPY` |
+| System & meta | `ENV`, `DATE`, `COUNTER`, `GIT`, `QUERY_GIT`, `HASH`, `VERSION_BUMP` |
+
+#### Reserved variables
+
+`$in`, `$out`, `$error`, `$meta`, `$raw`, `$draft`, `$ctx`, `$user`, `$session`, `$log`, `$flags`, `$quality`, `$sentiment`, `$confidence`, `$memory`, `$kb_results`
+
+User-defined step pipeline targets (`→ $name`) must not shadow reserved names.
+
+#### Tone values (`+tone=` modifier)
+
+`warm` · `neutral` · `formal` · `casual` · `urgent` · `empathetic` · `brand`
+
+#### Runtime value types
+
+The executor represents all step results with a closed `Value` enum:
+
+| Variant | Rust type | Notes |
+| --- | --- | --- |
+| `Null` | — | Unset or absent |
+| `Bool` | `bool` | |
+| `Int` | `i64` | |
+| `Float` | `f64` | |
+| `Text` | `String` | |
+| `List` | `Vec<Value>` | Ordered, heterogeneous |
+| `Map` | `Vec<(String, Value)>` | Preserves insertion order (not `HashMap`) |
+
+`Map` uses a `Vec` of key-value pairs rather than `HashMap` to preserve declaration order across round-trips.
+
+#### Runtime error codes
+
+| Code | Meaning |
+| --- | --- |
+| `NODUS:RULE_VIOLATION` | An `!!` absolute rule was violated at run time |
+| `NODUS:PARSE_ERROR` | Source file failed to parse |
+| `NODUS:MAX_REACHED` | A `~UNTIL` loop exhausted its `MAX:n` bound |
+| `NODUS:EXECUTION_FAILED` | A step failed during execution |
+| `NODUS:UNDEFINED_VAR` | A variable was referenced before assignment |
+| `NODUS:ROUTE_NOT_FOUND` | A `ROUTE(wf:name)` target does not exist |
+| `NODUS:RULE_CONFLICT` | Two `!!` rules contradict each other |
+| `NODUS:SCHEMA_MISMATCH` | Schema version does not match the workflow header |
+| `NODUS:NO_SCHEMA` | Workflow executed without a loaded schema |
+| `NODUS:NO_TRIGGER` | No `@ON:` trigger matched the current input |
+| `NODUS:UNHANDLED_ERROR` | A step error reached no `@err:` handler |
+
+#### Library API (public surface)
+
+| Function | Signature | Purpose |
+| --- | --- | --- |
+| `scaffold` | `(name: &str) -> WorkflowFile` | Return a minimal valid AST with one `GEN` step |
+| `validate` | `(source, filename) -> Result<ValidationReport>` | Parse + lint; all diagnostics regardless of severity |
+| `run` | `(source, filename, input?) -> Result<RunResult, Diagnostics>` | Validate then execute with stub provider; fast-fail on block errors (WFL-5) |
+| `transpile` | `(source, mode: TranspileMode) -> Result<String>` | `Compact` = lossless round-trip · `Human` = one-way prose |
+| `test` | `(source, filename) -> Result<TestReport>` | Execute all `@test:` blocks and aggregate pass/fail |
+| `run_with_provider` | `(source, filename, input?, provider) -> Result<RunResult, …>` | Like `run` but with a custom `ModelProvider` |
+
+The `ModelProvider` trait is the extension point for real model integration; the built-in `StubProvider` is used for tests and early development.
+
+#### Executor boot sequence
+
+When `run` or `run_with_provider` fires, the executor performs these steps in order:
+
+1. Load schema (from `§runtime.core`).
+2. Internalize `!!` absolute rules (violations halt immediately).
+3. Internalize `!PREF` soft preferences (advisory; yielded to `!!` rules).
+4. Register `@in` / `@ctx` inputs into the value environment.
+5. Match `@ON` triggers against the current input.
+6. Execute `@steps` sequentially; thread `→` pipeline targets between steps.
 
 ## 5. Drawbacks & Alternatives
 

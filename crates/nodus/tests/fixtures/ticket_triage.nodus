@@ -1,0 +1,58 @@
+§wf:ticket_triage v1.0
+;; Workflow: Support Ticket Triage
+;; Purpose:  Classify and route incoming support requests.
+
+§runtime: { core: schema.nodus }
+
+@ON: $trigger.name = "support_request" → RUN(wf:ticket_triage)
+
+!!NEVER: send reply without VALIDATE
+!!ALWAYS: LOG($out)
+
+!PREF: empathetic OVER neutral IF $classification.sentiment < -0.3
+
+@in: {
+  ticket_id: str
+  subject:   str
+  body:      str
+}
+
+@out: $triage_result
+@err: ESCALATE(human) +msg="Ticket triage failed"
+
+@steps:
+
+  1. ANALYZE($in.body, $in.subject) ~intent ~sentiment ~topics → $classification
+
+  2. ?IF $classification.severity = "critical":
+       ESCALATE(human) +msg="Critical ticket"
+       !BREAK
+
+  3. SCORE($classification) ~quality → $score
+
+  4. ?IF $score < 0.5 → REFINE($classification) → $classification
+
+  5. GEN(auto_reply) +ctx=$classification → $draft
+
+  6. VALIDATE($draft) ^brand_voice ^content_length → $valid
+
+  7. PUBLISH($valid, "email") → $sent
+
+  8. LOG($sent)
+  9. $triage_result = { ticket_id: $in.ticket_id, sent: $sent }
+  10. LOG($triage_result)
+
+;; HUMAN MODE
+;; WORKFLOW: ticket_triage
+;; TRIGGER: support_request event
+;; Classifies tickets, generates an auto-reply, and publishes it. Critical
+;; tickets always escalate to a human agent without sending an auto-reply.
+;; INPUT: ticket_id, subject, body
+;; OUTPUT: triage result record
+;; ON ERROR: escalate to human
+
+@test:normal_ticket {
+  input:    { ticket_id: "T-001", subject: "Billing?", body: "When is my invoice due?" }
+  expected: { status = SUCCESS }
+  tags: [smoke]
+}

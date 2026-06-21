@@ -1,0 +1,6 @@
+§wf:lint_missing_runtime v1.0
+;; Intentionally missing §runtime block — triggers E001.
+@in: { query }
+@out: $out
+@steps:
+  1. GEN($in.query) → $out

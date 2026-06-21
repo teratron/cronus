@@ -1,0 +1,12 @@
+§wf:simple_log v1.0
+;; Minimal valid workflow used as the golden baseline for parity tests.
+
+§runtime: { core: schema.nodus }
+
+@in: { query }
+@out: $out
+@err: ESCALATE(human)
+
+@steps:
+  1. GEN($in.query) → $out
+  2. LOG($out)

@@ -1,0 +1,17 @@
+§wf:until_quality_loop v1.0
+;; Demonstrates a bounded ~UNTIL loop refining output until quality ≥ 0.8.
+
+§runtime: { core: schema.nodus }
+
+@in: { prompt }
+@out: $out
+@err: ESCALATE(human)
+
+@steps:
+  1. GEN($in.prompt) → $draft
+  2. ~UNTIL $quality >= 0.8 | MAX:3
+       SCORE($draft) ~quality → $quality
+       ?IF $quality < 0.8 → REFINE($draft) → $draft
+     ~END
+  3. $out = $draft
+  4. LOG($out)

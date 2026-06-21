@@ -1,0 +1,13 @@
+§wf:lint_publish_before_validate v1.0
+;; Intentionally publishes before validating — triggers E005.
+
+§runtime: { core: schema.nodus }
+
+@in: { message }
+@out: $out
+@err: ESCALATE(human)
+
+@steps:
+  1. GEN($in.message) → $draft
+  2. PUBLISH($draft, "email") → $out
+  3. VALIDATE($draft) ^brand_voice → $valid

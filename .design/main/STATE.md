@@ -4,20 +4,20 @@
 <!-- Maximum 100 lines. Agent updates AFTER each completed action. -->
 
 **Workspace:** main
-**Updated:** 2026-06-21 11:06
+**Updated:** 2026-06-21 16:26
 **Phase:** 2 — Seed II: Workflow Runtime
 **Status:** Active
 
 ## Current Position
 
-- **Task:** T-2B02/B03 Done — AST node model + recursive-descent parser (workflow path). Front-end milestone reached: source → tokens → AST. 30 tests green, clippy clean, std-only. Next: T-2C01 (transpiler).
+- **Task:** T-2T01 Done — golden parity corpus (6 fixtures + 26 integration tests in `parity.rs`). 109 tests total, 0 failures. Parity verified: validation verdicts (E001/E005/E012/W001/W002), execution status (Ok/Err), transpilation structure (compact round-trip + human sections).
 - **Spec:** l2-workflow-runtime.md (Implements l1-workflow-language.md)
-- **Next Action:** Continue /magic.run main — next: T-2C01 (transpiler)
+- **Next Action:** Run /magic.task main to update the plan
 
 ## Progress
 
 ```
-Phase 2: [5/12] ▓▓▓▓░░░░ 42%
+Overall: [0/2] ░░░░░░░░ 0%
 ```
 
 ## Recent Decisions
@@ -36,6 +36,6 @@ Phase 2: [5/12] ▓▓▓▓░░░░ 42%
 
 ## Session Continuity
 
-**Last Session Ended:** 2026-06-16 16:00
+**Last Session Ended:** 2026-06-21 15:50
 **Handoff File:** none
-**Bootstrap Mode:** true
+**Bootstrap Mode:** false
