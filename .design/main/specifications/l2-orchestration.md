@@ -1,6 +1,6 @@
 # Orchestration
 
-**Version:** 1.0.8
+**Version:** 1.0.9
 **Status:** Stable
 **Layer:** implementation
 **Implements:** l1-orchestration.md
@@ -887,6 +887,40 @@ Plans MUST be self-contained. Forbidden references:
 - "as we discussed", "per our earlier decision", "see the previous session"
 
 Required: inline the relevant excerpts (file:line), the applicable convention, and the rationale. Plans must be executable by any agent, not only the one that wrote them.
+
+### 4.19 Continuous checkpoint mode
+
+Long-running mission sessions are vulnerable to crashes, context-window exhaustion, or interruption. Explicit checkpointing at task milestones enables session recovery without losing decision history.
+
+**Configuration:** `config.json` → `mission.checkpoint_mode: "explicit" | "continuous"` (default: `"explicit"`)
+
+**Explicit mode (default):** A checkpoint is written only when the user runs `cronus mission checkpoint` or when a phase transitions to `Done`.
+
+**Continuous mode:** A checkpoint is written automatically after each significant step — a tool-call group that changes one or more tracked files. This adds bookkeeping overhead but guarantees recovery at any point.
+
+**Checkpoint format:** Each checkpoint is a YAML document written to `.planning/checkpoints/cp-{timestamp}.yaml`:
+
+```yaml
+timestamp: 2026-06-21T15:30:00Z
+session_id: {id}
+skill: mission
+phase: phase-2
+decisions_made:
+  - "Selected sqlite-vec: better Rust FFI surface than the alternative"
+  - "Deferred mobile push: not required for v1 milestone"
+remaining_steps:
+  - "Implement storage adapter"
+  - "Write integration tests"
+failed_approaches:
+  - "Attempted async batch write: deadlock under concurrent read — reverted"
+context_sha: {git-sha-at-checkpoint-time}
+```
+
+**Recovery:** `cronus mission restore [--from cp-{timestamp}]` reads the latest (or named) checkpoint, reconstructs session state, and resumes the `remaining_steps` list. When `context_sha` differs from HEAD, a drift notice is emitted before recovery proceeds (see §4.18 drift check gate).
+
+**WIP commit strategy (opt-in):** When `mission.checkpoint_push: true`, the executor also creates a local git commit with a `WIP: [cronus-cp]` prefix and the checkpoint YAML as the commit body. Before finalization, `cronus mission squash` collapses all `WIP: [cronus-cp]` commits into a single clean commit; non-WIP commits are preserved.
+
+**Push behavior:** WIP commits are local-only by default (`checkpoint_push: false`). Set `checkpoint_push: true` to push the WIP branch to the remote — useful for CI-monitored or pair sessions.
 
 ## 5. Drawbacks & Alternatives
 

@@ -1,6 +1,6 @@
 # Agent Constitution
 
-**Version:** 1.0.7
+**Version:** 1.0.8
 **Status:** Stable
 **Layer:** implementation
 **Implements:** l1-office-model.md, l1-memory-model.md
@@ -780,6 +780,117 @@ Incorrect: "This fix improves session handling."
 Builder-to-builder: concrete, direct, no hype. Active voice. Short sentences. Concrete nouns.
 
 Avoid: *delve*, *crucial*, *robust*, *comprehensive*, *nuanced*, *multifaceted*, *moreover*, *furthermore*, *pivotal*, *landscape*, *underscore*, *foster*, *showcase*, *intricate*, *vibrant*, *fundamental*.
+
+### 4.20 Multi-session context disambiguation
+
+When multiple agent sessions run simultaneously across different terminals or workspaces, clarification prompts lose context — the user cannot immediately tell which project, branch, or task the question belongs to.
+
+**Rule:** When the session count in `.planning/sessions/` (files modified in the last two hours) reaches three or more, every `AskUserQuestion` call prepends a one-line context header to the question text.
+
+**Header format:**
+
+```
+[Session {letter}] ./{repo-slug} @ {branch} | {current-task-summary}
+```
+
+**Example:**
+
+```
+[Session B] ./cronus @ feature-api-redesign | Reviewing data model changes
+Which migration approach should be used?
+```
+
+**Implementation details:**
+
+- Session files: `.planning/sessions/{ppid}.json` — created at skill start, updated on each tool call.
+- Session count: number of `.json` files modified within the last 120 minutes.
+- Letter assignment: alphabetical by file modification time (`A` = oldest active session).
+- `current-task-summary`: first 60 characters of the active TASKS.md row's `title` field; falls back to the skill name when TASKS.md is absent.
+
+**Threshold:** Three or more concurrent sessions activates context headers. Below three, headers are omitted — they add noise when only one session is active.
+
+### 4.21 Question tuning and preference learning
+
+Repeated clarification prompts on already-decided questions add friction and erode trust in the workflow. A preference store captures recurring decision patterns and suppresses redundant prompts automatically.
+
+**Preference store:** `.planning/question-preferences.jsonl`
+
+**Entry schema:**
+
+```json
+{
+  "question_key": "checkpoint-mode-confirm",
+  "skill": "mission",
+  "response_pattern": "always-same",
+  "preferred_value": "proceed",
+  "occurrences": 4,
+  "suppressed": true,
+  "suppressed_at": "2026-06-01T10:00:00Z"
+}
+```
+
+**Suppression rule:** When the same `question_key` receives an identical response in three or more consecutive occurrences, the entry is marked `suppressed: true`. The preferred value is applied automatically, and a one-line notice is emitted:
+
+```
+[Preference applied] "checkpoint-mode-confirm" → "proceed" (4× same response; run `cronus workspace tune` to reset)
+```
+
+**Commands:**
+
+- `cronus workspace tune` — interactive review of preference entries; toggle suppression, reset counters, delete entries.
+- `cronus workspace tune --reset <key>` — remove suppression for a specific key without interactive mode.
+- `--ask-all` flag on any skill invocation: re-asks all suppressed questions for that session only.
+
+**Scope:** Preferences are per-workspace (stored in `.planning/`) and do not cross-contaminate other workspaces. A `global_preferences.jsonl` in the home workspace defines defaults that local workspaces inherit but can override.
+
+### 4.22 Model overlay system
+
+Different AI models have distinct behavioral tendencies — verbosity, tool discipline, uncertainty expression, and interaction style. Hardcoding model-specific instructions in every skill creates maintenance sprawl. A model overlay file centralizes per-model behavioral patches.
+
+**Configuration:** `config.json` → `model_overlays: { "claude": "overlays/claude.md", "gemini": "overlays/gemini.md" }`
+
+**Overlay file structure (`overlays/{model}.md`):**
+
+Three optional sections — include only what differs from default behavior for this model:
+
+```markdown
+## Tool Discipline
+[model-specific rules for tool selection and ordering]
+
+## Explanation Style
+[verbosity and framing adjustments]
+
+## Interaction Style
+[question-asking, confirmation, and self-correction behavior]
+```
+
+**Activation:** The preamble reads `CRONUS_MODEL` from the environment and injects the matching overlay as a conditional prose block. If no overlay exists for the detected model, the section is silently skipped.
+
+**Precedence:** Model overlay < skill-level instructions < user's inline instruction for the current message.
+
+**Overlay as conditional prose:** The agent reads the overlay and applies it as a behavioral constraint for the session. No runtime branching is required — the prose is the instruction.
+
+### 4.23 Three layers of knowledge (epistemological framework)
+
+Agents applying only conventional patterns miss solutions that are novel, domain-specific, or that require questioning received wisdom. A three-layer reasoning protocol makes the epistemological tier explicit.
+
+**Layer definitions:**
+
+| Layer | Name | Source | Default trust | When to use |
+| --- | --- | --- | --- | --- |
+| 1 | Tried-and-true | Battle-tested patterns, standard library, documented best practices | High | First resort — stable, low-risk |
+| 2 | New-and-popular | Recent posts, current ecosystem trends, community norms | Medium — scrutinize | When Layer 1 has no answer; verify independently before applying |
+| 3 | First principles | Original analysis derived from the specific problem constraints | Self-verified | When Layers 1 and 2 conflict or both fail |
+
+**Application:**
+
+- When making an architectural or design decision, the agent labels which layer it draws from.
+- Layer 2 reasoning includes an explicit scrutiny note: "This is currently popular — verifying it holds here because [reason]."
+- Layer 3 reasoning includes the derivation chain: "From first principles: [constraint A] + [constraint B] → [conclusion]."
+
+**Eureka moments:** When Layer 3 analysis correctly contradicts a Layer 1 or Layer 2 assumption, the finding is logged as a learning entry (§4.13 of `l2-self-improvement.md`) with `pattern_matched: "first-principles-correction"`.
+
+**Anti-pattern:** Quoting Layer 2 sources without scrutiny ("the community recommends X") is flagged in spec review as insufficient reasoning depth.
 
 ## 5. Drawbacks & Alternatives
 

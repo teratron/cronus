@@ -1,6 +1,6 @@
 # Quality Pipeline
 
-**Version:** 1.1.9
+**Version:** 1.1.10
 **Status:** Stable
 **Layer:** implementation
 **Implements:** l1-quality-standards.md
@@ -1005,6 +1005,109 @@ Each adversarial review finding (§4.8) auto-selects a playbook based on its cat
 | Missing webhook signature | assess-scope → prioritize-routes → implement-verification → test → deploy |
 | CVE in dependency | confirm-usage → patch → test → deploy (or: workaround + review-date if no patch) |
 | CI/CD script injection | identify-workflows → audit-checkout → fix-trigger → pin-actions → protect-CODEOWNERS |
+
+### 4.24 Review readiness dashboard
+
+Before finalizing any deliverable (spec, task batch, mission wave), a consolidated readiness check surfaces all quality signals in one place. The dashboard prevents ship-while-red: a condition where individual checks pass in isolation but aggregate state reveals a blocker.
+
+**Dashboard format (written to SUMMARY.md under `## Readiness`):**
+
+```
+Review Readiness Dashboard
+├─ Plan Status:      ✓ All required review phases complete
+├─ Code Status:      ⚠ 2 lint warnings (non-blocking); 0 errors
+├─ Test Status:      ✓ 42 → 51 tests (+9); coverage 78% → 82%
+└─ Security Status:  ✓ 0 findings
+```
+
+**Status symbols:** `✓` pass · `⚠` warning (non-blocking) · `✗` fail (blocks progression)
+
+**Dimension definitions:**
+
+| Dimension | Pass (`✓`) | Warn (`⚠`) | Block (`✗`) |
+| --- | --- | --- | --- |
+| Plan Status | All phases for the current milestone reviewed | One phase skipped with justification | Required review phase absent |
+| Code Status | Zero lint errors, zero clippy `-D warnings` violations | Lint warnings present | Any compilation or lint error |
+| Test Status | Test count did not decrease; coverage did not drop > 2% | Coverage drop ≤ 2% | Test count decreased |
+| Security Status | Zero RESTRICTED/CONFIDENTIAL findings | INTERNAL findings present | Any RESTRICTED or CONFIDENTIAL finding |
+
+**Gate rule:** All four dimensions must show `✓` or `⚠` before the workflow proceeds. Any `✗` blocks progression and emits a one-line remediation pointer.
+
+**Force-gate override:** `cronus finalize --force "<reason>"` bypasses the gate; the reason is appended to the `## Readiness` block and to CHANGELOG.md as an exception entry.
+
+**Integration:** The dashboard runs automatically at the end of `finalize --workflow=run` and `finalize --workflow=spec`. It is skipped for read-only workflows.
+
+### 4.25 Boil-the-lake anti-shortcut principle
+
+Shortcuts that defer 5–10% of correct implementation reduce quality for marginal AI-time savings. In human work, "skip for now" saves hours; with AI as the primary implementer, the delta between a complete and an incomplete implementation is typically minutes — making incompleteness a net negative with no compensating savings.
+
+**Rule:** When an implementation choice foregoes correctness for brevity (inline `// TODO` without a linked card, "handle edge case later", skipped validation), the reviewer calculates the completeness delta and surfaces it.
+
+**Completeness delta calculation:**
+
+```
+shortcut_lines  = estimated LOC for the shortcut path
+complete_lines  = estimated LOC for the full correct implementation
+delta_lines     = complete_lines - shortcut_lines
+
+ai_time_delta   = delta_lines × 0.3 min/LOC   (approximate; tune per project)
+
+if ai_time_delta < threshold (default: 60 min AI-time) → flag shortcut as unjustified
+```
+
+**Output format (in task review report):**
+
+```
+[SHORTCUT DETECTED] {location}
+  Shortcut:        {what was skipped}
+  Complete path:   {what the full implementation requires}
+  Estimated delta: ~{N} LOC / ~{ai_time} AI-min
+  Recommendation:  implement in full (delta is below threshold)
+```
+
+**Justified shortcuts** (accepted without flagging):
+
+1. The deferred item has an open task card with a concrete milestone.
+2. The delta exceeds the threshold AND a blocking external dependency exists (external API, hardware, legal review).
+3. The PR or task description explicitly acknowledges the deferral and links the follow-up card.
+
+**Anti-pattern suppression:** `// TODO` comments without a linked task card are treated as unjustified shortcuts by the code reviewer and reported in the quality gate run.
+
+### 4.26 LLM-as-judge quality tier
+
+Functional tests verify correctness; they cannot verify whether a prose output is clear, complete, or actionable for a downstream agent or human. An LLM-as-judge pass provides this signal at low cost.
+
+**Trigger:** Runs after `finalize --workflow=spec` and `finalize --workflow=task` produce changes. Skipped for `run` and `rule` workflows — those produce code and state, not prose deliverables.
+
+**Judge axes (scored 0–10):**
+
+| Axis | Question posed to the judge | Block (`< 6`) | Warn (`< 8`) |
+| --- | --- | --- | --- |
+| Clarity | Can a reader unfamiliar with this session understand the output without prior context? | Yes | Yes |
+| Completeness | Are all stated requirements represented? Are there unexplained gaps? | Yes | Yes |
+| Actionability | Can the next agent execute from this output without asking clarifying questions? | Yes | Yes |
+
+**Judge configuration:** `config.json` → `quality.judge_model` (default: lighter model than the execution model). The judge runs on the git diff of `.design/` since the last checkpoint, keeping token count bounded.
+
+**Score record:** `.planning/judge-scores.jsonl`
+
+```json
+{
+  "timestamp": "2026-06-21T15:30:00Z",
+  "workflow": "spec",
+  "file": "l2-orchestration.md",
+  "clarity": 9,
+  "completeness": 8,
+  "actionability": 7,
+  "overall": 8.0,
+  "model": "haiku-4-5",
+  "verdict": "pass"
+}
+```
+
+**Gate behavior:** Any axis below 6 blocks finalization and emits the axis score with a one-line explanation from the judge. All axes ≥ 6 (with any below 8 as a warning) allows finalization to proceed; warnings surface in the review readiness dashboard (§4.24).
+
+**Opt-out:** `CRONUS_JUDGE=0` env var or `quality.judge_enabled: false` in `config.json` disables the judge pass.
 
 ## 5. Drawbacks & Alternatives
 
