@@ -10,4 +10,4 @@ name = "cronus-tui"
 path = "src/main.rs"
 
 [dependencies]
-cronus-core = { workspace = true }
+cronus = { workspace = true }

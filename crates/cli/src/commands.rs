@@ -14,7 +14,7 @@ pub fn dispatch(command: Command, ctx: &Context) -> i32 {
 mod init {
     use std::path::{Path, PathBuf};
 
-    use cronus_core::state;
+    use cronus::state;
 
     use crate::output::Context;
 
@@ -101,7 +101,7 @@ mod init {
 mod status {
     use std::path::Path;
 
-    use cronus_core::paths::{Paths, Root};
+    use cronus::paths::{Paths, Root};
 
     use crate::output::Context;
 

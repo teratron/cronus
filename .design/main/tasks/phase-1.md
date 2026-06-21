@@ -79,7 +79,7 @@ Track T — Validation
 
 - **Spec:** l2-source-layout.md §4.1
 - **Status:** Done
-- **Verify:** `cargo metadata --no-deps` lists `cronus-core`, `nodus`, `cronus-cli`, `cronus-tui`; `cargo build` exit 0 (4 crates).
+- **Verify:** `cargo metadata --no-deps` lists `cronus`, `nodus`, `cronus-cli`, `cronus-tui`; `cargo build` exit 0 (4 crates).
 - **Changes:** Root Cargo workspace (edition 2024, pinned 1.96); 4 member crates. `nodus` empty lib (port in Phase 2).
 
 ### [T-1A02] JS workspace + Tauri scaffold
@@ -98,7 +98,7 @@ Track T — Validation
 
 - **Spec:** l2-filesystem-layout.md §4.1
 - **Status:** Done
-- **Verify:** `cargo test -p cronus-core` — `paths` tests pass (portable groups all roots; OS-native roots non-empty & distinct).
+- **Verify:** `cargo test -p cronus` — `paths` tests pass (portable groups all roots; OS-native roots non-empty & distinct).
 - **Changes:** `core::paths` resolving `Root::{Program,State,Cache,Logs}` per Windows/macOS/Linux(XDG) + portable; std-only.
 
 ### [T-1B02] State-tier bootstrap
@@ -112,7 +112,7 @@ Track T — Validation
 
 - **Spec:** l2-core-library.md, l1-architecture.md (INV-1/2/3)
 - **Status:** Done
-- **Verify:** `cargo build -p cronus-core`; `cargo tree -p cronus-core` → no dependencies (INV-1/2); cli/tui call `Engine::status()`.
+- **Verify:** `cargo build -p cronus`; `cargo tree -p cronus` → no dependencies (INV-1/2); cli/tui call `Engine::status()`.
 - **Changes:** `core::Capabilities` trait + `Engine`; thin cli/tui callers. Workflow wiring to `crates/nodus` deferred to Phase 2.
 
 ### [T-1C02] Durable state + restartable load
@@ -138,7 +138,7 @@ Track T — Validation
 
 ### [T-1T01] Validation — scaffold & dependency direction
 
-- **Method:** `cargo build` all members; `cargo tree -p cronus-core` no frontend deps; `cargo clippy --all-targets -- -D warnings` clean; `cargo fmt --all --check` clean.
+- **Method:** `cargo build` all members; `cargo tree -p cronus` no frontend deps; `cargo clippy --all-targets -- -D warnings` clean; `cargo fmt --all --check` clean.
 - **Status:** Done
 
 ### [T-1T02] Validation — paths & bootstrap
@@ -148,7 +148,7 @@ Track T — Validation
 
 ### [T-1T03] Validation — core contract & persistence
 
-- **Method:** `cargo tree -p cronus-core` no frontend deps (INV-1/2); `FileStore` restart-persistence test passes (STO-2/INV-5).
+- **Method:** `cargo tree -p cronus` no frontend deps (INV-1/2); `FileStore` restart-persistence test passes (STO-2/INV-5).
 - **Status:** Done
 
 ### [T-1T04] Validation — security baseline

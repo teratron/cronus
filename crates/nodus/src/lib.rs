@@ -1,5 +1,5 @@
 //! Workflow-language runtime: lexer, parser/AST, validator (+ lint), executor,
-//! and transpiler. A self-contained crate that `cronus-core` depends on and
+//! and transpiler. A self-contained crate that `cronus` depends on and
 //! links in-process, so it runs everywhere the core runs with no external
 //! language process. Kept as its own crate (not fused into the core) so it can
 //! be extracted to a standalone repository later.
