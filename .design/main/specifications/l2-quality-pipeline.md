@@ -1,6 +1,6 @@
 # Quality Pipeline
 
-**Version:** 1.1.11
+**Version:** 1.1.12
 **Status:** Stable
 **Layer:** implementation
 **Implements:** l1-quality-standards.md
@@ -1179,6 +1179,89 @@ Completion signal: "I can reproduce this failure and I know which component is r
 4. Commit with context: explain why this change addresses the root cause, not just what changed.
 
 **Anti-pattern:** Applying a sequence of plausible changes and hoping one works is random mutation, not debugging. Each change must be motivated by a stated, testable hypothesis.
+
+### 4.29 Failure-mode taxonomy for skill reflection
+
+When a skill improvement cycle (§4.15 of `l2-self-improvement.md`) analyzes a batch of failed trajectories, each failure is classified into one of a standard set of failure types before patch proposals are generated. Consistent taxonomy enables cross-batch pattern aggregation and prevents the optimizer from treating each failure as unique.
+
+**Standard failure categories:**
+
+| Category | Description |
+| --- | --- |
+| `sequencing_error` | Required steps performed out of order (e.g., delivery before required transformation) |
+| `premature_termination` | Agent stops or returns before all goal conditions are met |
+| `action_loop` | Same action repeated consecutively without progress |
+| `object_missed` | A required object was visible or reachable but the agent did not act on it |
+| `rule_missing` | The skill lacks a rule for the encountered situation |
+| `rule_wrong` | An existing skill rule is misleading or produces incorrect behavior |
+| `rule_ignored` | The skill contains the correct rule, but the agent did not follow it |
+| `other` | None of the above |
+
+**Failure analyst output format (JSON, single minibatch):**
+
+```json
+{
+  "batch_size": 8,
+  "failure_summary": [
+    { "failure_type": "sequencing_error", "count": 3, "description": "agents placed objects before required state change" },
+    { "failure_type": "rule_ignored",     "count": 2, "description": "skill says to check all containers; agents skipped closed drawers" }
+  ],
+  "patch": {
+    "reasoning": "Two patterns dominate: wrong ordering and container-skipping.",
+    "edits": [
+      { "op": "insert_after", "target": "## Common Mistakes", "content": "- Do not deliver before transforming — complete the state change first." },
+      { "op": "replace", "target": "Open drawers before judging them empty.", "content": "Open all drawers and cabinets before concluding an area is exhausted." }
+    ]
+  }
+}
+```
+
+**Success analyst output format (JSON, single minibatch):**
+
+```json
+{
+  "batch_size": 6,
+  "success_patterns": ["agent tracked remaining objects via explicit counter", "agent opened all containers before checking each area"],
+  "patch": {
+    "reasoning": "Counter-tracking appears in 4/6 trajectories — worth encoding.",
+    "edits": [
+      { "op": "append", "content": "## Efficiency Patterns\n- Keep an explicit count of remaining goal objects; stop searching only when count reaches zero." }
+    ]
+  }
+}
+```
+
+**Support count:** Each proposed edit carries a `support_count` — the number of trajectories whose failure (or success) the edit addresses. Edits with higher support count are ranked higher during the Select stage (§4.15 of `l2-self-improvement.md`).
+
+**Generalization rule:** Analyst edits must generalize beyond the specific trajectories observed. Edits that hardcode task-specific values (concrete object names, literal identifiers) are rejected during aggregation.
+
+### 4.30 Step context buffer
+
+Within a single epoch, naïve reflection treats each step independently — the optimizer may propose the same ineffective edit multiple times before realizing it fails validation. The step context buffer prevents this by accumulating a running record of what was tried and what happened.
+
+**Contents (per step entry):**
+
+```
+### Step {N} — {ACTION} ({n_fail}/{n_total} failed)
+  - "{failure pattern}" (x{count}, tasks: {id_1}, {id_2})
+  Rejected edits (score {before} -> {after}):
+    1. [replace] target="Apply the patch" -> "Verify the patch before applying"
+    2. [append] "Always check permissions before writing."
+```
+
+**Population:**
+
+- Every completed step appends one entry: step number, action (accept/reject/skip), failure patterns extracted from rollout results, and — for rejected steps — the specific edit operations that were tried.
+- Only entries within the **current epoch** are included. The buffer resets at the epoch boundary (momentum update provides the cross-epoch signal via §4.16 of `l2-self-improvement.md`).
+- The buffer is injected into the reflect prompt at the start of each reflection call: "Below is a summary of previous steps in this epoch. Use it to avoid repeating ineffective edits."
+
+**Failure pattern extraction:**
+
+1. Collect failed trajectories from the rollout.
+2. Group by `fail_reason` prefix (text before the first `:` in the reason string).
+3. Supplement with richer descriptions from analyst `failure_summary` output when available.
+
+**Anti-repetition guarantee:** When the optimizer receives the buffer, it can see which edits were already tried and rejected (with their score impact). This prevents the equivalent of trying the same update repeatedly and expecting different results.
 
 ## 5. Drawbacks & Alternatives
 

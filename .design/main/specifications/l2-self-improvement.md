@@ -1,6 +1,6 @@
 # Self-Improvement
 
-**Version:** 1.0.6
+**Version:** 1.0.7
 **Status:** Stable
 **Layer:** implementation
 **Implements:** l1-memory-model.md
@@ -798,6 +798,98 @@ Skills and extensions accumulate over time. Without lifecycle management, dorman
 - `active`: included in the agentic readiness checklist (§4.17 of `l2-agent-constitution.md`) and automatic skill routing.
 - `stale`: listed in `cronus workspace check` with an "idle — consider archiving" notice; excluded from auto-routing.
 - `archived`: excluded from all discovery; accessible via `cronus skills list --include-archived`.
+
+### 4.15 Iterative skill document evolution
+
+The self-improvement cycle treats a skill document (SKILL.md) as learnable "prompt state" — analogous to neural network weights — and optimizes it through a six-stage pipeline that mirrors the structure of supervised learning.
+
+**Six-stage pipeline (one training step):**
+
+1. **Rollout** — Execute a batch of tasks using the current skill document as the agent prompt. Record each task's trajectory and score.
+2. **Reflect** — Analyze failed (and optionally successful) trajectories to produce **edit patches** — structured proposals to modify the skill document.
+3. **Aggregate** — Merge semantically similar patches from the batch to avoid redundant edits.
+4. **Select** — Rank patches by relevance score and clip to an **edit budget** (max edits per step). Too many edits per step causes noisy updates; too few causes slow convergence.
+5. **Update** — Apply selected patches to the skill document, producing a candidate version.
+6. **Gate** — Evaluate the candidate skill on a validation batch. Accept the update only if the candidate score exceeds the current score; otherwise reject and preserve the current skill.
+
+**Edit operations:**
+
+| Operation | Effect |
+| --- | --- |
+| `append` | Add markdown to the end of the skill document |
+| `insert_after` | Insert markdown immediately after a named heading or paragraph |
+| `replace` | Substitute an exact passage with new content |
+| `delete` | Remove an exact passage |
+
+**Edit budget scheduler:** Controls how many patches are applied per step. Three schedules are supported:
+
+- `cosine` (recommended): aggressive early, tapering late — high budget in early steps for broad exploration, low budget late for careful refinement.
+- `linear`: steady decay from max to min budget.
+- `constant`: fixed budget throughout.
+- `autonomous`: the optimizer decides the edit count based on current rollout score and step buffer context (see §4.30 of `l2-quality-pipeline.md`).
+
+**Skill update modes:**
+
+- `patch`: Apply individual edit operations (append/replace/delete). Preserves surrounding content; minimal diff per step.
+- `rewrite_from_suggestions`: Optimizer rewrites the full skill from patch suggestions. Higher variance; use when the skill is heavily fragmented or contradictory.
+
+**File layout:**
+
+```
+.planning/skill-training/{run-id}/
+├── config.json             — Flattened runtime config (secrets redacted)
+├── history.json            — Per-step training history
+├── runtime_state.json      — Resume checkpoint (see §4.21 of l2-orchestration.md)
+├── best_skill.md           — Best validated skill version
+├── skills/skill_v{N}.md   — Skill snapshot after every accepted step
+└── steps/step_{N}/        — Per-step artifacts: patches, merged patch, eval
+```
+
+**Secret redaction:** Before writing `config.json`, any config key whose name contains `api_key` is redacted to `{first4}...{last4}`. Config files are never stored without redaction.
+
+### 4.16 Longitudinal momentum update
+
+Within-epoch edits improve specific failure modes but may inadvertently regress behaviors that were working. A cross-epoch momentum mechanism compares the skill from the end of the previous epoch against the current skill on a sample of training tasks.
+
+**Category classification:**
+
+| Category | Meaning |
+| --- | --- |
+| `improved` | Failed previously; passes now |
+| `regressed` | Passed previously; fails now |
+| `persistent_fail` | Failed in both epochs |
+| `stable_success` | Passed in both epochs |
+
+**Procedure (runs at the end of every epoch after the first):**
+
+1. Sample N tasks from the training pool (default: 20).
+2. Roll out both previous-epoch skill and current skill on the same sample.
+3. Classify each task into one of the four categories.
+4. Call the optimizer to produce high-level guidance addressing regressions and persistent failures.
+5. Inject the guidance into a designated `[slow-update]` placeholder section in the skill document.
+
+**Injection semantics:** Unlike step-level patch gating, momentum guidance is **force-injected** into both `current_skill` and `best_skill` without a validation gate. Epoch-level longitudinal insight must always persist — it must not be gated by step-level selection scores.
+
+**Epoch 1:** Instead of running the comparison (no previous epoch exists), inject an empty `[slow-update]` placeholder so the section is available for epoch 2+.
+
+### 4.17 Cross-epoch strategy memory
+
+The momentum update (§4.16) injects guidance into the skill document for the **target** agent to read. Separately, an **optimizer-side** strategy memory accumulates high-level notes about what changed between epochs for the **reflect** step to use.
+
+**Mechanism:**
+
+- At the end of each epoch (epoch 2+), the optimizer compares the previous and current skills, reviews the categorized comparison pairs, and appends a compact note to `.planning/skill-training/{run-id}/meta-skill.json`.
+- At the start of each reflection step in subsequent epochs, the latest meta-skill content is injected as additional context — making the optimizer aware of cross-epoch patterns before proposing new edits.
+- The meta-skill accumulates across epochs; it is not reset between epochs.
+
+**Distinction from momentum update:**
+
+| Dimension | Momentum update (§4.16) | Strategy memory (§4.17) |
+| --- | --- | --- |
+| Receiver | Target agent (reads the skill doc) | Optimizer (reads during reflection) |
+| Location | `[slow-update]` section in SKILL.md | `.planning/skill-training/{run-id}/meta-skill.json` |
+| Effect | Prevents target from regressing known-good behaviors | Prevents optimizer from repeating ineffective edit strategies |
+| Gating | Force-injected (no gate) | Injected as context (no gate) |
 
 ## 5. Drawbacks & Alternatives
 

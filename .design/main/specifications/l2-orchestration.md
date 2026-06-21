@@ -1,6 +1,6 @@
 # Orchestration
 
-**Version:** 1.0.10
+**Version:** 1.0.11
 **Status:** Stable
 **Layer:** implementation
 **Implements:** l1-orchestration.md
@@ -958,6 +958,35 @@ Different orchestration tasks have different time horizons, fault-tolerance requ
 - Audit trail: every claim, start, completion, and failure is recorded with timestamp.
 
 **Selection rule:** Choose the lowest tier that satisfies the durability requirement. Queue overhead (dispatch latency, storage, reclaim logic) is real — do not use Tier 3 when Tier 1 or Tier 2 suffices. Do not use Tier 1 for jobs longer than five minutes: parent context may exhaust before the child returns.
+
+### 4.21 Resumable skill training pipeline
+
+A skill evolution run (§4.15 of `l2-self-improvement.md`) may span many steps across epochs. Network failures, context exhaustion, or explicit interrupts must not lose training progress. A runtime state file makes every step a safe checkpoint.
+
+**Runtime state file (`.planning/skill-training/{run-id}/runtime_state.json`):**
+
+```json
+{
+  "last_completed_step": 12,
+  "current_skill_path": "skills/skill_v0012.md",
+  "current_score": 0.7250,
+  "current_origin": "step_0012",
+  "best_skill_path": "best_skill.md",
+  "best_score": 0.7500,
+  "best_step": 9,
+  "best_origin": "step_0009"
+}
+```
+
+**Auto-resume:** Re-running `cronus skills train --config {config}` with an existing `{run-id}` output directory automatically loads `runtime_state.json` and resumes from `last_completed_step + 1`. No flags required.
+
+**Selection cache:** To avoid re-running validation on previously evaluated skill versions, each step records a `candidate_hash` (SHA-256 of the skill text) alongside its validation score. On resume, if the candidate hash matches a prior evaluation, the stored score is returned immediately without a rollout.
+
+**Skill snapshots:** Every accepted update writes a versioned copy: `skills/skill_v{N:04d}.md`. The `best_skill.md` file tracks the all-time best validated skill separately from the current working skill — the two diverge when a step is accepted but does not surpass the historic best.
+
+**History log (`.planning/skill-training/{run-id}/history.json`):** Array of per-step records containing: epoch, step, action (accept/reject/skip), rollout scores, selection scores, timing per stage, and token counts per stage (prompt + completion + call count).
+
+**Secret policy:** The flattened config is written to `config.json` with API keys and endpoint credentials redacted. The runtime state and history logs never contain secrets.
 
 ## 5. Drawbacks & Alternatives
 
