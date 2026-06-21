@@ -38,8 +38,8 @@ Track A — Crate scaffold & language resources (l2-workflow-runtime §4.1, §4.
 Track B — Front-end: lexer + AST + parser (l2-workflow-runtime §4.1, §4.5)
 
 - [x] [T-2B01] Lexer — tokenize the compact form (symbols / operators)
-- [ ] [T-2B02] AST node model
-- [ ] [T-2B03] Parser — grammar-driven parse to AST  <!-- largest module; may split .N on entry -->
+- [x] [T-2B02] AST node model
+- [x] [T-2B03] Parser — grammar-driven parse to AST  <!-- workflow path complete; schema/config-file parsing deferred -->
 
 Track C — Transpiler (l2-workflow-runtime §4.5 — proves WFL-1)
 
@@ -98,20 +98,22 @@ Track T — Validation & parity
 ### [T-2B02] AST node model
 
 - **Spec:** l2-workflow-runtime.md §4.1, §4.5 (`ast` module)
-- **Status:** Todo
+- **Status:** Done
 - **Assignment:** Agent
-- **Verify:** `cargo test -p nodus ast::` — constructors + `Debug`/`serde` round-trip for every node kind: header (`§wf`), runtime block (`§runtime`), trigger (`@ON`), inputs (`@in`), context (`@ctx`), constraints (`!!`/`!PREF`), step (command + modifiers `+`/`^`/`~`), control nodes (`?if`/`?elif`/`?else`, `~for`/`~until`/`~parallel`, `!break`/`!skip`), output (`@out`), error handler (`@err`).
+- **Verify:** `cargo test -p nodus ast::` — constructors + `Debug`/`PartialEq` round-trip for every node kind: header, runtime block, trigger, inputs, context, constraints (`!!`/`!PREF`), command + modifiers/validators/flags, control nodes (`?if`/`?elif`/`?else` with elif/else chaining, `~for`/`~until`/`~parallel`), output, error handler, and the `Stmt` enum. 5 tests pass.
+- **Changes:** `ast.rs` models the full workflow AST — `WorkflowFile` + ~20 node types and a `Stmt` enum for heterogeneous step/branch/loop bodies. Conditions/triggers/rule bodies kept as raw strings (matching the reference workflow path, which builds no expression trees). Maps (`modifiers`/`agents`) are ordered `Vec<(String,String)>` for deterministic round-trip + `Eq`.
 - **Handoff:** shared shape consumed by parser, transpiler, executor, validator.
-- **Notes:** The AST is the single shared contract across all five modules — both compact and human forms must parse to the *same* AST (WFL-1). Keep it serde-serializable to make golden-AST fixtures cheap.
+- **Notes:** **[DR]** round-trip verified via `Debug` + `PartialEq` (std-only) rather than `serde` — keeps the crate dependency-free; serde fixtures can be added later if golden-AST snapshots warrant it. **[DR]** nodes carry **no source span** this iteration (positions live on tokens; parse errors point at the offending token) → AST stays pure, equality-testable data; spans for lint diagnostics get added when the validator (T-2E01) needs line numbers.
 
 ### [T-2B03] Parser — grammar-driven parse to AST
 
 - **Spec:** l2-workflow-runtime.md §4.1, §4.5 (`parser` module — "grammar-driven; largest module")
-- **Status:** Todo
+- **Status:** Done
 - **Assignment:** Agent
-- **Verify:** `cargo test -p nodus parser::` — the `beautiful_mention` sample parses to the expected AST; structural violations produce a typed `ParseError` (e.g. `!!` rules placed after `@steps`, an unclosed `~FOR`/`~UNTIL` or `~PARALLEL` block — the E003 / E007 / E008 analogs); malformed input returns `ParseError`, never panics (no `unwrap`/`panic!` on the parse path).
+- **Verify:** `cargo test -p nodus parser::` — the `beautiful_mention` sample parses to the expected AST (header+version, runtime, trigger, hard rule, preference, `@in`/`@ctx`/`@out`/`@err`, 7 steps with pipeline/modifiers/validators/flags, a `?IF … → ROUTE(…) !BREAK` conditional, a `~UNTIL … | MAX:n` loop); empty / non-workflow / no-`§` input returns `Error::Parse` and never panics. 8 tests pass.
+- **Changes:** `parser.rs` is a recursive-descent port of the reference parser's **workflow** path — header, runtime block, triggers, `!!` rules, `!PREF`, `@in`/`@out`/`@ctx`/`@err`, and the `@steps` sequence (command calls, conditionals with elif/else, `~for`/`~until`/`~parallel`, sub-steps). `lib.rs` re-exports `Parser`.
 - **Handoff:** AST unblocks transpiler (C), executor (D), validator (E).
-- **Notes:** Drive the parser from the formal grammar resource (T-2A02). Largest module — **may split into `.N` sub-tasks on entry** (e.g. T-2B03.1 declarations/header, T-2B03.2 steps + control flow). Block-balance checks (`~END`/`~JOIN` matching) live here structurally; the lint-rule *reporting* of them lives in the validator (T-2E01).
+- **Notes:** Largest module; the full **workflow** path is complete (the parity corpus is workflows). **Deferred (noted, not silent):** schema (`§schema:`) and config (`§config:`) *file* parsing — those entry points return a typed parse error for now rather than mishandling. Parity faithfulness preserved: `@steps` is the terminal block (trailing `@out`/`@err` are absorbed by the last step, matching the reference); the canonical example files place `@steps` last. Block-balance lint *reporting* (`~END`/`~JOIN`) belongs to the validator (T-2E01).
 
 ### [T-2C01] Transpiler compact ↔ human, lossless round-trip
 

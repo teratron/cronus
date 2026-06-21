@@ -4,20 +4,20 @@
 <!-- Maximum 100 lines. Agent updates AFTER each completed action. -->
 
 **Workspace:** main
-**Updated:** 2026-06-21 10:48
+**Updated:** 2026-06-21 11:06
 **Phase:** 2 — Seed II: Workflow Runtime
 **Status:** Active
 
 ## Current Position
 
-- **Task:** T-2A01/A02/B01 Done — `crates/nodus` tokenization foundation (scaffold + vocab schema + lexer, 17 tests green, clippy clean, std-only). Next: T-2B02 (AST).
+- **Task:** T-2B02/B03 Done — AST node model + recursive-descent parser (workflow path). Front-end milestone reached: source → tokens → AST. 30 tests green, clippy clean, std-only. Next: T-2C01 (transpiler).
 - **Spec:** l2-workflow-runtime.md (Implements l1-workflow-language.md)
-- **Next Action:** Continue /magic.run main — next: T-2B02 (AST node model)
+- **Next Action:** Continue /magic.run main — next: T-2C01 (transpiler)
 
 ## Progress
 
 ```
-Phase 2: [3/12] ▓▓░░░░░░ 25%
+Phase 2: [5/12] ▓▓▓▓░░░░ 42%
 ```
 
 ## Recent Decisions

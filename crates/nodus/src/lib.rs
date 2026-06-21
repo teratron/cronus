@@ -17,19 +17,20 @@
 
 mod error;
 
+pub mod ast;
 pub mod lexer;
+pub mod parser;
 pub mod vocab;
 
 // Pipeline modules — filled by the remaining Phase-2 tracks. Declared now so
 // the module layout (and the dependency seams between stages) is fixed.
-mod ast;
 mod executor;
-mod parser;
 mod transpiler;
 mod validator;
 
 pub use error::{Error, Result, Span};
 pub use lexer::{Lexer, Token, TokenType};
+pub use parser::Parser;
 pub use vocab::Schema;
 
 #[cfg(test)]
