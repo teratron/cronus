@@ -1,6 +1,6 @@
 # Mission Mode
 
-**Version:** 1.0.4
+**Version:** 1.0.5
 **Status:** Stable
 **Layer:** implementation
 **Implements:** l1-orchestration.md
@@ -513,6 +513,61 @@ The agent fills questions it can answer from the PRD (marking `source: prd`). Us
 #### Iteration
 
 Running `cronus mission clarify` after PRD edits appends new questions; answered questions are not re-asked. The planner treats `clarifications.md` as a locked input and MUST NOT contradict any `locked: true` answer.
+
+### 4.15 Session intent classification
+
+The structured clarification protocol (§4.14) collects questions, but the system does not yet know what *kind of work* the agent is doing. Intent classification auto-assigns a work type and phase intent to each execution session, enabling phase-specific routing and retrospective segmentation.
+
+#### Work types
+
+```text
+feature     — new capability (add, build, create, implement)
+bugfix      — defect correction (fix, bug, error, broken, patch)
+refactor    — restructuring without behavior change (refactor, rewrite, clean, optimize)
+review      — inspection or explanation (review, audit, inspect, explain)
+docs        — documentation update (doc, readme, comment, docstring)
+test        — test authoring or correction (test, spec, unit, integration, e2e)
+config      — environment or tooling (config, env, setup, docker, deploy)
+```
+
+Classification is derived from the first-prompt text, existing artifact types, and the active operation mode.
+
+#### Phase intent
+
+Orthogonal to work type, phase intent maps execution sessions to lifecycle stages:
+
+| Intent | Signals | Lifecycle stage |
+| --- | --- | --- |
+| `Planning` | plan mode, `plan/architect/design/scope/RFC` keywords | Discuss / CONTEXT-building |
+| `Implementation` | code artifacts present, `build/create/implement` keywords | Wave execution |
+| `Debugging` | `fix/error/exception/crash/trace` keywords | Rework / error correction |
+| `Review` | `review/explain/audit/walk-me-through` keywords | Decision review / safety gate |
+| `Verification` | `test/validate/check/assert/confirm` keywords | VERIFIED phase |
+| `Exploration` | `how-to/what-is/example/tutorial` keywords | Spike / learning |
+
+#### Recording
+
+Both are written to the phase's SUMMARY.md:
+
+```markdown
+---
+work_type: feature
+phase_intent: Implementation
+intent_confidence: 82
+---
+```
+
+#### Routing rules
+
+| work_type | Routing effect |
+| --- | --- |
+| `bugfix` | Rework gate: verify a D-NN decision exists before phase starts |
+| `refactor` | Architecture gate: require AD reference before wave execution |
+| `test` | Verification gate: emit VERIFIED finding on completion |
+| `review` | Safety gate: adversarial review (3-lane, §4.8 of `l2-quality-pipeline.md`) |
+| `feature` | Default story flow (PLAN.md → wave → SUMMARY.md) |
+| `docs` | Lightweight flow: CONTEXT.md + SUMMARY.md only; no PLAN.md required |
+| `config` | Infrastructure gate: require env-safety checklist (no secrets, .gitignore present) |
 
 ## 5. Drawbacks & Alternatives
 

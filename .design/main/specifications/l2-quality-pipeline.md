@@ -1,6 +1,6 @@
 # Quality Pipeline
 
-**Version:** 1.1.7
+**Version:** 1.1.8
 **Status:** Stable
 **Layer:** implementation
 **Implements:** l1-quality-standards.md
@@ -837,6 +837,86 @@ Stories without a valid Independent Test field are blocked at the `In Progress` 
 ```text
 BLOCKED: Story "[name]" has no Independent Test. Fill the field before execution begins.
 ```
+
+### 4.20 Proposal maturity grading
+
+Decision artifacts (proposals, clarifications, D-NN decisions) vary widely in quality. A grading rubric gives planners a fast signal before promoting a proposal from `draft` to `ready`.
+
+#### Five-dimension rubric
+
+Each dimension is scored 0 or 100; the final grade is the average.
+
+| Dimension | Signal | Score |
+| --- | --- | --- |
+| **Constraints** | Contains "must", "should", "limit", "restrict", "no more than" | 100 if present, 0 if absent |
+| **Success criteria** | Contains "expect", "verify", "should output", "acceptance", "done when" | 100 if present, 0 if absent |
+| **Verification steps** | Contains "test", "validate", "check", "confirm", "assert" | 100 if present, 0 if absent |
+| **Context provision** | References a spec file or decision (50%) + includes code/schema snippet (30%) + ≥3 structured lines (20%) | Weighted sum |
+| **Specificity** | Body ≥100 chars (40%) + uses bullets/headings/numbered lists (30%) + ≥4 lines (30%) | Weighted sum |
+
+Grade thresholds: **A** ≥80 · **B** 60–79 · **C** 40–59 · **D** 20–39 · **F** <20.
+
+#### Transition gate
+
+The grade is computed when a proposal transitions `draft → ready` (§4.12 of `l2-mission-mode.md`). Grade below **C** (< 40) blocks the transition:
+
+```text
+BLOCKED: Proposal "[id]" grade = D (score 32/100).
+Missing: constraints, verification steps.
+Add these before promoting to ready.
+```
+
+Each failed dimension appends an actionable issue:
+
+- Constraints absent → "Specify what the system MUST or MUST NOT do."
+- Success criteria absent → "Define how a reviewer verifies this is complete."
+- Verification absent → "Name the test or check that confirms correctness."
+- Context too thin → "Reference the related AD, decision, or code file."
+- Specificity too low → "Expand to ≥4 lines with structured prose or bullets."
+
+#### Trend
+
+The per-phase average grade is included in the retrospective. Trend: is proposal quality improving across phases?
+
+### 4.21 Spec-driven start detection
+
+Phases that begin without a clear mission, constraints, or acceptance criteria tend to drift and require more rework. Detecting whether a phase started spec-first or ad-hoc provides an early risk signal.
+
+#### Detection signals
+
+A phase start is classified as:
+
+- **Spec-driven**: any two of — references an artifact file (.md, spec, proposal); uses plan mode or discuss phase; body contains constraints (`must`, `limit`, `restrict`); body has ≥3 structured lines (bullets, headings, numbered list).
+- **Planning**: uses plan mode OR contains planning keywords (`plan`, `architect`, `design`, `scope`, `breakdown`, `roadmap`, `RFC`, `proposal`).
+- **Unstructured**: neither of the above.
+
+#### Recording
+
+Classification is written to the phase's SUMMARY.md:
+
+```markdown
+---
+start_mode: spec-driven | planning | unstructured
+start_confidence: 0-100
+---
+```
+
+The retrospective aggregates start modes across phases:
+
+```text
+Phase starts: 8 spec-driven (73%), 2 planning (18%), 1 unstructured (9%)
+```
+
+#### Gate
+
+If `start_mode: unstructured` is detected on a P1 (MVP) story phase, the orchestrator emits a non-blocking warning:
+
+```text
+⚠️ Phase "[name]" started without spec artifacts or structured intent.
+Recommendation: create CONTEXT.md with mission, goals, and constraints before wave execution.
+```
+
+This warning is logged in the run log and surfaced at the next `cronus mission status`.
 
 ## 5. Drawbacks & Alternatives
 

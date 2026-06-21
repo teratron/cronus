@@ -1,6 +1,6 @@
 # Self-Improvement
 
-**Version:** 1.0.3
+**Version:** 1.0.4
 **Status:** Stable
 **Layer:** implementation
 **Implements:** l1-memory-model.md
@@ -572,6 +572,125 @@ Measurement: median LOC=48, cost=$0.23/phase, latency=4.2min/phase.
 ```
 
 The scorecard is appended to the milestone retrospective (§4.9). Failed gates require a correction entry in the mistake log (§4.2) before the milestone is marked `Complete`.
+
+### 4.11 Multi-dimensional spec quality scoring
+
+Behavior gates (§4.10) validate yes/no pass conditions. A scoring layer gives a continuous 0–100 view of spec health across five orthogonal practice categories, enabling trend tracking and risk prioritization.
+
+#### Five practice categories
+
+| Category | What it measures |
+| --- | --- |
+| **Architecture readiness** | AD artifacts stable, decision rationale present, alternatives documented |
+| **Process compliance** | Phase gates executed in order, review quorum met, VERIFIED findings present |
+| **Decision freshness** | Age of last D-NN update, open clarifications ≤2, proposal review date within threshold |
+| **Verification coverage** | % stories with Independent Test; % acceptance criteria with a VERIFIED finding |
+| **Spec specificity** | Average proposal grade (§4.20 of `l2-quality-pipeline.md`); % proposals graded A or B |
+
+#### Scoring formula
+
+Each category scores independently 0–100. Violations deduct:
+
+- High severity: −12 points
+- Medium severity: −7 points
+- Low severity: −3 points
+
+Floor is 0. Categories with no data default to `N/A` and are excluded from the overall average.
+
+#### Category status
+
+| Score | Status |
+| --- | --- |
+| ≥70 | `good` |
+| 40–69 | `needs-improvement` |
+| <40 | `critical` |
+
+A `critical` category blocks milestone `Complete` and requires a correction entry in the mistake log (§4.2).
+
+#### Trend computation
+
+Trends compare the most recent 3-phase rolling average to the prior 3-phase window:
+
+```text
+change = (recent_avg - older_avg) / older_avg
+improving  : change > +20%
+regressing : change < -20%
+stable     : otherwise
+```
+
+#### Scorecard format (appended to milestone retrospective)
+
+```markdown
+## Spec Quality Scorecard
+
+| Category | Score | Status | Trend |
+| --- | --- | --- | --- |
+| Architecture readiness | 85 | good | ↑ improving |
+| Process compliance | 62 | needs-improvement | → stable |
+| Decision freshness | 44 | needs-improvement | ↓ regressing |
+| Verification coverage | 78 | good | ↑ improving |
+| Spec specificity | 91 | good | → stable |
+| **Overall** | **72** | **good** | ↑ improving |
+```
+
+### 4.12 Decision velocity and flow state
+
+Spec quality scores (§4.11) tell what is healthy; velocity and flow metrics tell how fast and smooth the team is progressing. Bottleneck detection requires a time dimension.
+
+#### Decision cycle time
+
+Cycle time measures the wall-clock span from when a decision artifact is created to when it is marked `decided` or `accepted`:
+
+```text
+cycle_time = timestamp(status → decided) - timestamp(status → draft)
+```
+
+Default thresholds (adaptive after 20 samples):
+
+| Label | Default |
+| --- | --- |
+| Fast | ≤1 day |
+| Normal | ≤5 days |
+| Slow | ≤14 days |
+| Stuck | >14 days |
+
+`Stuck` decisions emit a warning on the next `cronus mission status` and are escalated in the retrospective.
+
+#### Phase flow score
+
+The flow score captures how smoothly a phase executes — whether tasks proceed without pauses, rework, or coordination gaps:
+
+```text
+flow_score = (rapid_task_rate × 0.4) + (latency_score × 0.3) + (duration_score × 0.15) + (density_score × 0.15)
+```
+
+- **rapid_task_rate**: share of inter-task gaps ≤30 minutes
+- **latency_score**: median gap (≤10 min → 100; ≤30 → 80; ≤60 → 60; ≤5h → 20; else → 0)
+- **duration_score**: phase duration peaks at 4–8h; drops for very short or very long phases
+- **density_score**: tasks-per-hour, capped at 100
+
+Flow labels: `deep` ≥70 · `moderate` 45–69 · `shallow` 25–44 · `fragmented` <25.
+
+#### Bottleneck detection
+
+A phase with `flow: fragmented` and `cycle_time: Stuck` in the same reporting period is flagged:
+
+```text
+⚠️ BOTTLENECK: Phase "[name]" — fragmented flow + stuck decisions.
+Signals: 3 decisions > 14d open; median inter-task gap = 4.2h.
+Recommendation: schedule a sync or split the phase into smaller waves.
+```
+
+Bottleneck flags appear in the milestone retrospective and are candidates for the mistake log (§4.2).
+
+#### Adaptive threshold calibration
+
+After 20 or more completed phases, thresholds auto-calibrate from the observed distribution:
+
+- `Fast` threshold → 60th percentile of actual cycle times
+- `Stuck` threshold → 90th percentile, clamped to `Fast×10`
+
+Adaptive mode is noted in the milestone report. Without 20 samples, defaults apply.
 
 ## 5. Drawbacks & Alternatives
 

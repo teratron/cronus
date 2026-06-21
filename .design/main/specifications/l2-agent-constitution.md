@@ -1,6 +1,6 @@
 # Agent Constitution
 
-**Version:** 1.0.5
+**Version:** 1.0.6
 **Status:** Stable
 **Layer:** implementation
 **Implements:** l1-office-model.md, l1-memory-model.md
@@ -613,6 +613,67 @@ Content outside the managed block is the user's responsibility. The adapter NEVE
 #### Multi-file support
 
 A single install pass may inject into multiple context files (e.g., `CLAUDE.md` and `AGENTS.md`) using separate adapter entries with distinct `marker_prefix` values to avoid collisions.
+
+### 4.17 Agentic readiness checklist
+
+Before the Cronus spec system can run reliably in a workspace, a set of prerequisite artifacts must be in place. The agentic readiness checklist audits the workspace and emits a score with remediation steps.
+
+#### Eight readiness signals
+
+| Signal | Artifact | Severity |
+| --- | --- | --- |
+| Context file | CLAUDE.md / AGENTS.md / project-context.md present | critical |
+| Custom skills | ≥1 `.skill.md` or skill directory entry present | warning |
+| Agent definitions | AGENTS.md or persona config present | warning |
+| Prompt templates | ≥1 `.prompt.md` template present | info |
+| Lifecycle hooks | `hooks:` defined in at least one profile or extension manifest | warning |
+| Isolated runtime | `.devcontainer/devcontainer.json` or equivalent sandbox configured | warning |
+| Tool integrations | ≥1 MCP server configured | info |
+| Freshness | Context file modified within the last 30 days | critical |
+
+#### Score formula
+
+- Each `critical` signal: 20 points (2 signals × 20 = 40 max)
+- Each `warning` signal: 12 points (4 signals × 12 = 48 max)
+- Each `info` signal: 6 points (2 signals × 6 = 12 max)
+- Total: 100 points maximum
+
+| Range | Readiness |
+| --- | --- |
+| 80–100 | Ready |
+| 50–79 | Partial — agentic features may behave unexpectedly |
+| <50 | Not ready — core signals missing |
+
+#### Running the check
+
+```text
+cronus workspace check
+```
+
+Output:
+
+```text
+Agentic Readiness Score: 72/100 (Partial)
+
+✓ Context file          (CLAUDE.md)
+✗ Custom skills         — add .skill.md files or install a skill profile
+✓ Agent definitions     (AGENTS.md)
+✗ Prompt templates      — add .prompt.md templates for proposals/clarifications
+✓ Lifecycle hooks       (after_spec, before_mission defined)
+✗ Isolated runtime      — configure .devcontainer or sandbox
+✓ Tool integrations     (3 MCP servers)
+✓ Freshness             (CLAUDE.md updated 3 days ago)
+```
+
+#### Remediation
+
+Each failed signal includes a one-line fix:
+
+- `custom skills` → `cronus install --profile=minimal`
+- `isolated runtime` → `cronus workspace init-devcontainer`
+- `prompt templates` → `cronus install --templates=standard`
+
+The checklist runs automatically on `cronus install` and on the first execution in a new workspace.
 
 ## 5. Drawbacks & Alternatives
 
