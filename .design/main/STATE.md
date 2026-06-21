@@ -4,28 +4,33 @@
 <!-- Maximum 100 lines. Agent updates AFTER each completed action. -->
 
 **Workspace:** main
-**Updated:** 2026-06-21 07:19
-**Phase:** 1 — Seed I: Foundation
-**Status:** Done
+**Updated:** 2026-06-21 10:32
+**Phase:** 2 — Seed II: Workflow Runtime
+**Status:** Active
 
 ## Current Position
 
-- **Task:** T-1B02/C02/E01/E02 + validation — Phase 1 Rust complete
-- **Spec:** none
-- **Next Action:** Run /magic.task main to update the plan
+- **Task:** Phase 2 decomposed — 12 tasks across 7 tracks (T-2A01 … T-2T02) in `tasks/phase-2.md`; ready to execute.
+- **Spec:** l2-workflow-runtime.md (Implements l1-workflow-language.md)
+- **Next Action:** Run /magic.run main to execute Phase 2 (crates/nodus runtime port)
 
 ## Progress
 
 ```
-Overall: [0/1] ░░░░░░░░ 0%
+Phase 2: [0/12] ░░░░░░░░ 0%
 ```
 
 ## Recent Decisions
+
+- 2026-06-21 **Decision:** Decomposed Phase 2 (workflow runtime) into 12 atomic tasks, vertical-slice order (front-end → transpiler → minimal executor → validator → full command set), parity-gated against the reference workflow-language corpus. Executor steps bind to subsystem seams (real memory/HITL/orchestration/quality wiring deferred to Phases 4–6); runtime §4.6/§4.7 deferred to a post-parity increment.
+
 - 2026-06-19 **Decision:** Phase 1 Rust foundation done (11/13); T-1A02/A03 blocked on pnpm/tauri toolchain (Phase 8 dependency, not Phase 2). Proceeding to Phase 2 (nodus).
 
 - 2026-06-16 **Decision:** Initialized main workspace.
 
 ## Blockers
+
+- **Phase 1 decomposition gap (non-blocking for Phase 2):** `l2-sandbox-policy` and `l2-multi-user-auth` are in Phase 1 (PLAN.md) but lack `T-1xxx` tasks. Fold them into `tasks/phase-1.md` when Phase 1 is revisited; they do not gate the nodus runtime.
 
 ## Blocking Constraints
 

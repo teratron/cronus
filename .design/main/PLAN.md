@@ -1,13 +1,13 @@
 # Implementation Plan
 
-**Version:** 2.1.0
-**Generated:** 2026-06-20
+**Version:** 2.2.0
+**Generated:** 2026-06-21
 **Based on:** .design/main/INDEX.md v1.0.0
 **Status:** Active
 
 ## Overview
 
-Implementation plan for Cronus from 65 Stable specifications (19 L1 concepts + 46 L2 implementations). Phases follow a **growth order**: the agent grows like a sprout from a seed.
+Implementation plan for Cronus from 66 Stable specifications (19 L1 concepts + 47 L2 implementations). Phases follow a **growth order**: the agent grows like a sprout from a seed.
 
 - **Seed = the library** (`crates/core` + `crates/nodus` runtime) — Phases 1–2.
 - **Stem = the CLI** — Phase 3, the first usable surface, emerging straight from the seed.
@@ -46,6 +46,8 @@ Execution mode: **Parallel** (C3); tracks grouped by file independence. Critical
 
 *Buildable monorepo + engine skeleton + state + security. The soil and the seed coat.*
 
+> **Progress (2026-06-21):** Rust foundation complete and verified — filesystem path model, core skeleton + contract, durable state seam, and the security baseline (secret store / redaction / default-deny egress). The JS/Tauri scaffold under source-layout + technology-stack is **deferred to Phase 8** (toolchain `pnpm`/Tauri CLI absent here; off Phase 2's path). `l2-sandbox-policy` and `l2-multi-user-auth` are listed here but **not yet decomposed** — fold them in when Phase 1 is revisited (they do not gate Phase 2). See `tasks/phase-1.md`.
+
 - [ ] **Source Layout** ([l2-source-layout.md](specifications/l2-source-layout.md)) [L2] — Cargo + pnpm workspaces (`crates/{core,nodus,cli,tui}`), polyglot runner
 - [ ] **Technology Stack** ([l2-technology-stack.md](specifications/l2-technology-stack.md)) [L2] — toolchain (Rust, Vite/React 19, Tauri v2)
 - [ ] **Filesystem Layout** ([l2-filesystem-layout.md](specifications/l2-filesystem-layout.md)) [L2] — OS-native path resolver, state bootstrap
@@ -57,6 +59,8 @@ Execution mode: **Parallel** (C3); tracks grouped by file independence. Critical
 ## Phase 2 — Seed II: Workflow Runtime (`crates/nodus`)
 
 *The embeddable workflow-language runtime the core depends on. Behavior-preserving Rust port, built as a vertical slice first (see runtime spec §4.5).*
+
+> **Decomposed (2026-06-21):** 12 atomic tasks across 7 tracks in [tasks/phase-2.md](tasks/phase-2.md), ordered by the vertical-slice build (front-end → transpiler → minimal executor → validator → full command set), gated on parity with the reference golden corpus. Executor steps bind to **subsystem seams** (real memory/HITL/orchestration/quality wiring lands in Phases 4–6). Runtime §4.6 (step-file execution architecture) and §4.7 (platform-native lookup) are **deferred to a post-parity increment**.
 
 - [ ] **Workflow Runtime** ([l2-workflow-runtime.md](specifications/l2-workflow-runtime.md)) [L2] — lexer → parser/AST → transpiler → executor → validator/lint; step-binding to core subsystems
 
