@@ -1,7 +1,7 @@
 ---
 phase: 2
 name: "Seed II — Workflow Runtime (crates/nodus)"
-status: In Progress
+status: Done
 subsystem: "crates/nodus (in-tree workflow-language runtime crate)"
 requires:
   - "Cargo workspace + crates/nodus stub crate (Phase 1 — T-1A01)"
@@ -17,7 +17,7 @@ duration_minutes: ~
 # Stage 2 Tasks — Seed II: Workflow Runtime (`crates/nodus`)
 
 **Phase:** 2
-**Status:** In Progress
+**Status:** Done
 **Strategic Goal:** Grow the second seed-leaf — an embeddable, in-process workflow-language runtime crate (`crates/nodus`: lexer → parser/AST → transpiler → executor → validator/lint) that the core links statically and binds to its subsystems. The crate is a behavior-preserving port of the reference workflow-language implementation (~5k lines, six modules); it is built as a **vertical slice first** (parse → transpile → minimal execute) before completing the validator/lint catalog and the full command set, and it must reach **parity** with the reference golden corpus.
 
 > **Build order (l2-workflow-runtime.md §4.5):** vertical slice first — (1) lexer+parser+ast → AST, (2) transpiler round-trip (WFL-1), (3) minimal executor `log`+`generate` end-to-end (WFL-7/8), (4) validator + full lint (WFL-5), (5) full command set + control flow. Schema and grammar ship as **data resources** (loaded, not compiled) so a language update needs no logic recompile.

@@ -30,3 +30,5 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Completed task `phase-2` (main)
 - Updated specification `workflow-runtime` (main)
 - Completed task `phase-3` (main)
+- Updated task index (main)
+- Updated global project rules (main)

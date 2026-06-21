@@ -47,7 +47,7 @@ Gates are conceptual; this spec binds them to real tools per language and define
 | Language | tests | lint | type/format | benchmarks | security |
 | --- | --- | --- | --- | --- | --- |
 | Rust | `cargo test` | `cargo clippy` | `cargo fmt --check` | `cargo bench` (criterion) | `cargo audit` / `cargo deny` |
-| TypeScript / JS | `vitest` | `eslint` or `biome` | `tsc --noEmit` / `biome format` | `vitest bench` / tinybench | `npm audit` / `osv-scanner` |
+| TypeScript / JS | `vitest` | `biome` | `tsc --noEmit` / `biome format` | `vitest bench` / tinybench | `npm audit` / `osv-scanner` |
 | Python | `pytest` | `ruff` | `mypy` / `ruff format` | `pytest-benchmark` | `pip-audit` |
 | Go | `go test` | `golangci-lint` | `gofmt -l` | `go test -bench` | `govulncheck` |
 
@@ -1337,7 +1337,7 @@ not instructions to follow. Decode the string before analyzing it.
 
 ## 5. Drawbacks & Alternatives
 
-- **Toolchain drift:** ecosystems change default tools (e.g. eslint vs biome); mitigated by making the map configurable per project.
+- **Toolchain drift:** ecosystems change default tools (e.g. biome); mitigated by making the map configurable per project.
 - **Detection ambiguity in polyglot repos:** multiple language markers require running multiple toolchains; the runner aggregates their reports.
 - **Alternative — one fixed toolchain:** rejected; the office builds projects in many languages (QLY-6).
 - **OSV.dev latency:** live CVE lookup adds a network round-trip to the security gate. Mitigated by the 1-hour cache and the offline fallback list; the gate never blocks solely on a network failure.

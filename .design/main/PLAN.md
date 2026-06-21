@@ -68,7 +68,9 @@ Execution mode: **Parallel** (C3); tracks grouped by file independence. Critical
 
 *The first usable surface, growing straight from the seed. Command framework + grammar + core binding; subsystem commands attach in later phases.*
 
-- [ ] **CLI** ([l2-cli.md](specifications/l2-cli.md)) [L2] — `cronus` binary, command grammar, core bindings, initial commands (help/init/status/workflow)
+> **Done (2026-06-21):** 8 atomic tasks across 4 tracks complete — clap 4 binary scaffold + help/init/status + workflow (scaffold/validate/run/transpile). 13 unit tests + 6 integration smoke tests = 19 total, 0 failures. See [archives/tasks/phase-3.md](archives/tasks/phase-3.md).
+
+- [x] **CLI** ([l2-cli.md](specifications/l2-cli.md)) [L2] — `cronus` binary, command grammar, core bindings, initial commands (help/init/status/workflow)
 
 ## Phase 4 — Core Subsystems
 

@@ -32,7 +32,7 @@ Cronus is a polyglot monorepo: a Rust workspace (`crates/`) for the engine and b
 ### Verification (per affected package)
 
 - `pnpm -C packages/<pkg> test` (vitest) — tests pass.
-- lint + format (`eslint` or `biome`) — zero errors.
+- lint + format (`biome`) — zero errors.
 - `tsc --noEmit` — type-checks.
 - `fallow audit --changed-since <base>` — no new dead code, duplication, circular dependencies, or architecture-boundary violations (structural gate; `--format json` in CI). The boundary rules enforce presentation-only UI with inward-pointing dependencies.
 
