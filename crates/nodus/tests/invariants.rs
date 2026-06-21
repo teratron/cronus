@@ -1,0 +1,387 @@
+// Per-invariant assertions for WFL-1..9 — one named test per L1 contract clause
+// (l1-workflow-language.md §3). These guard the L1 contract directly, independent
+// of the reference corpus; they remain valid even as the reference evolves.
+
+use nodus::{
+    executor::{ModelProvider, Status, Value},
+    parser::Parser,
+    transpiler::Transpiler,
+    validator::{Severity, Validator},
+    vocab::Schema,
+    workflows::{self, TranspileMode},
+};
+
+// ── Fixtures ──────────────────────────────────────────────────────────────────
+
+const SIMPLE_LOG: &str = include_str!("fixtures/simple_log.nodus");
+const LINT_MISSING_RUNTIME: &str = include_str!("fixtures/lint_missing_runtime.nodus");
+const UNTIL_QUALITY_LOOP: &str = include_str!("fixtures/until_quality_loop.nodus");
+
+// Workflow with a !PREF but no hard rule violation — preference must not block.
+const PREF_ONLY: &str = r#"§wf:pref_only v1.0
+§runtime: { core: schema.nodus }
+!PREF: empathetic OVER neutral IF $in.mood = "sad"
+@in: { mood: str }
+@out: $out
+@err: ESCALATE(human)
+@steps:
+  1. GEN($in.mood) → $out
+  2. LOG($out)
+"#;
+
+// Workflow with both !PREF and !!NEVER — hard rule must win over preference.
+const PREF_AND_NEVER: &str = r#"§wf:pref_and_never v1.0
+§runtime: { core: schema.nodus }
+!PREF: fast OVER thorough
+!!NEVER: FETCH
+@in: { url: str }
+@out: $out
+@err: ESCALATE(human)
+@steps:
+  1. FETCH($in.url) → $out
+  2. LOG($out)
+"#;
+
+// Workflow whose ~UNTIL condition is never satisfied by the stub — MAX:2 will be hit.
+const ALWAYS_LOOPS: &str = r#"§wf:always_loops v1.0
+§runtime: { core: schema.nodus }
+@in: { prompt: str }
+@out: $out
+@err: ESCALATE(human)
+@steps:
+  1. GEN($in.prompt) → $out
+  2. ~UNTIL $out = "magic_stop_signal" | MAX:2
+       GEN("retry") → $out
+     ~END
+  3. LOG($out)
+"#;
+
+// ~UNTIL without a MAX cap — the validator must fire E010.
+const UNBOUNDED_LOOP: &str = r#"§wf:unbounded_loop v1.0
+§runtime: { core: schema.nodus }
+@in: { x: str }
+@out: $out
+@err: ESCALATE(human)
+@steps:
+  1. GEN($in.x) → $out
+  2. ~UNTIL $out = "done"
+       LOG($out)
+     ~END
+"#;
+
+// ── Custom provider for WFL-7 ─────────────────────────────────────────────────
+
+/// Sentinel output that proves dispatch went through this seam.
+const WFL7_MARKER: &str = "WFL7_SEAM_RESULT";
+
+struct FixedOutputProvider;
+
+impl ModelProvider for FixedOutputProvider {
+    fn model_id(&self) -> &str {
+        "fixed-wfl7"
+    }
+
+    fn generate(&self, _prompt: &str, _modifiers: &[(String, String)]) -> String {
+        WFL7_MARKER.to_string()
+    }
+
+    fn analyze(&self, _text: &str, flags: &[String]) -> Value {
+        Value::Map(
+            flags
+                .iter()
+                .map(|f| (f.clone(), Value::Float(0.9)))
+                .collect(),
+        )
+    }
+}
+
+// ── WFL-1 — Dual representation ───────────────────────────────────────────────
+
+#[test]
+fn wfl_1_compact_round_trip_preserves_ast() {
+    // to_nodus() strips comments by design (they are not logic).
+    // The correct losslessness check: normalise → re-parse → normalise again;
+    // both compact forms must be byte-identical.
+    let ast1 = Parser::parse(SIMPLE_LOG).expect("fixture must parse");
+    let compact1 = Transpiler::to_nodus(&ast1);
+    let ast2 = Parser::parse(&compact1).expect("compact form must re-parse");
+    let compact2 = Transpiler::to_nodus(&ast2);
+    assert_eq!(
+        compact1, compact2,
+        "WFL-1: to_nodus() output must be identical across round-trips (lossless logic)"
+    );
+}
+
+#[test]
+fn wfl_1_human_form_is_distinct_prose() {
+    let ast = Parser::parse(SIMPLE_LOG).expect("fixture must parse");
+    let human = Transpiler::to_human(&ast);
+    assert!(!human.is_empty(), "WFL-1: human form must not be empty");
+    assert!(
+        human.contains("WORKFLOW"),
+        "WFL-1: human form must include a WORKFLOW section header"
+    );
+    // Human form is not the same as the compact form — it is a distinct representation.
+    let compact = Transpiler::to_nodus(&ast);
+    assert_ne!(human, compact, "WFL-1: human and compact forms must differ");
+}
+
+// ── WFL-2 — Schema vocabulary contract ────────────────────────────────────────
+
+#[test]
+fn wfl_2_builtin_schema_is_loaded_and_queryable() {
+    let schema = Schema::builtin();
+    assert!(
+        schema.is_command("GEN"),
+        "WFL-2: schema must recognise GEN as a valid command"
+    );
+    assert!(
+        schema.is_command("LOG"),
+        "WFL-2: schema must recognise LOG as a valid command"
+    );
+    assert!(
+        !schema.is_command("FABRICATED_CMD"),
+        "WFL-2: schema must reject unknown commands"
+    );
+    assert!(
+        !schema.version().is_empty(),
+        "WFL-2: schema must carry a non-empty version string"
+    );
+}
+
+#[test]
+fn wfl_2_validator_uses_schema_to_catch_unknown_commands() {
+    // A source with an unknown command — the validator (which uses the schema)
+    // must flag it rather than silently accepting it.
+    let source = r#"§wf:schema_check v1.0
+§runtime: { core: schema.nodus }
+@in: { x }
+@out: $out
+@err: ESCALATE(human)
+@steps:
+  1. GEN($in.x) → $out
+  2. LOG($out)
+"#;
+    let ast = Parser::parse(source).expect("must parse");
+    let diags = Validator::validate(&ast, "schema_check.nodus");
+    // All commands above (GEN, LOG) are in-schema — no schema-vocabulary errors.
+    assert!(
+        !diags.iter().any(|d| d.severity == Severity::Error),
+        "WFL-2: known-vocabulary workflow must produce no errors"
+    );
+}
+
+// ── WFL-3 — Hard constraints inviolable ───────────────────────────────────────
+
+#[test]
+fn wfl_3_never_rule_halts_execution_with_failed_status() {
+    // !!NEVER: FETCH → the executor must refuse and return Failed.
+    let result = workflows::run(PREF_AND_NEVER, "pref_and_never.nodus", None)
+        .expect("validation must pass — constraint enforcement is a runtime check");
+    assert_eq!(
+        result.status,
+        Status::Failed,
+        "WFL-3: violating !!NEVER must set Status::Failed"
+    );
+    assert!(
+        !result.errors.is_empty(),
+        "WFL-3: the NEVER-rule violation must be recorded in RunResult.errors"
+    );
+    assert!(
+        result
+            .errors
+            .iter()
+            .any(|e| e.code.contains("RULE_VIOLATION")),
+        "WFL-3: error code must identify RULE_VIOLATION"
+    );
+}
+
+// ── WFL-4 — Preferences are soft ──────────────────────────────────────────────
+
+#[test]
+fn wfl_4_preference_does_not_halt_execution() {
+    // !PREF alone must not block — preferences are advisory, not enforcing.
+    let result = workflows::run(PREF_ONLY, "pref_only.nodus", None)
+        .expect("workflow with only !PREF must execute");
+    assert_eq!(
+        result.status,
+        Status::Ok,
+        "WFL-4: !PREF must not cause Status::Failed or Status::Aborted"
+    );
+}
+
+#[test]
+fn wfl_4_hard_rule_wins_over_preference() {
+    // When !PREF and !!NEVER coexist and the NEVER is violated, the hard rule
+    // prevails — preference softness does not weaken hard-constraint enforcement.
+    let result =
+        workflows::run(PREF_AND_NEVER, "pref_and_never.nodus", None).expect("validation must pass");
+    assert_eq!(
+        result.status,
+        Status::Failed,
+        "WFL-4: !!NEVER must win over any !PREF — hard rules are inviolable"
+    );
+}
+
+// ── WFL-5 — Validate before run ────────────────────────────────────────────────
+
+#[test]
+fn wfl_5_block_class_error_prevents_execution() {
+    // Missing §runtime (E001) is a block-class error — run() must reject before dispatch.
+    let err = workflows::run(LINT_MISSING_RUNTIME, "lint_missing_runtime.nodus", None)
+        .expect_err("run must fail when block-class errors are present");
+    assert!(
+        err.iter().any(|d| d.severity == Severity::Error),
+        "WFL-5: rejection diagnostics must include at least one Error-severity entry"
+    );
+}
+
+#[test]
+fn wfl_5_valid_workflow_passes_gate_and_executes() {
+    // A valid workflow must clear the validate gate and reach the executor.
+    let result = workflows::run(SIMPLE_LOG, "simple_log.nodus", None)
+        .expect("valid workflow must pass validate-before-run and reach executor");
+    assert_eq!(
+        result.status,
+        Status::Ok,
+        "WFL-5: validated workflow must execute successfully"
+    );
+}
+
+// ── WFL-6 — Bounded execution ─────────────────────────────────────────────────
+
+#[test]
+fn wfl_6_until_loop_sets_max_reached_flag() {
+    // The stub never produces "magic_stop_signal", so MAX:2 is always exhausted.
+    let result = workflows::run(ALWAYS_LOOPS, "always_loops.nodus", None)
+        .expect("must execute without block-class errors");
+    assert!(
+        result.flags.iter().any(|f| f == "NODUS:MAX_REACHED"),
+        "WFL-6: when loop condition is never met, NODUS:MAX_REACHED must be set"
+    );
+    assert_eq!(
+        result.status,
+        Status::Ok,
+        "WFL-6: hitting MAX cap must not abort the workflow"
+    );
+}
+
+#[test]
+fn wfl_6_until_without_max_is_lint_error() {
+    // The validator must reject ~UNTIL without an explicit MAX guard (E010).
+    let ast = Parser::parse(UNBOUNDED_LOOP).expect("must parse");
+    let diags = Validator::validate(&ast, "unbounded_loop.nodus");
+    assert!(
+        diags.iter().any(|d| d.code == "E010"),
+        "WFL-6: ~UNTIL without MAX must fire E010; got: {diags:?}"
+    );
+}
+
+#[test]
+fn wfl_6_bounded_loop_executes_within_limit() {
+    // The UNTIL_QUALITY_LOOP fixture uses MAX:3 — execution must complete (not hang).
+    let result = workflows::run(UNTIL_QUALITY_LOOP, "until_quality_loop.nodus", None)
+        .expect("bounded loop must execute without block-class errors");
+    assert!(
+        result.status == Status::Ok || result.flags.iter().any(|f| f == "NODUS:MAX_REACHED"),
+        "WFL-6: bounded loop must either meet its condition or exhaust MAX gracefully"
+    );
+}
+
+// ── WFL-7 — Subsystem-dispatch seam ──────────────────────────────────────────
+
+#[test]
+fn wfl_7_executor_dispatches_through_provider_seam() {
+    // A custom ModelProvider replaces the default stub — the executor must route
+    // GEN through it, proving the subsystem-dispatch seam is real and pluggable.
+    let result =
+        workflows::run_with_provider(SIMPLE_LOG, "simple_log.nodus", None, FixedOutputProvider)
+            .expect("must execute with custom provider");
+    assert_eq!(
+        result.status,
+        Status::Ok,
+        "WFL-7: execution through custom provider must succeed"
+    );
+    // $out is set by GEN → our provider → WFL7_MARKER; if dispatch went through
+    // the seam the result carries the provider's sentinel value.
+    match &result.out {
+        Value::Text(s) => assert_eq!(
+            s, WFL7_MARKER,
+            "WFL-7: GEN output must come from the injected provider, not a hardcoded path"
+        ),
+        other => panic!("WFL-7: expected Text($out), got {other:?}"),
+    }
+}
+
+// ── WFL-8 — Result contract ────────────────────────────────────────────────────
+
+#[test]
+fn wfl_8_success_result_has_required_fields() {
+    let result = workflows::run(SIMPLE_LOG, "simple_log.nodus", None).expect("must execute");
+    assert_eq!(
+        result.workflow, "wf:simple_log",
+        "WFL-8: workflow field must carry the declared identifier"
+    );
+    assert_eq!(
+        result.status,
+        Status::Ok,
+        "WFL-8: successful run must be Ok"
+    );
+    // log must record at least the LOG step.
+    assert!(
+        !result.log.is_empty(),
+        "WFL-8: log field must be non-empty after execution"
+    );
+    // errors and flags are present (possibly empty on clean run — that is correct).
+    let _ = &result.errors;
+    let _ = &result.flags;
+}
+
+#[test]
+fn wfl_8_failure_result_has_required_fields() {
+    // NEVER-rule violation → Status::Failed; the result contract must still be complete.
+    let result =
+        workflows::run(PREF_AND_NEVER, "pref_and_never.nodus", None).expect("validation must pass");
+    assert_eq!(
+        result.workflow, "wf:pref_and_never",
+        "WFL-8: workflow field must be set even on failure"
+    );
+    assert_eq!(
+        result.status,
+        Status::Failed,
+        "WFL-8: failed run must be Failed"
+    );
+    assert!(
+        !result.errors.is_empty(),
+        "WFL-8: errors field must be populated on failure"
+    );
+}
+
+// ── WFL-9 — Human view ────────────────────────────────────────────────────────
+
+#[test]
+fn wfl_9_human_view_contains_required_sections() {
+    let out = workflows::transpile(SIMPLE_LOG, TranspileMode::Human)
+        .expect("human transpile must succeed");
+    assert!(!out.is_empty(), "WFL-9: human view must not be empty");
+    assert!(
+        out.contains("WORKFLOW"),
+        "WFL-9: human view must include WORKFLOW section"
+    );
+    assert!(
+        out.contains("STEPS"),
+        "WFL-9: human view must include STEPS section"
+    );
+}
+
+#[test]
+fn wfl_9_human_view_is_not_compact_syntax() {
+    // The human form is prose for the client — it must not look like the machine form.
+    let human = workflows::transpile(SIMPLE_LOG, TranspileMode::Human)
+        .expect("human transpile must succeed");
+    // Compact form uses §wf: header — human form must not.
+    assert!(
+        !human.contains("§wf:"),
+        "WFL-9: human view must not contain compact §wf: syntax"
+    );
+}

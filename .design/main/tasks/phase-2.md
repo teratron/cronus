@@ -58,7 +58,7 @@ Track F — Library command surface (l2-workflow-runtime §4.4 — proves WFL-9)
 Track T — Validation & parity
 
 - [x] [T-2T01] Golden parity corpus vs the reference implementation (resolves the spec's corpus TBD)
-- [ ] [T-2T02] Per-invariant assertions WFL-1..9
+- [x] [T-2T02] Per-invariant assertions WFL-1..9
 
 ## Detailed Tracking
 
@@ -175,8 +175,9 @@ Track T — Validation & parity
 ### [T-2T02] Per-invariant assertions WFL-1..9
 
 - **Spec:** l1-workflow-language.md §3 (WFL-1..9) via l2-workflow-runtime.md §3
-- **Status:** Todo
+- **Status:** Done
 - **Assignment:** Agent
-- **Verify:** `cargo test -p nodus invariants::` — one named test per invariant: WFL-1 dual-render round-trip, WFL-2 schema-load-first, WFL-3 hard-constraint halt, WFL-4 preference-soft (never overrides a hard rule), WFL-5 validate-before-run, WFL-6 bounded execution, WFL-7 subsystem-dispatch seam present, WFL-8 result-contract shape, WFL-9 human-view render.
-- **Handoff:** green invariant suite + green parity suite ⇒ Phase 2 Done.
-- **Notes:** These guard the L1 contract directly, independent of the reference corpus — they stay valid even if the reference evolves.
+- **Verify:** `cargo test -p nodus` — 17 invariant tests pass (all 126 total green). One test per WFL invariant: WFL-1 compact round-trip losslessness + human distinctness, WFL-2 schema loads and rejects unknown commands, WFL-3 NEVER rule halts with Status::Failed + RULE_VIOLATION, WFL-4 preference does not halt + NEVER wins over preference, WFL-5 block-class errors prevent execution + valid workflow reaches executor, WFL-6 bounded loop sets NODUS:MAX_REACHED + E010 for missing MAX, WFL-7 custom ModelProvider dispatch seam proven via sentinel output, WFL-8 result contract on success and failure, WFL-9 human view contains WORKFLOW/STEPS sections and differs from compact form.
+- **Handoff:** green invariant suite (17) + green parity suite (26) + green unit suite (83) = 126 total. Phase 2 definition-of-done met.
+- **Changes:** `crates/nodus/tests/invariants.rs` — 17 integration tests across WFL-1..9; inline sources for PREF_ONLY, PREF_AND_NEVER, ALWAYS_LOOPS, UNBOUNDED_LOOP; FixedOutputProvider struct proves WFL-7 dispatch seam. `cargo clippy --all-targets -- -D warnings` clean.
+- **Notes:** WFL-1 round-trip assertion compares `to_nodus(ast1) == to_nodus(ast2)` (compact strings) rather than raw AST equality, because `to_nodus()` strips comments by design — comments are not logic. WFL-7 uses a sentinel string "WFL7_SEAM_RESULT" to prove dispatch is injected, not hardcoded. These guard the L1 contract directly, independent of the reference corpus.

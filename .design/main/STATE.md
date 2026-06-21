@@ -4,20 +4,20 @@
 <!-- Maximum 100 lines. Agent updates AFTER each completed action. -->
 
 **Workspace:** main
-**Updated:** 2026-06-21 16:26
-**Phase:** 2 — Seed II: Workflow Runtime
+**Updated:** 2026-06-21 20:44
+**Phase:** 3 — Stem: CLI
 **Status:** Active
 
 ## Current Position
 
-- **Task:** T-2T01 Done — golden parity corpus (6 fixtures + 26 integration tests in `parity.rs`). 109 tests total, 0 failures. Parity verified: validation verdicts (E001/E005/E012/W001/W002), execution status (Ok/Err), transpilation structure (compact round-trip + human sections).
+- **Task:** T-2T02 Done — per-invariant assertions WFL-1..9. 17 invariant tests + 26 parity tests + 83 unit tests = 126 total, 0 failures. Phase 2 definition-of-done met.
 - **Spec:** l2-workflow-runtime.md (Implements l1-workflow-language.md)
-- **Next Action:** Run /magic.task main to update the plan
+- **Next Action:** Plan complete — author new scope via /magic.spec main (or /magic.status for a briefing)
 
 ## Progress
 
 ```
-Overall: [0/2] ░░░░░░░░ 0%
+Overall: [1/3] ███░░░░░ 33%
 ```
 
 ## Recent Decisions

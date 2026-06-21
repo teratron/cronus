@@ -1,6 +1,6 @@
 # Implementation Plan
 
-**Version:** 2.2.0
+**Version:** 2.3.0
 **Generated:** 2026-06-21
 **Based on:** .design/main/INDEX.md v1.0.0
 **Status:** Active
@@ -60,9 +60,9 @@ Execution mode: **Parallel** (C3); tracks grouped by file independence. Critical
 
 *The embeddable workflow-language runtime the core depends on. Behavior-preserving Rust port, built as a vertical slice first (see runtime spec §4.5).*
 
-> **Decomposed (2026-06-21):** 12 atomic tasks across 7 tracks in [tasks/phase-2.md](tasks/phase-2.md), ordered by the vertical-slice build (front-end → transpiler → minimal executor → validator → full command set), gated on parity with the reference golden corpus. Executor steps bind to **subsystem seams** (real memory/HITL/orchestration/quality wiring lands in Phases 4–6). Runtime §4.6 (step-file execution architecture) and §4.7 (platform-native lookup) are **deferred to a post-parity increment**.
+> **Done (2026-06-21):** 12 atomic tasks across 7 tracks complete — lexer → parser/AST → transpiler → executor → validator/lint + library API. 126 tests (83 unit + 26 parity + 17 WFL-invariant), 0 failures. Parity verified against the reference corpus; all WFL-1..9 L1 invariants covered. See [tasks/phase-2.md](tasks/phase-2.md).
 
-- [ ] **Workflow Runtime** ([l2-workflow-runtime.md](specifications/l2-workflow-runtime.md)) [L2] — lexer → parser/AST → transpiler → executor → validator/lint; step-binding to core subsystems
+- [x] **Workflow Runtime** ([l2-workflow-runtime.md](specifications/l2-workflow-runtime.md)) [L2] — lexer → parser/AST → transpiler → executor → validator/lint; step-binding to core subsystems
 
 ## Phase 3 — Stem: CLI
 
