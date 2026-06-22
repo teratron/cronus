@@ -6,6 +6,10 @@ pub fn dispatch(command: Command, ctx: &Context) -> i32 {
         Command::Init { path } => init::run(path, ctx),
         Command::Status => status::run(ctx),
         Command::Workflow { sub } => workflow::dispatch(sub, ctx),
+        Command::Workspace { sub } => workspace::dispatch(sub, ctx),
+        Command::Memory { sub } => memory::dispatch(sub, ctx),
+        Command::Codegraph { sub } => codegraph_cmd::dispatch(sub, ctx),
+        Command::Agent { sub } => agent::dispatch(sub, ctx),
     }
 }
 
@@ -579,6 +583,520 @@ mod workflow {
         #[test]
         fn cmd_workflow_transpile_human() {
             assert_eq!(transpile_at(VALID, TranspileMode::Human, &text_ctx()), 0);
+        }
+    }
+}
+
+// ─── workspace ────────────────────────────────────────────────────────────────
+
+mod workspace {
+    use std::path::{Path, PathBuf};
+
+    use cronus::workspace::{WorkspaceId, WorkspaceManager, WorkspaceTemplate};
+
+    use crate::cli::WorkspaceCommand;
+    use crate::output::Context;
+
+    pub fn dispatch(sub: WorkspaceCommand, ctx: &Context) -> i32 {
+        match sub {
+            WorkspaceCommand::Create { id, name, path } => create(id, name, path, ctx),
+            WorkspaceCommand::List => list(ctx),
+            WorkspaceCommand::Switch { id } => switch(id, ctx),
+            WorkspaceCommand::Delete { id } => delete(id, ctx),
+            WorkspaceCommand::Check { id } => check(id, ctx),
+        }
+    }
+
+    fn db_path() -> PathBuf {
+        cronus::paths::Paths::os_native()
+            .resolve(cronus::paths::Root::State)
+            .join("workspaces.db")
+    }
+
+    fn open_manager() -> Result<WorkspaceManager, String> {
+        let p = db_path();
+        if let Some(parent) = p.parent() {
+            let _ = std::fs::create_dir_all(parent);
+        }
+        WorkspaceManager::open(&p).map_err(|e| e.to_string())
+    }
+
+    fn parse_id(s: &str) -> Result<WorkspaceId, String> {
+        WorkspaceId::new(s).map_err(|e| e.to_string())
+    }
+
+    fn create(id: String, name: Option<String>, path: Option<PathBuf>, ctx: &Context) -> i32 {
+        create_inner(&id, name.as_deref(), path.as_deref(), ctx)
+    }
+
+    fn create_inner(id: &str, name: Option<&str>, path: Option<&Path>, ctx: &Context) -> i32 {
+        let ws_id = match parse_id(id) {
+            Ok(i) => i,
+            Err(e) => { eprintln!("error: {e}"); return 1; }
+        };
+        let ws_name = name.unwrap_or(id);
+        let ws_path = path.map(|p| p.to_path_buf())
+            .unwrap_or_else(|| std::env::current_dir().unwrap_or_else(|_| PathBuf::from(".")));
+        let mgr = match open_manager() {
+            Ok(m) => m,
+            Err(e) => { eprintln!("error: {e}"); return 1; }
+        };
+        match mgr.create(&ws_id, ws_name, &ws_path, WorkspaceTemplate::Default) {
+            Ok(ws) => {
+                if ctx.is_json() {
+                    println!("{{\"result\":\"created\",\"id\":\"{}\"}}", ws.id);
+                } else {
+                    println!("Created workspace: {} ({})", ws.id, ws.name);
+                }
+                0
+            }
+            Err(e) => { eprintln!("error: {e}"); 1 }
+        }
+    }
+
+    fn list(ctx: &Context) -> i32 {
+        let mgr = match open_manager() {
+            Ok(m) => m,
+            Err(e) => { eprintln!("error: {e}"); return 1; }
+        };
+        match mgr.list() {
+            Ok(workspaces) => {
+                let active = mgr.get_active().ok().flatten();
+                if ctx.is_json() {
+                    let items: Vec<String> = workspaces.iter().map(|w| {
+                        let is_active = active.as_ref().map(|a| a == &w.id).unwrap_or(false);
+                        format!("{{\"id\":\"{}\",\"name\":\"{}\",\"active\":{is_active}}}",
+                            w.id, json_escape(&w.name))
+                    }).collect();
+                    println!("[{}]", items.join(","));
+                } else if workspaces.is_empty() {
+                    println!("No workspaces.");
+                } else {
+                    for w in &workspaces {
+                        let marker = if active.as_ref().map(|a| a == &w.id).unwrap_or(false) {
+                            " *"
+                        } else {
+                            ""
+                        };
+                        println!("{}{marker}  {}", w.id, w.name);
+                    }
+                }
+                0
+            }
+            Err(e) => { eprintln!("error: {e}"); 1 }
+        }
+    }
+
+    fn switch(id: String, ctx: &Context) -> i32 {
+        let ws_id = match parse_id(&id) {
+            Ok(i) => i,
+            Err(e) => { eprintln!("error: {e}"); return 1; }
+        };
+        let mgr = match open_manager() {
+            Ok(m) => m,
+            Err(e) => { eprintln!("error: {e}"); return 1; }
+        };
+        match mgr.set_active(&ws_id) {
+            Ok(()) => {
+                if ctx.is_json() {
+                    println!("{{\"result\":\"switched\",\"id\":\"{ws_id}\"}}");
+                } else {
+                    println!("Active workspace: {ws_id}");
+                }
+                0
+            }
+            Err(e) => { eprintln!("error: {e}"); 1 }
+        }
+    }
+
+    fn delete(id: String, ctx: &Context) -> i32 {
+        let ws_id = match parse_id(&id) {
+            Ok(i) => i,
+            Err(e) => { eprintln!("error: {e}"); return 1; }
+        };
+        let mgr = match open_manager() {
+            Ok(m) => m,
+            Err(e) => { eprintln!("error: {e}"); return 1; }
+        };
+        match mgr.delete(&ws_id) {
+            Ok(true) => {
+                if ctx.is_json() {
+                    println!("{{\"result\":\"deleted\",\"id\":\"{ws_id}\"}}");
+                } else {
+                    println!("Deleted workspace: {ws_id}");
+                }
+                0
+            }
+            Ok(false) => { eprintln!("error: workspace '{ws_id}' not found"); 1 }
+            Err(e) => { eprintln!("error: {e}"); 1 }
+        }
+    }
+
+    fn check(id: String, ctx: &Context) -> i32 {
+        let ws_id = match parse_id(&id) {
+            Ok(i) => i,
+            Err(e) => { eprintln!("error: {e}"); return 1; }
+        };
+        let mgr = match open_manager() {
+            Ok(m) => m,
+            Err(e) => { eprintln!("error: {e}"); return 1; }
+        };
+        match mgr.check(&ws_id) {
+            Ok(status) => {
+                if ctx.is_json() {
+                    println!(
+                        "{{\"exists\":{},\"active\":{},\"path_exists\":{}}}",
+                        status.exists, status.is_active, status.path_exists
+                    );
+                } else {
+                    println!("exists:     {}", status.exists);
+                    println!("active:     {}", status.is_active);
+                    println!("path_ok:    {}", status.path_exists);
+                }
+                0
+            }
+            Err(e) => { eprintln!("error: {e}"); 1 }
+        }
+    }
+
+    fn json_escape(s: &str) -> String {
+        s.replace('\\', "\\\\").replace('"', "\\\"")
+    }
+
+    #[cfg(test)]
+    mod tests {
+        use std::path::Path;
+
+        use cronus::workspace::{WorkspaceId, WorkspaceManager, WorkspaceTemplate};
+
+
+        use crate::output::{Context, OutputFormat};
+
+        fn text_ctx() -> Context { Context::new(OutputFormat::Text) }
+
+        #[test]
+        fn workspace_create_and_list() {
+            let mgr = WorkspaceManager::open_in_memory().unwrap();
+            let id = WorkspaceId::new("test-ws").unwrap();
+            mgr.create(&id, "Test", Path::new("/tmp"), WorkspaceTemplate::Default).unwrap();
+
+            let list = mgr.list().unwrap();
+            assert_eq!(list.len(), 1);
+            assert_eq!(list[0].id, id);
+        }
+
+        #[test]
+        fn workspace_switch_and_active() {
+            let mgr = WorkspaceManager::open_in_memory().unwrap();
+            let id = WorkspaceId::new("ws-a").unwrap();
+            mgr.create(&id, "A", Path::new("/a"), WorkspaceTemplate::Default).unwrap();
+            mgr.set_active(&id).unwrap();
+            assert_eq!(mgr.get_active().unwrap().as_ref(), Some(&id));
+        }
+
+        #[test]
+        fn workspace_delete_removes_entry() {
+            let mgr = WorkspaceManager::open_in_memory().unwrap();
+            let id = WorkspaceId::new("ws-del").unwrap();
+            mgr.create(&id, "Del", Path::new("/d"), WorkspaceTemplate::Empty).unwrap();
+            assert!(mgr.delete(&id).unwrap());
+            assert!(mgr.get(&id).unwrap().is_none());
+        }
+
+        #[test]
+        fn invalid_id_rejected() {
+            assert!(WorkspaceId::new("CAPS").is_err());
+            assert!(WorkspaceId::new("x").is_err());
+        }
+
+        #[test]
+        fn check_nonexistent_workspace() {
+            let mgr = WorkspaceManager::open_in_memory().unwrap();
+            let id = WorkspaceId::new("ghost").unwrap();
+            let status = mgr.check(&id).unwrap();
+            assert!(!status.exists);
+            assert!(!status.is_active);
+        }
+
+        // Suppress unused import warning for text_ctx
+        #[allow(dead_code)]
+        fn _use_ctx() -> Context { text_ctx() }
+    }
+}
+
+// ─── memory ───────────────────────────────────────────────────────────────────
+
+mod memory {
+    use cronus::memory::{
+        store::MemoryStore, MemoryEntry, MemoryKind, MemorySource,
+    };
+
+    use crate::cli::MemoryCommand;
+    use crate::output::Context;
+
+    fn open_store() -> Result<MemoryStore, String> {
+        MemoryStore::open_in_memory().map_err(|e| e.to_string())
+    }
+
+    pub fn dispatch(sub: MemoryCommand, ctx: &Context) -> i32 {
+        match sub {
+            MemoryCommand::Store { key, value } => store_entry(key, value, ctx),
+            MemoryCommand::Search { query } => search_entries(query, ctx),
+            MemoryCommand::Forget { id } => forget_entry(id, ctx),
+        }
+    }
+
+    fn store_entry(key: String, value: String, ctx: &Context) -> i32 {
+        let store = match open_store() {
+            Ok(s) => s,
+            Err(e) => { eprintln!("error: {e}"); return 1; }
+        };
+        let entry = MemoryEntry::new(MemoryKind::ProjectContext, MemorySource::System, key.clone(), value);
+        match store.add(entry) {
+            Ok(id) => {
+                if ctx.is_json() {
+                    println!("{{\"result\":\"stored\",\"id\":\"{id}\"}}");
+                } else {
+                    println!("Stored: {key} ({id})");
+                }
+                0
+            }
+            Err(e) => { eprintln!("error: {e}"); 1 }
+        }
+    }
+
+    fn search_entries(query: String, ctx: &Context) -> i32 {
+        let store = match open_store() {
+            Ok(s) => s,
+            Err(e) => { eprintln!("error: {e}"); return 1; }
+        };
+        match store.search_fts(&query, 10) {
+            Ok(entries) => {
+                if ctx.is_json() {
+                    let items: Vec<String> = entries.iter().map(|e| {
+                        format!("{{\"id\":\"{}\",\"title\":\"{}\"}}", e.id, e.title)
+                    }).collect();
+                    println!("[{}]", items.join(","));
+                } else if entries.is_empty() {
+                    println!("No results for '{query}'.");
+                } else {
+                    for e in &entries {
+                        println!("{}: {}", e.id, e.title);
+                    }
+                }
+                0
+            }
+            Err(e) => { eprintln!("error: {e}"); 1 }
+        }
+    }
+
+    fn forget_entry(id: String, ctx: &Context) -> i32 {
+        let store = match open_store() {
+            Ok(s) => s,
+            Err(e) => { eprintln!("error: {e}"); return 1; }
+        };
+        match store.delete(&id) {
+            Ok(true) => {
+                if ctx.is_json() {
+                    println!("{{\"result\":\"deleted\",\"id\":\"{id}\"}}");
+                } else {
+                    println!("Deleted: {id}");
+                }
+                0
+            }
+            Ok(false) => { eprintln!("error: entry '{id}' not found"); 1 }
+            Err(e) => { eprintln!("error: {e}"); 1 }
+        }
+    }
+
+    #[cfg(test)]
+    mod tests {
+        use super::{forget_entry, search_entries, store_entry};
+        use crate::output::{Context, OutputFormat};
+
+        fn ctx() -> Context { Context::new(OutputFormat::Text) }
+
+        #[test]
+        fn memory_store_exits_0() {
+            assert_eq!(store_entry("fact".into(), "the sky is blue".into(), &ctx()), 0);
+        }
+
+        #[test]
+        fn memory_search_exits_0_empty() {
+            assert_eq!(search_entries("nothing".into(), &ctx()), 0);
+        }
+
+        #[test]
+        fn memory_forget_exits_1_for_unknown() {
+            assert_eq!(forget_entry("nonexistent-id".into(), &ctx()), 1);
+        }
+    }
+}
+
+// ─── codegraph ────────────────────────────────────────────────────────────────
+
+mod codegraph_cmd {
+    use codegraph::{
+        extractor::{Extractor, RegexExtractor},
+        index::{fts_search, migrate, store_symbols},
+    };
+    use rusqlite::Connection;
+    use std::path::PathBuf;
+
+    use crate::cli::CodegraphCommand;
+    use crate::output::Context;
+
+    fn open_db() -> Result<Connection, String> {
+        let conn = Connection::open_in_memory().map_err(|e| e.to_string())?;
+        migrate(&conn).map_err(|e| e.to_string())?;
+        Ok(conn)
+    }
+
+    pub fn dispatch(sub: CodegraphCommand, ctx: &Context) -> i32 {
+        match sub {
+            CodegraphCommand::Index { path } => index_path(path, ctx),
+            CodegraphCommand::Search { query } => search_graph(query, ctx),
+        }
+    }
+
+    fn index_path(path: PathBuf, ctx: &Context) -> i32 {
+        let conn = match open_db() {
+            Ok(c) => c,
+            Err(e) => { eprintln!("error: {e}"); return 1; }
+        };
+        let extractor = RegexExtractor;
+        let mut total = 0usize;
+
+        if path.is_file() {
+            total += index_file(&conn, &path, &extractor);
+        } else if path.is_dir()
+            && let Ok(entries) = std::fs::read_dir(&path)
+        {
+            for entry in entries.filter_map(|e| e.ok()) {
+                let p = entry.path();
+                if p.extension().and_then(|e| e.to_str()) == Some("rs") {
+                    total += index_file(&conn, &p, &extractor);
+                }
+            }
+        }
+
+        if ctx.is_json() {
+            println!("{{\"result\":\"indexed\",\"symbols\":{total}}}");
+        } else {
+            println!("Indexed {total} symbols from {}", path.display());
+        }
+        0
+    }
+
+    fn index_file(conn: &Connection, path: &PathBuf, extractor: &RegexExtractor) -> usize {
+        let source = std::fs::read_to_string(path).unwrap_or_default();
+        let syms = extractor.extract(&source);
+        let n = syms.len();
+        let _ = store_symbols(conn, &path.display().to_string(), &syms);
+        n
+    }
+
+    fn search_graph(query: String, ctx: &Context) -> i32 {
+        let conn = match open_db() {
+            Ok(c) => c,
+            Err(e) => { eprintln!("error: {e}"); return 1; }
+        };
+        match fts_search(&conn, &query, 10) {
+            Ok(results) => {
+                if ctx.is_json() {
+                    let items: Vec<String> = results.iter().map(|s| {
+                        format!("{{\"name\":\"{}\",\"file\":\"{}\",\"line\":{}}}", s.name, s.file, s.line)
+                    }).collect();
+                    println!("[{}]", items.join(","));
+                } else if results.is_empty() {
+                    println!("No symbols matching '{query}'.");
+                } else {
+                    for s in &results {
+                        println!("{}:{} — {}", s.file, s.line, s.name);
+                    }
+                }
+                0
+            }
+            Err(e) => { eprintln!("error: {e}"); 1 }
+        }
+    }
+
+    #[cfg(test)]
+    mod tests {
+        use std::path::PathBuf;
+        use super::{index_path, search_graph};
+        use crate::output::{Context, OutputFormat};
+
+        fn ctx() -> Context { Context::new(OutputFormat::Text) }
+
+        #[test]
+        fn codegraph_index_nonexistent_path_exits_0_with_zero() {
+            // Non-existent dir → exits 0, prints 0 symbols
+            let p = PathBuf::from("/nonexistent/path/xyz");
+            assert_eq!(index_path(p, &ctx()), 0);
+        }
+
+        #[test]
+        fn codegraph_search_empty_db_exits_0() {
+            assert_eq!(search_graph("alpha".into(), &ctx()), 0);
+        }
+    }
+}
+
+// ─── agent ────────────────────────────────────────────────────────────────────
+
+mod agent {
+    use cronus::constitution::{identity_paths, IDENTITY_FILES};
+
+    use crate::cli::AgentCommand;
+    use crate::output::Context;
+
+    pub fn dispatch(sub: AgentCommand, ctx: &Context) -> i32 {
+        match sub {
+            AgentCommand::Constitution => constitution(ctx),
+            AgentCommand::Status => status(ctx),
+        }
+    }
+
+    fn constitution(ctx: &Context) -> i32 {
+        let workspace = std::env::current_dir().unwrap_or_else(|_| std::path::PathBuf::from("."));
+        let paths = identity_paths(&workspace);
+        if ctx.is_json() {
+            let items: Vec<String> = IDENTITY_FILES.iter().zip(paths.iter()).map(|(name, path)| {
+                let exists = path.exists();
+                let p = path.display().to_string().replace('\\', "\\\\").replace('"', "\\\"");
+                format!("{{\"file\":\"{name}\",\"path\":\"{p}\",\"exists\":{exists}}}")
+            }).collect();
+            println!("[{}]", items.join(","));
+        } else {
+            for (name, path) in IDENTITY_FILES.iter().zip(paths.iter()) {
+                let exists = if path.exists() { "✓" } else { "✗" };
+                println!("{exists} {name}: {}", path.display());
+            }
+        }
+        0
+    }
+
+    fn status(_ctx: &Context) -> i32 {
+        println!("agent: no active session");
+        0
+    }
+
+    #[cfg(test)]
+    mod tests {
+        use super::{constitution, status};
+        use crate::output::{Context, OutputFormat};
+
+        fn ctx() -> Context { Context::new(OutputFormat::Text) }
+
+        #[test]
+        fn agent_constitution_exits_0() {
+            assert_eq!(constitution(&ctx()), 0);
+        }
+
+        #[test]
+        fn agent_status_exits_0() {
+            assert_eq!(status(&ctx()), 0);
         }
     }
 }

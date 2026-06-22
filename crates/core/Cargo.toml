@@ -6,4 +6,7 @@ license.workspace = true
 repository.workspace = true
 
 [dependencies]
-# Foundation is std-only; subsystem dependencies (sqlite-vec, nodus, ...) land in later phases.
+aes-gcm = { workspace = true }
+argon2 = { workspace = true }
+keyring = { workspace = true }
+rusqlite = { workspace = true }

@@ -1,6 +1,6 @@
 # Project Context
 
-**Generated:** 2026-06-21
+**Generated:** 2026-06-22
 
 ## Active Technologies
 
@@ -57,6 +57,7 @@
 │   └── desktop/
 ├── crates/
 │   ├── cli/
+│   ├── codegraph/
 │   ├── core/
 │   ├── nodus/
 │   └── tui/

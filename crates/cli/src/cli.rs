@@ -32,6 +32,101 @@ pub enum Command {
         #[command(subcommand)]
         sub: WorkflowCommand,
     },
+    /// Manage named workspaces
+    Workspace {
+        #[command(subcommand)]
+        sub: WorkspaceCommand,
+    },
+    /// Manage memory entries
+    Memory {
+        #[command(subcommand)]
+        sub: MemoryCommand,
+    },
+    /// Code graph operations
+    Codegraph {
+        #[command(subcommand)]
+        sub: CodegraphCommand,
+    },
+    /// Agent management
+    Agent {
+        #[command(subcommand)]
+        sub: AgentCommand,
+    },
+}
+
+#[derive(Subcommand)]
+pub enum MemoryCommand {
+    /// Store a key-value memory entry
+    Store {
+        /// Entry title / key
+        key: String,
+        /// Entry body / value
+        value: String,
+    },
+    /// Search memory entries by keyword
+    Search {
+        /// Search query
+        query: String,
+    },
+    /// Delete a memory entry by ID
+    Forget {
+        /// Entry ID to delete
+        id: String,
+    },
+}
+
+#[derive(Subcommand)]
+pub enum CodegraphCommand {
+    /// Index a directory or file
+    Index {
+        /// Path to index
+        path: std::path::PathBuf,
+    },
+    /// Search the code graph by keyword
+    Search {
+        /// Search query
+        query: String,
+    },
+}
+
+#[derive(Subcommand)]
+pub enum AgentCommand {
+    /// Show agent identity files and status
+    Constitution,
+    /// Show agent runtime status
+    Status,
+}
+
+#[derive(Subcommand)]
+pub enum WorkspaceCommand {
+    /// Create a new workspace
+    Create {
+        /// Workspace ID (lowercase kebab-case, e.g. my-project)
+        id: String,
+        /// Human-readable name
+        #[arg(long, short = 'n')]
+        name: Option<String>,
+        /// Root path for the workspace (defaults to current directory)
+        #[arg(long)]
+        path: Option<PathBuf>,
+    },
+    /// List all workspaces
+    List,
+    /// Switch the active workspace
+    Switch {
+        /// Workspace ID to activate
+        id: String,
+    },
+    /// Delete a workspace
+    Delete {
+        /// Workspace ID to delete
+        id: String,
+    },
+    /// Check the status of a workspace
+    Check {
+        /// Workspace ID to inspect
+        id: String,
+    },
 }
 
 #[derive(Subcommand)]

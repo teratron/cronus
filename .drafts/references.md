@@ -19,6 +19,10 @@
 - <https://github.com/aporb/agentic-os>
 - <https://github.com/earendil-works/pi>
 - <https://github.com/anomalyco/opencode>
+- <https://github.com/crewAIInc/crewAI>
+- <https://github.com/langchain-ai/langgraph>
+- <https://github.com/ag2ai/ag2>
+- <https://github.com/Rai220/anima>
 
 ## Spec-Driven Development
 

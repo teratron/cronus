@@ -1,7 +1,7 @@
 # Master Task Index (Registry)
 
-**Version:** 1.4.0
-**Generated:** 2026-06-21
+**Version:** 1.5.0
+**Generated:** 2026-06-22
 **Based on:** .design/main/PLAN.md v2.3.0
 **Based on RULES:** .design/RULES.md v1.4.0
 **Execution Mode:** Parallel
@@ -16,10 +16,10 @@ Tactical registry of all phases and their statuses, ordered by the growth metaph
 | Phase | Description | Status |
 | --- | --- | --- |
 | [Phase 1](tasks/phase-1.md) | Seed I — Foundation: workspaces, filesystem, core skeleton, security | `In Progress` |
-| [Phase 2](tasks/phase-2.md) | Seed II — Workflow runtime (`crates/nodus`) port | `Done` |
+| [Phase 2](archives/tasks/phase-2.md) | Seed II — Workflow runtime (`crates/nodus`) port | `Done (Archived)` |
 | [Phase 3](archives/tasks/phase-3.md) | Stem — CLI (command framework + grammar + core bindings) | `Done (Archived)` |
-| [Phase 4](tasks/phase-4.md) | Core Subsystems: memory store, model/context routers, workspace management | `Active` |
-| Phase 5 | Office Work Engine: role catalog, kanban board, scheduler, quality pipeline, extension registry | `Pending` |
+| [Phase 4](tasks/phase-4.md) | Core Subsystems: memory store, model/context routers, workspace management | `Done` |
+| [Phase 5](tasks/phase-5.md) | Office Work Engine: role catalog, kanban board, scheduler, quality pipeline, extension registry | `Active` |
 | Phase 6 | Orchestration & Autonomy: delegation, /goal+judge+budget, briefings | `Pending` |
 | Phase 7 | Leaf — TUI (interactive terminal) | `Pending` |
 | Phase 8 | Flower — Desktop App: application UI, office view, dashboard | `Pending` |
@@ -27,5 +27,5 @@ Tactical registry of all phases and their statuses, ordered by the growth metaph
 
 ## Meta Information
 
-- **Last Updated**: 2026-06-21
+- **Last Updated**: 2026-06-22
 - **Maintainer**: Core Team
