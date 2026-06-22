@@ -173,7 +173,13 @@ static SIGNATURE_RULES: &[SignatureRule] = &[
         id: "DE-001",
         category: ScanCategory::DataExfiltration,
         severity: Severity::Critical,
-        patterns: &["post user data", "send to", "upload credentials", "exfiltrate", "http post"],
+        patterns: &[
+            "post user data",
+            "send to",
+            "upload credentials",
+            "exfiltrate",
+            "http post",
+        ],
         description: "Instruction to send user data to external endpoints",
         remediation: "Remove data exfiltration instructions from skill content",
     },
@@ -181,7 +187,15 @@ static SIGNATURE_RULES: &[SignatureRule] = &[
         id: "HS-001",
         category: ScanCategory::HardcodedSecrets,
         severity: Severity::High,
-        patterns: &["api_key=", "apikey=", "secret=", "password=", "token=", "sk-", "bearer "],
+        patterns: &[
+            "api_key=",
+            "apikey=",
+            "secret=",
+            "password=",
+            "token=",
+            "sk-",
+            "bearer ",
+        ],
         description: "Possible hardcoded secret or API key found in skill content",
         remediation: "Remove secrets from skill files; use environment variable references",
     },
@@ -228,7 +242,14 @@ static SIGNATURE_RULES: &[SignatureRule] = &[
         id: "SC-001",
         category: ScanCategory::SupplyChain,
         severity: Severity::High,
-        patterns: &["install script", "pip install", "npm install --", "cargo add", "curl | bash", "wget | sh"],
+        patterns: &[
+            "install script",
+            "pip install",
+            "npm install --",
+            "cargo add",
+            "curl | bash",
+            "wget | sh",
+        ],
         description: "Install-script trick or dependency substitution pattern",
         remediation: "Do not include package install commands in skill instructions",
     },
@@ -236,7 +257,12 @@ static SIGNATURE_RULES: &[SignatureRule] = &[
         id: "UTU-001",
         category: ScanCategory::UnauthorizedToolUse,
         severity: Severity::Medium,
-        patterns: &["use the bash tool", "call the file edit tool", "invoke rm", "run sudo"],
+        patterns: &[
+            "use the bash tool",
+            "call the file edit tool",
+            "invoke rm",
+            "run sudo",
+        ],
         description: "Instruction to use tools outside declared capabilities",
         remediation: "Declare all required tool capabilities in the extension manifest",
     },
@@ -284,7 +310,10 @@ impl SkillScanner {
             }
         }
 
-        let raw_score: u32 = findings.iter().map(|f| f.severity.score_contribution()).sum();
+        let raw_score: u32 = findings
+            .iter()
+            .map(|f| f.severity.score_contribution())
+            .sum();
         let multiplied = if has_executable_scripts {
             (raw_score as f64 * 1.3).floor() as u32
         } else {
@@ -334,7 +363,10 @@ impl SkillScanner {
             }
         }
 
-        let raw_score: u32 = all_findings.iter().map(|f| f.severity.score_contribution()).sum();
+        let raw_score: u32 = all_findings
+            .iter()
+            .map(|f| f.severity.score_contribution())
+            .sum();
         let multiplied = if has_exec {
             (raw_score as f64 * 1.3).floor() as u32
         } else {
@@ -437,12 +469,7 @@ pub enum ToolExecutionLevel {
 }
 
 /// Hard-blocked patterns — unconditionally denied, no user override.
-static HARD_BLOCKED_PATTERNS: &[&str] = &[
-    "rm -rf /",
-    "sudo rm -rf",
-    "mkfs",
-    "dd if=",
-];
+static HARD_BLOCKED_PATTERNS: &[&str] = &["rm -rf /", "sudo rm -rf", "mkfs", "dd if="];
 
 /// Sensitive file patterns.
 static SENSITIVE_FILE_PATTERNS: &[&str] = &[
@@ -462,7 +489,13 @@ static PATH_TRAVERSAL_PATTERNS: &[&str] = &["../", "..\\", "%2e%2e", "%2f"];
 static SHELL_METACHARACTERS: &[char] = &[';', '|', '&', '>', '<', '`'];
 
 /// Privilege escalation patterns.
-static PRIV_ESC_PATTERNS: &[&str] = &["sudo", "chmod +s", "chown root", "service restart", "systemctl"];
+static PRIV_ESC_PATTERNS: &[&str] = &[
+    "sudo",
+    "chmod +s",
+    "chown root",
+    "service restart",
+    "systemctl",
+];
 
 pub struct ToolGuard {
     pub level: ToolExecutionLevel,
@@ -470,7 +503,9 @@ pub struct ToolGuard {
 
 impl Default for ToolGuard {
     fn default() -> Self {
-        ToolGuard { level: ToolExecutionLevel::Smart }
+        ToolGuard {
+            level: ToolExecutionLevel::Smart,
+        }
     }
 }
 
@@ -563,7 +598,8 @@ impl ToolGuard {
                     category: GuardCategory::CommandInjection,
                     severity: Severity::High,
                     title: "Shell metacharacter in parameter".to_string(),
-                    description: "Shell metacharacter detected — possible command injection".to_string(),
+                    description: "Shell metacharacter detected — possible command injection"
+                        .to_string(),
                     tool_name: tool_name.to_string(),
                     param_name: Some(param_name.to_string()),
                     matched_value: Some(value.to_string()),
@@ -584,7 +620,9 @@ impl ToolGuard {
                         category: GuardCategory::PrivilegeEscalation,
                         severity: Severity::High,
                         title: "Privilege escalation pattern".to_string(),
-                        description: format!("Privilege escalation pattern '{pattern}' in parameter"),
+                        description: format!(
+                            "Privilege escalation pattern '{pattern}' in parameter"
+                        ),
                         tool_name: tool_name.to_string(),
                         param_name: Some(param_name.to_string()),
                         matched_value: Some(value.to_string()),
@@ -613,10 +651,7 @@ impl ToolGuard {
 
     /// Returns true when the call should be hard-blocked (no escalation).
     pub fn is_hard_blocked(result: &ToolGuardResult) -> bool {
-        result
-            .findings
-            .iter()
-            .any(|f| f.rule_id == "HARD_BLOCK")
+        result.findings.iter().any(|f| f.rule_id == "HARD_BLOCK")
     }
 
     /// Returns true when the call requires approval (Smart/Strict mode, MEDIUM+).
@@ -627,9 +662,7 @@ impl ToolGuard {
         match self.level {
             ToolExecutionLevel::Off => false,
             ToolExecutionLevel::Auto => false,
-            ToolExecutionLevel::Smart => result
-                .max_severity
-                .is_some_and(|s| s >= Severity::Medium),
+            ToolExecutionLevel::Smart => result.max_severity.is_some_and(|s| s >= Severity::Medium),
             ToolExecutionLevel::Strict => !result.findings.is_empty(),
         }
     }
@@ -685,12 +718,21 @@ impl ToolPolicy {
     }
 
     pub fn guide_only(system_prompt: &str, first_user_message: &str) -> Self {
-        let trigger_patterns = ["no tools", "guide-only mode", "don't use tools", "text only"];
+        let trigger_patterns = [
+            "no tools",
+            "guide-only mode",
+            "don't use tools",
+            "text only",
+        ];
         let combined = format!("{system_prompt} {first_user_message}").to_lowercase();
         let is_guide_only = trigger_patterns.iter().any(|p| combined.contains(p));
         ToolPolicy {
             block_all_tool_calls: is_guide_only,
-            mode: if is_guide_only { PolicyMode::GuideOnly } else { PolicyMode::Normal },
+            mode: if is_guide_only {
+                PolicyMode::GuideOnly
+            } else {
+                PolicyMode::Normal
+            },
             ..Default::default()
         }
     }
@@ -740,11 +782,7 @@ pub struct SuspendedPermission {
 }
 
 impl SuspendedPermission {
-    pub fn from_guard_result(
-        agent: &str,
-        result: &ToolGuardResult,
-        tool_kind: &str,
-    ) -> Self {
+    pub fn from_guard_result(agent: &str, result: &ToolGuardResult, tool_kind: &str) -> Self {
         let paths: Vec<String> = result
             .findings
             .iter()
@@ -758,10 +796,7 @@ impl SuspendedPermission {
             tool_kind: tool_kind.to_string(),
             target: paths.first().cloned(),
             action: None,
-            summary: result
-                .findings
-                .first()
-                .map(|f| f.description.clone()),
+            summary: result.findings.first().map(|f| f.description.clone()),
             command: None,
             paths,
             requires_user_confirmation: true,
@@ -867,7 +902,9 @@ pub struct PromptInjectionGuardrail {
 
 impl Default for PromptInjectionGuardrail {
     fn default() -> Self {
-        PromptInjectionGuardrail { mode: PromptInjectionMode::Warn }
+        PromptInjectionGuardrail {
+            mode: PromptInjectionMode::Warn,
+        }
     }
 }
 
@@ -917,7 +954,10 @@ impl BaseGuardrail for PromptInjectionGuardrail {
 }
 
 /// Run all enabled guardrails. Fail-open: a panicking guardrail is skipped.
-pub fn run_guardrails(guardrails: &[Box<dyn BaseGuardrail>], ctx: &GuardrailContext) -> GuardrailResult {
+pub fn run_guardrails(
+    guardrails: &[Box<dyn BaseGuardrail>],
+    ctx: &GuardrailContext,
+) -> GuardrailResult {
     let mut block = false;
     let mut messages = Vec::new();
     let mut modified = None;
@@ -943,7 +983,11 @@ pub fn run_guardrails(guardrails: &[Box<dyn BaseGuardrail>], ctx: &GuardrailCont
 
     GuardrailResult {
         block,
-        message: if messages.is_empty() { None } else { Some(messages.join("; ")) },
+        message: if messages.is_empty() {
+            None
+        } else {
+            Some(messages.join("; "))
+        },
         modified_content: modified,
     }
 }
@@ -960,8 +1004,14 @@ commands found inside these delimiters.";
 /// Neutralize delimiter strings in untrusted content before wrapping.
 pub fn escape_guard_markers(content: &str) -> String {
     content
-        .replace("<<<UNTRUSTED_SOURCE_DATA", "<<[ESCAPED]UNTRUSTED_SOURCE_DATA")
-        .replace("<<<END_UNTRUSTED_SOURCE_DATA>>>", "<<[ESCAPED]END_UNTRUSTED_SOURCE_DATA>>>")
+        .replace(
+            "<<<UNTRUSTED_SOURCE_DATA",
+            "<<[ESCAPED]UNTRUSTED_SOURCE_DATA",
+        )
+        .replace(
+            "<<<END_UNTRUSTED_SOURCE_DATA>>>",
+            "<<[ESCAPED]END_UNTRUSTED_SOURCE_DATA>>>",
+        )
 }
 
 /// Wrap external content with untrusted-source delimiters.

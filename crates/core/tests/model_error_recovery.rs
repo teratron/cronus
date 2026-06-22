@@ -1,6 +1,5 @@
 use cronus::router::recovery::{
-    classify, recovery_action, CredentialPool, FailoverKind, NoOpProbe, RecoveryAction,
-    HealthProbe,
+    CredentialPool, FailoverKind, HealthProbe, NoOpProbe, RecoveryAction, classify, recovery_action,
 };
 
 // ── Classification ────────────────────────────────────────────────────────────
@@ -27,17 +26,26 @@ fn http_404_classifies_as_model_not_found() {
 
 #[test]
 fn http_500_timeout_body_classifies_network_timeout() {
-    assert_eq!(classify(500, "request timed out"), FailoverKind::NetworkTimeout);
+    assert_eq!(
+        classify(500, "request timed out"),
+        FailoverKind::NetworkTimeout
+    );
 }
 
 #[test]
 fn http_500_generic_classifies_internal_server_error() {
-    assert_eq!(classify(500, "something went wrong"), FailoverKind::InternalServerError);
+    assert_eq!(
+        classify(500, "something went wrong"),
+        FailoverKind::InternalServerError
+    );
 }
 
 #[test]
 fn body_rate_limit_classifies_correctly() {
-    assert_eq!(classify(0, "rate limit exceeded, try again"), FailoverKind::RateLimit);
+    assert_eq!(
+        classify(0, "rate limit exceeded, try again"),
+        FailoverKind::RateLimit
+    );
 }
 
 #[test]
@@ -47,12 +55,18 @@ fn body_invalid_api_key_classifies_auth() {
 
 #[test]
 fn body_context_length_overflow() {
-    assert_eq!(classify(0, "context length overflow"), FailoverKind::ContextOverflow);
+    assert_eq!(
+        classify(0, "context length overflow"),
+        FailoverKind::ContextOverflow
+    );
 }
 
 #[test]
 fn body_quota_exceeded() {
-    assert_eq!(classify(0, "quota exceeded for billing period"), FailoverKind::QuotaExhausted);
+    assert_eq!(
+        classify(0, "quota exceeded for billing period"),
+        FailoverKind::QuotaExhausted
+    );
 }
 
 #[test]
@@ -64,22 +78,34 @@ fn body_unknown_falls_through() {
 
 #[test]
 fn rate_limit_action_is_retry() {
-    assert_eq!(recovery_action(FailoverKind::RateLimit), RecoveryAction::Retry);
+    assert_eq!(
+        recovery_action(FailoverKind::RateLimit),
+        RecoveryAction::Retry
+    );
 }
 
 #[test]
 fn auth_failure_action_is_rotate_credential() {
-    assert_eq!(recovery_action(FailoverKind::AuthFailure), RecoveryAction::RotateCredential);
+    assert_eq!(
+        recovery_action(FailoverKind::AuthFailure),
+        RecoveryAction::RotateCredential
+    );
 }
 
 #[test]
 fn context_overflow_action_is_compress() {
-    assert_eq!(recovery_action(FailoverKind::ContextOverflow), RecoveryAction::Compress);
+    assert_eq!(
+        recovery_action(FailoverKind::ContextOverflow),
+        RecoveryAction::Compress
+    );
 }
 
 #[test]
 fn unknown_action_is_abort() {
-    assert_eq!(recovery_action(FailoverKind::Unknown), RecoveryAction::Abort);
+    assert_eq!(
+        recovery_action(FailoverKind::Unknown),
+        RecoveryAction::Abort
+    );
 }
 
 // ── Credential pool ───────────────────────────────────────────────────────────
@@ -102,7 +128,11 @@ fn credential_pool_evicts_after_threshold() {
     pool.record_failure();
     assert_eq!(pool.len(), 2);
     pool.record_failure();
-    assert_eq!(pool.len(), 1, "credential must be evicted after threshold failures");
+    assert_eq!(
+        pool.len(),
+        1,
+        "credential must be evicted after threshold failures"
+    );
     assert!(!pool.is_empty());
 }
 
@@ -134,7 +164,10 @@ fn unhealthy_primary_falls_back_to_fallback() {
         }
     }
     let status = AlwaysUnhealthyProbe.probe();
-    assert!(status.healthy, "fallback probe success must yield healthy status");
+    assert!(
+        status.healthy,
+        "fallback probe success must yield healthy status"
+    );
 }
 
 #[test]
@@ -149,5 +182,8 @@ fn both_probes_fail_yields_unhealthy() {
         }
     }
     let status = BothFailProbe.probe();
-    assert!(!status.healthy, "both probes failing must yield unhealthy status");
+    assert!(
+        !status.healthy,
+        "both probes failing must yield unhealthy status"
+    );
 }

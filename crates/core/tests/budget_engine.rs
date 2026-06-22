@@ -57,7 +57,10 @@ fn card_policy_takes_precedence_over_workspace() {
         timestamp: 0,
     };
     let result = engine.ingest_cost(&evt);
-    assert!(matches!(result, Err(BudgetError::Exhausted { .. })), "card limit 1.0 should exhaust at 1.5");
+    assert!(
+        matches!(result, Err(BudgetError::Exhausted { .. })),
+        "card limit 1.0 should exhaust at 1.5"
+    );
 }
 
 #[test]
@@ -112,7 +115,10 @@ fn card_policy_sets_card_id() {
 
 #[test]
 fn budget_error_display_exhausted() {
-    let e = BudgetError::Exhausted { spent: 10.5, limit: 10.0 };
+    let e = BudgetError::Exhausted {
+        spent: 10.5,
+        limit: 10.0,
+    };
     let s = e.to_string();
     assert!(s.contains("exhausted"));
 }
@@ -128,7 +134,11 @@ fn budget_error_display_no_policy() {
 #[test]
 fn budget_period_unlimited_allows_no_spending_over_infinity() {
     let mut engine = BudgetEngine::new();
-    engine.add_policy(BudgetPolicy::workspace("ws", f64::INFINITY, BudgetPeriod::Unlimited));
+    engine.add_policy(BudgetPolicy::workspace(
+        "ws",
+        f64::INFINITY,
+        BudgetPeriod::Unlimited,
+    ));
     let result = engine.ingest_cost(&event("sess", None, 1_000_000.0));
     assert!(result.is_ok());
 }

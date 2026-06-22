@@ -1,9 +1,8 @@
 use cronus::router::{
-    FitLevel, RouterError, RouterMode,
+    FitLevel, RouterError, RouterMode, RouterPool,
     circuit::{CircuitBreaker, CircuitState},
     provider::{ModelProvider, ProviderHealth, ProviderTier, RoutingRequest, TaskType},
     scoring::ModePack,
-    RouterPool,
 };
 
 // ── Test provider ─────────────────────────────────────────────────────────────
@@ -19,13 +18,27 @@ struct MockProvider {
 }
 
 impl ModelProvider for MockProvider {
-    fn id(&self) -> &str { self.id }
-    fn health(&self) -> ProviderHealth { self.health }
-    fn context_window(&self) -> u32 { self.ctx }
-    fn cost_per_1k_tokens(&self) -> f64 { self.cost }
-    fn latency_p50_ms(&self) -> u64 { self.latency }
-    fn tier(&self) -> ProviderTier { self.tier }
-    fn task_fit(&self, _: TaskType) -> f64 { self.task_fit }
+    fn id(&self) -> &str {
+        self.id
+    }
+    fn health(&self) -> ProviderHealth {
+        self.health
+    }
+    fn context_window(&self) -> u32 {
+        self.ctx
+    }
+    fn cost_per_1k_tokens(&self) -> f64 {
+        self.cost
+    }
+    fn latency_p50_ms(&self) -> u64 {
+        self.latency
+    }
+    fn tier(&self) -> ProviderTier {
+        self.tier
+    }
+    fn task_fit(&self, _: TaskType) -> f64 {
+        self.task_fit
+    }
 }
 
 fn healthy(id: &'static str) -> Box<MockProvider> {
@@ -53,7 +66,10 @@ fn req() -> RoutingRequest {
 #[test]
 fn empty_pool_returns_error() {
     let pool = RouterPool::new(ModePack::Quality);
-    assert!(matches!(pool.route(&req()), Err(RouterError::NoProvidersAvailable)));
+    assert!(matches!(
+        pool.route(&req()),
+        Err(RouterError::NoProvidersAvailable)
+    ));
 }
 
 #[test]
@@ -72,18 +88,27 @@ fn prefers_higher_scoring_provider() {
     pool.register(Box::new(MockProvider {
         id: "low",
         health: ProviderHealth::Healthy,
-        ctx: 128_000, cost: 0.5, latency: 2000,
-        tier: ProviderTier::Economy, task_fit: 0.3,
+        ctx: 128_000,
+        cost: 0.5,
+        latency: 2000,
+        tier: ProviderTier::Economy,
+        task_fit: 0.3,
     }));
     // High-tier, high-fit
     pool.register(Box::new(MockProvider {
         id: "high",
         health: ProviderHealth::Healthy,
-        ctx: 200_000, cost: 0.01, latency: 200,
-        tier: ProviderTier::Premium, task_fit: 0.95,
+        ctx: 200_000,
+        cost: 0.01,
+        latency: 200,
+        tier: ProviderTier::Premium,
+        task_fit: 0.95,
     }));
     let dec = pool.route(&req()).unwrap();
-    assert_eq!(dec.provider_id, "high", "router must prefer the higher-scoring provider");
+    assert_eq!(
+        dec.provider_id, "high",
+        "router must prefer the higher-scoring provider"
+    );
 }
 
 #[test]
@@ -169,13 +194,18 @@ fn fit_level_routing_exclusion() {
         id: "tiny",
         health: ProviderHealth::Healthy,
         ctx: 100, // too small for our 5k request
-        cost: 0.001, latency: 50,
-        tier: ProviderTier::Economy, task_fit: 0.9,
+        cost: 0.001,
+        latency: 50,
+        tier: ProviderTier::Economy,
+        task_fit: 0.9,
     }));
     pool.register(healthy("big"));
 
     let dec = pool.route(&req()).unwrap();
-    assert_eq!(dec.provider_id, "big", "tiny context window must be excluded");
+    assert_eq!(
+        dec.provider_id, "big",
+        "tiny context window must be excluded"
+    );
 }
 
 #[test]
@@ -192,17 +222,29 @@ fn fit_level_evaluation() {
 fn offline_mode_excludes_remote_providers() {
     let pool = RouterPool::new(ModePack::Offline);
     pool.register(Box::new(MockProvider {
-        id: "remote", health: ProviderHealth::Healthy, ctx: 128_000,
-        cost: 0.01, latency: 300, tier: ProviderTier::Premium, task_fit: 0.9,
+        id: "remote",
+        health: ProviderHealth::Healthy,
+        ctx: 128_000,
+        cost: 0.01,
+        latency: 300,
+        tier: ProviderTier::Premium,
+        task_fit: 0.9,
     }));
     pool.register(Box::new(MockProvider {
-        id: "local", health: ProviderHealth::Healthy, ctx: 32_000,
-        cost: 0.0, latency: 50, tier: ProviderTier::Local, task_fit: 0.7,
+        id: "local",
+        health: ProviderHealth::Healthy,
+        ctx: 32_000,
+        cost: 0.0,
+        latency: 50,
+        tier: ProviderTier::Local,
+        task_fit: 0.7,
     }));
 
     let dec = pool.route(&req()).unwrap();
-    assert_eq!(dec.provider_id, "local",
-        "Offline mode must route to local provider only");
+    assert_eq!(
+        dec.provider_id, "local",
+        "Offline mode must route to local provider only"
+    );
 }
 
 #[test]

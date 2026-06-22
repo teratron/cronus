@@ -64,8 +64,7 @@ impl Drop for MemoryKey {
 ///
 /// The salt must be stored alongside the database (never inside encrypted rows).
 pub fn derive_key(passphrase: &str, salt: &[u8; 16]) -> EncryptResult<MemoryKey> {
-    let salt_str = SaltString::encode_b64(salt)
-        .map_err(|e| EncryptError::Kdf(e.to_string()))?;
+    let salt_str = SaltString::encode_b64(salt).map_err(|e| EncryptError::Kdf(e.to_string()))?;
 
     let argon2 = Argon2::default();
     let hash = argon2
@@ -139,7 +138,9 @@ pub struct KeyVault {
 
 impl KeyVault {
     pub fn new(workspace_id: impl Into<String>) -> Self {
-        KeyVault { workspace_id: workspace_id.into() }
+        KeyVault {
+            workspace_id: workspace_id.into(),
+        }
     }
 
     fn entry(&self) -> EncryptResult<keyring::Entry> {
@@ -150,16 +151,18 @@ impl KeyVault {
     /// Store the key in the OS keychain.
     pub fn store(&self, key: &MemoryKey) -> EncryptResult<()> {
         let hex = hex_encode(key.as_bytes());
-        self.entry()?.set_password(&hex)
+        self.entry()?
+            .set_password(&hex)
             .map_err(|e| EncryptError::Keychain(e.to_string()))
     }
 
     /// Load the key from the OS keychain.
     pub fn load(&self) -> EncryptResult<MemoryKey> {
-        let hex = self.entry()?.get_password()
+        let hex = self
+            .entry()?
+            .get_password()
             .map_err(|e| EncryptError::Keychain(e.to_string()))?;
-        let bytes = hex_decode(&hex)
-            .map_err(EncryptError::Keychain)?;
+        let bytes = hex_decode(&hex).map_err(EncryptError::Keychain)?;
         if bytes.len() != KEY_LEN {
             return Err(EncryptError::Keychain(format!(
                 "stored key has wrong length: {} (expected {KEY_LEN})",
@@ -173,7 +176,8 @@ impl KeyVault {
 
     /// Evict the key from the OS keychain (lock).
     pub fn evict(&self) -> EncryptResult<()> {
-        self.entry()?.delete_credential()
+        self.entry()?
+            .delete_credential()
             .map_err(|e| EncryptError::Keychain(e.to_string()))
     }
 }
@@ -191,8 +195,7 @@ fn hex_decode(s: &str) -> Result<Vec<u8>, String> {
     (0..s.len())
         .step_by(2)
         .map(|i| {
-            u8::from_str_radix(&s[i..i + 2], 16)
-                .map_err(|e| format!("invalid hex at {i}: {e}"))
+            u8::from_str_radix(&s[i..i + 2], 16).map_err(|e| format!("invalid hex at {i}: {e}"))
         })
         .collect()
 }
@@ -214,10 +217,12 @@ pub fn rotate_keys(
         let mut stmt = conn
             .prepare("SELECT rowid, body_enc FROM memories WHERE body_enc IS NOT NULL")
             .map_err(|e| EncryptError::Kdf(e.to_string()))?;
-        stmt.query_map([], |row| Ok((row.get::<_, i64>(0)?, row.get::<_, Vec<u8>>(1)?)))
-            .map_err(|e| EncryptError::Kdf(e.to_string()))?
-            .collect::<rusqlite::Result<_>>()
-            .map_err(|e| EncryptError::Kdf(e.to_string()))?
+        stmt.query_map([], |row| {
+            Ok((row.get::<_, i64>(0)?, row.get::<_, Vec<u8>>(1)?))
+        })
+        .map_err(|e| EncryptError::Kdf(e.to_string()))?
+        .collect::<rusqlite::Result<_>>()
+        .map_err(|e| EncryptError::Kdf(e.to_string()))?
     };
 
     // Re-encrypt under new key
@@ -288,7 +293,10 @@ mod tests {
         let mut wrong_bytes = [0u8; KEY_LEN];
         wrong_bytes[0] = 0xff;
         let wrong_key = MemoryKey(wrong_bytes);
-        assert!(decrypt(&blob, &wrong_key).is_err(), "wrong key must not decrypt");
+        assert!(
+            decrypt(&blob, &wrong_key).is_err(),
+            "wrong key must not decrypt"
+        );
     }
 
     #[test]
@@ -297,7 +305,11 @@ mod tests {
         let blob1 = encrypt("same text", &key).unwrap();
         let blob2 = encrypt("same text", &key).unwrap();
         // Nonces differ even for same plaintext
-        assert_ne!(blob1[..NONCE_LEN], blob2[..NONCE_LEN], "nonces must be unique");
+        assert_ne!(
+            blob1[..NONCE_LEN],
+            blob2[..NONCE_LEN],
+            "nonces must be unique"
+        );
     }
 
     #[test]
@@ -306,7 +318,11 @@ mod tests {
         let salt = [0xab_u8; 16];
         let k1 = derive_key(passphrase, &salt).unwrap();
         let k2 = derive_key(passphrase, &salt).unwrap();
-        assert_eq!(k1.as_bytes(), k2.as_bytes(), "same passphrase+salt must yield same key");
+        assert_eq!(
+            k1.as_bytes(),
+            k2.as_bytes(),
+            "same passphrase+salt must yield same key"
+        );
     }
 
     #[test]
@@ -316,14 +332,21 @@ mod tests {
         let salt2 = [0x22_u8; 16];
         let k1 = derive_key(passphrase, &salt1).unwrap();
         let k2 = derive_key(passphrase, &salt2).unwrap();
-        assert_ne!(k1.as_bytes(), k2.as_bytes(), "different salts must yield different keys");
+        assert_ne!(
+            k1.as_bytes(),
+            k2.as_bytes(),
+            "different salts must yield different keys"
+        );
     }
 
     #[test]
     fn short_blob_returns_invalid_ciphertext_error() {
         let key = test_key();
         let too_short = [0u8; NONCE_LEN - 1];
-        assert!(matches!(decrypt(&too_short, &key), Err(EncryptError::InvalidCiphertext)));
+        assert!(matches!(
+            decrypt(&too_short, &key),
+            Err(EncryptError::InvalidCiphertext)
+        ));
     }
 
     #[test]

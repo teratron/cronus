@@ -62,8 +62,18 @@ impl Extractor for RegexExtractor {
             let trimmed = line.trim_start();
 
             if let Some(sym) = try_extract_fn(trimmed, lineno)
-                .or_else(|| try_extract_keyword(trimmed, lineno, "struct ", "pub struct ", SymbolKind::Struct))
-                .or_else(|| try_extract_keyword(trimmed, lineno, "enum ", "pub enum ", SymbolKind::Enum))
+                .or_else(|| {
+                    try_extract_keyword(
+                        trimmed,
+                        lineno,
+                        "struct ",
+                        "pub struct ",
+                        SymbolKind::Struct,
+                    )
+                })
+                .or_else(|| {
+                    try_extract_keyword(trimmed, lineno, "enum ", "pub enum ", SymbolKind::Enum)
+                })
             {
                 symbols.push(sym);
             }
@@ -90,11 +100,19 @@ fn try_extract_fn(trimmed: &str, line: u32) -> Option<Symbol> {
     })
 }
 
-fn try_extract_keyword(trimmed: &str, line: u32, prefix: &str, pub_prefix: &str, kind: SymbolKind) -> Option<Symbol> {
+fn try_extract_keyword(
+    trimmed: &str,
+    line: u32,
+    prefix: &str,
+    pub_prefix: &str,
+    kind: SymbolKind,
+) -> Option<Symbol> {
     let rest = trimmed
         .strip_prefix(pub_prefix)
         .or_else(|| trimmed.strip_prefix(prefix))?;
-    let name = rest.split(|c: char| !c.is_alphanumeric() && c != '_').next()?;
+    let name = rest
+        .split(|c: char| !c.is_alphanumeric() && c != '_')
+        .next()?;
     if name.is_empty() {
         return None;
     }

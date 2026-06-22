@@ -1,5 +1,5 @@
 use cronus::memory::encryption::{
-    decrypt, derive_key, encrypt, rotate_keys, EncryptError, MemoryKey,
+    EncryptError, MemoryKey, decrypt, derive_key, encrypt, rotate_keys,
 };
 use rusqlite::Connection;
 
@@ -31,14 +31,20 @@ fn wrong_key_yields_decryption_error() {
     let mut wrong = [0u8; 32];
     wrong[0] = 0xff;
     let wrong_key = MemoryKey::from_bytes(wrong);
-    assert!(decrypt(&blob, &wrong_key).is_err(), "wrong key must not decrypt");
+    assert!(
+        decrypt(&blob, &wrong_key).is_err(),
+        "wrong key must not decrypt"
+    );
 }
 
 #[test]
 fn truncated_blob_yields_invalid_ciphertext() {
     let key = test_key();
     let short = [0u8; NONCE_LEN - 1];
-    assert!(matches!(decrypt(&short, &key), Err(EncryptError::InvalidCiphertext)));
+    assert!(matches!(
+        decrypt(&short, &key),
+        Err(EncryptError::InvalidCiphertext)
+    ));
 }
 
 // ── KDF ────────────────────────────────────────────────────────────────────────
@@ -116,7 +122,10 @@ fn key_rotation_re_encrypts_all_rows() {
         let recovered = decrypt(&blob, &new_key).unwrap();
         assert_eq!(recovered, plain);
         // Old key must no longer work
-        assert!(decrypt(&blob, &old_key).is_err(), "old key must not decrypt after rotation");
+        assert!(
+            decrypt(&blob, &old_key).is_err(),
+            "old key must not decrypt after rotation"
+        );
     }
 }
 

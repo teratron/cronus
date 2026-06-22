@@ -64,7 +64,9 @@ pub struct RunnerMap {
 
 impl RunnerMap {
     pub fn new() -> Self {
-        RunnerMap { inner: Mutex::new(HashMap::new()) }
+        RunnerMap {
+            inner: Mutex::new(HashMap::new()),
+        }
     }
 
     /// Register a new session and return its fence.
@@ -75,7 +77,10 @@ impl RunnerMap {
         let mut map = self.inner.lock().expect("runner map lock poisoned");
         map.insert(
             id,
-            RunnerState { status: RunnerStatus::Idle, interrupt: fence.clone() },
+            RunnerState {
+                status: RunnerStatus::Idle,
+                interrupt: fence.clone(),
+            },
         );
         fence
     }
@@ -108,7 +113,10 @@ impl RunnerMap {
     }
 
     pub fn is_registered(&self, id: &SessionId) -> bool {
-        self.inner.lock().expect("runner map lock poisoned").contains_key(id)
+        self.inner
+            .lock()
+            .expect("runner map lock poisoned")
+            .contains_key(id)
     }
 }
 
@@ -174,7 +182,9 @@ pub fn guard_output_size(output: &str) -> (String, Option<SessionError>) {
         &output[..MAX_OUTPUT_CHARS],
         output.len()
     );
-    let err = SessionError::Oversized { original_len: output.len() };
+    let err = SessionError::Oversized {
+        original_len: output.len(),
+    };
     (truncated, Some(err))
 }
 

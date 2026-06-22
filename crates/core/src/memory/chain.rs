@@ -49,7 +49,11 @@ mod tests {
 
     #[test]
     fn chain_kind_roundtrip() {
-        for kind in [ChainKind::Continuation, ChainKind::Supersedes, ChainKind::RelatedTo] {
+        for kind in [
+            ChainKind::Continuation,
+            ChainKind::Supersedes,
+            ChainKind::RelatedTo,
+        ] {
             let s = kind.as_str();
             assert_eq!(ChainKind::from_db_str(s), Some(kind));
         }

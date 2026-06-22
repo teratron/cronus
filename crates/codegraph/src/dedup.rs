@@ -4,8 +4,8 @@
 
 /// Low-entropy names that bypass deduplication.
 const LOW_ENTROPY: &[&str] = &[
-    "new", "init", "default", "clone", "drop", "fmt", "eq", "hash",
-    "get", "set", "len", "is_empty", "iter", "next", "into", "from",
+    "new", "init", "default", "clone", "drop", "fmt", "eq", "hash", "get", "set", "len",
+    "is_empty", "iter", "next", "into", "from",
 ];
 
 /// Returns true when the name has too low entropy to be deduplicated safely.

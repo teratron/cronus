@@ -1,6 +1,6 @@
 //! Inter-actor inbox — SQLite-backed send/drain pipeline with GC and bus events.
 
-use rusqlite::{params, Connection};
+use rusqlite::{Connection, params};
 
 // ── Constants ─────────────────────────────────────────────────────────────────
 
@@ -39,10 +39,7 @@ pub fn migrate(conn: &Connection) -> InboxResult<()> {
 
 /// Register an actor so it can be a valid sender.
 pub fn register_actor(conn: &Connection, id: &str) -> InboxResult<()> {
-    conn.execute(
-        "INSERT OR IGNORE INTO actors (id) VALUES (?1)",
-        params![id],
-    )?;
+    conn.execute("INSERT OR IGNORE INTO actors (id) VALUES (?1)", params![id])?;
     Ok(())
 }
 
@@ -130,21 +127,22 @@ pub fn drain(
     )?;
 
     let rows: Vec<DrainedMessage> = stmt
-        .query_map(
-            params![recipient_id, MAX_DRAIN_PER_TURN as i64],
-            |r| {
-                Ok(DrainedMessage {
-                    id: r.get(0)?,
-                    sender_id: r.get(1)?,
-                    body: r.get(2)?,
-                })
-            },
-        )?
+        .query_map(params![recipient_id, MAX_DRAIN_PER_TURN as i64], |r| {
+            Ok(DrainedMessage {
+                id: r.get(0)?,
+                sender_id: r.get(1)?,
+                body: r.get(2)?,
+            })
+        })?
         .filter_map(|r| r.ok())
         .collect();
 
     if !rows.is_empty() {
-        let ids: String = rows.iter().map(|r| r.id.to_string()).collect::<Vec<_>>().join(",");
+        let ids: String = rows
+            .iter()
+            .map(|r| r.id.to_string())
+            .collect::<Vec<_>>()
+            .join(",");
         conn.execute_batch(&format!(
             "UPDATE inbox SET drained_at = {now_ms} WHERE id IN ({ids})"
         ))?;

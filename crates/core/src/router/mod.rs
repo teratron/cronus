@@ -17,7 +17,7 @@ use std::sync::{
 
 use cache::SemanticCache;
 use circuit::{CircuitBreaker, CircuitState};
-use provider::{ModelProvider, ProviderHealth, RoutingRequest, RouteDecision};
+use provider::{ModelProvider, ProviderHealth, RouteDecision, RoutingRequest};
 use scoring::{ModePack, score};
 
 pub use hardware::FitLevel;
@@ -96,11 +96,7 @@ impl RouterPool {
     }
 
     /// Register a provider with a custom circuit breaker.
-    pub fn register_with_circuit(
-        &self,
-        provider: Box<dyn ModelProvider>,
-        circuit: CircuitBreaker,
-    ) {
+    pub fn register_with_circuit(&self, provider: Box<dyn ModelProvider>, circuit: CircuitBreaker) {
         let mut inner = self.inner.lock().expect("router lock poisoned");
         inner.entries.push(ProviderEntry { provider, circuit });
     }
@@ -134,7 +130,11 @@ impl RouterPool {
 
     /// Return the current LKGP (Last Known Good Provider) ID, if any.
     pub fn lkgp(&self) -> Option<String> {
-        self.inner.lock().expect("router lock poisoned").lkgp.clone()
+        self.inner
+            .lock()
+            .expect("router lock poisoned")
+            .lkgp
+            .clone()
     }
 
     /// Return the current circuit state for a registered provider.
@@ -165,7 +165,9 @@ impl RouterPool {
         // 5% bandit exploration — pick a random healthy provider.
         // Use `state()` (&self) rather than `is_open()` (&mut self) because the
         // `find` predicate only gets a shared reference to each entry.
-        let use_bandit = BANDIT_COUNTER.fetch_add(1, Ordering::Relaxed).is_multiple_of(20);
+        let use_bandit = BANDIT_COUNTER
+            .fetch_add(1, Ordering::Relaxed)
+            .is_multiple_of(20);
         if use_bandit
             && let Some(entry) = inner.entries.iter_mut().find(|e| {
                 e.circuit.state() != CircuitState::Open
@@ -192,13 +194,7 @@ impl RouterPool {
             if entry.circuit.is_open() {
                 continue;
             }
-            let s = score(
-                entry.provider.as_ref(),
-                req,
-                mode,
-                max_cost,
-                max_latency,
-            );
+            let s = score(entry.provider.as_ref(), req, mode, max_cost, max_latency);
             if s > best_score {
                 best_score = s;
                 best_id = Some(entry.provider.id().to_owned());
@@ -231,13 +227,27 @@ mod tests {
     }
 
     impl ModelProvider for TestProvider {
-        fn id(&self) -> &str { self.id }
-        fn health(&self) -> ProviderHealth { self.health }
-        fn context_window(&self) -> u32 { 128_000 }
-        fn cost_per_1k_tokens(&self) -> f64 { 0.01 }
-        fn latency_p50_ms(&self) -> u64 { 300 }
-        fn tier(&self) -> ProviderTier { ProviderTier::Standard }
-        fn task_fit(&self, _: TaskType) -> f64 { 0.8 }
+        fn id(&self) -> &str {
+            self.id
+        }
+        fn health(&self) -> ProviderHealth {
+            self.health
+        }
+        fn context_window(&self) -> u32 {
+            128_000
+        }
+        fn cost_per_1k_tokens(&self) -> f64 {
+            0.01
+        }
+        fn latency_p50_ms(&self) -> u64 {
+            300
+        }
+        fn tier(&self) -> ProviderTier {
+            ProviderTier::Standard
+        }
+        fn task_fit(&self, _: TaskType) -> f64 {
+            0.8
+        }
     }
 
     fn req() -> RoutingRequest {
@@ -251,7 +261,10 @@ mod tests {
     #[test]
     fn routes_to_healthy_provider() {
         let pool = RouterPool::new(ModePack::Quality);
-        pool.register(Box::new(TestProvider { id: "p1", health: ProviderHealth::Healthy }));
+        pool.register(Box::new(TestProvider {
+            id: "p1",
+            health: ProviderHealth::Healthy,
+        }));
 
         let decision = pool.route(&req()).expect("must route");
         assert_eq!(decision.provider_id, "p1");
@@ -260,13 +273,19 @@ mod tests {
     #[test]
     fn no_providers_returns_error() {
         let pool = RouterPool::new(ModePack::Quality);
-        assert!(matches!(pool.route(&req()), Err(RouterError::NoProvidersAvailable)));
+        assert!(matches!(
+            pool.route(&req()),
+            Err(RouterError::NoProvidersAvailable)
+        ));
     }
 
     #[test]
     fn records_success_updates_lkgp() {
         let pool = RouterPool::new(ModePack::Quality);
-        pool.register(Box::new(TestProvider { id: "p1", health: ProviderHealth::Healthy }));
+        pool.register(Box::new(TestProvider {
+            id: "p1",
+            health: ProviderHealth::Healthy,
+        }));
         pool.route(&req()).unwrap();
         pool.record_success("p1");
         let inner = pool.inner.lock().unwrap();
@@ -280,10 +299,16 @@ mod tests {
         let mut cb_open = cb;
         cb_open.record_failure(); // opens it
         pool.register_with_circuit(
-            Box::new(TestProvider { id: "broken", health: ProviderHealth::Healthy }),
+            Box::new(TestProvider {
+                id: "broken",
+                health: ProviderHealth::Healthy,
+            }),
             cb_open,
         );
-        pool.register(Box::new(TestProvider { id: "ok", health: ProviderHealth::Healthy }));
+        pool.register(Box::new(TestProvider {
+            id: "ok",
+            health: ProviderHealth::Healthy,
+        }));
 
         let decision = pool.route(&req()).expect("must route via fallback");
         assert_eq!(decision.provider_id, "ok");

@@ -50,7 +50,9 @@ impl std::fmt::Display for ExecError {
         match self {
             ExecError::AlreadyExists(s) => write!(f, "exec workspace already exists: {s}"),
             ExecError::NotFound(s) => write!(f, "exec workspace not found: {s}"),
-            ExecError::RemoteGitForbidden => write!(f, "remote git operations are forbidden in exec workspaces"),
+            ExecError::RemoteGitForbidden => {
+                write!(f, "remote git operations are forbidden in exec workspaces")
+            }
             ExecError::GateNotPassed => write!(f, "cannot finalize: quality gates have not passed"),
             ExecError::Io(e) => write!(f, "I/O error: {e}"),
         }

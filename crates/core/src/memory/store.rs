@@ -3,10 +3,11 @@
 use rusqlite::{Connection, params};
 
 use super::{
-    MemoryEntry, MemoryError, MemoryId, MemoryKind, MemorySource, Result, TrustUpdate,
-    VerificationState, CodeChangeType, SuggestedAction, now_secs,
-    chain::{ChainKind, SESSION_CHAIN_WINDOW_SECS, BELLMAN_MAX_DEPTH, propagated_delta},
-    trust::{apply_delta, TRUST_MIN_SEARCH},
+    CodeChangeType, MemoryEntry, MemoryError, MemoryId, MemoryKind, MemorySource, Result,
+    SuggestedAction, TrustUpdate, VerificationState,
+    chain::{BELLMAN_MAX_DEPTH, ChainKind, SESSION_CHAIN_WINDOW_SECS, propagated_delta},
+    now_secs,
+    trust::{TRUST_MIN_SEARCH, apply_delta},
 };
 
 pub struct MemoryStore {
@@ -155,9 +156,9 @@ impl MemoryStore {
     /// Full-text search over title+body. Filters entries below TRUST_MIN_SEARCH.
     pub fn search_fts(&self, query: &str, limit: usize) -> Result<Vec<MemoryEntry>> {
         // Step 1: collect matching memory IDs from the FTS index.
-        let mut fts_stmt = self.conn.prepare(
-            "SELECT memory_id FROM memories_fts WHERE memories_fts MATCH ?1 LIMIT ?2",
-        )?;
+        let mut fts_stmt = self
+            .conn
+            .prepare("SELECT memory_id FROM memories_fts WHERE memories_fts MATCH ?1 LIMIT ?2")?;
         let ids: Vec<String> = fts_stmt
             .query_map(params![query, limit as i64], |row| row.get(0))?
             .collect::<std::result::Result<_, _>>()?;
@@ -190,15 +191,13 @@ impl MemoryStore {
     ///
     /// Returns `true` when a row was removed, `false` when not found.
     pub fn delete(&self, id: &str) -> Result<bool> {
-        let affected = self.conn.execute(
-            "DELETE FROM memories WHERE id = ?1",
-            params![id],
-        )?;
+        let affected = self
+            .conn
+            .execute("DELETE FROM memories WHERE id = ?1", params![id])?;
         if affected > 0 {
-            let _ = self.conn.execute(
-                "DELETE FROM memories_fts WHERE memory_id = ?1",
-                params![id],
-            );
+            let _ = self
+                .conn
+                .execute("DELETE FROM memories_fts WHERE memory_id = ?1", params![id]);
         }
         Ok(affected > 0)
     }
@@ -231,34 +230,29 @@ impl MemoryStore {
         }
     }
 
-    fn chain_internal(
-        &self,
-        source: &MemoryId,
-        target: &MemoryId,
-        kind: ChainKind,
-    ) -> Result<()> {
+    fn chain_internal(&self, source: &MemoryId, target: &MemoryId, kind: ChainKind) -> Result<()> {
         self.conn.execute(
             "INSERT OR IGNORE INTO memory_chains (source_id, target_id, kind, created_at)
              VALUES (?1, ?2, ?3, ?4)",
-            params![source.as_str(), target.as_str(), kind.as_str(), now_secs() as i64],
+            params![
+                source.as_str(),
+                target.as_str(),
+                kind.as_str(),
+                now_secs() as i64
+            ],
         )?;
         Ok(())
     }
 
-    fn propagate_recursive(
-        &self,
-        from: &MemoryId,
-        base_delta: f64,
-        depth: usize,
-    ) -> Result<()> {
+    fn propagate_recursive(&self, from: &MemoryId, base_delta: f64, depth: usize) -> Result<()> {
         if depth >= BELLMAN_MAX_DEPTH {
             return Ok(());
         }
         let delta = propagated_delta(base_delta, depth);
 
-        let mut stmt = self.conn.prepare(
-            "SELECT target_id FROM memory_chains WHERE source_id = ?1",
-        )?;
+        let mut stmt = self
+            .conn
+            .prepare("SELECT target_id FROM memory_chains WHERE source_id = ?1")?;
         let targets: Vec<String> = stmt
             .query_map(params![from.as_str()], |row| row.get(0))?
             .collect::<std::result::Result<_, _>>()?;
@@ -285,9 +279,9 @@ impl MemoryStore {
     }
 
     fn ids_in_workspace(&self, workspace_id: &str) -> Result<Vec<MemoryId>> {
-        let mut stmt = self.conn.prepare(
-            "SELECT id FROM memories WHERE workspace_id = ?1",
-        )?;
+        let mut stmt = self
+            .conn
+            .prepare("SELECT id FROM memories WHERE workspace_id = ?1")?;
         let ids = stmt
             .query_map(params![workspace_id], |row| row.get::<_, String>(0))?
             .collect::<std::result::Result<Vec<_>, _>>()?

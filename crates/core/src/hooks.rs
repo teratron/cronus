@@ -34,7 +34,10 @@ impl HookEvent {
 
     pub fn can_block(&self) -> bool {
         // PreToolUse and Stop can block; PostToolUse cannot
-        matches!(self, HookEvent::PreToolUse | HookEvent::Stop | HookEvent::SubagentStop)
+        matches!(
+            self,
+            HookEvent::PreToolUse | HookEvent::Stop | HookEvent::SubagentStop
+        )
     }
 }
 
@@ -63,7 +66,9 @@ impl RuleCondition {
             RuleOp::Contains => field_value.contains(&*self.value),
             RuleOp::StartsWith => field_value.starts_with(&*self.value),
             RuleOp::EndsWith => field_value.ends_with(&*self.value),
-            RuleOp::Matches => field_value.to_lowercase().contains(&self.value.to_lowercase()),
+            RuleOp::Matches => field_value
+                .to_lowercase()
+                .contains(&self.value.to_lowercase()),
         }
     }
 }

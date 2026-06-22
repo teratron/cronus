@@ -38,8 +38,10 @@ fn get_missing_returns_none() {
 #[test]
 fn fts_search_finds_matching_entries() {
     let s = store();
-    s.add(entry("Rust lifetimes", "ownership borrow checker")).unwrap();
-    s.add(entry("Python decorators", "metaclass function wrap")).unwrap();
+    s.add(entry("Rust lifetimes", "ownership borrow checker"))
+        .unwrap();
+    s.add(entry("Python decorators", "metaclass function wrap"))
+        .unwrap();
 
     let results = s.search_fts("ownership", 10).unwrap();
     assert_eq!(results.len(), 1);
@@ -127,9 +129,10 @@ fn session_auto_chain_within_window() {
 
     let mut e2 = entry("second memory", "body two");
     e2.workspace_id = Some("ws-test".to_string());
-    e2.created_at = cronus::memory::MemoryEntry::new(
-        MemoryKind::Convention, MemorySource::Agent, "", ""
-    ).created_at + 60; // 60 seconds later — within 2h window
+    e2.created_at =
+        cronus::memory::MemoryEntry::new(MemoryKind::Convention, MemorySource::Agent, "", "")
+            .created_at
+            + 60; // 60 seconds later — within 2h window
     let _id2 = s.add(e2).unwrap();
 
     // Verify chain was created by checking the chain store
@@ -167,7 +170,9 @@ fn code_change_deleted_triggers_invalidate() {
     let action = CodeChangeType::Deleted.suggested_action();
     assert!(matches!(action, SuggestedAction::Invalidate(_)));
 
-    let affected = s.apply_code_change("ws-code", CodeChangeType::Deleted).unwrap();
+    let affected = s
+        .apply_code_change("ws-code", CodeChangeType::Deleted)
+        .unwrap();
     assert!(affected.contains(&id));
 }
 
@@ -185,7 +190,11 @@ fn hrr_encoding_stub_returns_zeroed_vector() {
     let s = store();
     let e = entry("hrr test", "body");
     let vec = s.encode_hrr(&e);
-    assert_eq!(vec.len(), 256, "HRR stub must return 256-dimensional vector");
+    assert_eq!(
+        vec.len(),
+        256,
+        "HRR stub must return 256-dimensional vector"
+    );
     assert!(vec.iter().all(|&v| v == 0.0), "HRR stub must be all zeros");
 }
 
@@ -201,7 +210,10 @@ fn search_excludes_superseded_entries() {
     s.add(e).unwrap();
 
     let results = s.search_fts("outdated knowledge", 10).unwrap();
-    assert!(results.is_empty(), "superseded entries must be excluded from search");
+    assert!(
+        results.is_empty(),
+        "superseded entries must be excluded from search"
+    );
 }
 
 #[test]

@@ -70,8 +70,9 @@ pub enum BudgetError {
 impl std::fmt::Display for BudgetError {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
-            BudgetError::Exhausted { spent, limit } =>
-                write!(f, "budget exhausted: spent={spent:.4} limit={limit:.4}"),
+            BudgetError::Exhausted { spent, limit } => {
+                write!(f, "budget exhausted: spent={spent:.4} limit={limit:.4}")
+            }
             BudgetError::NoPolicyFound => write!(f, "no budget policy found"),
         }
     }
@@ -99,13 +100,19 @@ impl BudgetEngine {
     fn resolve_policy(&self, event: &CostEvent) -> Option<&BudgetPolicy> {
         // card-specific (most specific)
         if let Some(card_id) = &event.card_id
-            && let Some(p) = self.policies.iter().find(|p| p.card_id.as_deref() == Some(card_id))
+            && let Some(p) = self
+                .policies
+                .iter()
+                .find(|p| p.card_id.as_deref() == Some(card_id))
         {
             return Some(p);
         }
         // role-specific
         if let Some(role_id) = &event.role_id
-            && let Some(p) = self.policies.iter().find(|p| p.role_id.as_deref() == Some(role_id))
+            && let Some(p) = self
+                .policies
+                .iter()
+                .find(|p| p.role_id.as_deref() == Some(role_id))
         {
             return Some(p);
         }
@@ -130,9 +137,15 @@ impl BudgetEngine {
         *spent += event.amount_usd;
 
         if *spent > limit {
-            Err(BudgetError::Exhausted { spent: *spent, limit })
+            Err(BudgetError::Exhausted {
+                spent: *spent,
+                limit,
+            })
         } else {
-            Ok(BudgetStatus::Ok { spent: *spent, remaining: limit - *spent })
+            Ok(BudgetStatus::Ok {
+                spent: *spent,
+                remaining: limit - *spent,
+            })
         }
     }
 

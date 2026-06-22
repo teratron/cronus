@@ -1,5 +1,5 @@
 use codegraph::community::{CommunityDetector, Edge, UnionFindDetector};
-use codegraph::dedup::{is_low_entropy, jaro_winkler, should_merge, DEFAULT_SIMILARITY_THRESHOLD};
+use codegraph::dedup::{DEFAULT_SIMILARITY_THRESHOLD, is_low_entropy, jaro_winkler, should_merge};
 use codegraph::extractor::{Confidence, Extractor, RegexExtractor, SymbolKind};
 use codegraph::index::{fts_search, get_by_name, migrate, store_symbols};
 use codegraph::search::{fuse, rrf_merge};
@@ -18,7 +18,10 @@ fn open() -> Connection {
 fn extractor_finds_fn_foo() {
     let source = "fn foo() { }";
     let syms = RegexExtractor.extract(source);
-    assert!(syms.iter().any(|s| s.name == "foo" && s.kind == SymbolKind::Function));
+    assert!(
+        syms.iter()
+            .any(|s| s.name == "foo" && s.kind == SymbolKind::Function)
+    );
 }
 
 #[test]
@@ -32,14 +35,20 @@ fn extractor_finds_pub_fn() {
 fn extractor_finds_struct() {
     let source = "pub struct MyStruct { }";
     let syms = RegexExtractor.extract(source);
-    assert!(syms.iter().any(|s| s.name == "MyStruct" && s.kind == SymbolKind::Struct));
+    assert!(
+        syms.iter()
+            .any(|s| s.name == "MyStruct" && s.kind == SymbolKind::Struct)
+    );
 }
 
 #[test]
 fn extractor_finds_enum() {
     let source = "pub enum MyEnum { A, B }";
     let syms = RegexExtractor.extract(source);
-    assert!(syms.iter().any(|s| s.name == "MyEnum" && s.kind == SymbolKind::Enum));
+    assert!(
+        syms.iter()
+            .any(|s| s.name == "MyEnum" && s.kind == SymbolKind::Enum)
+    );
 }
 
 #[test]
@@ -65,7 +74,10 @@ fn index_store_and_get_by_name() {
     let syms = RegexExtractor.extract("fn alpha() {}");
     store_symbols(&conn, "src/lib.rs", &syms).unwrap();
     let result = get_by_name(&conn, "alpha").unwrap();
-    assert!(result.is_some(), "stored symbol must be retrievable by name");
+    assert!(
+        result.is_some(),
+        "stored symbol must be retrievable by name"
+    );
     assert_eq!(result.unwrap().file, "src/lib.rs");
 }
 
@@ -115,8 +127,14 @@ fn rrf_merge_combines_two_lists() {
     let id3_pos = merged.iter().position(|(id, _)| *id == 3).unwrap();
     let id1_pos = merged.iter().position(|(id, _)| *id == 1).unwrap();
     let id2_pos = merged.iter().position(|(id, _)| *id == 2).unwrap();
-    assert!(id3_pos < id1_pos, "id=3 (in both lists) must rank higher than id=1 (one list)");
-    assert!(id3_pos < id2_pos, "id=3 (in both lists) must rank higher than id=2 (one list)");
+    assert!(
+        id3_pos < id1_pos,
+        "id=3 (in both lists) must rank higher than id=1 (one list)"
+    );
+    assert!(
+        id3_pos < id2_pos,
+        "id=3 (in both lists) must rank higher than id=2 (one list)"
+    );
 }
 
 #[test]
@@ -156,7 +174,10 @@ fn union_find_groups_connected_symbols() {
     let communities = detector.detect(&nodes, &edges);
     assert_eq!(communities.len(), 2, "two connected components");
     let c0 = communities.iter().find(|c| c.members.contains(&1)).unwrap();
-    assert!(c0.members.contains(&2), "1 and 2 must be in the same community");
+    assert!(
+        c0.members.contains(&2),
+        "1 and 2 must be in the same community"
+    );
 }
 
 #[test]
@@ -205,5 +226,9 @@ fn should_merge_identical_names() {
 
 #[test]
 fn should_merge_low_entropy_returns_false() {
-    assert!(!should_merge("new", "new_item", DEFAULT_SIMILARITY_THRESHOLD));
+    assert!(!should_merge(
+        "new",
+        "new_item",
+        DEFAULT_SIMILARITY_THRESHOLD
+    ));
 }

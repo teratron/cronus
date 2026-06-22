@@ -34,6 +34,7 @@
 - <https://github.com/Fission-AI/OpenSpec>
 - <https://github.com/gsd-build/get-shit-done>
 - <https://github.com/DietrichGebert/ponytail>
+- <https://github.com/eyaltoledano/claude-task-master>
 
 ## Memory
 
@@ -50,6 +51,10 @@
 - <https://github.com/shadcn/improve>
 - <https://github.com/nvidia/skillspector>
 - <https://gitverse.ru/gigachain/gigachain>
+- <https://github.com/zapier/zapier-platform>
+- <https://github.com/node-red/node-red>
+- <https://github.com/n8n-io/n8n>
+- <https://github.com/huginn/huginn>
 
 ## UI/UX
 

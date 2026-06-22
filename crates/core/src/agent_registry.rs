@@ -72,13 +72,25 @@ impl AgentDefinition {
 }
 
 static BUILTIN_NAMES: &[(&str, &str, AgentMode)] = &[
-    ("work", "Default interactive agent; full permission profile", AgentMode::Primary),
+    (
+        "work",
+        "Default interactive agent; full permission profile",
+        AgentMode::Primary,
+    ),
     ("code", "Code generation and modification", AgentMode::All),
-    ("plan", "Planning and task decomposition", AgentMode::SubAgent),
+    (
+        "plan",
+        "Planning and task decomposition",
+        AgentMode::SubAgent,
+    ),
     ("edit", "Targeted file editing", AgentMode::SubAgent),
     ("search", "Codebase and web search", AgentMode::SubAgent),
     ("test", "Test authoring and execution", AgentMode::SubAgent),
-    ("refactor", "Code refactoring and cleanup", AgentMode::SubAgent),
+    (
+        "refactor",
+        "Code refactoring and cleanup",
+        AgentMode::SubAgent,
+    ),
 ];
 
 #[derive(Debug)]
@@ -109,13 +121,19 @@ impl AgentRegistry {
     pub fn new() -> Self {
         let mut agents = HashMap::new();
         for (name, desc, mode) in BUILTIN_NAMES {
-            agents.insert(name.to_string(), AgentDefinition::builtin(name, desc, *mode));
+            agents.insert(
+                name.to_string(),
+                AgentDefinition::builtin(name, desc, *mode),
+            );
         }
         AgentRegistry { agents }
     }
 
     pub fn resolve(&self, name: &str) -> Result<&AgentDefinition> {
-        let def = self.agents.get(name).ok_or_else(|| RegistryError::NotFound(name.to_string()))?;
+        let def = self
+            .agents
+            .get(name)
+            .ok_or_else(|| RegistryError::NotFound(name.to_string()))?;
         if def.disabled {
             return Err(RegistryError::Disabled(name.to_string()));
         }
@@ -149,6 +167,11 @@ impl AgentRegistry {
 
     pub fn builtin_count(&self) -> usize {
         self.agents.values().filter(|d| d.native).count()
+    }
+
+    /// Insert a custom agent definition into the registry.
+    pub fn register_custom(&mut self, def: AgentDefinition) {
+        self.agents.insert(def.name.clone(), def);
     }
 
     /// Generate a stub AgentDefinition from a description (seam; real LLM in Phase 6).

@@ -25,7 +25,8 @@ pub const IDENTITY_FILES: [&str; 5] = [
 
 const SOUL_TEMPLATE: &str = "# Soul\n\n## Core values\n\n- Honesty\n- Helpfulness\n- Harmlessness\n\n## Does\n\n- Assist with technical tasks\n\n## Does not do\n\n- Generate harmful content\n";
 const PROFILE_TEMPLATE: &str = "# Profile\n\n## Name\n\nCronus Agent\n\n## Voice\n\nClear and direct\n\n## Focus\n\nSoftware engineering\n";
-const MEMORY_TEMPLATE: &str = "# Memory\n\n<!-- Quick-recall facts (≤200 lines, ≤150 chars/line, ≤25 KB) -->\n";
+const MEMORY_TEMPLATE: &str =
+    "# Memory\n\n<!-- Quick-recall facts (≤200 lines, ≤150 chars/line, ≤25 KB) -->\n";
 const HEARTBEAT_TEMPLATE: &str = "# Heartbeat\n\nstatus: active\nlast_seen: ~\n";
 const BOOTSTRAP_TEMPLATE: &str = "# Bootstrap\n\n- [ ] Identity files created\n- [ ] Memory initialised\n- [ ] Profile configured\n";
 
@@ -97,9 +98,7 @@ pub enum TomlValue {
 ///   fill gaps left by base.
 pub fn merge_toml(base: TomlValue, team: TomlValue, user: TomlValue) -> TomlValue {
     match (base, team, user) {
-        (TomlValue::Table(b), TomlValue::Table(t), TomlValue::Table(u)) => {
-            merge_tables(b, t, u)
-        }
+        (TomlValue::Table(b), TomlValue::Table(t), TomlValue::Table(u)) => merge_tables(b, t, u),
         (TomlValue::KeyedArray(b), TomlValue::KeyedArray(t), TomlValue::KeyedArray(u)) => {
             merge_keyed_arrays(b, t, u)
         }
@@ -129,9 +128,18 @@ fn merge_tables(
         .collect();
 
     for key in all_keys {
-        let b = base.get(&key).cloned().unwrap_or(TomlValue::String(String::new()));
-        let t = team.get(&key).cloned().unwrap_or(TomlValue::String(String::new()));
-        let u = user.get(&key).cloned().unwrap_or(TomlValue::String(String::new()));
+        let b = base
+            .get(&key)
+            .cloned()
+            .unwrap_or(TomlValue::String(String::new()));
+        let t = team
+            .get(&key)
+            .cloned()
+            .unwrap_or(TomlValue::String(String::new()));
+        let u = user
+            .get(&key)
+            .cloned()
+            .unwrap_or(TomlValue::String(String::new()));
         result.insert(key, merge_toml(b, t, u));
     }
     TomlValue::Table(result)
@@ -167,7 +175,10 @@ fn merge_keyed_arrays(
     // Override with user: replace same-name, append new.
     for u_entry in user {
         if let Some(name) = name_of(&u_entry) {
-            if let Some(slot) = result.iter_mut().find(|e| name_of(e).as_deref() == Some(&name)) {
+            if let Some(slot) = result
+                .iter_mut()
+                .find(|e| name_of(e).as_deref() == Some(&name))
+            {
                 *slot = u_entry;
             } else {
                 result.push(u_entry);

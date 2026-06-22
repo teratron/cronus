@@ -1,6 +1,9 @@
 //! Interrupt fence — a thread-safe boolean flag for session cancellation.
 
-use std::sync::{Arc, atomic::{AtomicBool, Ordering}};
+use std::sync::{
+    Arc,
+    atomic::{AtomicBool, Ordering},
+};
 
 /// Shared cancellation signal.
 ///

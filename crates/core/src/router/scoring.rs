@@ -40,24 +40,44 @@ impl ScoringWeights {
     fn for_mode(mode: ModePack) -> Self {
         match mode {
             ModePack::ShipFast => ScoringWeights {
-                health: 1.0, quota: 1.0, cost_inv: 0.5,
-                latency_inv: 2.0, task_fit: 0.8, specificity: 0.5,
-                stability: 0.8, tier: 1.0,
+                health: 1.0,
+                quota: 1.0,
+                cost_inv: 0.5,
+                latency_inv: 2.0,
+                task_fit: 0.8,
+                specificity: 0.5,
+                stability: 0.8,
+                tier: 1.0,
             },
             ModePack::CostSaver => ScoringWeights {
-                health: 1.0, quota: 1.0, cost_inv: 2.0,
-                latency_inv: 0.5, task_fit: 0.8, specificity: 0.5,
-                stability: 0.8, tier: 0.5,
+                health: 1.0,
+                quota: 1.0,
+                cost_inv: 2.0,
+                latency_inv: 0.5,
+                task_fit: 0.8,
+                specificity: 0.5,
+                stability: 0.8,
+                tier: 0.5,
             },
             ModePack::Quality => ScoringWeights {
-                health: 1.0, quota: 1.0, cost_inv: 0.8,
-                latency_inv: 0.8, task_fit: 1.5, specificity: 1.0,
-                stability: 1.5, tier: 1.0,
+                health: 1.0,
+                quota: 1.0,
+                cost_inv: 0.8,
+                latency_inv: 0.8,
+                task_fit: 1.5,
+                specificity: 1.0,
+                stability: 1.5,
+                tier: 1.0,
             },
             ModePack::Offline => ScoringWeights {
-                health: 1.0, quota: 1.0, cost_inv: 1.0,
-                latency_inv: 1.0, task_fit: 1.0, specificity: 1.0,
-                stability: 1.0, tier: 0.0, // tier irrelevant for local-only
+                health: 1.0,
+                quota: 1.0,
+                cost_inv: 1.0,
+                latency_inv: 1.0,
+                task_fit: 1.0,
+                specificity: 1.0,
+                stability: 1.0,
+                tier: 0.0, // tier irrelevant for local-only
             },
         }
     }
@@ -128,7 +148,7 @@ pub fn score(
         + w.specificity * specificity
         + w.stability * stability
         + w.tier * tier_score   // weight ×2 is built into w.tier for Quality mode
-        + w.tier * tier_score   // second application of tier weight
+        + w.tier * tier_score // second application of tier weight
 }
 
 #[cfg(test)]
@@ -146,13 +166,27 @@ mod tests {
         fit: f64,
     }
     impl ModelProvider for P {
-        fn id(&self) -> &str { self.id }
-        fn health(&self) -> ProviderHealth { self.health }
-        fn context_window(&self) -> u32 { self.ctx }
-        fn cost_per_1k_tokens(&self) -> f64 { self.cost }
-        fn latency_p50_ms(&self) -> u64 { self.latency }
-        fn tier(&self) -> ProviderTier { self.tier }
-        fn task_fit(&self, _: TaskType) -> f64 { self.fit }
+        fn id(&self) -> &str {
+            self.id
+        }
+        fn health(&self) -> ProviderHealth {
+            self.health
+        }
+        fn context_window(&self) -> u32 {
+            self.ctx
+        }
+        fn cost_per_1k_tokens(&self) -> f64 {
+            self.cost
+        }
+        fn latency_p50_ms(&self) -> u64 {
+            self.latency
+        }
+        fn tier(&self) -> ProviderTier {
+            self.tier
+        }
+        fn task_fit(&self, _: TaskType) -> f64 {
+            self.fit
+        }
     }
 
     fn req() -> RoutingRequest {
@@ -166,8 +200,13 @@ mod tests {
     #[test]
     fn unavailable_provider_scores_zero() {
         let p = P {
-            id: "p", health: ProviderHealth::Unavailable, ctx: 128_000,
-            cost: 0.01, latency: 200, tier: ProviderTier::Standard, fit: 0.8,
+            id: "p",
+            health: ProviderHealth::Unavailable,
+            ctx: 128_000,
+            cost: 0.01,
+            latency: 200,
+            tier: ProviderTier::Standard,
+            fit: 0.8,
         };
         assert_eq!(score(&p, &req(), ModePack::Quality, 1.0, 1000), 0.0);
     }
@@ -175,8 +214,13 @@ mod tests {
     #[test]
     fn context_overflow_scores_zero() {
         let p = P {
-            id: "p", health: ProviderHealth::Healthy, ctx: 1_000,
-            cost: 0.01, latency: 200, tier: ProviderTier::Standard, fit: 0.8,
+            id: "p",
+            health: ProviderHealth::Healthy,
+            ctx: 1_000,
+            cost: 0.01,
+            latency: 200,
+            tier: ProviderTier::Standard,
+            fit: 0.8,
         };
         assert_eq!(score(&p, &req(), ModePack::Quality, 1.0, 1000), 0.0);
     }
@@ -184,8 +228,13 @@ mod tests {
     #[test]
     fn healthy_provider_scores_positive() {
         let p = P {
-            id: "p", health: ProviderHealth::Healthy, ctx: 128_000,
-            cost: 0.01, latency: 200, tier: ProviderTier::Standard, fit: 0.9,
+            id: "p",
+            health: ProviderHealth::Healthy,
+            ctx: 128_000,
+            cost: 0.01,
+            latency: 200,
+            tier: ProviderTier::Standard,
+            fit: 0.9,
         };
         let s = score(&p, &req(), ModePack::Quality, 1.0, 1000);
         assert!(s > 0.0, "healthy provider must score positive");
@@ -194,16 +243,32 @@ mod tests {
     #[test]
     fn offline_mode_excludes_non_local() {
         let remote = P {
-            id: "r", health: ProviderHealth::Healthy, ctx: 128_000,
-            cost: 0.01, latency: 200, tier: ProviderTier::Standard, fit: 0.9,
+            id: "r",
+            health: ProviderHealth::Healthy,
+            ctx: 128_000,
+            cost: 0.01,
+            latency: 200,
+            tier: ProviderTier::Standard,
+            fit: 0.9,
         };
         let local = P {
-            id: "l", health: ProviderHealth::Healthy, ctx: 32_000,
-            cost: 0.0, latency: 50, tier: ProviderTier::Local, fit: 0.7,
+            id: "l",
+            health: ProviderHealth::Healthy,
+            ctx: 32_000,
+            cost: 0.0,
+            latency: 50,
+            tier: ProviderTier::Local,
+            fit: 0.7,
         };
         let remote_score = score(&remote, &req(), ModePack::Offline, 1.0, 1000);
         let local_score = score(&local, &req(), ModePack::Offline, 1.0, 1000);
-        assert_eq!(remote_score, 0.0, "remote provider must be excluded in Offline mode");
-        assert!(local_score > 0.0, "local provider must score positive in Offline mode");
+        assert_eq!(
+            remote_score, 0.0,
+            "remote provider must be excluded in Offline mode"
+        );
+        assert!(
+            local_score > 0.0,
+            "local provider must score positive in Offline mode"
+        );
     }
 }

@@ -114,7 +114,10 @@ mod tests {
         assert_eq!(cb.state(), CircuitState::Open);
         // With zero cooldown, is_open() should transition to HalfOpen
         let open = cb.is_open();
-        assert!(!open, "zero-cooldown circuit must transition to HalfOpen immediately");
+        assert!(
+            !open,
+            "zero-cooldown circuit must transition to HalfOpen immediately"
+        );
         assert_eq!(cb.state(), CircuitState::HalfOpen);
     }
 }

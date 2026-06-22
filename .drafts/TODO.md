@@ -57,6 +57,13 @@
 - [ ] ральф-луп обёрнут в мета-луп, что бы поколения не выраждались в один и тот же монолог
 - [ ] автономное мыслящее существо
 - [ ] аналог n8n системы автоматизации для офиса
+  - <D:\Projects\src\github.com\teratron\cronus\.references\tools\n8n-master>
+  - <D:\Projects\src\github.com\teratron\cronus\.references\tools\zapier-platform-main>
+  - <D:\Projects\src\github.com\teratron\cronus\.references\tools\node-red-main>
+  - <D:\Projects\src\github.com\teratron\cronus\.references\tools\huginn-master>
+- [ ] глобальная оркестрация из существующих спецификаций, продумывать сразу что на каком этапе планировать и делать, например: сама суть движка приложения сформирована, но надо сразу учитывать при кодинге такие вещи как языковая поддержка и т.д.
+- [ ] nodus вынести в отдельный воркспейс sdd .design/
+- [ ] кнопка открытия проекта/офиса в ide редакторе (например, в vscode, idea, atom, zed и т.д.)
 
 ---
 
@@ -105,6 +112,7 @@
   - <D:\Projects\src\github.com\teratron\cronus\.references\tools\omnigent-main>
   - <D:\Projects\src\github.com\teratron\cronus\.references\tools\ruflo-main>
   - <D:\Projects\src\github.com\teratron\cronus\.references\tools\gigachain>
+  - <D:\Projects\src\github.com\teratron\cronus\.references\tools\Harness_материалы.pdf>
 примечание: ...
 
 ---

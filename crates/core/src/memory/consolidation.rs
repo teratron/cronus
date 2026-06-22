@@ -54,7 +54,11 @@ pub struct NoOpConsolidator;
 
 impl Consolidator for NoOpConsolidator {
     fn run(&self, _config: &ConsolidationConfig) -> ConsolidationResult {
-        ConsolidationResult { merged: 0, evicted: 0, skipped: true }
+        ConsolidationResult {
+            merged: 0,
+            evicted: 0,
+            skipped: true,
+        }
     }
 }
 

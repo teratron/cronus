@@ -125,10 +125,7 @@ impl<'a> ContextRouter<'a> {
                 self.project_dir.join("PROJECT_RULES.md"),
                 RulePrecedence::Project,
             ),
-            (
-                self.project_dir.join("RULES.md"),
-                RulePrecedence::Global,
-            ),
+            (self.project_dir.join("RULES.md"), RulePrecedence::Global),
         ];
 
         let mut entries: Vec<RuleEntry> = candidates
@@ -150,4 +147,3 @@ fn load_rule_file(path: &Path, precedence: RulePrecedence) -> Option<RuleEntry> 
         precedence,
     })
 }
-

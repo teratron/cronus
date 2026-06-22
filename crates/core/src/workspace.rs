@@ -121,7 +121,10 @@ impl std::fmt::Display for WorkspaceError {
         match self {
             WorkspaceError::Database(e) => write!(f, "workspace database error: {e}"),
             WorkspaceError::InvalidId(id) => {
-                write!(f, "invalid workspace ID '{id}': must be lowercase kebab-case, 2–64 chars")
+                write!(
+                    f,
+                    "invalid workspace ID '{id}': must be lowercase kebab-case, 2–64 chars"
+                )
             }
             WorkspaceError::NotFound(id) => write!(f, "workspace '{id}' not found"),
             WorkspaceError::AlreadyExists(id) => write!(f, "workspace '{id}' already exists"),
@@ -180,7 +183,13 @@ impl WorkspaceManager {
         self.conn.execute(
             "INSERT INTO workspaces (id, name, path, created_at, template)
              VALUES (?1, ?2, ?3, ?4, ?5)",
-            params![id.as_str(), name, path_str.as_ref(), now as i64, template_str],
+            params![
+                id.as_str(),
+                name,
+                path_str.as_ref(),
+                now as i64,
+                template_str
+            ],
         )?;
         Ok(Workspace {
             id: id.clone(),
@@ -216,10 +225,9 @@ impl WorkspaceManager {
 
     /// Delete a workspace. Returns `true` if deleted, `false` if it did not exist.
     pub fn delete(&self, id: &WorkspaceId) -> Result<bool, WorkspaceError> {
-        let n = self.conn.execute(
-            "DELETE FROM workspaces WHERE id = ?1",
-            params![id.as_str()],
-        )?;
+        let n = self
+            .conn
+            .execute("DELETE FROM workspaces WHERE id = ?1", params![id.as_str()])?;
         if n > 0 {
             // Clear active if it was this workspace
             self.conn.execute(
@@ -259,7 +267,11 @@ impl WorkspaceManager {
 
     pub fn check(&self, id: &WorkspaceId) -> Result<WorkspaceStatus, WorkspaceError> {
         let ws = self.get(id)?;
-        let active = self.get_active()?.as_ref().map(|a| a == id).unwrap_or(false);
+        let active = self
+            .get_active()?
+            .as_ref()
+            .map(|a| a == id)
+            .unwrap_or(false);
         Ok(WorkspaceStatus {
             exists: ws.is_some(),
             is_active: active,
@@ -332,7 +344,12 @@ mod tests {
         let mgr = WorkspaceManager::open_in_memory().unwrap();
         let id = WorkspaceId::new("test-ws").unwrap();
         let ws = mgr
-            .create(&id, "Test Workspace", Path::new("/tmp/test"), WorkspaceTemplate::Default)
+            .create(
+                &id,
+                "Test Workspace",
+                Path::new("/tmp/test"),
+                WorkspaceTemplate::Default,
+            )
             .unwrap();
         assert_eq!(ws.id, id);
         assert_eq!(ws.name, "Test Workspace");
@@ -345,7 +362,8 @@ mod tests {
     fn duplicate_create_fails() {
         let mgr = WorkspaceManager::open_in_memory().unwrap();
         let id = WorkspaceId::new("dup").unwrap();
-        mgr.create(&id, "First", Path::new("/a"), WorkspaceTemplate::Default).unwrap();
+        mgr.create(&id, "First", Path::new("/a"), WorkspaceTemplate::Default)
+            .unwrap();
         let err = mgr.create(&id, "Second", Path::new("/b"), WorkspaceTemplate::Default);
         assert!(matches!(err, Err(WorkspaceError::AlreadyExists(_))));
     }
@@ -355,8 +373,13 @@ mod tests {
         let mgr = WorkspaceManager::open_in_memory().unwrap();
         for i in 0..3u8 {
             let id = WorkspaceId::new(format!("ws-{i}")).unwrap();
-            mgr.create(&id, &format!("WS {i}"), Path::new("/tmp"), WorkspaceTemplate::Empty)
-                .unwrap();
+            mgr.create(
+                &id,
+                &format!("WS {i}"),
+                Path::new("/tmp"),
+                WorkspaceTemplate::Empty,
+            )
+            .unwrap();
         }
         assert_eq!(mgr.list().unwrap().len(), 3);
     }
@@ -365,7 +388,13 @@ mod tests {
     fn delete_workspace() {
         let mgr = WorkspaceManager::open_in_memory().unwrap();
         let id = WorkspaceId::new("to-delete").unwrap();
-        mgr.create(&id, "Delete me", Path::new("/tmp"), WorkspaceTemplate::Default).unwrap();
+        mgr.create(
+            &id,
+            "Delete me",
+            Path::new("/tmp"),
+            WorkspaceTemplate::Default,
+        )
+        .unwrap();
         assert!(mgr.delete(&id).unwrap());
         assert!(mgr.get(&id).unwrap().is_none());
         assert!(!mgr.delete(&id).unwrap(), "second delete must return false");
@@ -375,25 +404,36 @@ mod tests {
     fn active_workspace_lifecycle() {
         let mgr = WorkspaceManager::open_in_memory().unwrap();
         let id = WorkspaceId::new("active-ws").unwrap();
-        mgr.create(&id, "Active", Path::new("/tmp"), WorkspaceTemplate::Default).unwrap();
+        mgr.create(&id, "Active", Path::new("/tmp"), WorkspaceTemplate::Default)
+            .unwrap();
 
-        assert!(mgr.get_active().unwrap().is_none(), "no active workspace initially");
+        assert!(
+            mgr.get_active().unwrap().is_none(),
+            "no active workspace initially"
+        );
         mgr.set_active(&id).unwrap();
-        assert_eq!(mgr.get_active().unwrap().as_ref().map(|i| i.as_str()), Some("active-ws"));
+        assert_eq!(
+            mgr.get_active().unwrap().as_ref().map(|i| i.as_str()),
+            Some("active-ws")
+        );
     }
 
     #[test]
     fn set_active_nonexistent_workspace_fails() {
         let mgr = WorkspaceManager::open_in_memory().unwrap();
         let id = WorkspaceId::new("ghost").unwrap();
-        assert!(matches!(mgr.set_active(&id), Err(WorkspaceError::NotFound(_))));
+        assert!(matches!(
+            mgr.set_active(&id),
+            Err(WorkspaceError::NotFound(_))
+        ));
     }
 
     #[test]
     fn check_workspace_status() {
         let mgr = WorkspaceManager::open_in_memory().unwrap();
         let id = WorkspaceId::new("chk").unwrap();
-        mgr.create(&id, "Chk", Path::new("/tmp"), WorkspaceTemplate::Default).unwrap();
+        mgr.create(&id, "Chk", Path::new("/tmp"), WorkspaceTemplate::Default)
+            .unwrap();
         mgr.set_active(&id).unwrap();
 
         let status = mgr.check(&id).unwrap();

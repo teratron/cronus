@@ -57,7 +57,10 @@ impl GateKind {
 
     /// Returns true when this gate is always required (QLY-2).
     pub fn is_always_on(&self) -> bool {
-        matches!(self, GateKind::Tests | GateKind::Lint | GateKind::TypeFormat)
+        matches!(
+            self,
+            GateKind::Tests | GateKind::Lint | GateKind::TypeFormat
+        )
     }
 
     /// Returns true when this gate is conditional (performance/security tags).
@@ -117,8 +120,7 @@ pub fn detect_language(project_root: &Path) -> Language {
         Language::Rust
     } else if project_root.join("package.json").exists() {
         Language::TypeScript
-    } else if project_root.join("pyproject.toml").exists()
-        || project_root.join("setup.py").exists()
+    } else if project_root.join("pyproject.toml").exists() || project_root.join("setup.py").exists()
     {
         Language::Python
     } else if project_root.join("go.mod").exists() {
@@ -190,9 +192,19 @@ pub fn run_gate(gate: GateKind, project_root: &Path, tags: &[CardTag]) -> GateRe
             let stderr = String::from_utf8_lossy(&out.stderr).to_string();
             let combined = format!("{stdout}{stderr}");
             if out.status.success() {
-                GateResult { gate, status: GateStatus::Pass, output: combined, duration_ms }
+                GateResult {
+                    gate,
+                    status: GateStatus::Pass,
+                    output: combined,
+                    duration_ms,
+                }
             } else {
-                GateResult { gate, status: GateStatus::Fail, output: combined, duration_ms }
+                GateResult {
+                    gate,
+                    status: GateStatus::Fail,
+                    output: combined,
+                    duration_ms,
+                }
             }
         }
         Err(e) => GateResult {

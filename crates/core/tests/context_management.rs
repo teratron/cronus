@@ -1,9 +1,7 @@
 use cronus::context_mgmt::{
-    adaptive_budget, should_compact, total_tokens, trim_cascade,
-    truncate_head, truncate_tail, truncate_tool_result,
-    CompactionDetails, ContextEntry, NoOpCompactor, TrimPriority, Compactor,
-    CONTEXT_RESERVE_TOKENS, DEFAULT_MAX_BYTES, GREP_MAX_LINE_LENGTH,
-    TOOL_RESULT_MAX_CHARS,
+    CONTEXT_RESERVE_TOKENS, CompactionDetails, Compactor, ContextEntry, DEFAULT_MAX_BYTES,
+    GREP_MAX_LINE_LENGTH, NoOpCompactor, TOOL_RESULT_MAX_CHARS, TrimPriority, adaptive_budget,
+    should_compact, total_tokens, trim_cascade, truncate_head, truncate_tail, truncate_tool_result,
 };
 
 // ── Adaptive budget ────────────────────────────────────────────────────────────
@@ -51,7 +49,9 @@ fn trim_cascade_removes_lowest_priority_first() {
     trim_cascade(&mut entries, 200);
     assert_eq!(entries.len(), 2);
     assert!(
-        entries.iter().all(|e| e.priority != TrimPriority::OrphanedToolResult),
+        entries
+            .iter()
+            .all(|e| e.priority != TrimPriority::OrphanedToolResult),
         "orphaned tool results must be removed first"
     );
 }
@@ -144,7 +144,10 @@ fn compaction_details_xml_renders_both_sections() {
 
     let xml = cd.to_xml();
     assert!(xml.contains("<read-files>"), "must have read-files section");
-    assert!(xml.contains("<modified-files>"), "must have modified-files section");
+    assert!(
+        xml.contains("<modified-files>"),
+        "must have modified-files section"
+    );
     assert!(xml.contains("src/main.rs"));
     assert!(xml.contains("src/lib.rs"));
 }

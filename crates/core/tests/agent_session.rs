@@ -1,10 +1,10 @@
+use cronus::context_router::ContextBundle;
 use cronus::session::{
-    InterruptFence, IterationBudget, RunnerMap, SessionEntry, SessionError, SessionId, TurnContext,
-    guard_output_size, MAX_GOAL_REACT, MAX_OUTPUT_CHARS,
+    InterruptFence, IterationBudget, MAX_GOAL_REACT, MAX_OUTPUT_CHARS, RunnerMap, SessionEntry,
+    SessionError, SessionId, TurnContext, guard_output_size,
     hooks::{HookOutcome, NoOpHook, StopHook},
     migration::{CURRENT_SESSION_VERSION, SessionData},
 };
-use cronus::context_router::ContextBundle;
 
 fn sid(s: &str) -> SessionId {
     SessionId::new(s)
@@ -33,7 +33,10 @@ fn iteration_budget_tick_increments_counter() {
     }
     assert!(!b.is_exhausted());
     b.tick();
-    assert!(b.is_exhausted(), "budget must be exhausted at max iterations");
+    assert!(
+        b.is_exhausted(),
+        "budget must be exhausted at max iterations"
+    );
 }
 
 #[test]
@@ -118,17 +121,15 @@ fn mark_idle_allows_next_assert_not_busy() {
     map.register(id.clone());
     map.assert_not_busy(&id).unwrap();
     map.mark_idle(&id);
-    map.assert_not_busy(&id).expect("must be allowed after mark_idle");
+    map.assert_not_busy(&id)
+        .expect("must be allowed after mark_idle");
 }
 
 #[test]
 fn assert_not_busy_on_unregistered_returns_error() {
     let map = RunnerMap::new();
     let id = sid("ghost");
-    assert_eq!(
-        map.assert_not_busy(&id),
-        Err(SessionError::NotRegistered)
-    );
+    assert_eq!(map.assert_not_busy(&id), Err(SessionError::NotRegistered));
 }
 
 #[test]
@@ -171,7 +172,10 @@ fn oversized_output_is_truncated_with_annotation() {
     // The prefix is truncated to MAX_OUTPUT_CHARS; annotation is appended.
     // Overall length < original (minus 100 overhead chars we removed).
     assert!(out.starts_with(&"x".repeat(MAX_OUTPUT_CHARS)));
-    assert!(out.contains("[output truncated:"), "annotation must be present");
+    assert!(
+        out.contains("[output truncated:"),
+        "annotation must be present"
+    );
     assert!(matches!(err, Some(SessionError::Oversized { .. })));
 }
 

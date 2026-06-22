@@ -1,6 +1,6 @@
 use cronus::autonomy::{
-    classify_command, evaluate, ApprovalDecision, ApprovalManager, ActionTracker,
-    AutonomyError, AutonomyLevel, CommandRiskLevel, GateDecision, RESOLVED_ENTRY_GRACE_MS,
+    ActionTracker, ApprovalDecision, ApprovalManager, AutonomyError, AutonomyLevel,
+    CommandRiskLevel, GateDecision, RESOLVED_ENTRY_GRACE_MS, classify_command, evaluate,
 };
 use std::time::{Duration, Instant};
 
@@ -17,7 +17,10 @@ fn three_autonomy_levels_exist() {
 
 #[test]
 fn supervised_low_risk_is_allowed() {
-    assert_eq!(evaluate(AutonomyLevel::Supervised, CommandRiskLevel::Low), GateDecision::Allow);
+    assert_eq!(
+        evaluate(AutonomyLevel::Supervised, CommandRiskLevel::Low),
+        GateDecision::Allow
+    );
 }
 
 #[test]
@@ -38,7 +41,10 @@ fn supervised_high_risk_requires_approval() {
 
 #[test]
 fn supervised_critical_risk_is_denied() {
-    assert_eq!(evaluate(AutonomyLevel::Supervised, CommandRiskLevel::Critical), GateDecision::Deny);
+    assert_eq!(
+        evaluate(AutonomyLevel::Supervised, CommandRiskLevel::Critical),
+        GateDecision::Deny
+    );
 }
 
 #[test]
@@ -59,7 +65,10 @@ fn semi_autonomous_critical_risk_is_denied() {
 
 #[test]
 fn autonomous_high_risk_is_allowed() {
-    assert_eq!(evaluate(AutonomyLevel::Autonomous, CommandRiskLevel::High), GateDecision::Allow);
+    assert_eq!(
+        evaluate(AutonomyLevel::Autonomous, CommandRiskLevel::High),
+        GateDecision::Allow
+    );
 }
 
 #[test]
@@ -74,12 +83,18 @@ fn autonomous_critical_risk_requires_approval() {
 
 #[test]
 fn rm_rf_is_critical() {
-    assert_eq!(classify_command("rm -rf /home/user"), CommandRiskLevel::Critical);
+    assert_eq!(
+        classify_command("rm -rf /home/user"),
+        CommandRiskLevel::Critical
+    );
 }
 
 #[test]
 fn drop_table_is_critical() {
-    assert_eq!(classify_command("DROP TABLE users"), CommandRiskLevel::Critical);
+    assert_eq!(
+        classify_command("DROP TABLE users"),
+        CommandRiskLevel::Critical
+    );
 }
 
 #[test]
@@ -129,7 +144,11 @@ fn action_tracker_resets_after_window() {
     tracker.record(now).unwrap();
     // Advance past the 100ms window
     let future = now + Duration::from_millis(101);
-    assert_eq!(tracker.count(future), 0, "old entries must expire after window");
+    assert_eq!(
+        tracker.count(future),
+        0,
+        "old entries must expire after window"
+    );
     // Should be able to record again
     tracker.record(future).unwrap();
 }
@@ -144,7 +163,10 @@ fn approval_gate_create_and_register_are_separate() {
     assert_eq!(mgr.decision(id, Instant::now()), None);
 
     mgr.register(id, ApprovalDecision::Approved).unwrap();
-    assert_eq!(mgr.decision(id, Instant::now()), Some(ApprovalDecision::Approved));
+    assert_eq!(
+        mgr.decision(id, Instant::now()),
+        Some(ApprovalDecision::Approved)
+    );
 }
 
 #[test]
@@ -155,7 +177,10 @@ fn approval_gate_register_is_idempotent() {
     // Second register call — must not error
     mgr.register(id, ApprovalDecision::Denied).unwrap();
     // Decision remains Approved (first write wins)
-    assert_eq!(mgr.decision(id, Instant::now()), Some(ApprovalDecision::Approved));
+    assert_eq!(
+        mgr.decision(id, Instant::now()),
+        Some(ApprovalDecision::Approved)
+    );
 }
 
 #[test]
@@ -195,7 +220,11 @@ fn gc_evicts_resolved_gates_past_grace() {
     // GC at time T = now + RESOLVED_ENTRY_GRACE_MS + 1 (past grace)
     let past_grace = Instant::now() + Duration::from_millis(RESOLVED_ENTRY_GRACE_MS + 1);
     mgr.gc(past_grace);
-    assert_eq!(mgr.decision(id, past_grace), None, "evicted gate must return None");
+    assert_eq!(
+        mgr.decision(id, past_grace),
+        None,
+        "evicted gate must return None"
+    );
 }
 
 // ── Constants ─────────────────────────────────────────────────────────────────

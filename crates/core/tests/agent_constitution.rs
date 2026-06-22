@@ -1,7 +1,7 @@
 use cronus::constitution::{
-    activate, bootstrap, identity_paths, merge_toml, readiness_score,
-    ActivationStep, ReadinessSignal, ReadinessTier, TomlValue,
-    BOOTSTRAP_FILE, HEARTBEAT_FILE, IDENTITY_FILES, MEMORY_FILE, PROFILE_FILE, SOUL_FILE,
+    ActivationStep, BOOTSTRAP_FILE, HEARTBEAT_FILE, IDENTITY_FILES, MEMORY_FILE, PROFILE_FILE,
+    ReadinessSignal, ReadinessTier, SOUL_FILE, TomlValue, activate, bootstrap, identity_paths,
+    merge_toml, readiness_score,
 };
 use std::collections::HashMap;
 use std::fs;
@@ -81,7 +81,10 @@ fn merge_scalar_user_wins_when_set() {
     let base = TomlValue::String("base".into());
     let team = TomlValue::String("team".into());
     let user = TomlValue::String("user".into());
-    assert_eq!(merge_toml(base, team, user), TomlValue::String("user".into()));
+    assert_eq!(
+        merge_toml(base, team, user),
+        TomlValue::String("user".into())
+    );
 }
 
 #[test]
@@ -89,7 +92,10 @@ fn merge_scalar_team_wins_when_user_empty() {
     let base = TomlValue::String("base".into());
     let team = TomlValue::String("team".into());
     let user = TomlValue::String(String::new());
-    assert_eq!(merge_toml(base, team, user), TomlValue::String("team".into()));
+    assert_eq!(
+        merge_toml(base, team, user),
+        TomlValue::String("team".into())
+    );
 }
 
 #[test]
@@ -97,7 +103,10 @@ fn merge_scalar_base_wins_when_team_and_user_empty() {
     let base = TomlValue::String("base".into());
     let team = TomlValue::String(String::new());
     let user = TomlValue::String(String::new());
-    assert_eq!(merge_toml(base, team, user), TomlValue::String("base".into()));
+    assert_eq!(
+        merge_toml(base, team, user),
+        TomlValue::String("base".into())
+    );
 }
 
 // ── 3-file TOML merge: table ──────────────────────────────────────────────────

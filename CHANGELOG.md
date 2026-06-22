@@ -34,3 +34,5 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Updated global project rules (main)
 - Completed task `phase-4` (main)
 - Completed 3 tasks (main)
+- Completed task `phase-5` (main)
+- Completed 5 tasks (main)

@@ -1,7 +1,7 @@
 use cronus::checkpoint::{
-    build_resume_reminder, list_snapshots, needs_auto_memory, prune_snapshots, read_section,
-    write_atomic, CheckpointPaths, FileCheckpointWriter, NoOpCheckpointWriter, CheckpointWriter,
-    AUTO_MEMORY_THRESHOLD_BYTES, MAX_SNAPSHOTS,
+    AUTO_MEMORY_THRESHOLD_BYTES, CheckpointPaths, CheckpointWriter, FileCheckpointWriter,
+    MAX_SNAPSHOTS, NoOpCheckpointWriter, build_resume_reminder, list_snapshots, needs_auto_memory,
+    prune_snapshots, read_section, write_atomic,
 };
 use std::fs;
 use std::sync::atomic::{AtomicU64, Ordering};
@@ -23,16 +23,30 @@ fn checkpoint_paths_layout_under_state_dir() {
     let state = std::path::PathBuf::from("/state");
     let p = CheckpointPaths::new(&state);
     assert_eq!(p.context, std::path::PathBuf::from("/state/checkpoint"));
-    assert_eq!(p.memory, std::path::PathBuf::from("/state/checkpoint/memory"));
-    assert_eq!(p.notes, std::path::PathBuf::from("/state/checkpoint/notes.md"));
+    assert_eq!(
+        p.memory,
+        std::path::PathBuf::from("/state/checkpoint/memory")
+    );
+    assert_eq!(
+        p.notes,
+        std::path::PathBuf::from("/state/checkpoint/notes.md")
+    );
 }
 
 #[test]
 fn fork_paths_include_fork_id() {
     let state = std::path::PathBuf::from("/state");
     let p = CheckpointPaths::fork(&state, "abc123");
-    assert!(p.context.to_string_lossy().contains("checkpoint-fork-abc123"));
-    assert!(p.memory.to_string_lossy().contains("checkpoint-fork-abc123"));
+    assert!(
+        p.context
+            .to_string_lossy()
+            .contains("checkpoint-fork-abc123")
+    );
+    assert!(
+        p.memory
+            .to_string_lossy()
+            .contains("checkpoint-fork-abc123")
+    );
     assert!(p.notes.to_string_lossy().contains("checkpoint-fork-abc123"));
 }
 
@@ -84,10 +98,7 @@ fn noop_writer_does_nothing() {
     let dir = tmp_dir();
     let paths = CheckpointPaths::new(&dir);
     NoOpCheckpointWriter.write(&paths, "anything").unwrap();
-    assert!(
-        !paths.context.exists(),
-        "noop writer must not create files"
-    );
+    assert!(!paths.context.exists(), "noop writer must not create files");
     fs::remove_dir_all(&dir).ok();
 }
 
@@ -116,10 +127,7 @@ fn read_section_truncates_at_max_bytes() {
 
 #[test]
 fn read_section_error_on_missing_file() {
-    let result = read_section(
-        &std::path::PathBuf::from("/nonexistent/path/to/file"),
-        100,
-    );
+    let result = read_section(&std::path::PathBuf::from("/nonexistent/path/to/file"), 100);
     assert!(result.is_err());
 }
 
@@ -159,7 +167,10 @@ fn list_snapshots_returns_sorted_paths() {
     }
     let snaps = list_snapshots(&dir);
     assert_eq!(snaps.len(), 3);
-    let names: Vec<_> = snaps.iter().map(|p| p.file_name().unwrap().to_str().unwrap()).collect();
+    let names: Vec<_> = snaps
+        .iter()
+        .map(|p| p.file_name().unwrap().to_str().unwrap())
+        .collect();
     assert_eq!(names, vec!["2026-01", "2026-02", "2026-03"]);
     fs::remove_dir_all(&dir).ok();
 }
@@ -176,7 +187,10 @@ fn prune_snapshots_removes_oldest_when_over_cap() {
     let remaining = list_snapshots(&dir);
     assert_eq!(remaining.len(), MAX_SNAPSHOTS);
     // Verify we kept the NEWEST (highest index)
-    let names: Vec<_> = remaining.iter().map(|p| p.file_name().unwrap().to_str().unwrap()).collect();
+    let names: Vec<_> = remaining
+        .iter()
+        .map(|p| p.file_name().unwrap().to_str().unwrap())
+        .collect();
     assert!(names.contains(&"snap-0049"), "must keep newest entries");
     fs::remove_dir_all(&dir).ok();
 }

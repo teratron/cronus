@@ -34,7 +34,10 @@ impl std::fmt::Display for ProviderError {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
             ProviderError::Unavailable(r) => write!(f, "provider unavailable: {r}"),
-            ProviderError::ContextOverflow { required, available } => {
+            ProviderError::ContextOverflow {
+                required,
+                available,
+            } => {
                 write!(f, "context overflow: need {required}, have {available}")
             }
             ProviderError::QuotaExhausted => write!(f, "quota exhausted"),
@@ -116,13 +119,27 @@ mod tests {
     }
 
     impl ModelProvider for MockProvider {
-        fn id(&self) -> &str { self.id }
-        fn health(&self) -> ProviderHealth { self.health }
-        fn context_window(&self) -> u32 { self.ctx }
-        fn cost_per_1k_tokens(&self) -> f64 { self.cost }
-        fn latency_p50_ms(&self) -> u64 { self.latency }
-        fn tier(&self) -> ProviderTier { self.tier }
-        fn task_fit(&self, _task: TaskType) -> f64 { 0.8 }
+        fn id(&self) -> &str {
+            self.id
+        }
+        fn health(&self) -> ProviderHealth {
+            self.health
+        }
+        fn context_window(&self) -> u32 {
+            self.ctx
+        }
+        fn cost_per_1k_tokens(&self) -> f64 {
+            self.cost
+        }
+        fn latency_p50_ms(&self) -> u64 {
+            self.latency
+        }
+        fn tier(&self) -> ProviderTier {
+            self.tier
+        }
+        fn task_fit(&self, _task: TaskType) -> f64 {
+            0.8
+        }
     }
 
     #[test]

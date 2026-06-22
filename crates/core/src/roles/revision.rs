@@ -1,7 +1,7 @@
 //! Config revision tracking for hired role instances.
 
-use std::path::Path;
 use super::Result;
+use std::path::Path;
 
 #[derive(Debug, Clone)]
 pub struct AgentConfigRevision {

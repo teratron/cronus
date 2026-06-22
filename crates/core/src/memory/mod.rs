@@ -305,15 +305,24 @@ pub struct TrustUpdate {
 
 impl TrustUpdate {
     pub fn positive() -> Self {
-        TrustUpdate { positive: true, new_verification_state: None }
+        TrustUpdate {
+            positive: true,
+            new_verification_state: None,
+        }
     }
 
     pub fn negative() -> Self {
-        TrustUpdate { positive: false, new_verification_state: None }
+        TrustUpdate {
+            positive: false,
+            new_verification_state: None,
+        }
     }
 
     pub fn with_verification(state: VerificationState) -> Self {
-        TrustUpdate { positive: true, new_verification_state: Some(state) }
+        TrustUpdate {
+            positive: true,
+            new_verification_state: Some(state),
+        }
     }
 }
 
@@ -330,14 +339,8 @@ mod tests {
 
     #[test]
     fn verification_state_weights_ordered() {
-        assert!(
-            VerificationState::Untested.weight()
-                < VerificationState::Claimed.weight()
-        );
-        assert!(
-            VerificationState::Claimed.weight()
-                < VerificationState::TestedInProject.weight()
-        );
+        assert!(VerificationState::Untested.weight() < VerificationState::Claimed.weight());
+        assert!(VerificationState::Claimed.weight() < VerificationState::TestedInProject.weight());
         assert!(
             VerificationState::TestedInProject.weight()
                 < VerificationState::ValidatedCrossProject.weight()
@@ -363,12 +366,8 @@ mod tests {
 
     #[test]
     fn memory_entry_effective_trust() {
-        let mut entry = MemoryEntry::new(
-            MemoryKind::Convention,
-            MemorySource::Agent,
-            "test",
-            "body",
-        );
+        let mut entry =
+            MemoryEntry::new(MemoryKind::Convention, MemorySource::Agent, "test", "body");
         entry.trust_score = 1.0;
         entry.verification_state = VerificationState::Untested;
         assert!((entry.effective_trust() - 0.30).abs() < f64::EPSILON);

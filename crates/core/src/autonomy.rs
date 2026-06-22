@@ -54,14 +54,24 @@ pub fn classify_command(cmd: &str) -> CommandRiskLevel {
         }
     }
 
-    let high_patterns = ["write", "delete", "remove", "overwrite", "execute", "chmod", "chown"];
+    let high_patterns = [
+        "write",
+        "delete",
+        "remove",
+        "overwrite",
+        "execute",
+        "chmod",
+        "chown",
+    ];
     for pat in &high_patterns {
         if lower.contains(pat) {
             return CommandRiskLevel::High;
         }
     }
 
-    let low_patterns = ["read", "list", "show", "get", "fetch", "search", "query", "cat ", "ls ", "find "];
+    let low_patterns = [
+        "read", "list", "show", "get", "fetch", "search", "query", "cat ", "ls ", "find ",
+    ];
     for pat in &low_patterns {
         if lower.contains(pat) {
             return CommandRiskLevel::Low;
@@ -129,7 +139,11 @@ impl ActionTracker {
     }
 
     pub fn new_with_window(cap: usize, window: Duration) -> Self {
-        ActionTracker { cap, window, timestamps: Vec::new() }
+        ActionTracker {
+            cap,
+            window,
+            timestamps: Vec::new(),
+        }
     }
 
     /// Record an action. Returns `Err(AutonomyError::RateLimitExceeded)` when
@@ -150,7 +164,8 @@ impl ActionTracker {
     }
 
     fn prune(&mut self, now: Instant) {
-        self.timestamps.retain(|&t| now.duration_since(t) < self.window);
+        self.timestamps
+            .retain(|&t| now.duration_since(t) < self.window);
     }
 }
 
@@ -245,14 +260,19 @@ impl ApprovalManager {
     pub fn create(&mut self, command: String, risk: CommandRiskLevel, ttl_ms: u64) -> ApprovalId {
         let id = ApprovalId(self.next_id);
         self.next_id += 1;
-        self.gates.insert(id, ApprovalGate::new(id, command, risk, ttl_ms));
+        self.gates
+            .insert(id, ApprovalGate::new(id, command, risk, ttl_ms));
         id
     }
 
     /// Register an approval decision for an existing gate.
     ///
     /// Registering the same ID twice is idempotent — second call is ignored.
-    pub fn register(&mut self, id: ApprovalId, decision: ApprovalDecision) -> Result<(), AutonomyError> {
+    pub fn register(
+        &mut self,
+        id: ApprovalId,
+        decision: ApprovalDecision,
+    ) -> Result<(), AutonomyError> {
         match self.gates.get_mut(&id) {
             Some(gate) => {
                 if gate.state == ApprovalState::Pending {

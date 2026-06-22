@@ -1,7 +1,7 @@
 //! TurnContext and IterationBudget.
 
-use crate::context_router::ContextBundle;
 use super::SessionId;
+use crate::context_router::ContextBundle;
 
 // ── IterationBudget ───────────────────────────────────────────────────────────
 
@@ -60,7 +60,12 @@ impl TurnContext {
         budget: IterationBudget,
         context: ContextBundle,
     ) -> Self {
-        TurnContext { session_id, iteration, budget, context }
+        TurnContext {
+            session_id,
+            iteration,
+            budget,
+            context,
+        }
     }
 
     /// Advance to the next iteration within this turn.

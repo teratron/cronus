@@ -90,6 +90,7 @@ The plan is injected into every subsequent query-generation prompt so the model 
 ### 4.4 Query generation
 
 Each round generates `num_queries` search queries (default 3–5) as a JSON array. The prompt receives:
+
 - The original question.
 - The research plan.
 - The running report (what is already known).
@@ -98,6 +99,7 @@ Each round generates `num_queries` search queries (default 3–5) as a JSON arra
 ### 4.5 Content filtering
 
 Before wrapping and injecting fetched content, a quality filter rejects:
+
 - Results shorter than a minimum character threshold (likely error pages or stubs).
 - Exact duplicates of already-seen URLs.
 - Results matching known low-quality patterns (e.g. empty body, HTTP error status).

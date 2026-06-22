@@ -72,7 +72,10 @@ pub struct RoleManager {
 
 impl RoleManager {
     pub fn new(program_dir: PathBuf, state_dir: PathBuf) -> Self {
-        RoleManager { _program_dir: program_dir, state_dir }
+        RoleManager {
+            _program_dir: program_dir,
+            state_dir,
+        }
     }
 
     /// List all preset roles from the embedded catalog.
@@ -163,7 +166,12 @@ impl RoleManager {
     }
 
     /// Create a custom role derived from a preset.
-    pub fn create_from_preset(&self, id: &str, display_name: &str, preset_id: &str) -> Result<HiredInstance> {
+    pub fn create_from_preset(
+        &self,
+        id: &str,
+        display_name: &str,
+        preset_id: &str,
+    ) -> Result<HiredInstance> {
         validate_role_id(id)?;
         let preset = PRESET_CATALOG
             .iter()
@@ -217,10 +225,7 @@ impl RoleManager {
             fs::rename(&memory_dir, &archive_dir)?;
         }
 
-        let fired_dir = self
-            .state_dir
-            .join("employees")
-            .join(format!("{id}-fired"));
+        let fired_dir = self.state_dir.join("employees").join(format!("{id}-fired"));
         fs::rename(&instance_dir, &fired_dir)?;
         Ok(())
     }
@@ -233,7 +238,9 @@ impl RoleManager {
 
 fn validate_role_id(id: &str) -> Result<()> {
     if id.is_empty()
-        || !id.chars().all(|c| c.is_ascii_lowercase() || c.is_ascii_digit() || c == '-')
+        || !id
+            .chars()
+            .all(|c| c.is_ascii_lowercase() || c.is_ascii_digit() || c == '-')
     {
         return Err(RoleError::InvalidId(id.to_string()));
     }

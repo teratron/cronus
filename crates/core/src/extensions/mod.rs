@@ -70,7 +70,10 @@ pub struct ExtensionManifest {
 pub enum RegistryError {
     InvalidManifest(String),
     NotFound(String),
-    InvalidTransition { from: ExtensionState, to: ExtensionState },
+    InvalidTransition {
+        from: ExtensionState,
+        to: ExtensionState,
+    },
     InactiveExtension(String),
 }
 
@@ -79,10 +82,10 @@ impl std::fmt::Display for RegistryError {
         match self {
             RegistryError::InvalidManifest(s) => write!(f, "invalid manifest: {s}"),
             RegistryError::NotFound(id) => write!(f, "extension not found: {id}"),
-            RegistryError::InvalidTransition { from, to } =>
-                write!(f, "invalid transition: {:?} → {:?}", from, to),
-            RegistryError::InactiveExtension(id) =>
-                write!(f, "extension not active: {id}"),
+            RegistryError::InvalidTransition { from, to } => {
+                write!(f, "invalid transition: {:?} → {:?}", from, to)
+            }
+            RegistryError::InactiveExtension(id) => write!(f, "extension not active: {id}"),
         }
     }
 }
@@ -95,10 +98,14 @@ pub fn validate_manifest(manifest: &ExtensionManifest) -> Result<()> {
         return Err(RegistryError::InvalidManifest("id is required".to_string()));
     }
     if manifest.name.is_empty() {
-        return Err(RegistryError::InvalidManifest("name is required".to_string()));
+        return Err(RegistryError::InvalidManifest(
+            "name is required".to_string(),
+        ));
     }
     if manifest.version.is_empty() {
-        return Err(RegistryError::InvalidManifest("version is required".to_string()));
+        return Err(RegistryError::InvalidManifest(
+            "version is required".to_string(),
+        ));
     }
     Ok(())
 }
@@ -110,12 +117,15 @@ pub struct ExtensionRegistry {
 
 impl ExtensionRegistry {
     pub fn new() -> Self {
-        ExtensionRegistry { entries: HashMap::new() }
+        ExtensionRegistry {
+            entries: HashMap::new(),
+        }
     }
 
     pub fn register(&mut self, manifest: ExtensionManifest) -> Result<()> {
         validate_manifest(&manifest)?;
-        self.entries.insert(manifest.id.clone(), (manifest, ExtensionState::Discovered));
+        self.entries
+            .insert(manifest.id.clone(), (manifest, ExtensionState::Discovered));
         Ok(())
     }
 
@@ -124,7 +134,10 @@ impl ExtensionRegistry {
     }
 
     pub fn transition(&mut self, id: &str, to: ExtensionState) -> Result<()> {
-        let entry = self.entries.get_mut(id).ok_or_else(|| RegistryError::NotFound(id.to_string()))?;
+        let entry = self
+            .entries
+            .get_mut(id)
+            .ok_or_else(|| RegistryError::NotFound(id.to_string()))?;
         let from = entry.1;
         let valid = matches!(
             (from, to),
@@ -141,7 +154,10 @@ impl ExtensionRegistry {
     }
 
     pub fn require_active(&self, id: &str) -> Result<&ExtensionManifest> {
-        let (manifest, state) = self.entries.get(id).ok_or_else(|| RegistryError::NotFound(id.to_string()))?;
+        let (manifest, state) = self
+            .entries
+            .get(id)
+            .ok_or_else(|| RegistryError::NotFound(id.to_string()))?;
         if *state != ExtensionState::Active {
             return Err(RegistryError::InactiveExtension(id.to_string()));
         }

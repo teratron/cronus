@@ -14,7 +14,9 @@ cronus = { path = "crates/core" }
 nodus = { path = "crates/nodus" }
 aes-gcm = "0.10"
 argon2 = "0.5"
+chrono = "0.4"
 clap = { version = "4", features = ["derive"] }
+cron = "0.17"
 keyring = "4"
 rusqlite = { version = "0.40", features = ["bundled"] }
 serde_json = "1"

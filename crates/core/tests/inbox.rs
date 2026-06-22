@@ -1,7 +1,7 @@
 use cronus::inbox::{
-    actor_exists, drain, gc, migrate, register_actor, send, undrained_count, BusEvent,
-    CaptureBusSender, DrainedMessage, InboxError, InboxMessage, NoOpBusSender,
-    GC_TTL_MS, MAX_DRAIN_PER_TURN,
+    BusEvent, CaptureBusSender, DrainedMessage, GC_TTL_MS, InboxError, InboxMessage,
+    MAX_DRAIN_PER_TURN, NoOpBusSender, actor_exists, drain, gc, migrate, register_actor, send,
+    undrained_count,
 };
 use rusqlite::Connection;
 
@@ -130,7 +130,10 @@ fn send_bus_event_count_increases_with_multiple_sends() {
     }
     let events = bus.captured();
     // Count field in the last event should be 3
-    assert!(matches!(&events[2], BusEvent::InboxArrived { count: 3, .. }));
+    assert!(matches!(
+        &events[2],
+        BusEvent::InboxArrived { count: 3, .. }
+    ));
 }
 
 // ── Drain ─────────────────────────────────────────────────────────────────────
@@ -181,7 +184,10 @@ fn drain_marks_messages_as_drained() {
 
     drain(&conn, "r", now_ms() + 1).unwrap();
     let count = undrained_count(&conn, "r").unwrap();
-    assert_eq!(count, 0, "drained messages must not appear in undrained count");
+    assert_eq!(
+        count, 0,
+        "drained messages must not appear in undrained count"
+    );
 }
 
 #[test]

@@ -1,7 +1,7 @@
 //! Hired role instances — mutable copies under the state tier.
 
-use std::path::Path;
 use super::{AdapterLevel, ContextDelivery, Result, RoleCategory};
+use std::path::Path;
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum HiredFrom {

@@ -1,8 +1,8 @@
 use std::sync::atomic::{AtomicU64, Ordering};
 
 use cronus::roles::{
-    AgentConfigRevision, HiredFrom,
-    RevisionSource, RoleCategory, RoleError, RoleManager, PRESET_CATALOG,
+    AgentConfigRevision, HiredFrom, PRESET_CATALOG, RevisionSource, RoleCategory, RoleError,
+    RoleManager,
 };
 
 static COUNTER: AtomicU64 = AtomicU64::new(0);
@@ -26,16 +26,30 @@ fn make_manager(label: &str) -> (RoleManager, std::path::PathBuf, std::path::Pat
 
 #[test]
 fn preset_catalog_has_25_roles() {
-    assert_eq!(PRESET_CATALOG.len(), 25, "catalog should have exactly 25 preset roles");
+    assert_eq!(
+        PRESET_CATALOG.len(),
+        25,
+        "catalog should have exactly 25 preset roles"
+    );
 }
 
 #[test]
 fn preset_catalog_covers_all_categories() {
-    let has_engineering = PRESET_CATALOG.iter().any(|r| r.category == RoleCategory::Engineering);
-    let has_quality = PRESET_CATALOG.iter().any(|r| r.category == RoleCategory::Quality);
-    let has_ops = PRESET_CATALOG.iter().any(|r| r.category == RoleCategory::OpsAndDocs);
-    let has_memory = PRESET_CATALOG.iter().any(|r| r.category == RoleCategory::Memory);
-    let has_business = PRESET_CATALOG.iter().any(|r| r.category == RoleCategory::Business);
+    let has_engineering = PRESET_CATALOG
+        .iter()
+        .any(|r| r.category == RoleCategory::Engineering);
+    let has_quality = PRESET_CATALOG
+        .iter()
+        .any(|r| r.category == RoleCategory::Quality);
+    let has_ops = PRESET_CATALOG
+        .iter()
+        .any(|r| r.category == RoleCategory::OpsAndDocs);
+    let has_memory = PRESET_CATALOG
+        .iter()
+        .any(|r| r.category == RoleCategory::Memory);
+    let has_business = PRESET_CATALOG
+        .iter()
+        .any(|r| r.category == RoleCategory::Business);
     assert!(has_engineering && has_quality && has_ops && has_memory && has_business);
 }
 
@@ -61,7 +75,10 @@ fn hire_copies_blueprint_to_state() {
     let (mgr, _, state_dir) = make_manager("hire");
     let instance = mgr.hire("architect", None).unwrap();
     let instance_dir = state_dir.join("employees").join(&instance.id);
-    assert!(instance_dir.exists(), "instance directory should be created");
+    assert!(
+        instance_dir.exists(),
+        "instance directory should be created"
+    );
     assert!(instance_dir.join("memory").exists());
     assert!(instance_dir.join("skills").exists());
     assert!(instance_dir.join("skins").exists());
@@ -72,7 +89,10 @@ fn hire_copies_blueprint_to_state() {
 fn hire_records_hired_from_preset() {
     let (mgr, _, _) = make_manager("hire-from");
     let instance = mgr.hire("backend-engineer", None).unwrap();
-    assert_eq!(instance.hired_from, HiredFrom::Preset("backend-engineer".to_string()));
+    assert_eq!(
+        instance.hired_from,
+        HiredFrom::Preset("backend-engineer".to_string())
+    );
 }
 
 #[test]
@@ -100,10 +120,16 @@ fn fire_archives_memory_and_removes_from_roster() {
     mgr.fire("writer-1").unwrap();
 
     // Instance dir should be renamed/moved
-    assert!(!instance_dir.exists(), "instance dir should be gone after fire");
+    assert!(
+        !instance_dir.exists(),
+        "instance dir should be gone after fire"
+    );
     // Fired dir exists
     let fired_dir = state_dir.join("employees").join("writer-1-fired");
-    assert!(fired_dir.exists(), "fired dir should contain the archived instance");
+    assert!(
+        fired_dir.exists(),
+        "fired dir should contain the archived instance"
+    );
 }
 
 #[test]

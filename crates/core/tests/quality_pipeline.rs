@@ -1,8 +1,8 @@
-use std::sync::atomic::{AtomicU64, Ordering};
 use cronus::quality::{
-    CardTag, DoneGateStatus, GateKind, GateResult, GateResultStore, GateStatus,
-    check_done_gate, detect_language, Language,
+    CardTag, DoneGateStatus, GateKind, GateResult, GateResultStore, GateStatus, Language,
+    check_done_gate, detect_language,
 };
+use std::sync::atomic::{AtomicU64, Ordering};
 
 static COUNTER: AtomicU64 = AtomicU64::new(0);
 
@@ -15,7 +15,12 @@ fn tmp_dir(label: &str) -> std::path::PathBuf {
 }
 
 fn make_result(gate: GateKind, status: GateStatus) -> GateResult {
-    GateResult { gate, status, output: String::new(), duration_ms: 0 }
+    GateResult {
+        gate,
+        status,
+        output: String::new(),
+        duration_ms: 0,
+    }
 }
 
 // ── detect_language ─────────────────────────────────────────────────────────

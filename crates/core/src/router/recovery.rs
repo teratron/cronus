@@ -108,7 +108,10 @@ pub struct Credential {
 
 impl Credential {
     pub fn new(value: String) -> Self {
-        Credential { value, failure_count: 0 }
+        Credential {
+            value,
+            failure_count: 0,
+        }
     }
 }
 
@@ -254,23 +257,35 @@ mod tests {
 
     #[test]
     fn classify_500_timeout_body() {
-        assert_eq!(classify(503, "request timed out"), FailoverKind::NetworkTimeout);
+        assert_eq!(
+            classify(503, "request timed out"),
+            FailoverKind::NetworkTimeout
+        );
     }
 
     #[test]
     fn recovery_action_mapping() {
-        assert_eq!(recovery_action(FailoverKind::RateLimit), RecoveryAction::Retry);
-        assert_eq!(recovery_action(FailoverKind::AuthFailure), RecoveryAction::RotateCredential);
-        assert_eq!(recovery_action(FailoverKind::ContextOverflow), RecoveryAction::Compress);
-        assert_eq!(recovery_action(FailoverKind::Unknown), RecoveryAction::Abort);
+        assert_eq!(
+            recovery_action(FailoverKind::RateLimit),
+            RecoveryAction::Retry
+        );
+        assert_eq!(
+            recovery_action(FailoverKind::AuthFailure),
+            RecoveryAction::RotateCredential
+        );
+        assert_eq!(
+            recovery_action(FailoverKind::ContextOverflow),
+            RecoveryAction::Compress
+        );
+        assert_eq!(
+            recovery_action(FailoverKind::Unknown),
+            RecoveryAction::Abort
+        );
     }
 
     #[test]
     fn credential_pool_rotate() {
-        let mut pool = CredentialPool::new(
-            vec!["key-a".into(), "key-b".into()],
-            5,
-        );
+        let mut pool = CredentialPool::new(vec!["key-a".into(), "key-b".into()], 5);
         assert_eq!(pool.current().unwrap().value, "key-a");
         pool.rotate();
         assert_eq!(pool.current().unwrap().value, "key-b");

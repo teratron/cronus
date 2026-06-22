@@ -1,5 +1,5 @@
 use cronus::{
-    context_router::{ContextRouter, RulePrecedence, RuleEntry, SessionAction, SessionContext},
+    context_router::{ContextRouter, RuleEntry, RulePrecedence, SessionAction, SessionContext},
     memory::MemoryStore,
 };
 use std::path::PathBuf;
@@ -25,7 +25,12 @@ fn empty_bundle_when_no_memories_or_rules() {
 fn memory_entries_included_in_bundle() {
     use cronus::memory::{MemoryEntry, MemoryKind, MemorySource};
     let s = store();
-    let e = MemoryEntry::new(MemoryKind::Convention, MemorySource::Agent, "FTS test", "context router keyword");
+    let e = MemoryEntry::new(
+        MemoryKind::Convention,
+        MemorySource::Agent,
+        "FTS test",
+        "context router keyword",
+    );
     s.add(e).unwrap();
 
     let dir = nonexistent_dir();
@@ -56,7 +61,10 @@ fn session_retire_clears_context() {
     let dir = nonexistent_dir();
     let router = ContextRouter::new(&s, &dir, &dir);
     let bundle = router.assemble("query", 5).unwrap();
-    let ctx = SessionContext { session_id: "s2".into(), entries: vec![] };
+    let ctx = SessionContext {
+        session_id: "s2".into(),
+        entries: vec![],
+    };
     let bundle = router.with_session(bundle, ctx, SessionAction::Retire);
     assert!(bundle.session.is_none());
 }

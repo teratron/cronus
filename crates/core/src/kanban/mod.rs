@@ -21,10 +21,10 @@ pub enum KanbanError {
 impl fmt::Display for KanbanError {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
-            KanbanError::InvalidTransition { from, to } =>
-                write!(f, "invalid transition: {from:?} → {to:?}"),
-            KanbanError::BlockedRequiresReason =>
-                write!(f, "blocked state requires a reason"),
+            KanbanError::InvalidTransition { from, to } => {
+                write!(f, "invalid transition: {from:?} → {to:?}")
+            }
+            KanbanError::BlockedRequiresReason => write!(f, "blocked state requires a reason"),
             KanbanError::CardNotFound(id) => write!(f, "card not found: {id}"),
             KanbanError::Io(e) => write!(f, "I/O error: {e}"),
         }
@@ -156,15 +156,26 @@ impl Card {
 
     /// Serialize the card to a simple JSON string (including full history).
     fn to_json(&self) -> String {
-        let history_items: Vec<String> = self.history.iter().map(|r| {
-            format!(
-                "{{\"from\":\"{}\",\"to\":\"{}\",\"actor\":\"{}\",\"at\":{}}}",
-                r.from.as_str(), r.to.as_str(), r.actor, r.at
-            )
-        }).collect();
+        let history_items: Vec<String> = self
+            .history
+            .iter()
+            .map(|r| {
+                format!(
+                    "{{\"from\":\"{}\",\"to\":\"{}\",\"actor\":\"{}\",\"at\":{}}}",
+                    r.from.as_str(),
+                    r.to.as_str(),
+                    r.actor,
+                    r.at
+                )
+            })
+            .collect();
         format!(
             "{{\"id\":\"{}\",\"task_ref\":\"{}\",\"state\":\"{}\",\"created_at\":{},\"updated_at\":{},\"history\":[{}]}}",
-            self.id, self.task_ref, self.state.as_str(), self.created_at, self.updated_at,
+            self.id,
+            self.task_ref,
+            self.state.as_str(),
+            self.created_at,
+            self.updated_at,
             history_items.join(",")
         )
     }
@@ -207,7 +218,9 @@ impl Board {
     }
 
     pub fn open(ws_path: &Path) -> Self {
-        Board { kanban_dir: ws_path.join("kanban") }
+        Board {
+            kanban_dir: ws_path.join("kanban"),
+        }
     }
 
     fn cards_dir(&self) -> PathBuf {
@@ -285,7 +298,10 @@ impl Board {
             return Err(KanbanError::BlockedRequiresReason);
         }
         if !card.state.can_transition_to(to) {
-            return Err(KanbanError::InvalidTransition { from: card.state, to });
+            return Err(KanbanError::InvalidTransition {
+                from: card.state,
+                to,
+            });
         }
 
         let record = TransitionRecord {
@@ -301,7 +317,13 @@ impl Board {
         card.updated_at = now;
 
         self.save_card(&card)?;
-        self.append_event(card_id, &format!("{{\"type\":\"transition\",\"to\":\"{}\",\"at\":{now}}}", to.as_str()))?;
+        self.append_event(
+            card_id,
+            &format!(
+                "{{\"type\":\"transition\",\"to\":\"{}\",\"at\":{now}}}",
+                to.as_str()
+            ),
+        )?;
         Ok(card)
     }
 
@@ -309,7 +331,10 @@ impl Board {
     fn append_event(&self, card_id: &str, event: &str) -> Result<()> {
         use std::io::Write;
         let path = self.events_dir().join(format!("{card_id}.jsonl"));
-        let mut file = fs::OpenOptions::new().create(true).append(true).open(path)?;
+        let mut file = fs::OpenOptions::new()
+            .create(true)
+            .append(true)
+            .open(path)?;
         writeln!(file, "{event}")?;
         Ok(())
     }
@@ -376,18 +401,24 @@ fn extract_json_u64(json: &str, key: &str) -> Option<u64> {
     let pattern = format!("\"{key}\":");
     let start = json.find(&pattern)? + pattern.len();
     let rest = &json[start..];
-    let end = rest.find(|c: char| !c.is_ascii_digit()).unwrap_or(rest.len());
+    let end = rest
+        .find(|c: char| !c.is_ascii_digit())
+        .unwrap_or(rest.len());
     rest[..end].parse().ok()
 }
 
 /// Extract the `"history"` array from a card JSON, rebuilding TransitionRecords.
 fn extract_json_history(json: &str) -> Vec<TransitionRecord> {
     let marker = "\"history\":[";
-    let Some(array_start) = json.find(marker) else { return Vec::new() };
+    let Some(array_start) = json.find(marker) else {
+        return Vec::new();
+    };
     let inner_start = array_start + marker.len();
     let rest = &json[inner_start..];
     // find the matching closing bracket
-    let Some(array_end) = rest.find(']') else { return Vec::new() };
+    let Some(array_end) = rest.find(']') else {
+        return Vec::new();
+    };
     let array = &rest[..array_end];
 
     let mut records = Vec::new();
@@ -395,7 +426,9 @@ fn extract_json_history(json: &str) -> Vec<TransitionRecord> {
     let mut pos = 0;
     while let Some(obj_start) = array[pos..].find('{') {
         let abs_start = pos + obj_start;
-        let Some(obj_end) = array[abs_start..].find('}') else { break };
+        let Some(obj_end) = array[abs_start..].find('}') else {
+            break;
+        };
         let obj = &array[abs_start..abs_start + obj_end + 1];
 
         let from_str = extract_json_str(obj, "from").unwrap_or_default();
@@ -404,7 +437,13 @@ fn extract_json_history(json: &str) -> Vec<TransitionRecord> {
         let at = extract_json_u64(obj, "at").unwrap_or(0);
 
         if let (Some(from), Some(to)) = (CardState::parse(&from_str), CardState::parse(&to_str)) {
-            records.push(TransitionRecord { from, to, actor, at, reason: None });
+            records.push(TransitionRecord {
+                from,
+                to,
+                actor,
+                at,
+                reason: None,
+            });
         }
         pos = abs_start + obj_end + 1;
     }

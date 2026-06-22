@@ -63,7 +63,8 @@ impl LearningApprovalGate {
 
     pub fn submit(&mut self, skill: CandidateSkill) {
         let id = skill.id.clone();
-        self.candidates.insert(id, (skill, CandidateStatus::Pending));
+        self.candidates
+            .insert(id, (skill, CandidateStatus::Pending));
     }
 
     pub fn approve(&mut self, id: &str) -> bool {

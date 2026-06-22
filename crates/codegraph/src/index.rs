@@ -1,6 +1,6 @@
 //! SQLite + FTS5 code symbol index.
 
-use rusqlite::{params, Connection};
+use rusqlite::{Connection, params};
 
 use crate::extractor::Symbol;
 
@@ -60,13 +60,7 @@ pub fn store_symbols(conn: &Connection, file: &str, symbols: &[Symbol]) -> Index
     for sym in symbols {
         conn.execute(
             "INSERT INTO symbols (name, kind, file, line, doc) VALUES (?1, ?2, ?3, ?4, ?5)",
-            params![
-                sym.name,
-                format!("{:?}", sym.kind),
-                file,
-                sym.line,
-                sym.doc
-            ],
+            params![sym.name, format!("{:?}", sym.kind), file, sym.line, sym.doc],
         )?;
         count += 1;
     }
@@ -75,9 +69,8 @@ pub fn store_symbols(conn: &Connection, file: &str, symbols: &[Symbol]) -> Index
 
 /// Retrieve a symbol by exact name.
 pub fn get_by_name(conn: &Connection, name: &str) -> IndexResult<Option<IndexedSymbol>> {
-    let mut stmt = conn.prepare(
-        "SELECT id, name, kind, file, line, doc FROM symbols WHERE name = ?1 LIMIT 1",
-    )?;
+    let mut stmt = conn
+        .prepare("SELECT id, name, kind, file, line, doc FROM symbols WHERE name = ?1 LIMIT 1")?;
     let mut rows = stmt.query_map(params![name], map_row)?;
     Ok(rows.next().and_then(|r| r.ok()))
 }

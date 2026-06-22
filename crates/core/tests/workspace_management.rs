@@ -27,7 +27,10 @@ fn invalid_ids_rejected() {
         ("has_underscore", "contains underscore"),
     ];
     for (id, reason) in bad {
-        assert!(WorkspaceId::new(id).is_err(), "'{id}' should be invalid: {reason}");
+        assert!(
+            WorkspaceId::new(id).is_err(),
+            "'{id}' should be invalid: {reason}"
+        );
     }
 }
 
@@ -50,13 +53,23 @@ fn over_max_length_rejected() {
 fn create_and_retrieve() {
     let m = mgr();
     let id = WorkspaceId::new("my-ws").unwrap();
-    let ws = m.create(&id, "My WS", Path::new("/projects/my"), WorkspaceTemplate::Default).unwrap();
+    let ws = m
+        .create(
+            &id,
+            "My WS",
+            Path::new("/projects/my"),
+            WorkspaceTemplate::Default,
+        )
+        .unwrap();
 
     assert_eq!(ws.id, id);
     assert_eq!(ws.name, "My WS");
     assert_eq!(ws.template, "Default");
 
-    let got = m.get(&id).unwrap().expect("workspace must exist after create");
+    let got = m
+        .get(&id)
+        .unwrap()
+        .expect("workspace must exist after create");
     assert_eq!(got.id, id);
     assert_eq!(got.name, "My WS");
 }
@@ -72,10 +85,14 @@ fn get_missing_returns_none() {
 fn duplicate_create_returns_already_exists() {
     let m = mgr();
     let id = WorkspaceId::new("dup-ws").unwrap();
-    m.create(&id, "First", Path::new("/a"), WorkspaceTemplate::Empty).unwrap();
+    m.create(&id, "First", Path::new("/a"), WorkspaceTemplate::Empty)
+        .unwrap();
     let err = m.create(&id, "Second", Path::new("/b"), WorkspaceTemplate::Default);
     assert!(
-        matches!(err, Err(cronus::workspace::WorkspaceError::AlreadyExists(_))),
+        matches!(
+            err,
+            Err(cronus::workspace::WorkspaceError::AlreadyExists(_))
+        ),
         "duplicate create must return AlreadyExists"
     );
 }
@@ -91,7 +108,13 @@ fn list_returns_all() {
     let m = mgr();
     for i in 0..5u8 {
         let id = WorkspaceId::new(format!("ws-{i}")).unwrap();
-        m.create(&id, &format!("WS {i}"), Path::new("/tmp"), WorkspaceTemplate::Empty).unwrap();
+        m.create(
+            &id,
+            &format!("WS {i}"),
+            Path::new("/tmp"),
+            WorkspaceTemplate::Empty,
+        )
+        .unwrap();
     }
     assert_eq!(m.list().unwrap().len(), 5);
 }
@@ -100,7 +123,8 @@ fn list_returns_all() {
 fn delete_returns_true_on_existing() {
     let m = mgr();
     let id = WorkspaceId::new("to-del").unwrap();
-    m.create(&id, "Del", Path::new("/d"), WorkspaceTemplate::Default).unwrap();
+    m.create(&id, "Del", Path::new("/d"), WorkspaceTemplate::Default)
+        .unwrap();
     assert!(m.delete(&id).unwrap());
     assert!(m.get(&id).unwrap().is_none());
 }
@@ -124,9 +148,18 @@ fn no_active_initially() {
 fn set_and_get_active() {
     let m = mgr();
     let id = WorkspaceId::new("active-one").unwrap();
-    m.create(&id, "Active One", Path::new("/a"), WorkspaceTemplate::Default).unwrap();
+    m.create(
+        &id,
+        "Active One",
+        Path::new("/a"),
+        WorkspaceTemplate::Default,
+    )
+    .unwrap();
     m.set_active(&id).unwrap();
-    let active = m.get_active().unwrap().expect("active workspace must be set");
+    let active = m
+        .get_active()
+        .unwrap()
+        .expect("active workspace must be set");
     assert_eq!(active, id);
 }
 
@@ -134,7 +167,8 @@ fn set_and_get_active() {
 fn set_active_is_idempotent() {
     let m = mgr();
     let id = WorkspaceId::new("idem-ws").unwrap();
-    m.create(&id, "Idem", Path::new("/i"), WorkspaceTemplate::Default).unwrap();
+    m.create(&id, "Idem", Path::new("/i"), WorkspaceTemplate::Default)
+        .unwrap();
     m.set_active(&id).unwrap();
     m.set_active(&id).unwrap(); // second call must not fail
     assert_eq!(m.get_active().unwrap().unwrap(), id);
@@ -145,8 +179,10 @@ fn set_active_switches_between_workspaces() {
     let m = mgr();
     let id_a = WorkspaceId::new("ws-alpha").unwrap();
     let id_b = WorkspaceId::new("ws-beta").unwrap();
-    m.create(&id_a, "Alpha", Path::new("/a"), WorkspaceTemplate::Default).unwrap();
-    m.create(&id_b, "Beta", Path::new("/b"), WorkspaceTemplate::Default).unwrap();
+    m.create(&id_a, "Alpha", Path::new("/a"), WorkspaceTemplate::Default)
+        .unwrap();
+    m.create(&id_b, "Beta", Path::new("/b"), WorkspaceTemplate::Default)
+        .unwrap();
 
     m.set_active(&id_a).unwrap();
     assert_eq!(m.get_active().unwrap().unwrap(), id_a);
@@ -160,7 +196,10 @@ fn set_active_nonexistent_fails() {
     let m = mgr();
     let id = WorkspaceId::new("ghost-ws").unwrap();
     assert!(
-        matches!(m.set_active(&id), Err(cronus::workspace::WorkspaceError::NotFound(_))),
+        matches!(
+            m.set_active(&id),
+            Err(cronus::workspace::WorkspaceError::NotFound(_))
+        ),
         "set_active on nonexistent workspace must return NotFound"
     );
 }
@@ -169,7 +208,8 @@ fn set_active_nonexistent_fails() {
 fn delete_clears_active() {
     let m = mgr();
     let id = WorkspaceId::new("will-vanish").unwrap();
-    m.create(&id, "Vanish", Path::new("/v"), WorkspaceTemplate::Default).unwrap();
+    m.create(&id, "Vanish", Path::new("/v"), WorkspaceTemplate::Default)
+        .unwrap();
     m.set_active(&id).unwrap();
     m.delete(&id).unwrap();
     // Active should now be empty
@@ -182,7 +222,8 @@ fn delete_clears_active() {
 fn check_existing_workspace() {
     let m = mgr();
     let id = WorkspaceId::new("chk-ws").unwrap();
-    m.create(&id, "Check", Path::new("/tmp"), WorkspaceTemplate::Default).unwrap();
+    m.create(&id, "Check", Path::new("/tmp"), WorkspaceTemplate::Default)
+        .unwrap();
     m.set_active(&id).unwrap();
 
     let status = m.check(&id).unwrap();
@@ -206,7 +247,8 @@ fn check_nonexistent_workspace() {
 fn template_stored_correctly() {
     let m = mgr();
     let id = WorkspaceId::new("tmpl-ws").unwrap();
-    m.create(&id, "Tmpl", Path::new("/t"), WorkspaceTemplate::Empty).unwrap();
+    m.create(&id, "Tmpl", Path::new("/t"), WorkspaceTemplate::Empty)
+        .unwrap();
     let ws = m.get(&id).unwrap().unwrap();
     assert_eq!(ws.template, "Empty");
 }
