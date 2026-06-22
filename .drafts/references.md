@@ -23,6 +23,8 @@
 - <https://github.com/langchain-ai/langgraph>
 - <https://github.com/ag2ai/ag2>
 - <https://github.com/Rai220/anima>
+- <https://github.com/msitarzewski/agency-agents>
+- <https://github.com/obra/superpowers>
 
 ## Spec-Driven Development
 
@@ -47,6 +49,7 @@
 - <https://github.com/cjpais/Handy>
 - <https://github.com/shadcn/improve>
 - <https://github.com/nvidia/skillspector>
+- <https://gitverse.ru/gigachain/gigachain>
 
 ## UI/UX
 
