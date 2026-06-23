@@ -18,11 +18,10 @@ Global registry aggregating all project specifications across workspaces.
 | Workspace | Description |
 | --- | --- |
 | [main](main/INDEX.md) | Primary project workspace |
-
-<!-- Add your workspaces here -->
+| [nodus](nodus/INDEX.md) | Nodus DSL runtime — standalone workflow-language library |
 
 ## Meta Information
 
 - **Maintainer**: Core Team
 - **License**: MIT
-- **Last Updated**: 2026-06-16
+- **Last Updated**: 2026-06-23

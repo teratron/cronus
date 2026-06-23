@@ -4,29 +4,29 @@
 <!-- Maximum 100 lines. Agent updates AFTER each completed action. -->
 
 **Workspace:** main
-**Updated:** 2026-06-23 20:07
-**Phase:** 6 — Orchestration & Autonomy
-**Status:** Active
+**Updated:** 2026-06-23 20:26
+**Phase:** 7 — TUI (Leaf)
+**Status:** Pending
 
 ## Current Position
 
-- **Task:** Phase 4 complete (14/14 tasks done, 453 tests, 0 failures). Phase 5 decomposed into 12 atomic tasks across 5 tracks. Starting Wave 1: T-5A01 (Tool Security), T-5B01 (Role Catalog), T-5B02 (Kanban Board), T-5D01 (Quality Pipeline) — all parallel, no cross-Phase-5 deps.
-- **Spec:** l2-tool-security.md, l2-role-catalog.md, l2-kanban-board.md, l2-quality-pipeline.md
-- **Next Action:** Run /magic.task main to update the plan
+- **Task:** Phase 6 complete (5/5 tasks done: T-6A01 orchestration, T-6B01 trigger triage, T-6C01 mission mode, T-6C02 deep research, T-6T01 validation). Phase 7 (TUI) not yet decomposed into atomic tasks.
+- **Spec:** l2-tui.md (single spec for Phase 7)
+- **Next Action:** Plan complete — author new scope via /magic.spec main (or /magic.status for a briefing)
 
 ## Progress
 
 ```
-Overall: [4/6] █████░░░ 67%
+Overall: [5/6] ███████░ 83%
 ```
 
 ## Recent Decisions
 
+- 2026-06-23 **Decision:** nodus workspace created under `.design/nodus/` — PLAN.md (3 phases), TASKS.md, tasks/phase-1.md (7 tasks: T-1A01..T-1T01). Phase 1 covers spec completeness (TBDs in §4.4 parallel error propagation + §4.3 macro invocation), vocabulary alignment, and NL invariant test coverage.
+
+- 2026-06-23 **Decision:** Phase 6 (Orchestration & Autonomy) confirmed Done and Archived — all 5 tasks complete (orchestration engine, trigger triage, mission mode, deep research, validation). TASKS.md auto-repaired: `Active` → `Done (Archived)`.
+
 - 2026-06-22 **Decision:** Phase 4 (Core Subsystems) fully complete — 14 tasks, 453 tests, 0 failures. Key subsystems delivered: memory store + encryption, codegraph crate, model/context router, agent session loop, context management, session checkpoint, inbox, agent autonomy, workspace management, agent constitution. CLI commands added for all subsystems.
-
-- 2026-06-22 **Decision:** Phase 5 decomposed into 12 tasks across 5 tracks: A (Security: T-5A01), B (Work Model: T-5B01–T-5B05), C (Extensions: T-5C01–T-5C03), D (Quality & Agent: T-5D01–T-5D02), T (Validation: T-5T01). Wave 1 (T-5A01 + T-5B01 + T-5B02 + T-5D01) is parallel. Justified new deps: `cron` (T-5B03), `git2` (T-5B05).
-
-- 2026-06-22 **Decision:** Wave 1 (T-4A01 + T-4B01 + T-4D01) completed and verified. Key implementation choices: standalone FTS5 table (no content-table triggers), effective_trust filter applied only via SQL trust_score gate (not duplicated in Rust), `from_db_str` naming for DB deserializers to avoid confusion with `std::str::FromStr`, if-let-chain flattening via Rust 2024 `&&` patterns.
 
 ## Blockers
 
@@ -36,6 +36,6 @@ Overall: [4/6] █████░░░ 67%
 
 ## Session Continuity
 
-**Last Session Ended:** 2026-06-22
+**Last Session Ended:** 2026-06-23
 **Handoff File:** none
 **Bootstrap Mode:** false

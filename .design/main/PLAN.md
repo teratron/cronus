@@ -114,12 +114,12 @@ Execution mode: **Parallel** (C3); tracks grouped by file independence. Critical
 
 *Coordination protocol that ties subsystems into an autonomous office.*
 
-> **In Progress (2026-06-22):** 5 atomic tasks across 3 tracks decomposed — orchestration engine (delegation, goal/judge/budget, tier hierarchy, action ranking), trigger triage (4-outcome classifier + dedup + rate limiting), mission mode (two-phase PRD + execution loop), deep research (iterative search engine + untrusted content wrapping), plus validation track. See [tasks/phase-6.md](tasks/phase-6.md).
+> **Done (2026-06-22):** 5 atomic tasks across 3 tracks complete — orchestration engine (delegation, goal/judge/budget, tier hierarchy, action ranking), trigger triage (4-outcome classifier + dedup + rate limiting), mission mode (two-phase PRD + execution loop), deep research (iterative search engine + untrusted content wrapping), plus validation track. See [archives/tasks/phase-6.md](archives/tasks/phase-6.md).
 
-- [ ] **Orchestration** ([l2-orchestration.md](specifications/l2-orchestration.md)) [L2] — delegation, /goal+judge+budget, briefings, adaptive topology, agent tier hierarchy (Chat/Reasoning/Worker), MAX_SPAWN_DEPTH=3, toolkit action ranking
-- [ ] **Trigger Triage** ([l2-trigger-triage.md](specifications/l2-trigger-triage.md)) [L2] — TriggerEnvelope intake pipeline, 4-outcome classifier (local CPU + cloud + rule fallback), dedup cache (depends on orchestration + scheduler + agent-session)
-- [ ] **Mission Mode** ([l2-mission-mode.md](specifications/l2-mission-mode.md)) [L2] — two-phase autonomous goal execution: PRD generation → user checkpoint → story-verified loop with max-iterations circuit-breaker (depends on orchestration + kanban + tool-security)
-- [ ] **Deep Research** ([l2-deep-research.md](specifications/l2-deep-research.md)) [L2] — iterative Think→Plan→Search→Extract→Synthesize engine, date-grounding, untrusted content wrapping, max_rounds circuit breaker (depends on orchestration + tool-security + context-management)
+- [x] **Orchestration** ([l2-orchestration.md](specifications/l2-orchestration.md)) [L2] — delegation, /goal+judge+budget, briefings, adaptive topology, agent tier hierarchy (Chat/Reasoning/Worker), MAX_SPAWN_DEPTH=3, toolkit action ranking
+- [x] **Trigger Triage** ([l2-trigger-triage.md](specifications/l2-trigger-triage.md)) [L2] — TriggerEnvelope intake pipeline, 4-outcome classifier (local CPU + cloud + rule fallback), dedup cache (depends on orchestration + scheduler + agent-session)
+- [x] **Mission Mode** ([l2-mission-mode.md](specifications/l2-mission-mode.md)) [L2] — two-phase autonomous goal execution: PRD generation → user checkpoint → story-verified loop with max-iterations circuit-breaker (depends on orchestration + kanban + tool-security)
+- [x] **Deep Research** ([l2-deep-research.md](specifications/l2-deep-research.md)) [L2] — iterative Think→Plan→Search→Extract→Synthesize engine, date-grounding, untrusted content wrapping, max_rounds circuit breaker (depends on orchestration + tool-security + context-management)
 
 ## Phase 7 — Leaf: TUI
 
