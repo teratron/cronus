@@ -11,11 +11,12 @@
 //! refinement — [`Schema`]'s query surface is the seam it would back.
 
 /// Version of the builtin vocabulary (tracks the reference schema it mirrors).
-pub const BUILTIN_SCHEMA_VERSION: &str = "0.4.5";
+pub const BUILTIN_SCHEMA_VERSION: &str = "0.4.6";
 
 /// Known command names (ALL_CAPS). The lexer tags an ALL_CAPS word as a
 /// `CommandName` only when it appears here; anything else lexes as a generic
-/// identifier.
+/// identifier. 51 commands total; `RUN` is the macro meta-command that
+/// bypasses schema vocabulary checks and is recognized before the validation pass.
 pub const KNOWN_COMMANDS: &[&str] = &[
     "FETCH",
     "STORE",
@@ -67,6 +68,7 @@ pub const KNOWN_COMMANDS: &[&str] = &[
     "PARSE_INDEX",
     "VERSION_BUMP",
     "GENERATE_DOC",
+    "RUN",
 ];
 
 /// Tone values accepted by the `+tone=` modifier and the `TONE` command.
@@ -96,6 +98,22 @@ pub const RESERVED_VARIABLES: &[&str] = &[
     "$quality",
     "$sentiment",
     "$confidence",
+    "$memory",
+    "$kb_results",
+];
+
+/// Runtime-owned variable names that user pipeline targets must not shadow (NL-8).
+/// These are set exclusively by the executor and are not writable by workflow steps.
+/// Writable reserved variables (`$out`, `$raw`, `$draft`, `$log`, `$quality`,
+/// `$sentiment`, `$confidence`) are intentionally excluded — commands assign to them.
+pub const RUNTIME_OWNED_VARIABLES: &[&str] = &[
+    "$in",
+    "$error",
+    "$meta",
+    "$ctx",
+    "$user",
+    "$session",
+    "$flags",
     "$memory",
     "$kb_results",
 ];
@@ -189,6 +207,11 @@ impl Schema {
         RESERVED_VARIABLES.contains(&name)
     }
 
+    /// Is `name` (with leading `$`) a runtime-owned variable that user steps must not shadow?
+    pub fn is_runtime_owned(&self, name: &str) -> bool {
+        RUNTIME_OWNED_VARIABLES.contains(&name)
+    }
+
     /// Is `tone` a valid tone value?
     pub fn is_valid_tone(&self, tone: &str) -> bool {
         VALID_TONES.contains(&tone)
@@ -242,5 +265,33 @@ mod tests {
     #[test]
     fn version_is_reported() {
         assert_eq!(Schema::builtin().version(), BUILTIN_SCHEMA_VERSION);
+    }
+
+    #[test]
+    fn run_is_known_command() {
+        let schema = Schema::builtin();
+        assert!(schema.is_command("RUN"), "RUN must be a known command");
+        assert_eq!(BUILTIN_SCHEMA_VERSION, "0.4.6", "version bump must accompany RUN addition");
+    }
+
+    #[test]
+    fn runtime_owned_is_subset_of_reserved() {
+        for var in RUNTIME_OWNED_VARIABLES {
+            assert!(
+                RESERVED_VARIABLES.contains(var),
+                "{var} in RUNTIME_OWNED_VARIABLES but missing from RESERVED_VARIABLES"
+            );
+        }
+    }
+
+    #[test]
+    fn runtime_owned_excludes_writable_reserved() {
+        let writable = ["$out", "$raw", "$draft", "$log", "$quality", "$sentiment", "$confidence"];
+        for var in writable {
+            assert!(
+                !RUNTIME_OWNED_VARIABLES.contains(&var),
+                "{var} must not be in RUNTIME_OWNED_VARIABLES (it is user-writable)"
+            );
+        }
     }
 }

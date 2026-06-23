@@ -1,0 +1,16 @@
+§wf:parallel_join v1.0
+;; Normative fixture: ~PARALLEL branches with ~JOIN result collection.
+
+§runtime: { core: schema.nodus }
+
+@in: { query: text }
+@out: $out
+@err: ESCALATE(human)
+
+@steps:
+  1. ~PARALLEL
+       GEN($in.query) → $draft
+       ANALYZE($in.query) → $analysis
+     ~JOIN → $results
+  2. GEN($results) → $out
+  3. LOG($out)

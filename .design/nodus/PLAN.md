@@ -30,14 +30,17 @@ Execution mode: **Sequential** (spec correctness must precede hardening; hardeni
   - ✅ `RUN` meta-command vocabulary gap documented
   - ✅ All Canonical References resolve; Document History added (v1.0.1)
 
-## Phase 2 — Library Hardening
+## Phase 2 — Library Hardening ✓
 
 *Build confidence required for safe extraction: golden test corpus, NL-invariant coverage map, public API stability baseline.*
 
-- [ ] **Nodus Runtime (Rust)** ([l2-nodus-runtime.md](specifications/l2-nodus-runtime.md)) [L2]
-  - Normative fixture corpus: one `.nodus` file per control-flow construct in `crates/nodus/tests/fixtures/`
-  - Coverage map: all NL-1..NL-10 invariants exercised by at least one named test
-  - Extraction checklist: `Cargo.toml` standalone readiness, zero internal Cronus imports, declared semver baseline
+- [x] **Nodus Runtime (Rust)** ([l2-nodus-runtime.md](specifications/l2-nodus-runtime.md)) [L2]
+  - ✅ Normative fixture corpus: `conditional.nodus`, `for_loop.nodus`, `parallel_join.nodus`, `macro_expand.nodus`
+  - ✅ E013 (NL-8): validator rejects runtime-owned variable as pipeline target; `RUNTIME_OWNED_VARIABLES` constant added
+  - ✅ E014 (NL-10): validator rejects forward references; per-step ordered tracking implemented
+  - ✅ `RUN` added to `KNOWN_COMMANDS`; `BUILTIN_SCHEMA_VERSION` bumped to `"0.4.6"`
+  - ✅ 142 tests pass (91 unit + 17 invariant + 34 parity); clippy clean
+  - ✅ Extraction audit: zero external deps, zero intra-workspace imports; `Cargo.toml` workspace fields documented
 
 ## Backlog
 

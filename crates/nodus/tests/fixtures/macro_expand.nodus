@@ -1,0 +1,15 @@
+§wf:macro_expand v1.0
+;; Normative fixture: @macro declaration and RUN invocation.
+
+§runtime: { core: schema.nodus }
+
+@in: { name: text }
+@out: $out
+@err: ESCALATE(human)
+
+@macro: greet
+  GEN($in.name) → $draft
+
+@steps:
+  1. RUN(@greet) → $out
+  2. LOG($out)

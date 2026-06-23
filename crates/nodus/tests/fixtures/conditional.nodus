@@ -1,0 +1,18 @@
+§wf:conditional v1.0
+;; Normative fixture: conditional branching — ?IF, ?ELIF, ?ELSE.
+
+§runtime: { core: schema.nodus }
+
+!PREF: formal OVER neutral
+
+@in: { severity: text, message: text }
+@out: $out
+@err: ESCALATE(human)
+
+@steps:
+  1. ANALYZE($in.message) ~intent ~sentiment → $classification
+  2. ?IF $classification.intent = "critical" → ESCALATE(on_call)
+     ?ELIF $classification.intent = "high" → NOTIFY(team)
+     ?ELSE → NOTIFY(standard)
+  3. GEN($in.severity) → $out
+  4. LOG($out)

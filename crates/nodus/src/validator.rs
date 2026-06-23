@@ -1,9 +1,9 @@
 //! Validator — structural lint and schema-vocabulary checks.
 //!
-//! Runs 28 rules against a parsed [`WorkflowFile`] AST and returns a flat list
+//! Runs 30 rules against a parsed [`WorkflowFile`] AST and returns a flat list
 //! of [`Diagnostic`]s. Rules are grouped by severity:
 //!
-//! - **Error** (E001–E012): block execution when found.
+//! - **Error** (E001–E014): block execution when found.
 //! - **Warning** (W001–W010): workflow runs but has unsafe or incomplete patterns.
 //! - **Info** (I001–I006): style suggestions.
 //!
@@ -63,7 +63,7 @@ impl Diagnostic {
 pub struct Validator;
 
 impl Validator {
-    /// Run all 28 lint rules against `ast` and return accumulated diagnostics.
+    /// Run all 30 lint rules against `ast` and return accumulated diagnostics.
     pub fn validate(ast: &WorkflowFile, filename: &str) -> Vec<Diagnostic> {
         let mut d = Vec::new();
 
@@ -78,6 +78,8 @@ impl Validator {
         d.extend(Self::e010_until_has_max(ast, filename));
         // E011: core schema path filesystem check — deferred
         d.extend(Self::e012_name_matches_file(ast, filename));
+        d.extend(Self::e013_no_reserved_pipeline_target(ast, filename));
+        d.extend(Self::e014_no_forward_references(ast, filename));
 
         // Warnings
         d.extend(Self::w001_err_handler(ast, filename));
@@ -232,6 +234,88 @@ impl Validator {
             )];
         }
         vec![]
+    }
+
+    fn e013_no_reserved_pipeline_target(wf: &WorkflowFile, filename: &str) -> Vec<Diagnostic> {
+        let mut diags = Vec::new();
+        for step in &wf.steps {
+            for cmd in extract_commands_step(step) {
+                if let Some(target) = &cmd.pipeline_target {
+                    let root = target.split('.').next().unwrap_or(target);
+                    if vocab::RUNTIME_OWNED_VARIABLES.contains(&root) {
+                        diags.push(Diagnostic::new(
+                            Severity::Error,
+                            "E013",
+                            format!("Pipeline target '{root}' is runtime-owned and must not be reassigned."),
+                            filename,
+                        ));
+                    }
+                }
+            }
+        }
+        diags
+    }
+
+    fn e014_no_forward_references(wf: &WorkflowFile, filename: &str) -> Vec<Diagnostic> {
+        let mut pre_declared: std::collections::HashSet<String> = vocab::RESERVED_VARIABLES
+            .iter()
+            .map(|s| s.split('.').next().unwrap_or(s).to_string())
+            .collect();
+        if let Some(input) = &wf.input_decl {
+            for f in &input.fields {
+                pre_declared.insert(format!("${}", f.name));
+            }
+        }
+
+        // Collect pipeline targets declared anywhere within each top-level step.
+        let step_targets: Vec<std::collections::HashSet<String>> = wf
+            .steps
+            .iter()
+            .map(|step| {
+                let mut targets = std::collections::HashSet::new();
+                let mut dummy_used = std::collections::HashSet::new();
+                collect_vars_step(step, &mut targets, &mut dummy_used);
+                targets
+            })
+            .collect();
+
+        let mut diags = Vec::new();
+        let mut available = pre_declared.clone();
+
+        for (i, step) in wf.steps.iter().enumerate() {
+            // Within-step self-reference is permitted: include the current step's
+            // own targets in the availability set before checking usages.
+            let extended: std::collections::HashSet<String> = available
+                .iter()
+                .chain(step_targets[i].iter())
+                .cloned()
+                .collect();
+
+            let mut dummy_targets = std::collections::HashSet::new();
+            let mut step_used = std::collections::HashSet::new();
+            collect_vars_step(step, &mut dummy_targets, &mut step_used);
+
+            for usage in &step_used {
+                let root = usage.split('.').next().unwrap_or(usage);
+                if !extended.contains(root) && !extended.contains(usage.as_str()) {
+                    let forward = step_targets[i + 1..].iter().any(|ts| {
+                        ts.contains(root) || ts.contains(usage.as_str())
+                    });
+                    if forward {
+                        diags.push(Diagnostic::new(
+                            Severity::Error,
+                            "E014",
+                            format!("{usage} referenced before assignment."),
+                            filename,
+                        ));
+                    }
+                }
+            }
+
+            available.extend(step_targets[i].iter().cloned());
+        }
+
+        diags
     }
 
     // ─── Warnings ─────────────────────────────────────────────────────────────
@@ -915,6 +999,159 @@ mod tests {
             diags
                 .iter()
                 .any(|d| d.code == "I006" && d.severity == Severity::Info)
+        );
+    }
+
+    #[test]
+    fn e013_fires_when_pipeline_target_is_reserved() {
+        use crate::ast::{CommandCall, RuntimeBlock, Step, Stmt, WorkflowFile};
+
+        let wf = WorkflowFile {
+            runtime: Some(RuntimeBlock { core: "schema.nodus".to_string(), ..Default::default() }),
+            steps: vec![Step {
+                number: 1,
+                body: Some(Stmt::Command(CommandCall {
+                    name: "GEN".to_string(),
+                    args: vec!["prompt".to_string()],
+                    pipeline_target: Some("$in".to_string()),
+                    ..Default::default()
+                })),
+                ..Default::default()
+            }],
+            ..Default::default()
+        };
+        let diags = Validator::validate(&wf, "");
+        assert!(
+            diags.iter().any(|d| d.code == "E013"),
+            "expected E013 for pipeline target shadowing runtime-owned $in; got: {:?}",
+            diags.iter().map(|d| (&d.code, &d.message)).collect::<Vec<_>>()
+        );
+    }
+
+    #[test]
+    fn no_e013_when_target_is_user_defined() {
+        use crate::ast::{CommandCall, RuntimeBlock, Step, Stmt, WorkflowFile};
+
+        let wf = WorkflowFile {
+            runtime: Some(RuntimeBlock { core: "schema.nodus".to_string(), ..Default::default() }),
+            steps: vec![Step {
+                number: 1,
+                body: Some(Stmt::Command(CommandCall {
+                    name: "GEN".to_string(),
+                    args: vec!["prompt".to_string()],
+                    pipeline_target: Some("$result".to_string()),
+                    ..Default::default()
+                })),
+                ..Default::default()
+            }],
+            ..Default::default()
+        };
+        let diags = Validator::validate(&wf, "");
+        assert!(
+            !diags.iter().any(|d| d.code == "E013"),
+            "unexpected E013 for user-defined pipeline target"
+        );
+    }
+
+    #[test]
+    fn no_e013_for_writable_reserved_vars() {
+        use crate::ast::{CommandCall, RuntimeBlock, Step, Stmt, WorkflowFile};
+
+        for target in ["$out", "$draft", "$raw", "$quality"] {
+            let wf = WorkflowFile {
+                runtime: Some(RuntimeBlock { core: "schema.nodus".to_string(), ..Default::default() }),
+                steps: vec![Step {
+                    number: 1,
+                    body: Some(Stmt::Command(CommandCall {
+                        name: "GEN".to_string(),
+                        args: vec!["prompt".to_string()],
+                        pipeline_target: Some(target.to_string()),
+                        ..Default::default()
+                    })),
+                    ..Default::default()
+                }],
+                ..Default::default()
+            };
+            let diags = Validator::validate(&wf, "");
+            assert!(
+                !diags.iter().any(|d| d.code == "E013"),
+                "unexpected E013 for writable reserved variable {target}"
+            );
+        }
+    }
+
+    #[test]
+    fn e014_fires_when_variable_used_before_assignment() {
+        use crate::ast::{CommandCall, RuntimeBlock, Step, Stmt, WorkflowFile};
+
+        // Step 1 uses $result; step 2 declares → $result — forward reference
+        let wf = WorkflowFile {
+            runtime: Some(RuntimeBlock { core: "schema.nodus".to_string(), ..Default::default() }),
+            steps: vec![
+                Step {
+                    number: 1,
+                    body: Some(Stmt::Command(CommandCall {
+                        name: "LOG".to_string(),
+                        args: vec!["$result".to_string()],
+                        ..Default::default()
+                    })),
+                    ..Default::default()
+                },
+                Step {
+                    number: 2,
+                    body: Some(Stmt::Command(CommandCall {
+                        name: "GEN".to_string(),
+                        args: vec!["prompt".to_string()],
+                        pipeline_target: Some("$result".to_string()),
+                        ..Default::default()
+                    })),
+                    ..Default::default()
+                },
+            ],
+            ..Default::default()
+        };
+        let diags = Validator::validate(&wf, "");
+        assert!(
+            diags.iter().any(|d| d.code == "E014"),
+            "expected E014 for forward reference; got: {:?}",
+            diags.iter().map(|d| (&d.code, &d.message)).collect::<Vec<_>>()
+        );
+    }
+
+    #[test]
+    fn no_e014_when_variable_assigned_in_prior_step() {
+        use crate::ast::{CommandCall, RuntimeBlock, Step, Stmt, WorkflowFile};
+
+        // Step 1 declares → $result; step 2 uses $result — correct order
+        let wf = WorkflowFile {
+            runtime: Some(RuntimeBlock { core: "schema.nodus".to_string(), ..Default::default() }),
+            steps: vec![
+                Step {
+                    number: 1,
+                    body: Some(Stmt::Command(CommandCall {
+                        name: "GEN".to_string(),
+                        args: vec!["prompt".to_string()],
+                        pipeline_target: Some("$result".to_string()),
+                        ..Default::default()
+                    })),
+                    ..Default::default()
+                },
+                Step {
+                    number: 2,
+                    body: Some(Stmt::Command(CommandCall {
+                        name: "LOG".to_string(),
+                        args: vec!["$result".to_string()],
+                        ..Default::default()
+                    })),
+                    ..Default::default()
+                },
+            ],
+            ..Default::default()
+        };
+        let diags = Validator::validate(&wf, "");
+        assert!(
+            !diags.iter().any(|d| d.code == "E014"),
+            "unexpected E014 for correctly-ordered variable usage"
         );
     }
 

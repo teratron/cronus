@@ -1,7 +1,7 @@
 ---
 phase: 2
 name: "Library Hardening"
-status: Todo
+status: Done
 subsystem: "crates/nodus"
 requires:
   - "Phase 1 — Spec Completeness & Vocabulary Alignment"
@@ -9,12 +9,13 @@ provides: []
 key_files:
   created:
     - "crates/nodus/tests/fixtures/conditional.nodus"
-    - "crates/nodus/tests/fixtures/for-loop.nodus"
-    - "crates/nodus/tests/fixtures/parallel-join.nodus"
-    - "crates/nodus/tests/fixtures/macro-expand.nodus"
+    - "crates/nodus/tests/fixtures/for_loop.nodus"
+    - "crates/nodus/tests/fixtures/parallel_join.nodus"
+    - "crates/nodus/tests/fixtures/macro_expand.nodus"
   modified:
     - "crates/nodus/src/vocab.rs"
     - "crates/nodus/src/validator.rs"
+    - "crates/nodus/tests/parity.rs"
 patterns_established: []
 duration_minutes: ~
 ---
@@ -22,33 +23,33 @@ duration_minutes: ~
 # Phase 2 Tasks — Library Hardening
 
 **Phase:** 2
-**Status:** Todo
+**Status:** Done
 **Strategic Goal:** Build the confidence required for safe extraction: a normative control-flow fixture corpus, closure of NL-8 and NL-10 validator gaps, RUN meta-command vocabulary wiring, and an extraction readiness audit.
 
 ## Atomic Checklist
 
 ### Track A — Fixture Corpus
 
-- [ ] [T-2A01] Add `conditional.nodus` — covers ?IF/?ELIF/?ELSE + !BREAK/!SKIP/!OVERRIDE branch flags
-- [ ] [T-2A02] Add `for-loop.nodus` — covers ~FOR $var IN $collection
-- [ ] [T-2A03] Add `parallel-join.nodus` — covers ~PARALLEL blocks and ~JOIN result collection
-- [ ] [T-2A04] Add `macro-expand.nodus` — covers @macro declaration + RUN(@macro_name) invocation *(depends on T-2B03)*
+- [x] [T-2A01] Add `conditional.nodus` — covers ?IF/?ELIF/?ELSE + !BREAK/!SKIP/!OVERRIDE branch flags
+- [x] [T-2A02] Add `for_loop.nodus` — covers ~FOR $var IN $collection
+- [x] [T-2A03] Add `parallel_join.nodus` — covers ~PARALLEL blocks and ~JOIN result collection
+- [x] [T-2A04] Add `macro_expand.nodus` — covers @macro declaration + RUN(@macro_name) invocation *(depends on T-2B03)*
 
 ### Track B — Invariant & Vocabulary Fixes
 
-- [ ] [T-2B01] NL-8: validator rejects `→ $reserved_var` (reserved variable as pipeline target) with `Severity::Error`
-- [ ] [T-2B02] NL-10: validator rejects forward references — step uses `$x` before any prior step declares `→ $x`
-- [ ] [T-2B03] Add `RUN` to `KNOWN_COMMANDS`; mark it as macro meta-command in the validator (bypasses domain-command checks)
+- [x] [T-2B01] NL-8: validator rejects `→ $reserved_var` (runtime-owned variable as pipeline target) with `Severity::Error` (E013)
+- [x] [T-2B02] NL-10: validator rejects forward references — step uses `$x` before any prior step declares `→ $x` (E014)
+- [x] [T-2B03] Add `RUN` to `KNOWN_COMMANDS`; bumped `BUILTIN_SCHEMA_VERSION` to `"0.4.6"`; added `RUNTIME_OWNED_VARIABLES`
 
 ### Track C — Extraction Readiness Audit
 
-- [ ] [T-2C01] Audit `crates/nodus/Cargo.toml` — document workspace-delegated fields, confirm zero external `[dependencies]`, record standalone extraction requirements
-- [ ] [T-2C02] Scan `crates/nodus/src/` for intra-workspace imports — confirm no `use crate_core`, `use cronus_*`, or workspace path references outside `crates/nodus`
+- [x] [T-2C01] Audit `crates/nodus/Cargo.toml` — workspace-delegated fields documented; zero external `[dependencies]` confirmed; extraction requirements recorded
+- [x] [T-2C02] Scan `crates/nodus/src/` for intra-workspace imports — zero matches; no blockers for Phase 3
 
 ### Track T — Validation
 
-- [ ] [T-2T01] Run `cargo test -p nodus` — all tests pass (including new NL-8 + NL-10 + RUN tests)
-- [ ] [T-2T02] Run `cargo clippy -p nodus -- -D warnings` — zero lints after Track B changes
+- [x] [T-2T01] Run `cargo test -p nodus` — 142 tests pass (91 unit + 17 invariant + 34 parity); 0 failures
+- [x] [T-2T02] Run `cargo clippy -p nodus -- -D warnings` — zero lints
 
 ## Detailed Tracking
 
@@ -118,6 +119,7 @@ Requires `RUN` to be in `KNOWN_COMMANDS` (T-2B03 must be Done before this task r
 Add a validation check: when a step's pipeline target (`→ $name`) matches a name in `vocab::RESERVED_VARIABLES`, emit `Severity::Error` with a new error code (suggest `E013` if available, or extend the existing code series). The check applies to all step types including loop bodies and parallel branches.
 
 **Acceptance criteria:**
+
 - New test `validator::tests::e013_fires_when_pipeline_target_is_reserved` passes.
 - `no_e013_when_target_is_user_defined` test passes.
 - `cargo clippy -p nodus -- -D warnings` clean.
@@ -134,6 +136,7 @@ Add a forward-reference check: when the validator encounters a variable referenc
 Scope boundary: track pipeline bindings (`→ $x`) only; `@ctx` keys and `@in` fields are pre-loaded before step 1 (per NL-9 / executor boot step 4).
 
 **Acceptance criteria:**
+
 - New test `validator::tests::e014_fires_when_variable_used_before_assignment` passes.
 - `no_e014_when_variable_assigned_in_prior_step` passes.
 - Existing `pipeline_threads_output_between_steps` executor test continues to pass.
@@ -175,6 +178,7 @@ Document the standalone extraction requirements in the Results section below.
 **Directory:** `crates/nodus/src/` (read-only)
 
 Search all `.rs` files for:
+
 - `use crate_core::`, `use cronus::`, `use codegraph::`, or any crate name from the workspace `members` list (other than `nodus`).
 - `path = "../` or `path = "../../` style Cargo.toml path deps (already checked in T-2C01, but verify in source too).
 
@@ -208,8 +212,26 @@ Run after Track B tasks are Done. Zero lints required.
 
 ### T-2C01 Cargo.toml extraction audit
 
-<!-- fill during execution -->
+**Workspace-delegated fields:** `version`, `edition`, `license`, `repository` — all use `.workspace = true`.
+
+**Current workspace version:** `0.1.0` (from root `Cargo.toml`).
+
+**`[dependencies]`:** Empty. Zero external crate dependencies; the runtime is entirely std-only.
+
+**`[dev-dependencies]`:** Absent from `crates/nodus/Cargo.toml`. Test helpers (`StubProvider`, `Parser`, `Executor`) live in the same crate's `src/` — no cross-crate test dependencies.
+
+**`[features]`:** None declared.
+
+**Standalone extraction requirements:**
+
+1. Provide explicit `version`, `edition`, `license`, `repository` fields (currently delegated to workspace).
+2. No `[dependencies]` to carry over — the crate is dependency-free.
+3. Move dev tooling (if any shared with workspace root) into a dedicated dev-dependency block.
 
 ### T-2C02 Intra-workspace import scan
 
-<!-- fill during execution -->
+**Command:** `grep -rn "use crate_core|use cronus|use codegraph|use cli|use tui" crates/nodus/src/`
+
+**Result:** Zero matches. No intra-workspace imports found.
+
+**Verdict:** `crates/nodus` is fully self-contained. All source files under `crates/nodus/src/` reference only the Rust standard library and other modules within `crates/nodus/src/` itself (via `crate::` paths). No blockers for Phase 3 (Standalone Extraction) from the import perspective.

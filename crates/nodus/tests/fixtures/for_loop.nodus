@@ -1,0 +1,15 @@
+§wf:for_loop v1.0
+;; Normative fixture: ~FOR iteration over an input list.
+
+§runtime: { core: schema.nodus }
+
+@in: { items: list }
+@out: $out
+@err: ESCALATE(human)
+
+@steps:
+  1. ~FOR $item IN $in.items
+       LOG($item)
+     ~END
+  2. GEN($in.items) → $out
+  3. LOG($out)

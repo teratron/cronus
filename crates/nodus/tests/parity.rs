@@ -24,6 +24,10 @@ const LINT_PUBLISH_BEFORE_VALIDATE: &str =
     include_str!("fixtures/lint_publish_before_validate.nodus");
 const LINT_NAME_MISMATCH: &str = include_str!("fixtures/lint_name_mismatch.nodus");
 const UNTIL_QUALITY_LOOP: &str = include_str!("fixtures/until_quality_loop.nodus");
+const CONDITIONAL: &str = include_str!("fixtures/conditional.nodus");
+const FOR_LOOP: &str = include_str!("fixtures/for_loop.nodus");
+const PARALLEL_JOIN: &str = include_str!("fixtures/parallel_join.nodus");
+const MACRO_EXPAND: &str = include_str!("fixtures/macro_expand.nodus");
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
 
@@ -159,6 +163,58 @@ mod validation {
         assert!(
             !codes(&diags).contains(&"W002"),
             "unexpected W002 when @test blocks exist"
+        );
+    }
+
+    #[test]
+    fn conditional_no_block_errors() {
+        let diags = parse_and_validate(CONDITIONAL, "conditional.nodus");
+        let errors: Vec<_> = diags
+            .iter()
+            .filter(|d| d.severity == Severity::Error)
+            .collect();
+        assert!(
+            errors.is_empty(),
+            "expected no block-class errors for conditional; got: {errors:?}"
+        );
+    }
+
+    #[test]
+    fn for_loop_no_block_errors() {
+        let diags = parse_and_validate(FOR_LOOP, "for_loop.nodus");
+        let errors: Vec<_> = diags
+            .iter()
+            .filter(|d| d.severity == Severity::Error)
+            .collect();
+        assert!(
+            errors.is_empty(),
+            "expected no block-class errors for for_loop; got: {errors:?}"
+        );
+    }
+
+    #[test]
+    fn parallel_join_no_block_errors() {
+        let diags = parse_and_validate(PARALLEL_JOIN, "parallel_join.nodus");
+        let errors: Vec<_> = diags
+            .iter()
+            .filter(|d| d.severity == Severity::Error)
+            .collect();
+        assert!(
+            errors.is_empty(),
+            "expected no block-class errors for parallel_join; got: {errors:?}"
+        );
+    }
+
+    #[test]
+    fn macro_expand_no_block_errors() {
+        let diags = parse_and_validate(MACRO_EXPAND, "macro_expand.nodus");
+        let errors: Vec<_> = diags
+            .iter()
+            .filter(|d| d.severity == Severity::Error)
+            .collect();
+        assert!(
+            errors.is_empty(),
+            "expected no block-class errors for macro_expand; got: {errors:?}"
         );
     }
 
@@ -313,6 +369,34 @@ mod execution {
             Status::Ok,
             "bounded ~UNTIL loop must not abort the workflow"
         );
+    }
+
+    #[test]
+    fn conditional_executes_ok() {
+        let result = workflows::run(CONDITIONAL, "conditional.nodus", None)
+            .expect("conditional must execute without block-class errors");
+        assert_eq!(result.status, Status::Ok, "conditional must return Status::Ok");
+    }
+
+    #[test]
+    fn for_loop_executes_ok() {
+        let result = workflows::run(FOR_LOOP, "for_loop.nodus", None)
+            .expect("for_loop must execute without block-class errors");
+        assert_eq!(result.status, Status::Ok, "for_loop must return Status::Ok");
+    }
+
+    #[test]
+    fn parallel_join_executes_ok() {
+        let result = workflows::run(PARALLEL_JOIN, "parallel_join.nodus", None)
+            .expect("parallel_join must execute without block-class errors");
+        assert_eq!(result.status, Status::Ok, "parallel_join must return Status::Ok");
+    }
+
+    #[test]
+    fn macro_expand_executes_ok() {
+        let result = workflows::run(MACRO_EXPAND, "macro_expand.nodus", None)
+            .expect("macro_expand must execute without block-class errors");
+        assert_eq!(result.status, Status::Ok, "macro_expand must return Status::Ok");
     }
 
     #[test]

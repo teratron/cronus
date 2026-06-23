@@ -1,7 +1,7 @@
 # Master Task Index (Registry)
 
-**Version:** 1.1.0
-**Generated:** 2026-06-23
+**Version:** 1.2.0
+**Generated:** 2026-06-24
 **Based on:** .design/nodus/PLAN.md v1.0.0
 **Based on RULES:** .design/RULES.md v1.4.0
 **Execution Mode:** Sequential
@@ -16,7 +16,7 @@ Tactical registry of all phases. Atomic checklists live in `tasks/phase-{N}.md`.
 | Phase | Description | Status |
 | --- | --- | --- |
 | [Phase 1](archives/tasks/phase-1.md) | Spec Completeness & Vocabulary Alignment | `Done (Archived)` |
-| [Phase 2](tasks/phase-2.md) | Library Hardening: fixture corpus, NL-8/NL-10 enforcement, RUN vocabulary, extraction audit | `Todo` |
+| [Phase 2](archives/tasks/phase-2.md) | Library Hardening: fixture corpus, NL-8/NL-10 enforcement, RUN vocabulary, extraction audit | `Done (Archived)` |
 
 ## Pending Phases
 
@@ -26,5 +26,5 @@ Tactical registry of all phases. Atomic checklists live in `tasks/phase-{N}.md`.
 
 ## Meta Information
 
-- **Last Updated**: 2026-06-23
+- **Last Updated**: 2026-06-24
 - **Maintainer**: Core Team
