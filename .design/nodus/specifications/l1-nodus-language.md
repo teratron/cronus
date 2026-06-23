@@ -1,6 +1,6 @@
 # Nodus DSL Language
 
-**Version:** 1.0.0
+**Version:** 1.0.1
 **Status:** Stable
 **Layer:** concept
 
@@ -94,6 +94,23 @@ N. COMMAND(args) +modifier=value ^validator ~flag → $target
 
 Step numbers are positive integers; numbers need not be consecutive but must be monotonically increasing within `@steps:`.
 
+Macro invocation — expands a `@macro:` body in place of a step:
+
+```text
+[REFERENCE]
+N. RUN(@macro_name) +modifier=value → $target
+```
+
+`RUN` is a built-in meta-command reserved for macro expansion. It accepts the
+`@macro:` name (sigil included) as its sole argument. Standard `+modifier` and
+`→ $target` decorators apply; `^validator` and `~flag` decorators are not
+permitted on macro steps. The transpiler renders macro invocations as
+`Run macro: macro_name` in human form.
+
+`RUN` is not a domain command and does not appear in the schema vocabulary table.
+Conforming implementations must recognize `RUN(@…)` before the schema validation
+pass so that macro steps are not rejected as unknown commands.
+
 ### 4.4 Control flow
 
 ```text
@@ -116,9 +133,17 @@ Step numbers are positive integers; numbers need not be consecutive but must be 
 ```
 
 Branch-level flags:
+
 - `!BREAK` — exit the enclosing loop immediately
 - `!SKIP` — continue to the next loop iteration
 - `!OVERRIDE` — suppress a `!PREF` rule for this branch only (NL-3)
+
+**Parallel error propagation**: if any branch in a `~PARALLEL` block raises an
+error, the block enters fail-fast state — `~JOIN` is bypassed and the error is
+forwarded to the `@err:` handler (or terminates with `NODUS:UNHANDLED_ERROR`
+if no handler is declared). `NODUS:RULE_VIOLATION` bypasses `@err:` entirely
+per NL-2. Runtimes that execute `~PARALLEL` branches sequentially (permitted by
+the "scheduling hint" clause) apply the same fail-fast semantics.
 
 ### 4.5 Error model
 
@@ -150,3 +175,10 @@ A runtime error carries a typed `NODUS:*` code. The `@err:` handler is invoked f
 | --- | --- | --- |
 | `[RUNTIME]` | `crates/nodus/` | Reference implementation of this spec |
 | `[FIXTURES]` | `crates/nodus/tests/fixtures/` | Canonical sample workflows (normative test corpus) |
+
+## Document History
+
+| Version | Date | Change |
+| --- | --- | --- |
+| 1.0.1 | 2026-06-23 | Added macro invocation syntax (`RUN(@macro_name)`) to §4.3; added `~PARALLEL` fail-fast error propagation semantics to §4.4 |
+| 1.0.0 | 2026-06-23 | Initial spec — language invariants NL-1..NL-10, file types, section grammar, step syntax, control flow, error taxonomy |

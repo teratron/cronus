@@ -1,6 +1,6 @@
 # Nodus Runtime (Rust)
 
-**Version:** 1.0.0
+**Version:** 1.0.1
 **Status:** Stable
 **Layer:** implementation
 **Implements:** l1-nodus-language.md
@@ -127,6 +127,10 @@ Tone values (`+tone=` modifier): `warm` · `neutral` · `formal` · `casual` · 
 
 Reserved variables: `$in` `$out` `$error` `$meta` `$raw` `$draft` `$ctx` `$user` `$session` `$log` `$flags` `$quality` `$sentiment` `$confidence` `$memory` `$kb_results`
 
+**Vocabulary alignment (v0.4.5):** `KNOWN_COMMANDS` contains **50** commands across the 8 categories above. `BUILTIN_SCHEMA_VERSION = "0.4.5"` matches the spec.
+
+**Vocabulary gap — `RUN` meta-command:** `TRANSPILER_VERB_MAP` includes `("RUN", "Run macro")`, but `RUN` is absent from `KNOWN_COMMANDS`. `RUN` is the macro-invocation meta-command defined in l1-nodus-language.md §4.3 — it must be recognized before the schema validation pass, not looked up in the vocabulary table. An implementation may handle this by either: (a) adding `RUN` to `KNOWN_COMMANDS` and suppressing the domain-command checks for it, or (b) pre-processing macro steps before schema validation. Either approach is conforming; the choice is an implementation detail.
+
 ## 5. Drawbacks & Alternatives
 
 - **`StubProvider` gap**: the stub returns placeholder values; real AI generation requires a concrete `ModelProvider` wired at the host layer. Tests that rely on stub output cannot verify generation quality.
@@ -144,3 +148,10 @@ Reserved variables: `$in` `$out` `$error` `$meta` `$raw` `$draft` `$ctx` `$user`
 | `[WORKFLOWS]` | `crates/nodus/src/workflows.rs` | Public API function signatures and contracts |
 | `[AST]` | `crates/nodus/src/ast.rs` | Full AST node type definitions |
 | `[FIXTURES]` | `crates/nodus/tests/fixtures/` | Canonical sample workflows (normative test corpus) |
+
+## Document History
+
+| Version | Date | Change |
+| --- | --- | --- |
+| 1.0.1 | 2026-06-23 | §4.6: documented vocabulary alignment (50 commands verified against `vocab.rs`), added `RUN` meta-command gap note |
+| 1.0.0 | 2026-06-23 | Initial spec — module structure, AST nodes, Value type, executor boot sequence, public API, vocabulary schema v0.4.5 |

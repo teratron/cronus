@@ -15,7 +15,7 @@ Tactical registry of all phases. Atomic checklists live in `tasks/phase-{N}.md`.
 
 | Phase | Description | Status |
 | --- | --- | --- |
-| [Phase 1](tasks/phase-1.md) | Spec Completeness & Vocabulary Alignment | `Todo` |
+| [Phase 1](archives/tasks/phase-1.md) | Spec Completeness & Vocabulary Alignment | `Done (Archived)` |
 
 ## Pending Phases
 

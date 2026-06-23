@@ -21,14 +21,14 @@ Execution mode: **Sequential** (spec correctness must precede hardening; hardeni
 
 *Close open items in both specs; ensure the vocabulary table and Canonical References are authoritative.*
 
-- [ ] **Nodus DSL Language** ([l1-nodus-language.md](specifications/l1-nodus-language.md)) [L1]
-  - Fill TBD: `~PARALLEL` branch error propagation semantics (§4.4)
-  - Fill TBD: `@macro` invocation syntax in `@steps` (§4.3 / §4.4)
-  - Add Document History table
-- [ ] **Nodus Runtime (Rust)** ([l2-nodus-runtime.md](specifications/l2-nodus-runtime.md)) [L2]
-  - Cross-check §4.6 vocabulary table against `crates/nodus/src/vocab.rs::KNOWN_COMMANDS`
-  - Verify all Canonical References resolve to existing source paths
-  - Add Document History table
+- [x] **Nodus DSL Language** ([l1-nodus-language.md](specifications/l1-nodus-language.md)) [L1]
+  - ✅ `~PARALLEL` fail-fast error propagation documented (§4.4)
+  - ✅ `RUN(@macro_name)` macro invocation syntax documented (§4.3)
+  - ✅ Document History added (v1.0.1)
+- [x] **Nodus Runtime (Rust)** ([l2-nodus-runtime.md](specifications/l2-nodus-runtime.md)) [L2]
+  - ✅ §4.6 verified: 50 commands match `vocab.rs::KNOWN_COMMANDS`; `BUILTIN_SCHEMA_VERSION` = "0.4.5"
+  - ✅ `RUN` meta-command vocabulary gap documented
+  - ✅ All Canonical References resolve; Document History added (v1.0.1)
 
 ## Phase 2 — Library Hardening
 
