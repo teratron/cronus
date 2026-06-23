@@ -1,8 +1,8 @@
 # Implementation Plan
 
-**Version:** 1.0.0
-**Generated:** 2026-06-23
-**Based on:** .design/nodus/INDEX.md v1.0.1
+**Version:** 1.1.0
+**Generated:** 2026-06-24
+**Based on:** .design/nodus/INDEX.md v1.0.2
 **Status:** Active
 
 ## Overview
@@ -42,6 +42,13 @@ Execution mode: **Sequential** (spec correctness must precede hardening; hardeni
   - ✅ 142 tests pass (91 unit + 17 invariant + 34 parity); clippy clean
   - ✅ Extraction audit: zero external deps, zero intra-workspace imports; `Cargo.toml` workspace fields documented
 
-## Backlog
+## Phase 3 — Standalone Extraction
 
-- Phase 3 — Standalone Extraction (move `crates/nodus` to an independent repository, update Cronus to depend on the published crate)
+*Prepare `crates/nodus` for publication as an independent library: sync the spec with Phase 2 implementation, harden the Cargo manifest for crates.io, document the public API, and produce the extraction artifacts (CI workflow, extraction procedure).*
+
+- [ ] **Nodus Runtime (Rust)** ([l2-nodus-runtime.md](specifications/l2-nodus-runtime.md)) [L2]
+  - Sync spec with Phase 2 state: BUILTIN_SCHEMA_VERSION v0.4.6, 51 commands, E013/E014, RUNTIME_OWNED_VARIABLES constant; bump spec to v1.0.2
+  - Replace workspace-delegated `Cargo.toml` fields with explicit values; add crates.io publication metadata (description, keywords, categories, readme, homepage, documentation)
+  - Add `//!` crate-level doc and `///` item-level doc to all public API surfaces
+  - Write `.github/workflows/ci.yml` (standalone CI: test + clippy + fmt + doc)
+  - Write `EXTRACTION.md` — step-by-step human procedure for repo creation, tag, and crates.io publish
