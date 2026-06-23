@@ -4,7 +4,7 @@
 <!-- Maximum 100 lines. Agent updates AFTER each completed action. -->
 
 **Workspace:** main
-**Updated:** 2026-06-22 09:46
+**Updated:** 2026-06-23 20:07
 **Phase:** 6 — Orchestration & Autonomy
 **Status:** Active
 
@@ -12,7 +12,7 @@
 
 - **Task:** Phase 4 complete (14/14 tasks done, 453 tests, 0 failures). Phase 5 decomposed into 12 atomic tasks across 5 tracks. Starting Wave 1: T-5A01 (Tool Security), T-5B01 (Role Catalog), T-5B02 (Kanban Board), T-5D01 (Quality Pipeline) — all parallel, no cross-Phase-5 deps.
 - **Spec:** l2-tool-security.md, l2-role-catalog.md, l2-kanban-board.md, l2-quality-pipeline.md
-- **Next Action:** Plan complete — author new scope via /magic.spec main (or /magic.status for a briefing)
+- **Next Action:** Run /magic.task main to update the plan
 
 ## Progress
 

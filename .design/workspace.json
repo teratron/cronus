@@ -3,6 +3,9 @@
   "workspaces": {
     "main": {
       "description": "Primary project workspace"
+    },
+    "nodus": {
+      "description": "Nodus DSL runtime — standalone workflow-language library"
     }
   },
   "finalization": {
