@@ -1,9 +1,18 @@
 [package]
-name = "nodus"
-version.workspace = true
-edition.workspace = true
-license.workspace = true
-repository.workspace = true
+name        = "nodus"
+version     = "0.1.0"
+edition     = "2024"
+license     = "MIT"
+repository  = "https://github.com/teratron/cronus"
+description = "Declarative workflow DSL and Rust runtime for AI-augmented automation pipelines"
+homepage    = "https://github.com/teratron/cronus"
+documentation = "https://docs.rs/nodus"
+keywords    = ["workflow", "dsl", "automation", "ai", "declarative"]
+categories  = ["parser-implementations", "development-tools"]
+readme      = "README.md"
+
+[package.metadata.docs.rs]
+all-features = true
 
 [dependencies]
-# Self-contained workflow-language runtime; the port lands in Phase 2.
+# Self-contained; zero runtime dependencies beyond std.

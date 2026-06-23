@@ -13,8 +13,8 @@
 //! 5. Match `@ON` triggers
 //! 6. Execute `@steps` sequentially; thread pipeline `→` targets between steps
 //!
-//! The result contract (`RunResult`) is the structured surface consumed by the
-//! library API (T-2F01) and satisfies the WFL-8 invariant.
+//! Every execution returns a [`RunResult`] regardless of outcome; callers
+//! inspect `status` first, then use `out`, `log`, and `errors` for details.
 
 use crate::ast::{AbsoluteRule, CommandCall, RuleKind, Step, Stmt, WorkflowFile};
 use crate::vocab;
@@ -80,7 +80,7 @@ impl From<&str> for Value {
 
 // ─── Result contract ──────────────────────────────────────────────────────────
 
-/// Execution status (WFL-8).
+/// Overall outcome of a workflow execution.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum Status {
     /// All steps completed without errors.
@@ -115,7 +115,7 @@ pub struct RuntimeError {
     pub reason: String,
 }
 
-/// The structured output of a workflow execution (WFL-8).
+/// The structured output of a workflow execution.
 ///
 /// Every execution — successful or not — returns a `RunResult`. Callers
 /// inspect `status` first, then use `out`, `log`, and `errors` for details.

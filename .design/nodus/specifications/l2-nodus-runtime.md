@@ -1,13 +1,13 @@
 # Nodus Runtime (Rust)
 
-**Version:** 1.0.1
+**Version:** 1.0.2
 **Status:** Stable
 **Layer:** implementation
 **Implements:** l1-nodus-language.md
 
 ## Overview
 
-Concrete Rust implementation of the Nodus DSL: a self-contained crate (`crates/nodus`) comprising a lexer, parser (→ AST), validator (lint), executor, and transpiler. Vendored in the Cronus monorepo; the crate boundary keeps future extraction to a standalone repository low-cost. The current built-in schema version is **v0.4.5** (`BUILTIN_SCHEMA_VERSION`).
+Concrete Rust implementation of the Nodus DSL: a self-contained crate (`crates/nodus`) comprising a lexer, parser (→ AST), validator (lint), executor, and transpiler. Vendored in the Cronus monorepo; the crate boundary keeps future extraction to a standalone repository low-cost. The current built-in schema version is **v0.4.6** (`BUILTIN_SCHEMA_VERSION`).
 
 ## Related Specifications
 
@@ -22,7 +22,7 @@ A Rust implementation links in-process with any host (desktop, mobile, server) w
 
 - No runtime dependencies beyond `std`; model integration is injected via the `ModelProvider` trait.
 - `StubProvider` ships with the crate for tests and early development; real providers are wired at the host layer.
-- Schema and grammar are data, not code: `BUILTIN_SCHEMA_VERSION = "0.4.5"` is the baseline; adding a command requires updating `vocab.rs` and bumping the version constant.
+- Schema and grammar are data, not code: `BUILTIN_SCHEMA_VERSION = "0.4.6"` is the baseline; adding a command requires updating `vocab.rs` and bumping the version constant.
 - `Map` values use `Vec<(String, Value)>` (not `HashMap`) to preserve declaration order across transpiler round-trips (NL-6).
 
 ## 3. Invariant Compliance
@@ -36,9 +36,9 @@ A Rust implementation links in-process with any host (desktop, mobile, server) w
 | NL-5 Bounded loops | Validator checks every `~UNTIL` AST node for a `MAX:n` bound; absence emits `Severity::Error` code `E006` |
 | NL-6 Dual representation | `Transpiler::to_nodus` (compact, lossless) and `Transpiler::to_human` (one-way prose); round-trip test in `workflows.rs` verifies AST equality after compact re-parse |
 | NL-7 Closed value types | `executor::Value` is a closed Rust enum: `Null / Bool / Int / Float / Text / List / Map` — extension requires a source change and a breaking version bump |
-| NL-8 Reserved namespace | `vocab::RESERVED_VARIABLES` slice; validator emits `Severity::Error` if a pipeline target shadows a reserved name |
+| NL-8 Reserved namespace | `vocab::RUNTIME_OWNED_VARIABLES` (9-element subset of `RESERVED_VARIABLES`); validator emits `Severity::Error` code `E013` if a pipeline target (`→ $name`) names a runtime-owned variable |
 | NL-9 Typed I/O contract | Required `@in` fields (no `?` suffix, no default) verified by executor before step 1; missing input returns `Status::Error` |
-| NL-10 Sequential pipeline | AST `steps` field is `Vec<Step>` in declaration order; validator detects forward-reference targets and emits `Severity::Error` |
+| NL-10 Sequential pipeline | AST `steps` field is `Vec<Step>` in declaration order; validator emits `Severity::Error` code `E014` when a variable is referenced before any prior step declares it via `→ $name` |
 
 ## 4. Detailed Design
 
@@ -52,7 +52,7 @@ crates/nodus/src/
 ├── lexer.rs         — tokenizer → Vec<Token>
 ├── parser.rs        — recursive-descent parser → WorkflowFile AST
 ├── ast.rs           — all AST node types (FileType, FileHeader, WorkflowFile, Stmt, …)
-├── vocab.rs         — Schema, KNOWN_COMMANDS, RESERVED_VARIABLES, VALID_TONES, error_code
+├── vocab.rs         — Schema, KNOWN_COMMANDS, RESERVED_VARIABLES, RUNTIME_OWNED_VARIABLES, VALID_TONES, error_code
 ├── validator.rs     — Diagnostic, Severity, Validator
 ├── executor.rs      — Value, Executor, ModelProvider trait, StubProvider, RunResult, Status
 ├── transpiler.rs    — Transpiler (to_nodus / to_human)
@@ -110,7 +110,7 @@ pub enum Value {
 
 The `ModelProvider` trait is the sole extension point for real model integration. Any host (Cronus core, CLI, test harness) may supply a concrete provider; the crate itself is provider-agnostic.
 
-### 4.6 Vocabulary schema (v0.4.5)
+### 4.6 Vocabulary schema (v0.4.6)
 
 | Category | Commands |
 | --- | --- |
@@ -122,14 +122,15 @@ The `ModelProvider` trait is the sole extension point for real model integration
 | Execution | `EXECUTE`, `SIMULATE`, `EXECUTE_TEST`, `TRANSPILE` |
 | Filesystem | `WRITE`, `READ_FILE`, `MKDIR`, `FILE_EXISTS`, `SCAN_DIR`, `MOVE`, `COPY` |
 | System & meta | `ENV`, `DATE`, `COUNTER`, `GIT`, `QUERY_GIT`, `HASH`, `VERSION_BUMP` |
+| Meta-command | `RUN` |
 
 Tone values (`+tone=` modifier): `warm` · `neutral` · `formal` · `casual` · `urgent` · `empathetic` · `brand`
 
 Reserved variables: `$in` `$out` `$error` `$meta` `$raw` `$draft` `$ctx` `$user` `$session` `$log` `$flags` `$quality` `$sentiment` `$confidence` `$memory` `$kb_results`
 
-**Vocabulary alignment (v0.4.5):** `KNOWN_COMMANDS` contains **50** commands across the 8 categories above. `BUILTIN_SCHEMA_VERSION = "0.4.5"` matches the spec.
+**Runtime-owned variables** (`RUNTIME_OWNED_VARIABLES` — read-only subset of reserved): `$in` `$error` `$meta` `$ctx` `$user` `$session` `$flags` `$memory` `$kb_results` — pipeline targets (`→ $name`) must not name these variables; violation emits E013.
 
-**Vocabulary gap — `RUN` meta-command:** `TRANSPILER_VERB_MAP` includes `("RUN", "Run macro")`, but `RUN` is absent from `KNOWN_COMMANDS`. `RUN` is the macro-invocation meta-command defined in l1-nodus-language.md §4.3 — it must be recognized before the schema validation pass, not looked up in the vocabulary table. An implementation may handle this by either: (a) adding `RUN` to `KNOWN_COMMANDS` and suppressing the domain-command checks for it, or (b) pre-processing macro steps before schema validation. Either approach is conforming; the choice is an implementation detail.
+**Vocabulary alignment (v0.4.6):** `KNOWN_COMMANDS` contains **51** commands across the 9 categories above. `BUILTIN_SCHEMA_VERSION = "0.4.6"` matches the spec. `RUN` is a meta-command — it bypasses domain-command argument and modifier checks; only decorator rules (`+modifier`, `→ $target`) apply.
 
 ## 5. Drawbacks & Alternatives
 
@@ -153,5 +154,6 @@ Reserved variables: `$in` `$out` `$error` `$meta` `$raw` `$draft` `$ctx` `$user`
 
 | Version | Date | Change |
 | --- | --- | --- |
+| 1.0.2 | 2026-06-24 | §4.6: BUILTIN_SCHEMA_VERSION v0.4.6, 51 commands (RUN added as meta-command), RUNTIME_OWNED_VARIABLES constant documented; §3: NL-8→E013, NL-10→E014 enforced |
 | 1.0.1 | 2026-06-23 | §4.6: documented vocabulary alignment (50 commands verified against `vocab.rs`), added `RUN` meta-command gap note |
 | 1.0.0 | 2026-06-23 | Initial spec — module structure, AST nodes, Value type, executor boot sequence, public API, vocabulary schema v0.4.5 |

@@ -6,24 +6,26 @@
 **Workspace:** nodus
 **Updated:** 2026-06-24
 **Phase:** 3 — Standalone Extraction
-**Status:** Active
+**Status:** Done
 
 ## Current Position
 
-- **Task:** Phase 3 planned (9 tasks, tracks A/B/C/D/T) — ready for execution
-- **Spec:** l1-nodus-language.md v1.0.1, l2-nodus-runtime.md v1.0.1 (sync pending in T-3A01)
-- **Next Action:** Run /magic.run nodus to execute Phase 3
+- **Task:** All phases complete — crate is extraction-ready
+- **Spec:** l1-nodus-language.md v1.0.1, l2-nodus-runtime.md v1.0.2
+- **Next Action:** Human operator: follow `crates/nodus/EXTRACTION.md` to create standalone repository and publish to crates.io
 
 ## Progress
 
 ```
-Overall: [2/3] ████████ 67%
+Overall: [3/3] ████████ 100%
 Phase 1: Done (Archived)
 Phase 2: Done (Archived)
-Phase 3: Todo (9 tasks)
+Phase 3: Done (Archived)
 ```
 
 ## Recent Decisions
+
+- 2026-06-24 **Decision:** Phase 3 complete. Delivers: l2-nodus-runtime.md v1.0.2, standalone Cargo.toml (crates.io metadata), `lib.rs` rewritten for standalone audience, CI workflow, EXTRACTION.md procedure, 143 tests passing. Crate is extraction-ready.
 
 - 2026-06-24 **Decision:** Phase 3 planned — 9 tasks across tracks A (spec sync), B (Cargo hardening), C (API docs), D (extraction artifacts), T (validation). Spec drift l2 v0.4.5→v0.4.6 filed as T-3A01.
 

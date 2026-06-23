@@ -1,19 +1,43 @@
-//! Workflow-language runtime: lexer, parser/AST, validator (+ lint), executor,
-//! and transpiler. A self-contained crate that `cronus` depends on and
-//! links in-process, so it runs everywhere the core runs with no external
-//! language process. Kept as its own crate (not fused into the core) so it can
-//! be extracted to a standalone repository later.
+//! Declarative workflow DSL runtime — lexer, parser/AST, validator (+ lint),
+//! executor, and transpiler. The crate is `std`-only with zero external
+//! dependencies: embed it anywhere Rust runs.
 //!
-//! The crate is a behavior-preserving port of the reference workflow-language
-//! implementation, built as a vertical slice: lexer → parser → transpiler →
-//! executor → validator. The vocabulary lives in [`vocab`] as data, separate
-//! from the logic that consults it, so updating the language is a data change.
+//! # Quick start
 //!
-//! ## Status
+//! ```rust
+//! use nodus::{workflows, executor::Status};
 //!
-//! Implemented: the crate scaffold, the builtin vocabulary [`vocab::Schema`],
-//! and the [`lexer`]. The parser, transpiler, executor, and validator modules
-//! exist as the layout the remaining front-end and runtime tracks fill in.
+//! let source = r#"
+//! §wf:greet v1.0
+//! §runtime: { core: schema.nodus }
+//! @in:  { name: text }
+//! @out: $out
+//! @err: ESCALATE(human)
+//! @steps:
+//!   1. GEN($in.name) → $out
+//!   2. LOG($out)
+//! "#;
+//!
+//! let result = workflows::run(source, "greet.nodus", None).unwrap();
+//! assert_eq!(result.status, Status::Ok);
+//! ```
+//!
+//! # Workflow lifecycle
+//!
+//! | Step | Function | Purpose |
+//! | --- | --- | --- |
+//! | Scaffold | [`workflows::scaffold`] | Minimal valid AST |
+//! | Validate | [`workflows::validate`] | All lint diagnostics |
+//! | Run | [`workflows::run`] | Execute with built-in stub |
+//! | Transpile | [`workflows::transpile`] | Compact or human form |
+//!
+//! # Design
+//!
+//! The vocabulary lives in [`vocab`] as data separate from the logic that
+//! consults it — updating the language is a data change, not a code change.
+//! The [`executor::ModelProvider`] trait is the sole extension point for real
+//! AI model integration; the built-in [`executor::StubProvider`] satisfies the
+//! interface without I/O, enabling fully in-process tests.
 
 mod error;
 

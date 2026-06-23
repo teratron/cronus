@@ -22,7 +22,7 @@ Tactical registry of all phases. Atomic checklists live in `tasks/phase-{N}.md`.
 
 | Phase | Description | Status |
 | --- | --- | --- |
-| [Phase 3](tasks/phase-3.md) | Standalone Extraction: spec sync, Cargo hardening, public API docs, CI workflow, extraction procedure | `Todo` |
+| [Phase 3](archives/tasks/phase-3.md) | Standalone Extraction: spec sync, Cargo hardening, public API docs, CI workflow, extraction procedure | `Done (Archived)` |
 
 ## Meta Information
 

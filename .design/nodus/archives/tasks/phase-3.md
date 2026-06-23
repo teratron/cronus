@@ -1,7 +1,7 @@
 ---
 phase: 3
 name: "Standalone Extraction"
-status: Todo
+status: Done
 subsystem: "crates/nodus"
 requires:
   - "Phase 2 — Library Hardening"
@@ -22,34 +22,34 @@ duration_minutes: ~
 # Phase 3 Tasks — Standalone Extraction
 
 **Phase:** 3
-**Status:** Todo
+**Status:** Done
 **Strategic Goal:** Prepare `crates/nodus` for publication as an independent library. Sync the spec with Phase 2 implementation state, harden the Cargo manifest for crates.io, document the entire public API, and produce the extraction artifacts (CI workflow, human extraction procedure).
 
 ## Atomic Checklist
 
 ### Track A — Spec Sync
 
-- [ ] [T-3A01] Sync `l2-nodus-runtime.md` with Phase 2 implementation state; bump spec to v1.0.2
+- [x] [T-3A01] Sync `l2-nodus-runtime.md` with Phase 2 implementation state; bumped spec to v1.0.2
 
 ### Track B — Cargo Manifest Hardening
 
-- [ ] [T-3B01] Replace workspace-delegated fields in `crates/nodus/Cargo.toml` with explicit values
-- [ ] [T-3B02] Add crates.io publication metadata to `crates/nodus/Cargo.toml`
+- [x] [T-3B01] Replace workspace-delegated fields in `crates/nodus/Cargo.toml` with explicit values
+- [x] [T-3B02] Add crates.io publication metadata to `crates/nodus/Cargo.toml`; updated `README.md` for standalone audience
 
 ### Track C — Public API Documentation
 
-- [ ] [T-3C01] Add `//!` crate-level documentation to `crates/nodus/src/lib.rs`
-- [ ] [T-3C02] Add `///` item-level doc comments to all public API items; verify `cargo doc` is warning-free
+- [x] [T-3C01] Updated `crates/nodus/src/lib.rs` `//!` doc — standalone quick-start example, lifecycle table, accurate description; removed Cronus-internal references
+- [x] [T-3C02] Fixed broken intra-doc link in `workflows.rs`; removed SDD task-ID references from `executor.rs` and `workflows.rs`; zero `cargo doc` warnings
 
 ### Track D — Extraction Artifacts
 
-- [ ] [T-3D01] Write `.github/workflows/ci.yml` inside `crates/nodus/` for the standalone repo
-- [ ] [T-3D02] Write `crates/nodus/EXTRACTION.md` — step-by-step human extraction procedure
+- [x] [T-3D01] Written `crates/nodus/.github/workflows/ci.yml` — check + test + clippy + fmt + doc steps
+- [x] [T-3D02] Written `crates/nodus/EXTRACTION.md` — 7-step human extraction procedure (create repo, copy, commit, tag, publish, update Cronus, archive)
 
 ### Track T — Validation
 
-- [ ] [T-3T01] Run `cargo test -p nodus` — all tests pass; no regressions from Cargo.toml changes
-- [ ] [T-3T02] Run `cargo doc --no-deps -p nodus` — zero doc warnings; `cargo clippy -p nodus -- -D warnings` clean
+- [x] [T-3T01] `cargo test -p nodus` — 143 passed (91 unit + 17 invariant + 34 parity + 1 doctest); 0 failed
+- [x] [T-3T02] `cargo doc --no-deps -p nodus` — 0 warnings; `cargo clippy -p nodus -- -D warnings` — 0 lints
 
 ## Detailed Tracking
 
@@ -144,6 +144,7 @@ For every `pub` item (function, struct, enum, trait, const) visible through the 
 - Do not duplicate the type signature — explain the behaviour.
 
 Priority order (highest public surface impact):
+
 1. `workflows::run`, `workflows::validate`, `workflows::scaffold`, `workflows::transpile`
 2. `executor::Status` and its variants
 3. `validator::Diagnostic`, `validator::Severity`
@@ -230,12 +231,12 @@ Run after T-3C01 and T-3C02 are complete.
 
 ### T-3A01 l2-nodus-runtime.md sync
 
-<!-- fill during execution -->
+`l2-nodus-runtime.md` bumped to v1.0.2. Changes: `BUILTIN_SCHEMA_VERSION` → `"0.4.6"`, command count 50 → 51 (RUN meta-command added), `RUNTIME_OWNED_VARIABLES` constant documented (9 read-only reserved vars), NL-8 row updated to E013 enforced, NL-10 row updated to E014 enforced. `INDEX.md` updated to v1.0.3 with revised l2 entry.
 
 ### T-3B02 Cargo.toml metadata additions
 
-<!-- fill during execution -->
+Added to `[package]`: `description`, `homepage`, `documentation`, `keywords` (5 terms), `categories` (2 terms), `readme = "README.md"`. Added `[package.metadata.docs.rs]` with `all-features = true`. Rewrote `README.md` for standalone audience (removed monorepo-internal references, added lifecycle table, MIT license note).
 
 ### T-3C02 Doc coverage
 
-<!-- fill during execution -->
+`cargo doc --no-deps -p nodus` → 0 warnings. Fixed broken intra-doc link `[StubProvider]` → `[crate::executor::StubProvider]` in `workflows.rs`. Removed SDD task-ID references (`T-2F01`, `T-2T01`) and internal invariant labels (`WFL-8`, `WFL-9`) from `executor.rs` and `workflows.rs` doc comments. `lib.rs` `//!` doc rewritten: standalone quick-start doctest (passes in `cargo test`), lifecycle table, design note on `ModelProvider` extension point.

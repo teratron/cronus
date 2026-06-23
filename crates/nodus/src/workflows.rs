@@ -118,7 +118,7 @@ pub fn validate(source: &str, filename: &str) -> Result<ValidationReport, Error>
 /// block-class error (WFL-5: validate-before-run guarantee). On a clean report
 /// it delegates to [`Executor`] and returns the [`RunResult`].
 ///
-/// Execution uses the built-in [`StubProvider`]; real model integration is
+/// Execution uses the built-in [`crate::executor::StubProvider`]; real model integration is
 /// wired at the subsystem level in later phases.
 pub fn run(
     source: &str,
@@ -160,7 +160,7 @@ pub fn transpile(source: &str, mode: TranspileMode) -> Result<String, Error> {
 /// Each block's `raw_lines` are validated against the workflow's expected
 /// outputs. In this stub implementation all test blocks report pass as long as
 /// the source parses and the executor returns `Status::Ok`; a fuller
-/// per-assertion runner is introduced with the golden corpus (T-2T01).
+/// per-assertion runner is a planned enhancement; the stub runner covers smoke-level pass/fail.
 pub fn test(source: &str, _filename: &str) -> Result<TestReport, Error> {
     let ast = Parser::parse(source)?;
 
@@ -354,15 +354,12 @@ mod tests {
     }
 
     #[test]
-    fn wfl_9_human_view_renders_prose() {
-        // WFL-9: the library exposes a `transpile(_, Human)` that returns the
-        // human prose view. Already covered by transpile_human_returns_prose;
-        // this named test is the invariant anchor.
-        let human = transpile(VALID_WF, TranspileMode::Human).expect("wfl-9");
-        assert!(!human.is_empty(), "WFL-9: human render must not be empty");
+    fn human_view_renders_prose() {
+        let human = transpile(VALID_WF, TranspileMode::Human).expect("human transpile");
+        assert!(!human.is_empty(), "human render must not be empty");
         assert!(
             human.contains("WORKFLOW"),
-            "WFL-9: human render must include WORKFLOW header"
+            "human render must include WORKFLOW header"
         );
     }
 }

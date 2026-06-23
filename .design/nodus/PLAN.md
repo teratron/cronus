@@ -42,13 +42,14 @@ Execution mode: **Sequential** (spec correctness must precede hardening; hardeni
   - ✅ 142 tests pass (91 unit + 17 invariant + 34 parity); clippy clean
   - ✅ Extraction audit: zero external deps, zero intra-workspace imports; `Cargo.toml` workspace fields documented
 
-## Phase 3 — Standalone Extraction
+## Phase 3 — Standalone Extraction ✓
 
 *Prepare `crates/nodus` for publication as an independent library: sync the spec with Phase 2 implementation, harden the Cargo manifest for crates.io, document the public API, and produce the extraction artifacts (CI workflow, extraction procedure).*
 
-- [ ] **Nodus Runtime (Rust)** ([l2-nodus-runtime.md](specifications/l2-nodus-runtime.md)) [L2]
-  - Sync spec with Phase 2 state: BUILTIN_SCHEMA_VERSION v0.4.6, 51 commands, E013/E014, RUNTIME_OWNED_VARIABLES constant; bump spec to v1.0.2
-  - Replace workspace-delegated `Cargo.toml` fields with explicit values; add crates.io publication metadata (description, keywords, categories, readme, homepage, documentation)
-  - Add `//!` crate-level doc and `///` item-level doc to all public API surfaces
-  - Write `.github/workflows/ci.yml` (standalone CI: test + clippy + fmt + doc)
-  - Write `EXTRACTION.md` — step-by-step human procedure for repo creation, tag, and crates.io publish
+- [x] **Nodus Runtime (Rust)** ([l2-nodus-runtime.md](specifications/l2-nodus-runtime.md)) [L2]
+  - ✅ l2-nodus-runtime.md synced to v1.0.2: BUILTIN_SCHEMA_VERSION v0.4.6, 51 commands, E013/E014, RUNTIME_OWNED_VARIABLES
+  - ✅ `Cargo.toml` workspace-delegated fields replaced; crates.io metadata added (description, keywords, categories, readme, homepage, documentation, docs.rs config)
+  - ✅ `lib.rs` `//!` doc rewritten standalone; broken intra-doc links and SDD reference leaks removed; 0 `cargo doc` warnings
+  - ✅ `crates/nodus/.github/workflows/ci.yml` written (check + test + clippy + fmt + doc)
+  - ✅ `crates/nodus/EXTRACTION.md` written (7-step human extraction procedure)
+  - ✅ 143 tests pass (91 unit + 17 invariant + 34 parity + 1 doctest); clippy clean
