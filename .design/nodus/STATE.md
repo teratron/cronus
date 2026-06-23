@@ -4,15 +4,15 @@
 <!-- Maximum 100 lines. Agent updates AFTER each completed action. -->
 
 **Workspace:** nodus
-**Updated:** 2026-06-23 20:37
+**Updated:** 2026-06-23 20:43
 **Phase:** 2 — Library Hardening
-**Status:** Pending
+**Status:** Active
 
 ## Current Position
 
 - **Task:** Phase 1 — Spec Completeness & Vocabulary Alignment
 - **Spec:** l1-nodus-language.md, l2-nodus-runtime.md
-- **Next Action:** Phase 2 — Library Hardening (pending)
+- **Next Action:** Run /magic.run nodus to execute Phase 2
 
 ## Progress
 
