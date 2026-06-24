@@ -1,6 +1,6 @@
 # Nodus Portability and Extension Contract
 
-**Version:** 1.0.0
+**Version:** 1.0.1
 **Status:** Stable
 **Layer:** concept
 
@@ -70,8 +70,8 @@ Each extension point is identified by role. An implementation must provide exact
 | --- | --- | --- | --- |
 | Model | `ModelProvider` | Invoke AI model; return structured output | `StubProvider` (deterministic) |
 | Storage | `StorageProvider` | Persist and retrieve workflow state across invocations | <!-- TBD: define when first host requires durable state --> |
-| Audit | `AuditProvider` | Record execution events for observability and replay | <!-- TBD: define when first host requires structured logging --> |
-| Policy | `PolicyProvider` | Evaluate runtime policy decisions beyond schema hard-rules | <!-- TBD: define when first host requires dynamic policy --> |
+| Audit | `AuditProvider` | Record execution events for observability and replay | `NoopAuditProvider` (discards all events; see `l1-nodus-observability.md`) |
+| Policy | `PolicyProvider` | Evaluate runtime policy decisions beyond hard schema rules: spend caps, approval gates, tool-access restrictions | <!-- TBD: define when first host requires dynamic policy beyond !!NEVER/!PREF --> |
 
 > New roles are added only when LP-3 is satisfied. The table above is the authoritative extension point registry; an implementation that introduces a role not listed here must first amend this spec.
 
@@ -162,4 +162,5 @@ The LP-invariants are evaluated in the order that minimises rework:
 
 | Version | Date | Author | Notes |
 | --- | --- | --- | --- |
+| 1.0.1 | 2026-06-24 | Core Team | AuditProvider row filled — references l1-nodus-observability.md; PolicyProvider TBD refined |
 | 1.0.0 | 2026-06-24 | Core Team | Initial spec — portability contract, LP-1…LP-7, extension taxonomy, feedback lifecycle |

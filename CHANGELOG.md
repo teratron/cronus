@@ -37,3 +37,5 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Completed task `phase-5` (main)
 - Completed 5 tasks (main)
 - Updated task execution state (main)
+- Added specification `harness-engineering` (main)
+- Updated 2 specifications (nodus)

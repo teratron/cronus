@@ -50,11 +50,14 @@
 - <https://github.com/cjpais/Handy>
 - <https://github.com/shadcn/improve>
 - <https://github.com/nvidia/skillspector>
-- <https://gitverse.ru/gigachain/gigachain>
 - <https://github.com/zapier/zapier-platform>
 - <https://github.com/node-red/node-red>
 - <https://github.com/n8n-io/n8n>
 - <https://github.com/huginn/huginn>
+
+### Harness
+
+- <https://gitverse.ru/gigachain/gigachain>
 
 ## UI/UX
 

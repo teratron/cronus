@@ -56,11 +56,7 @@
 - [ ] решить проблему накопления ошибок в мультеагентной системе
 - [ ] ральф-луп обёрнут в мета-луп, что бы поколения не выраждались в один и тот же монолог
 - [ ] автономное мыслящее существо
-- [ ] аналог n8n системы автоматизации для офиса, как отдельный раздел, надо продумать только ли под капотом реализовать для каждого работника или дополнительно визуализировать, изучи и проанализируй референсы:
-  - <D:\Projects\src\github.com\teratron\cronus\.references\tools\n8n-master>
-  - <D:\Projects\src\github.com\teratron\cronus\.references\tools\zapier-platform-main>
-  - <D:\Projects\src\github.com\teratron\cronus\.references\tools\node-red-main>
-  - <D:\Projects\src\github.com\teratron\cronus\.references\tools\huginn-master>
+- [x] аналог n8n системы автоматизации для офиса, как отдельный раздел, надо продумать только ли под капотом реализовать для каждого работника или дополнительно визуализировать, изучи и проанализируй референсы
 - [ ] глобальная оркестрация из существующих спецификаций в рамках  проекта, продумывать сразу что на каком этапе планировать и делать, например: сама суть движка приложения сформирована, но надо сразу учитывать при кодинге такие вещи как языковая поддержка и т.д.
 - [x] nodus вынести в отдельный воркспейс sdd .design/
 - [x] при создании cronus должны приходить фидбэки для улучшения nodus, добавлять универсальные механизмы, фичи, патерны, которые могут быть использованны в других проекта
@@ -110,14 +106,7 @@
 
 ---
 
-- [ ] /magic.spec надо глубоко изучить тему harness AI engineeniring и новое направление dynamic harness, возможности применения этих технологий в нашем проекте cronus и особенно возможность интегрировать в паралельный проект-библиотеку nodus <D:\Projects\src\github.com\teratron\cronus\crates\nodus>, предлагаю изучить и проанализировать несколько референсов и выделить идеи, которые могут нам пригодится:
-  - <D:\Projects\src\github.com\teratron\cronus\.references\tools\agentic-harness-engineering-main>
-  - <D:\Projects\src\github.com\teratron\cronus\.references\tools\meta-harness-main>
-  - <D:\Projects\src\github.com\teratron\cronus\.references\tools\Meta-Harness-master>
-  - <D:\Projects\src\github.com\teratron\cronus\.references\tools\omnigent-main>
-  - <D:\Projects\src\github.com\teratron\cronus\.references\tools\ruflo-main>
-  - <D:\Projects\src\github.com\teratron\cronus\.references\tools\gigachain>
-  - <D:\Projects\src\github.com\teratron\cronus\.references\tools\Harness_материалы.pdf>
+- [x] /magic.spec надо глубоко изучить тему harness AI engineeniring и новое направление dynamic harness, возможности применения этих технологий в нашем проекте cronus и особенно возможность интегрировать в паралельный проект-библиотеку nodus <D:\Projects\src\github.com\teratron\cronus\crates\nodus>, предлагаю изучить и проанализировать несколько референсов и выделить идеи, которые могут нам пригодится:
 примечание: ...
 
 ---

@@ -4,7 +4,7 @@
 <!-- Maximum 100 lines. Agent updates AFTER each completed action. -->
 
 **Workspace:** nodus
-**Updated:** 2026-06-24
+**Updated:** 2026-06-24 04:07
 **Phase:** 3 — Standalone Extraction
 **Status:** Done
 
@@ -12,15 +12,12 @@
 
 - **Task:** All phases complete — crate is extraction-ready; portability contract authored
 - **Spec:** l1-nodus-language.md v1.0.1, l2-nodus-runtime.md v1.0.2, l1-nodus-portability.md v1.0.0
-- **Next Action:** Human operator: follow `crates/nodus/EXTRACTION.md` to create standalone repository and publish to crates.io
+- **Next Action:** Run /magic.task nodus to update the plan
 
 ## Progress
 
 ```
 Overall: [3/3] ████████ 100%
-Phase 1: Done (Archived)
-Phase 2: Done (Archived)
-Phase 3: Done (Archived)
 ```
 
 ## Recent Decisions

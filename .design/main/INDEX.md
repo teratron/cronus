@@ -1,6 +1,6 @@
 # Workspace Specifications Registry
 
-**Version:** 1.0.0
+**Version:** 1.0.1
 **Status:** Active
 **Engine Version:** 2.1.46
 
@@ -31,6 +31,7 @@ Local registry of specifications for this workspace.
 | [l1-dashboard.md](specifications/l1-dashboard.md) | Live read-only statistics projection: per-office + building aggregate (tech-agnostic) | Stable | 1 | 1.0.0 |
 | [l1-workflow-language.md](specifications/l1-workflow-language.md) | Agent workflow DSL: dual-mode, schema contract, constraints, subsystem-bound steps (tech-agnostic) | Stable | 1 | 1.0.0 |
 | [l1-extensions.md](specifications/l1-extensions.md) | Unified extensions: skills/MCP/plugins, default-deny+sandboxed lifecycle, skill generation (tech-agnostic) | Stable | 1 | 1.0.0 |
+| [l1-harness-engineering.md](specifications/l1-harness-engineering.md) | Harness engineering pattern: harness≠model (HE-1), nodus workflow as harness spec (HE-2), frozen evaluation pipeline (HE-3), evidence-backed amendment with 4 required fields (HE-4), single-component change per iteration (HE-5), transfer validity on held-out set (HE-6), append-only history (HE-7); six-component harness taxonomy (workflow spec/schema/macro library/memory contract/policy config/trace config) with nodus mapping; three-phase evolution loop (EVALUATE→ANALYZE→IMPROVE); versioning and transfer protocols; budget/termination criteria | Stable | 1 | 1.0.0 |
 | [l2-technology-stack.md](specifications/l2-technology-stack.md) | Validated cross-platform technology stack; local LLM provider catalog (Ollama/llama.cpp/MLX/vLLM/LM Studio/Docker, GpuBackend taxonomy, GPU detection cascade, special-platform notes); quantization system (GGUF/MLX/AWQ/GPTQ hierarchy, bpp/speed-multiplier/quality-penalty table, best-quant-for-budget algorithm, KV cache quantization formats); audio processing stack (16 kHz sample rate, VAD/ONNX pipeline, cpal/rubato/rodio, platform mute cascade, stream lifecycle) | Stable | 2 | 1.0.2 |
 | [l2-core-library.md](specifications/l2-core-library.md) | Layer 1: embeddable core library (foundation); manager pattern (Arc + RAII loading guard + idle watcher thread + backend enum dispatch); typed prefixed ID system (ses/msg/prt/per/que/evt/job/wrk/tool/pty prefixes, ascending/descending factories, monotonic base62 26-char body, branded type enforcement); ThinkingLevel taxonomy (off/minimal/low/medium/high/xhigh, prepareNextTurn-settable); CustomAgentMessages declaration-merging extensibility (augment interface for typed custom message variants) | Stable | 2 | 1.1.2 |
 | [l2-cli.md](specifications/l2-cli.md) | Layer 2: command-line frontend | Stable | 2 | 1.0.0 |
