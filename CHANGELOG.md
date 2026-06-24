@@ -61,4 +61,4 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Added specification `harness-engineering` (main)
 - Updated 2 specifications (nodus)
 - Added 11 specifications (main)
-
+- Added 3 specifications (main)
