@@ -1,6 +1,6 @@
 # Harness Engineering Pattern
 
-**Version:** 1.0.0
+**Version:** 1.1.0
 **Status:** Stable
 **Layer:** concept
 
@@ -56,6 +56,10 @@ Rules that any conforming harness engineering implementation MUST honour:
 
 - **HE-7 Append-only evolution history**: each iteration's harness artifacts (workflow files, traces, scores) are stored immutably. Prior iterations are never overwritten. The history is the audit trail.
 
+- **HE-8 Artifact extraction mandatory**: the ANALYZE phase MUST produce at least one durable artifact — an external, persisted object (compressed failure pattern set, extracted rule list, causal failure model) — as its primary output. Analysis that remains only as accumulated conversational context is not sufficient; without an external artifact, the analysis is lost when the context window closes, and the next iteration degenerates to the same strategy. The artifact is the compressed knowledge that carries the iteration's learning forward.
+
+- **HE-9 Context freshness per iteration**: each new EVALUATE→ANALYZE→IMPROVE iteration MUST open with a fresh context window loaded with the artifact produced by the previous ANALYZE phase. It MUST NOT inherit the accumulated conversational history from all prior iterations. Accumulated history causes context rot: noise accumulates faster than signal, the model's effective attention on the current task shrinks, and successive iterations converge toward identical outputs regardless of artifact content. The artifact IS the compressed continuity; raw history is noise.
+
 ## 4. Detailed Design
 
 ### 4.1 Harness Component Taxonomy
@@ -91,16 +95,23 @@ Phase 2 — ANALYZE
      - Per-task failure attribution (which component, which step, which error code)
      - Pattern detection: recurring failure classes across tasks
   6. Identify the highest-frequency failure class
+  7. WRITE the analysis as a durable artifact to external storage (HE-8):
+     artifact contains: iteration number, top failure classes with frequencies,
+     root-cause hypotheses, and proposed amendment direction.
+     A cycle that does not write this artifact is incomplete regardless of IMPROVE output.
 
 Phase 3 — IMPROVE
-  7. Propose an amendment targeting the identified root cause
+  8. Open a FRESH context window loaded with the artifact from Phase 2 (HE-9).
+     Do NOT carry forward the raw trace history or prior-iteration chat context.
+  9. Propose an amendment targeting the identified root cause
      — must satisfy HE-4 (four-field evidence requirement)
      — must target exactly one harness component (HE-5)
-  8. Apply the amendment to produce the next harness candidate
-  9. Evaluate candidate on the search set
-  10. Check: did the predicted tasks flip?
-      — Yes → adopt as the next iteration's harness
-      — No  → discard candidate; investigate mis-prediction; revise root cause
+  10. Apply the amendment to produce the next harness candidate
+  11. Evaluate candidate on the search set
+  12. Check: did the predicted tasks flip?
+       — Yes → adopt as the next iteration's harness
+       — No  → discard candidate; investigate mis-prediction; revise root cause
+             → revision uses the artifact (HE-8/HE-9), not replayed history
 
 Termination:
   Stop when target score is reached, budget is exhausted,
@@ -113,6 +124,7 @@ Post-evolution:
 ### 4.3 Workflow File Versioning
 
 Each evolved harness iteration is a distinct version of the workflow file. Version bumps follow the nodus portability contract (`l1-nodus-portability.md` LP-6):
+
 - `patch` — typo-only, no semantic change
 - `minor` — additive changes to step sequence, macros, or schema extension
 - `major` — change to `@in`/`@out`/`@err` contract, schema vocabulary removal, or policy constraint removal
@@ -122,11 +134,13 @@ Each iteration's workflow file is committed with a message that includes the evi
 ### 4.4 Transfer Validity Protocol
 
 A harness that was evolved against one base model is transferable to a different model if:
+
 - The harness changes encode structural improvements (step decomposition, macro extraction, policy tightening) rather than prompt-text tuning
 - The harness passes HE-6 on the held-out set with the new model without re-evolution
 - The harness makes no assumptions about model-internal behaviour (no references to model-specific response formats or quirks)
 
 A harness that fails HE-6 transfer requires one of:
+
 1. Re-evolution from the baseline harness using traces from the new model
 2. Addition of a model-specific adapter layer in the schema extension (not in the nodus core)
 
@@ -174,3 +188,4 @@ The order of implementation for a conforming harness evolution system:
 | Version | Date | Author | Notes |
 | --- | --- | --- | --- |
 | 1.0.0 | 2026-06-24 | Core Team | Initial spec — HE-1…HE-7, six-component harness taxonomy, nodus-workflow mapping, three-phase evolution loop, transfer validity protocol, budget criteria |
+| 1.1.0 | 2026-06-24 | Core Team | Added HE-8 (artifact extraction mandatory in ANALYZE phase) and HE-9 (context freshness per iteration via fresh context + artifact load); updated §4.2 ANALYZE/IMPROVE phases to reflect artifact write and fresh-context open steps |
