@@ -4,7 +4,7 @@
 <!-- Maximum 100 lines. Agent updates AFTER each completed action. -->
 
 **Workspace:** main
-**Updated:** 2026-06-23 21:34
+**Updated:** 2026-06-24 03:55
 **Phase:** 7 — TUI (Leaf)
 **Status:** Pending
 
@@ -12,7 +12,7 @@
 
 - **Task:** Phase 6 complete (5/5 tasks done: T-6A01 orchestration, T-6B01 trigger triage, T-6C01 mission mode, T-6C02 deep research, T-6T01 validation). Phase 7 (TUI) not yet decomposed into atomic tasks.
 - **Spec:** l2-tui.md (single spec for Phase 7)
-- **Next Action:** Plan complete — author new scope via /magic.spec main (or /magic.status for a briefing)
+- **Next Action:** Run /magic.task main to update the plan
 
 ## Progress
 

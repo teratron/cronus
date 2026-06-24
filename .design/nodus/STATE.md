@@ -10,8 +10,8 @@
 
 ## Current Position
 
-- **Task:** All phases complete — crate is extraction-ready
-- **Spec:** l1-nodus-language.md v1.0.1, l2-nodus-runtime.md v1.0.2
+- **Task:** All phases complete — crate is extraction-ready; portability contract authored
+- **Spec:** l1-nodus-language.md v1.0.1, l2-nodus-runtime.md v1.0.2, l1-nodus-portability.md v1.0.0
 - **Next Action:** Human operator: follow `crates/nodus/EXTRACTION.md` to create standalone repository and publish to crates.io
 
 ## Progress
@@ -24,6 +24,8 @@ Phase 3: Done (Archived)
 ```
 
 ## Recent Decisions
+
+- 2026-06-24 **Decision:** l1-nodus-portability.md v1.0.0 authored — portability contract: LP-1 host neutrality, LP-2 extension via abstract interfaces, LP-3 two-host generalisation rule, LP-4 vocabulary isolation, LP-5 composable extension, LP-6 semver contract, LP-7 feedback loop lifecycle. Extension point taxonomy (ModelProvider + future Storage/Audit/Policy), feedback distillation protocol, universal pattern criteria, vocabulary layering model. Promoted Stable.
 
 - 2026-06-24 **Decision:** Phase 3 complete. Delivers: l2-nodus-runtime.md v1.0.2, standalone Cargo.toml (crates.io metadata), `lib.rs` rewritten for standalone audience, CI workflow, EXTRACTION.md procedure, 143 tests passing. Crate is extraction-ready.
 
