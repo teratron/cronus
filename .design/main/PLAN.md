@@ -1,13 +1,13 @@
 # Implementation Plan
 
-**Version:** 2.4.0
+**Version:** 2.5.0
 **Generated:** 2026-06-24
-**Based on:** .design/main/INDEX.md v1.0.3
+**Based on:** .design/main/INDEX.md v1.0.4
 **Status:** Active
 
 ## Overview
 
-Implementation plan for Cronus from 74 Stable specifications (27 L1 concepts + 47 L2 implementations). Phases follow a **growth order**: the agent grows like a sprout from a seed.
+Implementation plan for Cronus from 77 Stable specifications (30 L1 concepts + 47 L2 implementations). Phases follow a **growth order**: the agent grows like a sprout from a seed.
 
 - **Seed = the library** (`crates/core` + `crates/nodus` runtime) — Phases 1–2.
 - **Stem = the CLI** — Phase 3, the first usable surface, emerging straight from the seed.
@@ -50,6 +50,9 @@ Execution mode: **Parallel** (C3); tracks grouped by file independence. Critical
 - [x] **Office Control** ([l1-office-control.md](specifications/l1-office-control.md)) [L1] — OfficeState taxonomy (Active/Idle/Paused/Hibernating/Error/Offline); OC-1…OC-5; master switch; token exhaustion hibernation with model substitution; per-subsystem granularity
 - [x] **Version Control** ([l1-version-control.md](specifications/l1-version-control.md)) [L1] — virtual staging area on git worktrees; VC-1…VC-6; trunk-based vs Git Flow; role authority table; Conventional Commits with card reference footer
 - [x] **Inner Monologue** ([l1-inner-monologue.md](specifications/l1-inner-monologue.md)) [L1] — heartbeat-driven background cognitive process; IM-1…IM-5; 5 intention types; Pulse log; proactivity threshold with suppression
+- [x] **Lookahead Planning** ([l1-lookahead-planning.md](specifications/l1-lookahead-planning.md)) [L1] — pre-execution consequence simulation N steps ahead; LP-1…LP-6; 7-category trigger catalog (branch merge/schema migration/file deletion/dep upgrade/security policy/mass refactor/arch change); CONFIRM/MODIFY/ESCALATE/BUDGET_EXHAUSTED conclusions
+- [x] **Agent Client Protocol** ([l1-acp.md](specifications/l1-acp.md)) [L1] — transport-agnostic protocol for external callers; ACP-1…ACP-7; session lifecycle, streaming event taxonomy, capability declaration, trust levels (trusted/restricted/anonymous), cross-office ACP relay
+- [x] **Global Orchestration** ([l1-global-orchestration.md](specifications/l1-global-orchestration.md)) [L1] — building-level coordination above individual offices; GO-1…GO-6; phase-awareness enforcement (cross-cutting concern catalog), cross-office delegation via ACP relay, building-level escalation with HITL gate
 
 ## Phase 1 — Seed I: Foundation
 
@@ -170,10 +173,13 @@ Execution mode: **Parallel** (C3); tracks grouped by file independence. Critical
 - [ ] **L2 Deliberation Engine** (`l2-deliberation.md` — to author) [L2] — parallel argument dispatch, orchestrator synthesis, deliberation log storage, Channels tab rendering; `Implements: l1-deliberation.md`; depends on orchestration + inbox + navigation
 - [ ] **L2 Version Control** (`l2-version-control.md` — to author) [L2] — virtual staging area lifecycle, role authority enforcement, Conventional Commits generation, remote platform adapter; `Implements: l1-version-control.md`; depends on execution-workspace + quality-pipeline + kanban-board
 - [ ] **L2 Inner Monologue** (`l2-inner-monologue.md` — to author) [L2] — heartbeat cycle implementation, state snapshot assembly, intention dispatch pipeline, Pulse log SQLite storage, proactivity threshold; `Implements: l1-inner-monologue.md`; depends on scheduler + inbox + navigation + agent-session
+- [ ] **L2 Lookahead Planning** (`l2-lookahead-planning.md` — to author) [L2] — lookahead engine implementation: trigger detection, consequence simulation runner (LP-2 no real exec), budget guard, conclusion dispatcher, decision log writer; `Implements: l1-lookahead-planning.md`; depends on orchestration + kanban-board + execution-workspace
+- [ ] **L2 Agent Client Protocol** (`l2-acp.md` — to author) [L2] — ACP server implementation; boundary with l2-agent-session's /acp endpoint must be clarified (l2-agent-session owns the Streamable HTTP transport; l2-acp owns session lifecycle + capability registry + trust enforcement + relay); `Implements: l1-acp.md`; depends on agent-session + security + orchestration
+- [ ] **L2 Global Orchestration** (`l2-global-orchestration.md` — to author) [L2] — building manager implementation: office event bus aggregation (GO-4), ACP relay router (GO-5), phase-awareness concern catalog enforcement (GO-3), cross-office deliberation dispatch (GO-6); `Implements: l1-global-orchestration.md`; depends on l2-acp + orchestration + deliberation + office-control
 
 ## Backlog
 
-<!-- All registered specs are scheduled across Phases 0–10. -->
+<!-- All registered specs are scheduled across Phases 0–10. 77 Stable specs total (30 L1 + 47 L2). -->
 
 ## Risks (Planning Audit)
 
