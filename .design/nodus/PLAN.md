@@ -1,9 +1,9 @@
 # Implementation Plan
 
-**Version:** 1.3.0
+**Version:** 1.4.0
 **Generated:** 2026-06-24
 **Based on:** .design/nodus/INDEX.md v1.0.6
-**Status:** Active
+**Status:** Complete
 
 ## Overview
 
@@ -56,22 +56,20 @@ Execution mode: **Sequential** (spec correctness must precede hardening; hardeni
   - ✅ `crates/nodus/EXTRACTION.md` written (7-step human extraction procedure)
   - ✅ 143 tests pass (91 unit + 17 invariant + 34 parity + 1 doctest); clippy clean
 
-## Phase 4 — Observability & Extension Framework
+## Phase 4 — Observability & Extension Framework ✓
 
 *Implement the full AuditProvider event taxonomy from `l1-nodus-observability.md` and complete the extension interface framework from `l1-nodus-portability.md`. Raises nodus from "extraction-ready" to "production-observable".*
 
-> **Status:** Active — `l2-nodus-observability.md` authored (Stable v1.0.0). Atomic tasks decomposed in `tasks/phase-4.md`.
-
 - [x] **L2 Nodus Observability** ([l2-nodus-observability.md](specifications/l2-nodus-observability.md)) [L2] — full AuditProvider implementation: AuditProvider trait + ExecutionEvent 10-variant enum + NoopAuditProvider + RunManifest + FieldDescriptor; executor hook-point map (all 10 events); run_with_audit + run_with_provider_and_audit public API; 13-test plan; `Implements: l1-nodus-observability.md`
+  - ✅ `observability.rs` module created; AuditProvider trait + 10-variant ExecutionEvent + NoopAuditProvider
+  - ✅ `executor.rs` wired: StepStart/StepEnd/StepError/ConstraintHit/BranchTaken/LoopIteration/MacroEnter/MacroExit/ModelCall/ModelResponse
+  - ✅ `run_with_audit` + `run_with_provider_and_audit` added to `workflows.rs` + re-exported from `lib.rs`
+  - ✅ `tests/observability.rs`: observer_neutrality, run_with_audit_api, run_with_provider_and_audit_api
+  - ✅ All tests pass; clippy clean; docs zero-warning
 
-  Atomic tasks in [tasks/phase-4.md](tasks/phase-4.md):
-  - Track A (observability.rs): T-4A01 (types), T-4A02 (unit tests)
-  - Track B (executor.rs delta): T-4B01 (Executor field + lib.rs), T-4B02 (step events), T-4B03 (branch/loop/macro events), T-4B04 (model events + run_complete)
-  - Track C (workflows.rs delta): T-4C01 (run_with_audit API)
-  - Track T (integration tests + spec sync): T-4T01 (observer_neutrality), T-4T02 (API integration), T-4T03 (runtime spec delta + cargo clean)
-
-- [ ] **Nodus Runtime delta** ([l2-nodus-runtime.md](specifications/l2-nodus-runtime.md)) [L2] — update §4.1 module structure (add observability.rs), update §4.5 public API table (add run_with_audit variants), version bump 1.0.2 → 1.0.3; task T-4T03 covers this
+- [x] **Nodus Runtime delta** ([l2-nodus-runtime.md](specifications/l2-nodus-runtime.md)) [L2] — §4.1 updated (observability.rs added), §4.5 updated (run_with_audit/run_with_provider_and_audit), version bumped 1.0.2 → 1.0.3
 
 ## Backlog
 
-<!-- All 4 registered specs are scheduled across Phases 0–4. -->
+<!-- All 5 registered specs are scheduled across Phases 0–4. All phases complete. -->
+<!-- Next evolution: author l2-nodus-portability.md when StorageProvider/PolicyProvider extension points are ready (see l1-nodus-portability.md LP-7). -->
