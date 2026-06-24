@@ -24,6 +24,37 @@ Internal phase journal. Each entry corresponds to a completed phase.
 - T-3T01: `cargo test -p nodus` — 143 passed (91 unit + 17 invariant + 34 parity + 1 doctest); 0 failed; 0 regressions
 - T-3T02: `cargo doc --no-deps -p nodus` — 0 warnings; `cargo clippy -p nodus -- -D warnings` — 0 lints
 
+## Phase 6 — Testing Implementation (2026-06-24)
+
+- T-6A01: Extended `TestBlock` AST node in `ast.rs` — `input: Vec<(String, String)>`, `expected: Vec<(String, String)>`, `tags: Vec<String>` typed fields; `raw_lines` retained as deprecated backward-compat companion
+- T-6A02: Updated `parse_test_block()` in `parser.rs` — key-value parsing into typed fields; E015 emitted on duplicate `@test:` name in same file (NT-9)
+- T-6A03: Updated `transpiler.rs` — `to_nodus()` emits `input:`/`expected:`/`tags:` from typed fields; `to_human()` emits readable assertion prose; parity tests pass
+- T-6B01: Implemented `evaluate_test_block()` in `workflows.rs` — per-`expected:` entry lookup against `RunResult.vars`; type mismatch = assertion failure; returns `(bool, String)`
+- T-6B02: Rewrote `test()` in `workflows.rs` — full NT-1 (block isolation), NT-2 (input override), NT-3 (assertion bind), NT-4 (failure semantics), NT-5 (provider neutrality); empty `expected:` passes trivially on `Status::Ok`
+- T-6C01: Extended `Validator` in `validator.rs` — W001 (route uncovered: `ROUTE(wf:x)` with no covering `@test:`) and W002 (no assertions: `@test:` block with empty `expected:`) diagnostics; E015 not double-reported
+- T-6C02: Added tag filtering — `test_with_tags()` / `TestOptions { tags }` in `workflows.rs`; NT-6 (skip non-matching blocks); `lib.rs` re-exports updated
+- T-6T01: `tests/testing.rs` — 7 integration tests: `block_isolation` (NT-1), `input_override` (NT-2), `expected_assertion_pass` (NT-3), `expected_assertion_fail` (NT-4), `tag_filter_skips_unmatched` (NT-6), `ordered_report` (NT-7), `tag_filter_empty_runs_all`
+- T-6T02: Authored `l2-nodus-testing.md` v1.0.0 — NT-1…NT-10 compliance table; TestBlock AST, test()/test_with_tags() signatures, TestOptions/TestReport/TestResult types; E015/W001/W002 diagnostics; registered in INDEX.md
+- T-6T03: `cargo test -p nodus` — 204 passed (138 unit + 17 invariant + 4 observability + 34 parity + 3 portability + 7 testing + 1 doctest); `cargo clippy` zero lints; `cargo fmt` clean
+
+## Phase 5 — Portability Implementation (2026-06-24)
+
+- T-5A01: Created `portability.rs` — `SchemaProvider` trait + `BuiltinSchemaProvider` (wraps KNOWN_COMMANDS); `StorageProvider` + `NoopStorageProvider`; `PolicyProvider` + `NoopPolicyProvider` (LP-3 interface stubs)
+- T-5A02: `vocab.rs` delta — `Schema::with_provider()` constructor (merges BuiltinSchemaProvider vocabulary with host extensions); `is_host_command()` predicate; `host_commands`/`host_reserved` fields
+- T-5B01: `lexer.rs` delta — `new_with_schema()`, `tokenize_str_with_schema()`, `extra_commands` field; schema-aware lexing recognizes host-registered commands
+- T-5B02: `parser.rs` delta — `parse_with_schema()` uses extended lexer; host commands parsed identically to built-in commands
+- T-5C01: `workflows.rs` delta — `run_with_schema()` + `run_with_schema_and_audit()` public functions; `lib.rs` re-exports for all portability types
+- T-5C02: `l2-nodus-runtime.md` synced v1.0.3 → v1.0.4 — portability.rs module added to §4.1; SchemaProvider/StorageProvider/PolicyProvider documented in §4.4; run_with_schema/run_with_schema_and_audit added to §4.5
+- T-5T01: `tests/portability.rs` — 3 integration tests: `host_schema_extends_builtin`, `host_schema_unknown_command_not_dispatched`, `noop_storage_and_policy_compile`; 166 total tests (107 unit + 17 invariant + 4 observability + 34 parity + 3 portability + 1 doctest)
+
+## Phase 4 — Observability & Extension Framework (2026-06-24)
+
+- T-4A01: Created `observability.rs` — `AuditProvider` trait (7 methods); `ExecutionEvent` 10-variant enum (StepStart/StepEnd/StepError/ConstraintHit/BranchTaken/LoopIteration/MacroEnter/MacroExit/ModelCall/ModelResponse); `NoopAuditProvider` no-op impl; `RunManifest` + `FieldDescriptor` metadata types
+- T-4B01: `executor.rs` hook points — all 10 ExecutionEvent variants emitted at correct lifecycle points; HO-1…HO-6 compliant; no raw user-text in traces
+- T-4B02: `run_with_audit()` + `run_with_provider_and_audit()` added to `workflows.rs`; re-exported from `lib.rs`; AuditProvider composable with ModelProvider
+- T-4C01: `l2-nodus-runtime.md` synced v1.0.2 → v1.0.3 — §4.1 observability.rs module added; §4.5 run_with_audit/run_with_provider_and_audit documented
+- T-4T01: `tests/observability.rs` — 3 integration tests: `observer_neutrality` (HO-5), `run_with_audit_api`, `run_with_provider_and_audit_api`; 163 total tests
+
 ## Phase 2 — Library Hardening (2026-06-24)
 
 - T-2B03: Added `"RUN"` to `KNOWN_COMMANDS`; bumped `BUILTIN_SCHEMA_VERSION` from `"0.4.5"` to `"0.4.6"`; added `RUNTIME_OWNED_VARIABLES` constant (9 read-only runtime variables); added `Schema::is_runtime_owned()` method

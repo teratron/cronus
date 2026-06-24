@@ -1,8 +1,8 @@
 # Implementation Plan
 
-**Version:** 1.7.0
+**Version:** 1.8.0
 **Generated:** 2026-06-24
-**Based on:** .design/nodus/INDEX.md v1.0.9
+**Based on:** .design/nodus/INDEX.md v1.0.10
 **Status:** Active
 
 ## Overview
@@ -85,21 +85,22 @@ Execution mode: **Sequential** (spec correctness must precede hardening; hardeni
   - ✅ `l2-nodus-runtime.md` spec sync v1.0.3 → v1.0.4
   - ✅ 166 tests pass (107 unit + 17 invariant + 4 observability + 34 parity + 3 portability + 1 doctest); clippy clean; fmt clean; docs zero warnings
 
-## Phase 6 — Testing Implementation
+## Phase 6 — Testing Implementation ✓
 
 *Implement the full `@test:` block contract from `l1-nodus-testing.md`. Raises nodus from a
 stub-level runner to an assertion-evaluating test facility (NT-1…NT-10).*
 
-- [ ] **L2 Nodus Testing** ([l2-nodus-testing.md](specifications/l2-nodus-testing.md)) [L2 — to be authored in Track T]
-  - [ ] Track A: `ast.rs` — structured `TestBlock` (input/expected/tags typed fields)
-  - [ ] Track A: `parser.rs` — `parse_test_block()` populates structured fields; E015 on duplicate name
-  - [ ] Track A: `transpiler.rs` — round-trip fidelity for structured test blocks
-  - [ ] Track B: `workflows.rs` — `evaluate_test_block()` helper; rewrite `test()` for per-block assertion evaluation (NT-1, NT-2, NT-3, NT-4, NT-5)
-  - [ ] Track C: `validator.rs` — W001 (route uncovered), W002 (no expected:) diagnostics
-  - [ ] Track C: public API — tag filtering in `test()` (NT-6)
-  - [ ] Track T: `tests/testing.rs` — 6 integration tests covering NT-1…NT-7
-  - [ ] Track T: `l2-nodus-testing.md` — L2 spec authored; NT compliance table
-  - [ ] Track T: Quality gates (clippy/fmt/test/doc all green; target 175+ tests)
+> **Status:** Complete — all tracks A/B/C/T delivered. Atomic tasks in `archives/tasks/phase-6.md`.
+
+- [x] **L2 Nodus Testing** ([l2-nodus-testing.md](specifications/l2-nodus-testing.md)) [L2]
+  - ✅ `ast.rs`: structured `TestBlock` (input/expected/tags/raw_lines typed fields)
+  - ✅ `parser.rs`: `parse_test_block()` populates structured fields; E015 on duplicate test name
+  - ✅ `transpiler.rs`: round-trip fidelity for structured test blocks (to_nodus + to_human)
+  - ✅ `workflows.rs`: `evaluate_test_block()` assertion evaluator; `test()` rewritten for per-block NT-1/NT-2/NT-3/NT-4/NT-5; `test_with_tags()` for NT-6
+  - ✅ `validator.rs`: W001 (route uncovered), W002 (no expected:) diagnostics; E015 not double-reported
+  - ✅ `tests/testing.rs`: 7 integration tests covering NT-1…NT-7
+  - ✅ `l2-nodus-testing.md` v1.0.0 authored; NT-1…NT-10 compliance table; registered in INDEX.md
+  - ✅ Quality gates: 204 tests pass (target 175+ met); clippy clean; fmt clean; docs zero new warnings
 
 ## Backlog
 

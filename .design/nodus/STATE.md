@@ -4,23 +4,25 @@
 <!-- Maximum 100 lines. Agent updates AFTER each completed action. -->
 
 **Workspace:** nodus
-**Updated:** 2026-06-24 09:58
-**Phase:** 6 — Testing Implementation
+**Updated:** 2026-06-24 14:10
+**Phase:** 6 — Testing Implementation (Complete)
 **Status:** Active
 
 ## Current Position
 
-- **Task:** Phase 5 complete — crate is now fully-portable per LP-invariants
-- **Spec:** l1-nodus-language.md v1.0.1, l2-nodus-runtime.md v1.0.4, l1-nodus-portability.md v1.0.1, l1-nodus-observability.md v1.0.0, l2-nodus-observability.md v1.0.0, l2-nodus-portability.md v1.0.0
-- **Next Action:** Run /magic.run nodus to execute Phase 6
+- **Task:** Phase 6 complete — nodus is a first-class assertion-evaluating test facility (NT-1…NT-10)
+- **Spec:** l1-nodus-testing.md v1.0.1, l2-nodus-testing.md v1.0.0 (all 8 specs Stable)
+- **Next Action:** All 6 phases complete. Backlog: StorageProvider/PolicyProvider integration (pending LP-3), l2-nodus-transpiler.md. Run /magic.spec nodus to author new specs when ready.
 
 ## Progress
 
 ```
-Overall: [5/5] ██████████ 100%
+Overall: [6/6] ██████████ 100%
 ```
 
 ## Recent Decisions
+
+- 2026-06-24 **Decision:** Phase 6 complete. Delivers: `ast.rs` TestBlock structured fields (input/expected/tags), `parser.rs` E015 + input/expected parsing, `workflows.rs` evaluate_test_block() + test()/test_with_tags() NT-1…NT-10, `validator.rs` W001/W002, `tests/testing.rs` (7 integration tests), l2-nodus-testing.md v1.0.0 (Stable). 204 tests pass. Phase 6 archived.
 
 - 2026-06-24 **Decision:** Phase 4 complete (reconciled). Delivers: `observability.rs` (AuditProvider trait, 10-variant ExecutionEvent enum, NoopAuditProvider, RunManifest, FieldDescriptor), executor.rs hook points for all 10 event types, `run_with_audit` + `run_with_provider_and_audit` public API, `tests/observability.rs` (observer_neutrality + API integration tests), l2-nodus-runtime.md v1.0.3 (spec sync). Phase 4 archived.
 

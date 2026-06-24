@@ -1,12 +1,25 @@
 ---
 phase: 6
-name: Testing Implementation
-status: Todo
-subsystem: crates/nodus
+name: "Testing Implementation"
+status: Done
+subsystem: "crates/nodus"
 requires:
   - phase-5
-provides: []
-key_files: []
+provides:
+  - TestBlock AST node (structured input/expected/tags/raw_lines fields)
+  - evaluate_test_block() assertion evaluator in workflows.rs
+  - test() / test_with_tags() public API with NT-1…NT-10 compliance
+  - TestOptions / TestReport / TestResult types
+  - E015 / W001 / W002 validator diagnostics
+  - tests/testing.rs (7 integration tests)
+  - l2-nodus-testing.md v1.0.0 (Rust L2 testing spec, Stable)
+key_files:
+  - crates/nodus/src/ast.rs
+  - crates/nodus/src/parser.rs
+  - crates/nodus/src/transpiler.rs
+  - crates/nodus/src/workflows.rs
+  - crates/nodus/src/validator.rs
+  - crates/nodus/tests/testing.rs
 patterns_established: []
 duration_minutes: 0
 ---
