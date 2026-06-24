@@ -1,8 +1,8 @@
 # Master Task Index (Registry)
 
-**Version:** 1.3.0
+**Version:** 1.5.0
 **Generated:** 2026-06-24
-**Based on:** .design/nodus/PLAN.md v1.1.0
+**Based on:** .design/nodus/PLAN.md v1.3.0
 **Based on RULES:** .design/RULES.md v1.4.0
 **Execution Mode:** Sequential
 **Status:** Active
@@ -23,6 +23,7 @@ Tactical registry of all phases. Atomic checklists live in `tasks/phase-{N}.md`.
 | Phase | Description | Status |
 | --- | --- | --- |
 | [Phase 3](archives/tasks/phase-3.md) | Standalone Extraction: spec sync, Cargo hardening, public API docs, CI workflow, extraction procedure | `Done (Archived)` |
+| [Phase 4](tasks/phase-4.md) | Observability & Extension Framework: observability.rs (AuditProvider + 10-event enum), executor hook points (Tracks A/B/C/T), l2-nodus-runtime.md delta v1.0.3 | `Active` |
 
 ## Meta Information
 
