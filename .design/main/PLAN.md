@@ -1,13 +1,13 @@
 # Implementation Plan
 
-**Version:** 2.3.0
-**Generated:** 2026-06-21
-**Based on:** .design/main/INDEX.md v1.0.0
+**Version:** 2.4.0
+**Generated:** 2026-06-24
+**Based on:** .design/main/INDEX.md v1.0.3
 **Status:** Active
 
 ## Overview
 
-Implementation plan for Cronus from 66 Stable specifications (19 L1 concepts + 47 L2 implementations). Phases follow a **growth order**: the agent grows like a sprout from a seed.
+Implementation plan for Cronus from 74 Stable specifications (27 L1 concepts + 47 L2 implementations). Phases follow a **growth order**: the agent grows like a sprout from a seed.
 
 - **Seed = the library** (`crates/core` + `crates/nodus` runtime) — Phases 1–2.
 - **Stem = the CLI** — Phase 3, the first usable surface, emerging straight from the seed.
@@ -41,6 +41,15 @@ Execution mode: **Parallel** (C3); tracks grouped by file independence. Critical
 - [x] **Dashboard & Statistics** ([l1-dashboard.md](specifications/l1-dashboard.md)) [L1]
 - [x] **Workflow Language** ([l1-workflow-language.md](specifications/l1-workflow-language.md)) [L1]
 - [x] **Extensions** ([l1-extensions.md](specifications/l1-extensions.md)) [L1]
+- [x] **Automation Pipeline** ([l1-automation-pipeline.md](specifications/l1-automation-pipeline.md)) [L1] — dual-mode event-driven automation; AP-1…AP-7; 8-node taxonomy; implicit (`@ON:` blocks) + explicit (canvas) surfaces; AP-6 AuditProvider observability
+- [x] **Automation Canvas** ([l1-automation-canvas.md](specifications/l1-automation-canvas.md)) [L1] — visual pipeline editor; AC-1…AC-6; three-panel layout; implicit read-only + explicit authoring; inspection via AuditProvider stream
+- [x] **Harness Engineering** ([l1-harness-engineering.md](specifications/l1-harness-engineering.md)) [L1] — EVALUATE→ANALYZE→IMPROVE loop; HE-1…HE-9; six-component harness taxonomy; artifact extraction mandatory (HE-8); context freshness per iteration (HE-9)
+- [x] **Navigation Model** ([l1-navigation-model.md](specifications/l1-navigation-model.md)) [L1] — canonical 11-tab sidebar; NV-1…NV-5; office tab bar with lazy loading + OfficeState icons; two-tier settings (Global/Local); IDE integration via shell-spawn
+- [x] **Voice Input** ([l1-voice-input.md](specifications/l1-voice-input.md)) [L1] — on-device only speech pipeline; VI-1…VI-5; ACTIVATE→CAPTURE→VAD→TRANSCRIBE→REVIEW→INJECT; push-to-talk + toggle modes
+- [x] **Deliberation** ([l1-deliberation.md](specifications/l1-deliberation.md)) [L1] — multi-worker structured debate; DL-1…DL-5; parallel independent arguments; orchestrator finality; append-only log in Channels tab
+- [x] **Office Control** ([l1-office-control.md](specifications/l1-office-control.md)) [L1] — OfficeState taxonomy (Active/Idle/Paused/Hibernating/Error/Offline); OC-1…OC-5; master switch; token exhaustion hibernation with model substitution; per-subsystem granularity
+- [x] **Version Control** ([l1-version-control.md](specifications/l1-version-control.md)) [L1] — virtual staging area on git worktrees; VC-1…VC-6; trunk-based vs Git Flow; role authority table; Conventional Commits with card reference footer
+- [x] **Inner Monologue** ([l1-inner-monologue.md](specifications/l1-inner-monologue.md)) [L1] — heartbeat-driven background cognitive process; IM-1…IM-5; 5 intention types; Pulse log; proactivity threshold with suppression
 
 ## Phase 1 — Seed I: Foundation
 
@@ -147,9 +156,24 @@ Execution mode: **Parallel** (C3); tracks grouped by file independence. Critical
 - [ ] **Telemetry** ([l1-telemetry.md](specifications/l1-telemetry.md)) [L1] — opt-in program metrics (implementation light)
 - [ ] **Agent Migration** ([l2-agent-migration.md](specifications/l2-agent-migration.md)) [L2] — migration manifest v1, two-layer import (archives vs memory candidates), staged apply, source adapters (depends on memory-store + extension-registry + backup)
 
+## Phase 10 — Advanced Office Features (L2)
+
+*L2 implementation specs for the L1 concepts added in 2026-06. These specs must be authored via `/magic.spec` before implementation tasks can be generated.*
+
+> **Status:** Pending — L2 specifications not yet authored. Use `/magic.spec` to create each before running `/magic.task` to decompose into tasks.
+
+- [ ] **L2 Automation Engine** (`l2-automation-pipeline.md` — to author) [L2] — runtime engine for event-driven automation pipelines; `Implements: l1-automation-pipeline.md`; trigger dispatcher, node executor, deduplication window, office-scoped isolation, AuditProvider binding
+- [ ] **L2 Automation Canvas UI** (`l2-automation-canvas.md` — to author) [L2] — visual canvas renderer; `Implements: l1-automation-canvas.md`; three-panel layout implementation, node palette, live state indicators, implicit-to-explicit conversion; depends on automation-engine + app-ui
+- [ ] **L2 Office Control** (`l2-office-control.md` — to author) [L2] — OfficeState machine, drain protocol, checkpoint write/restore, model-router fallback integration, per-subsystem pause toggles; `Implements: l1-office-control.md`; depends on orchestration + budget-engine + model-router
+- [ ] **L2 Navigation** (`l2-navigation.md` — to author) [L2] — sidebar tab rendering, office tab bar, lazy loading, live status icons, two-tier settings surfaces, IDE launch; `Implements: l1-navigation-model.md`; depends on app-ui + office-control
+- [ ] **L2 Voice Input** (`l2-voice-input.md` — to author) [L2] — cpal audio capture, ONNX VAD, on-device speech model integration, review overlay, push-to-talk/toggle activation; `Implements: l1-voice-input.md`; depends on technology-stack + security
+- [ ] **L2 Deliberation Engine** (`l2-deliberation.md` — to author) [L2] — parallel argument dispatch, orchestrator synthesis, deliberation log storage, Channels tab rendering; `Implements: l1-deliberation.md`; depends on orchestration + inbox + navigation
+- [ ] **L2 Version Control** (`l2-version-control.md` — to author) [L2] — virtual staging area lifecycle, role authority enforcement, Conventional Commits generation, remote platform adapter; `Implements: l1-version-control.md`; depends on execution-workspace + quality-pipeline + kanban-board
+- [ ] **L2 Inner Monologue** (`l2-inner-monologue.md` — to author) [L2] — heartbeat cycle implementation, state snapshot assembly, intention dispatch pipeline, Pulse log SQLite storage, proactivity threshold; `Implements: l1-inner-monologue.md`; depends on scheduler + inbox + navigation + agent-session
+
 ## Backlog
 
-<!-- All registered specs are scheduled across Phases 0–9; backlog is empty. -->
+<!-- All registered specs are scheduled across Phases 0–10. -->
 
 ## Risks (Planning Audit)
 

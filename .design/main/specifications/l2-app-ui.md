@@ -1,6 +1,6 @@
 # Application UI/UX Frontend (Desktop / Web / Mobile)
 
-**Version:** 1.2.1
+**Version:** 1.2.2
 **Status:** Stable
 **Layer:** implementation
 **Implements:** l1-architecture.md
@@ -24,7 +24,7 @@ Non-technical clients ("the client who brings ideas") need a graphical, low-fric
 ## 2. Constraints & Assumptions
 
 - Shell: **Tauri v2** (system WebView), packaging desktop + iOS/Android from one Rust core.
-- UI: **React 19 + Vite + TypeScript**, **Tailwind CSS v4**, one of **shadcn/ui** or **DaisyUI**, **Lexical** editor.
+- UI: **React 19 + Vite + TypeScript**, **Tailwind CSS v4**, **shadcn/ui**, **Lexical** editor.
 - The frontend holds no domain logic (INV-2); it calls the core over Tauri's IPC bridge.
 - **Mobile is a thin client** (INV-4): foreground use + push-driven (APNs/FCM) sync; optional foreground-only local LLM (1–3B Q4 via the core's llama.cpp FFI). It does NOT run a persistent background server.
 - A minimum OS/WebView floor is enforced for Tailwind v4 (see [l2-technology-stack.md](l2-technology-stack.md) §5).

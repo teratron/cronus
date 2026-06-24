@@ -1,6 +1,6 @@
 # Orchestration & Autonomy
 
-**Version:** 1.0.0
+**Version:** 1.1.0
 **Status:** Stable
 **Layer:** concept
 
@@ -41,6 +41,7 @@ Rules every Layer 2 implementation MUST NOT violate:
 - **ORC-8 (Synchronization without duplication):** the orchestrator periodically synchronizes the office (briefings) to keep multi-agent work coherent; synchronization produces shared state, never duplicated work.
 - **ORC-9 (Approval gate for high-impact work):** before irreversible or high-impact actions, the orchestrator may require plan approval — from a higher manager or, at escalation gates, the client (consistent with OFF-6 HITL).
 - **ORC-10 (Resumable):** orchestration state (plan, delegations, goal progress) persists so an autonomous run resumes after a restart (consistent with OFF-8 / durable state).
+- **ORC-11 (Error containment):** errors in delegated work MUST NOT propagate unfiltered to the orchestrator. Each delegation boundary is an error containment point: executor failures are classified (retryable / fatal / escalation-required) before they surface upward. A single worker failure MUST NOT invalidate the orchestrator's plan unless the failed task has no viable alternative path.
 
 > L2 specs cannot reach RFC status until all invariants here are addressed in their "Invariant Compliance" section.
 
@@ -85,6 +86,36 @@ The single-prompt autonomy: the client states a goal; the office plans, delegate
 - **Delegation:** the orchestrator creates assigned work items (board cards) for competent roles; missing roles are hired (WSL-6).
 - **Monitoring:** it tracks running/blocked work and re-delegates or unblocks.
 - **Briefings:** periodic office/department synchronization keeps shared understanding current (ORC-8), so parallel agents do not diverge or duplicate.
+
+### 4.4 Error Containment Protocol
+
+Each delegation boundary implements a three-step error filter (ORC-11):
+
+```text
+[REFERENCE]
+Worker completes with error:
+
+Step 1 — CLASSIFY
+  retryable       : transient failures (network timeout, rate limit, context overflow)
+                    → orchestrator schedules a retry on the same or alternate role
+  fatal_isolated  : task-scoped failures (test failure, compilation error, assertion)
+                    → card moves to Blocked; orchestrator continues other delegations
+  escalation      : decisions requiring human intent (ambiguous spec, conflicting constraints,
+                    budget risk above threshold)
+                    → HITL gate fires (ORC-9); orchestrator pauses affected delegation path
+
+Step 2 — SCOPE CHECK
+  Is the failed task on the critical path (no viable alternative)?
+    YES → Propagate: escalate the failure classification to the orchestrator's plan level
+    NO  → Contain:  mark task Blocked; other delegations continue undisturbed
+
+Step 3 — LOG
+  Append {task_id, error_class, scope, action_taken} to the office error log.
+  The doctor and self-improvement subsystems read this log; the orchestrator does not
+  expose raw worker errors to the client unless escalation fires.
+```
+
+Error accumulation is monotone within a plan: contained failures accrue in the Blocked column. The orchestrator presents a consolidated "N tasks blocked" summary rather than a stream of individual errors.
 
 ## 5. Drawbacks & Alternatives
 

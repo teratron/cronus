@@ -1,8 +1,8 @@
 # Master Task Index (Registry)
 
-**Version:** 1.5.1
-**Generated:** 2026-06-23
-**Based on:** .design/main/PLAN.md v2.3.0
+**Version:** 1.6.0
+**Generated:** 2026-06-24
+**Based on:** .design/main/PLAN.md v2.4.0
 **Based on RULES:** .design/RULES.md v1.4.0
 **Execution Mode:** Parallel
 **Status:** Active
@@ -24,8 +24,9 @@ Tactical registry of all phases and their statuses, ordered by the growth metaph
 | Phase 7 | Leaf — TUI (interactive terminal) | `Pending` |
 | Phase 8 | Flower — Desktop App: application UI, office view, dashboard | `Pending` |
 | Phase 9 | Operational Hardening: doctor, backup, error reporting, telemetry | `Pending` |
+| Phase 10 | Advanced Office Features (L2): automation engine, canvas, office control, navigation, voice input, deliberation, version control, inner monologue — L2 specs pending authoring | `Pending` |
 
 ## Meta Information
 
-- **Last Updated**: 2026-06-23
+- **Last Updated**: 2026-06-24
 - **Maintainer**: Core Team

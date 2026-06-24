@@ -1,6 +1,6 @@
 # Dashboard
 
-**Version:** 1.0.1
+**Version:** 1.0.2
 **Status:** Stable
 **Layer:** implementation
 **Implements:** l1-dashboard.md
@@ -180,10 +180,50 @@ Degradation map (HTTP endpoint → disk fallback):
       "Offline — connect runtime for live health data" notice.
 ```
 
+### 4.8 Runtime Analytics
+
+The dashboard collects operational telemetry during office execution to feed the self-improvement cycle and the doctor subsystem. Analytics are per-session and per-model; no user content is recorded — only aggregate usage numbers.
+
+```text
+[REFERENCE]
+Collected during every active office session:
+
+  Token counters (per session, per model):
+    - input_tokens_used       : cumulative input tokens consumed this session
+    - output_tokens_used      : cumulative output tokens generated this session
+    - cache_read_tokens       : tokens served from prompt cache (cost ≈ 0.1× full)
+    - tool_call_count         : number of tool invocations issued by agents
+
+  Model distribution (per session):
+    - model_id → {input, output, tool_call_count}
+    - Reveals which roles / task types are dominated by expensive models
+
+  Cost estimate (per session):
+    - Derived field: (input × rate_in + output × rate_out) per model,
+      summed to a session_cost_usd estimate
+    - Rate table is configurable (Local Settings → Office → Budget); used for
+      display only, not for billing
+
+  Time series (ring buffer, last 100 sessions):
+    - session_id, started_at, ended_at, total_tokens, total_cost_usd
+    - Feeds the "Usage trends" panel in the Settings surface
+
+  Aggregation schedule:
+    - In-memory counters updated after each LLM API response (hot path)
+    - Flushed to <state>/analytics.db (SQLite) at session close and on a
+      30-second heartbeat while active
+    - Doctor reads from analytics.db; inner monologue reads a recent-sessions
+      summary exported to <state>/analytics_summary.json on flush
+```
+
+Presented in the Settings surface as "Usage" panel; accessible via `dashboard analytics [--session <id>]`.
+Feeds: self-improvement calibration data, model-router cost scoring, doctor anomaly detection.
+
 ## 5. Drawbacks & Alternatives
 
 - **Recompute cost on busy offices:** mitigated by event-driven incremental metric updates.
 - **Alternative — persist computed metrics:** rejected; storing derived numbers risks drift (DSH-1). Only layout persists.
+- **Analytics storage growth:** mitigated by capping the in-DB ring buffer at 100 sessions; older entries are pruned on flush.
 
 ## Canonical References
 
