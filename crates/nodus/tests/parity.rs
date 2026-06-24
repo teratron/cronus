@@ -375,7 +375,11 @@ mod execution {
     fn conditional_executes_ok() {
         let result = workflows::run(CONDITIONAL, "conditional.nodus", None)
             .expect("conditional must execute without block-class errors");
-        assert_eq!(result.status, Status::Ok, "conditional must return Status::Ok");
+        assert_eq!(
+            result.status,
+            Status::Ok,
+            "conditional must return Status::Ok"
+        );
     }
 
     #[test]
@@ -389,14 +393,22 @@ mod execution {
     fn parallel_join_executes_ok() {
         let result = workflows::run(PARALLEL_JOIN, "parallel_join.nodus", None)
             .expect("parallel_join must execute without block-class errors");
-        assert_eq!(result.status, Status::Ok, "parallel_join must return Status::Ok");
+        assert_eq!(
+            result.status,
+            Status::Ok,
+            "parallel_join must return Status::Ok"
+        );
     }
 
     #[test]
     fn macro_expand_executes_ok() {
         let result = workflows::run(MACRO_EXPAND, "macro_expand.nodus", None)
             .expect("macro_expand must execute without block-class errors");
-        assert_eq!(result.status, Status::Ok, "macro_expand must return Status::Ok");
+        assert_eq!(
+            result.status,
+            Status::Ok,
+            "macro_expand must return Status::Ok"
+        );
     }
 
     #[test]

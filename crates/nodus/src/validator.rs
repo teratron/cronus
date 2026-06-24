@@ -298,9 +298,9 @@ impl Validator {
             for usage in &step_used {
                 let root = usage.split('.').next().unwrap_or(usage);
                 if !extended.contains(root) && !extended.contains(usage.as_str()) {
-                    let forward = step_targets[i + 1..].iter().any(|ts| {
-                        ts.contains(root) || ts.contains(usage.as_str())
-                    });
+                    let forward = step_targets[i + 1..]
+                        .iter()
+                        .any(|ts| ts.contains(root) || ts.contains(usage.as_str()));
                     if forward {
                         diags.push(Diagnostic::new(
                             Severity::Error,
@@ -1007,7 +1007,10 @@ mod tests {
         use crate::ast::{CommandCall, RuntimeBlock, Step, Stmt, WorkflowFile};
 
         let wf = WorkflowFile {
-            runtime: Some(RuntimeBlock { core: "schema.nodus".to_string(), ..Default::default() }),
+            runtime: Some(RuntimeBlock {
+                core: "schema.nodus".to_string(),
+                ..Default::default()
+            }),
             steps: vec![Step {
                 number: 1,
                 body: Some(Stmt::Command(CommandCall {
@@ -1024,7 +1027,10 @@ mod tests {
         assert!(
             diags.iter().any(|d| d.code == "E013"),
             "expected E013 for pipeline target shadowing runtime-owned $in; got: {:?}",
-            diags.iter().map(|d| (&d.code, &d.message)).collect::<Vec<_>>()
+            diags
+                .iter()
+                .map(|d| (&d.code, &d.message))
+                .collect::<Vec<_>>()
         );
     }
 
@@ -1033,7 +1039,10 @@ mod tests {
         use crate::ast::{CommandCall, RuntimeBlock, Step, Stmt, WorkflowFile};
 
         let wf = WorkflowFile {
-            runtime: Some(RuntimeBlock { core: "schema.nodus".to_string(), ..Default::default() }),
+            runtime: Some(RuntimeBlock {
+                core: "schema.nodus".to_string(),
+                ..Default::default()
+            }),
             steps: vec![Step {
                 number: 1,
                 body: Some(Stmt::Command(CommandCall {
@@ -1059,7 +1068,10 @@ mod tests {
 
         for target in ["$out", "$draft", "$raw", "$quality"] {
             let wf = WorkflowFile {
-                runtime: Some(RuntimeBlock { core: "schema.nodus".to_string(), ..Default::default() }),
+                runtime: Some(RuntimeBlock {
+                    core: "schema.nodus".to_string(),
+                    ..Default::default()
+                }),
                 steps: vec![Step {
                     number: 1,
                     body: Some(Stmt::Command(CommandCall {
@@ -1086,7 +1098,10 @@ mod tests {
 
         // Step 1 uses $result; step 2 declares → $result — forward reference
         let wf = WorkflowFile {
-            runtime: Some(RuntimeBlock { core: "schema.nodus".to_string(), ..Default::default() }),
+            runtime: Some(RuntimeBlock {
+                core: "schema.nodus".to_string(),
+                ..Default::default()
+            }),
             steps: vec![
                 Step {
                     number: 1,
@@ -1114,7 +1129,10 @@ mod tests {
         assert!(
             diags.iter().any(|d| d.code == "E014"),
             "expected E014 for forward reference; got: {:?}",
-            diags.iter().map(|d| (&d.code, &d.message)).collect::<Vec<_>>()
+            diags
+                .iter()
+                .map(|d| (&d.code, &d.message))
+                .collect::<Vec<_>>()
         );
     }
 
@@ -1124,7 +1142,10 @@ mod tests {
 
         // Step 1 declares → $result; step 2 uses $result — correct order
         let wf = WorkflowFile {
-            runtime: Some(RuntimeBlock { core: "schema.nodus".to_string(), ..Default::default() }),
+            runtime: Some(RuntimeBlock {
+                core: "schema.nodus".to_string(),
+                ..Default::default()
+            }),
             steps: vec![
                 Step {
                     number: 1,

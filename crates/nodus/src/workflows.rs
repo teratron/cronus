@@ -9,7 +9,8 @@
 
 use crate::Error;
 use crate::ast::WorkflowFile;
-use crate::executor::{Executor, ModelProvider, RunResult, Value};
+use crate::executor::{Executor, ModelProvider, RunResult, StubProvider, Value};
+use crate::observability::AuditProvider;
 use crate::parser::Parser;
 use crate::transpiler::Transpiler;
 use crate::validator::{Diagnostic, Severity, Validator};
@@ -214,6 +215,72 @@ pub fn run_with_provider(
     }
 
     Ok(Executor::new(provider).execute(&ast, input))
+}
+
+/// Run with the built-in stub provider and a custom [`AuditProvider`].
+///
+/// Validates before executing (fast-fail on block-class errors). `run_id` and
+/// `started_at` are forwarded to the run manifest; empty strings are accepted
+/// when the caller has no run-level metadata.
+pub fn run_with_audit(
+    source: &str,
+    filename: &str,
+    input: Option<Value>,
+    audit: impl AuditProvider + 'static,
+    run_id: &str,
+    started_at: &str,
+) -> Result<RunResult, Vec<Diagnostic>> {
+    let ast = Parser::parse(source).map_err(|e| {
+        vec![Diagnostic {
+            severity: Severity::Error,
+            code: "PARSE_ERROR".to_string(),
+            message: e.to_string(),
+            line: 0,
+            column: 0,
+            filename: filename.to_string(),
+        }]
+    })?;
+
+    let report = ValidationReport::new(Validator::validate(&ast, filename));
+    if report.has_errors {
+        return Err(report.diagnostics);
+    }
+
+    Ok(Executor::with_audit(StubProvider, audit)
+        .execute_with_params(&ast, input, run_id, started_at))
+}
+
+/// Run with a custom [`ModelProvider`] and a custom [`AuditProvider`].
+///
+/// Validates before executing (fast-fail on block-class errors). `run_id` and
+/// `started_at` are forwarded to the run manifest; empty strings are accepted
+/// when the caller has no run-level metadata.
+pub fn run_with_provider_and_audit(
+    source: &str,
+    filename: &str,
+    input: Option<Value>,
+    provider: impl ModelProvider + 'static,
+    audit: impl AuditProvider + 'static,
+    run_id: &str,
+    started_at: &str,
+) -> Result<RunResult, Vec<Diagnostic>> {
+    let ast = Parser::parse(source).map_err(|e| {
+        vec![Diagnostic {
+            severity: Severity::Error,
+            code: "PARSE_ERROR".to_string(),
+            message: e.to_string(),
+            line: 0,
+            column: 0,
+            filename: filename.to_string(),
+        }]
+    })?;
+
+    let report = ValidationReport::new(Validator::validate(&ast, filename));
+    if report.has_errors {
+        return Err(report.diagnostics);
+    }
+
+    Ok(Executor::with_audit(provider, audit).execute_with_params(&ast, input, run_id, started_at))
 }
 
 // ─── Tests ────────────────────────────────────────────────────────────────────

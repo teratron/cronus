@@ -54,6 +54,8 @@
 - <https://github.com/node-red/node-red>
 - <https://github.com/n8n-io/n8n>
 - <https://github.com/huginn/huginn>
+- <https://github.com/lmstudio-ai/lms>
+- <https://github.com/ollama/ollama>
 
 ### Harness
 

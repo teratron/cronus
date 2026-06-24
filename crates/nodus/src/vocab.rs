@@ -271,7 +271,10 @@ mod tests {
     fn run_is_known_command() {
         let schema = Schema::builtin();
         assert!(schema.is_command("RUN"), "RUN must be a known command");
-        assert_eq!(BUILTIN_SCHEMA_VERSION, "0.4.6", "version bump must accompany RUN addition");
+        assert_eq!(
+            BUILTIN_SCHEMA_VERSION, "0.4.6",
+            "version bump must accompany RUN addition"
+        );
     }
 
     #[test]
@@ -286,7 +289,15 @@ mod tests {
 
     #[test]
     fn runtime_owned_excludes_writable_reserved() {
-        let writable = ["$out", "$raw", "$draft", "$log", "$quality", "$sentiment", "$confidence"];
+        let writable = [
+            "$out",
+            "$raw",
+            "$draft",
+            "$log",
+            "$quality",
+            "$sentiment",
+            "$confidence",
+        ];
         for var in writable {
             assert!(
                 !RUNTIME_OWNED_VARIABLES.contains(&var),

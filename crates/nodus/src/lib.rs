@@ -43,6 +43,7 @@ mod error;
 
 pub mod ast;
 pub mod lexer;
+pub mod observability;
 pub mod parser;
 pub mod vocab;
 
@@ -55,13 +56,17 @@ pub mod workflows;
 pub use error::{Error, Result, Span};
 pub use executor::{Executor, ModelProvider, RunResult, Status, StubProvider, Value};
 pub use lexer::{Lexer, Token, TokenType};
+pub use observability::{
+    AuditProvider, ExecutionEvent, FieldDescriptor, LoopType, NoopAuditProvider, RunManifest,
+    RunStatus,
+};
 pub use parser::Parser;
 pub use transpiler::Transpiler;
 pub use validator::{Diagnostic, Severity, Validator};
 pub use vocab::Schema;
 pub use workflows::{
-    TestReport, TestResult, TranspileMode, ValidationReport, run, run_with_provider, scaffold,
-    test, transpile,
+    TestReport, TestResult, TranspileMode, ValidationReport, run, run_with_audit,
+    run_with_provider, run_with_provider_and_audit, scaffold, test, transpile,
 };
 
 #[cfg(test)]

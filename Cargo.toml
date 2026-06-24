@@ -1,12 +1,22 @@
 [workspace]
 resolver = "2"
-members = ["crates/core", "crates/codegraph", "crates/nodus", "crates/cli", "crates/tui"]
+members = [
+    "crates/core",
+    "crates/codegraph",
+    "crates/nodus",
+    "crates/cli",
+    "crates/tui",
+]
 
 [workspace.package]
 version = "0.1.0"
 edition = "2024"
 license = "MIT"
+description = ""
 repository = "https://github.com/teratron/cronus"
+homepage = "https://github.com/teratron/cronus"
+documentation = "https://teratron.github.io/cronus"
+readme = "README.md"
 
 [workspace.dependencies]
 codegraph = { path = "crates/codegraph" }

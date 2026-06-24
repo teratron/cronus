@@ -17,8 +17,13 @@
 //! inspect `status` first, then use `out`, `log`, and `errors` for details.
 
 use crate::ast::{AbsoluteRule, CommandCall, RuleKind, Step, Stmt, WorkflowFile};
+use crate::observability::{
+    AuditProvider, ExecutionEvent, FieldDescriptor, LoopType, NoopAuditProvider, RunManifest,
+    RunStatus,
+};
 use crate::vocab;
 use std::collections::HashMap;
+use std::time::Instant;
 
 // ─── Value ────────────────────────────────────────────────────────────────────
 
@@ -202,6 +207,8 @@ struct ExecutionContext {
     errors: Vec<RuntimeError>,
     flags: Vec<String>,
     out_locked: bool,
+    event_count: u32,
+    start_instant: Instant,
 }
 
 impl ExecutionContext {
@@ -213,6 +220,8 @@ impl ExecutionContext {
             errors: Vec::new(),
             flags: Vec::new(),
             out_locked: false,
+            event_count: 0,
+            start_instant: Instant::now(),
         }
     }
 
@@ -305,13 +314,15 @@ impl ExecutionContext {
 /// Core runtime engine for NODUS workflows.
 pub struct Executor {
     provider: Box<dyn ModelProvider>,
+    audit: Box<dyn AuditProvider>,
 }
 
 impl Executor {
-    /// Create an executor backed by `provider`.
+    /// Create an executor backed by `provider` with a no-op audit provider.
     pub fn new(provider: impl ModelProvider + 'static) -> Self {
         Executor {
             provider: Box::new(provider),
+            audit: Box::new(NoopAuditProvider),
         }
     }
 
@@ -320,9 +331,41 @@ impl Executor {
         Self::new(StubProvider)
     }
 
+    /// Create an executor with a custom model provider and audit provider.
+    pub fn with_audit(
+        provider: impl ModelProvider + 'static,
+        audit: impl AuditProvider + 'static,
+    ) -> Self {
+        Executor {
+            provider: Box::new(provider),
+            audit: Box::new(audit),
+        }
+    }
+
     /// Run a parsed workflow through the boot sequence, execute its steps, and
     /// return the structured [`RunResult`].
     pub fn execute(&self, ast: &WorkflowFile, input: Option<Value>) -> RunResult {
+        self.execute_inner(ast, input, "", "")
+    }
+
+    /// Run a workflow with explicit run metadata forwarded to the audit provider.
+    pub fn execute_with_params(
+        &self,
+        ast: &WorkflowFile,
+        input: Option<Value>,
+        run_id: &str,
+        started_at: &str,
+    ) -> RunResult {
+        self.execute_inner(ast, input, run_id, started_at)
+    }
+
+    fn execute_inner(
+        &self,
+        ast: &WorkflowFile,
+        input: Option<Value>,
+        run_id: &str,
+        started_at: &str,
+    ) -> RunResult {
         let mut ctx = ExecutionContext::new();
 
         // Boot step 1: identify workflow.
@@ -409,6 +452,22 @@ impl Executor {
             Status::Ok
         };
 
+        let run_status = match status {
+            Status::Ok | Status::Partial => RunStatus::Ok,
+            Status::Failed | Status::Aborted => RunStatus::ConstraintHalt,
+        };
+        self.audit.run_complete(RunManifest {
+            workflow_name: workflow_id.clone(),
+            schema_version: crate::vocab::BUILTIN_SCHEMA_VERSION.to_string(),
+            run_id: run_id.to_string(),
+            started_at: started_at.to_string(),
+            elapsed_ms: ctx.start_instant.elapsed().as_millis() as u64,
+            status: run_status,
+            error_code: ctx.errors.first().map(|e| e.code.clone()),
+            total_steps: ctx.log.len() as u32,
+            event_count: ctx.event_count,
+        });
+
         RunResult {
             workflow: workflow_id,
             status,
@@ -461,6 +520,12 @@ impl Executor {
         step_num: u32,
     ) -> Option<Signal> {
         if Self::evaluate_condition(ctx, &cond.condition) {
+            self.audit.record_event(ExecutionEvent::BranchTaken {
+                step_index: step_num,
+                branch_label: "if".to_string(),
+                condition_result: true,
+            });
+            ctx.event_count += 1;
             if let Some(action) = &cond.action {
                 let sig = self.execute_command(ctx, action, step_num);
                 if sig.is_some() {
@@ -484,6 +549,12 @@ impl Executor {
 
         for elif_br in &cond.elif_branches {
             if Self::evaluate_condition(ctx, &elif_br.condition) {
+                self.audit.record_event(ExecutionEvent::BranchTaken {
+                    step_index: step_num,
+                    branch_label: "elif".to_string(),
+                    condition_result: true,
+                });
+                ctx.event_count += 1;
                 if let Some(action) = &elif_br.action {
                     let sig = self.execute_command(ctx, action, step_num);
                     if sig.is_some() {
@@ -507,6 +578,12 @@ impl Executor {
         }
 
         if let Some(else_br) = &cond.else_branch {
+            self.audit.record_event(ExecutionEvent::BranchTaken {
+                step_index: step_num,
+                branch_label: "else".to_string(),
+                condition_result: false,
+            });
+            ctx.event_count += 1;
             if let Some(action) = &else_br.action {
                 let sig = self.execute_command(ctx, action, step_num);
                 if sig.is_some() {
@@ -538,8 +615,15 @@ impl Executor {
             _ => return None,
         };
 
-        for item in collection {
+        for (iter_idx, item) in collection.into_iter().enumerate() {
             ctx.set_var(&fl.variable, item);
+            self.audit.record_event(ExecutionEvent::LoopIteration {
+                step_index: step_num,
+                loop_type: LoopType::For,
+                iteration_number: iter_idx as u32,
+                bound_vars: vec![fl.variable.clone()],
+            });
+            ctx.event_count += 1;
             let mut skip_rest = false;
             for child in &fl.body {
                 let sig = self.execute_node(ctx, child, step_num);
@@ -565,7 +649,14 @@ impl Executor {
     ) -> Option<Signal> {
         let max_iter = ul.max_iterations.unwrap_or(5) as usize;
 
-        for _ in 0..max_iter {
+        for iter_idx in 0..max_iter {
+            self.audit.record_event(ExecutionEvent::LoopIteration {
+                step_index: step_num,
+                loop_type: LoopType::Until,
+                iteration_number: iter_idx as u32,
+                bound_vars: vec![],
+            });
+            ctx.event_count += 1;
             for child in &ul.body {
                 let sig = self.execute_node(ctx, child, step_num);
                 if matches!(sig, Some(Signal::Break)) {
@@ -723,6 +814,19 @@ impl Executor {
         step_num: u32,
     ) -> Option<Signal> {
         if let Some(violation) = ctx.check_rules(&cmd.name, &cmd.args) {
+            self.audit.record_event(ExecutionEvent::ConstraintHit {
+                rule_name: violation.clone(),
+                triggering_step_index: step_num,
+                halt: true,
+            });
+            ctx.event_count += 1;
+            self.audit.record_event(ExecutionEvent::StepError {
+                step_index: step_num,
+                step_command: cmd.name.clone(),
+                error_code: vocab::error_code::RULE_VIOLATION.to_string(),
+                error_detail: violation.clone(),
+            });
+            ctx.event_count += 1;
             ctx.errors.push(RuntimeError {
                 code: vocab::error_code::RULE_VIOLATION.to_string(),
                 step: step_num,
@@ -731,7 +835,27 @@ impl Executor {
             return Some(Signal::Break);
         }
 
-        let result = self.dispatch(ctx, cmd);
+        let input_vars: Vec<String> = ctx.variables.keys().cloned().collect();
+        let step_start = Instant::now();
+        self.audit.record_event(ExecutionEvent::StepStart {
+            step_index: step_num,
+            step_command: cmd.name.clone(),
+            input_vars,
+        });
+        ctx.event_count += 1;
+
+        let result = self.dispatch(ctx, cmd, step_num);
+
+        let elapsed_ms = step_start.elapsed().as_millis() as u64;
+        let output_vars: Vec<String> = cmd.pipeline_target.iter().cloned().collect();
+        self.audit.record_event(ExecutionEvent::StepEnd {
+            step_index: step_num,
+            step_command: cmd.name.clone(),
+            output_vars,
+            elapsed_ms,
+        });
+        ctx.event_count += 1;
+
         ctx.log_step(step_num, &cmd.name, result.clone());
 
         if let Some(target) = &cmd.pipeline_target {
@@ -747,11 +871,11 @@ impl Executor {
 
     // ─── Command dispatch ─────────────────────────────────────────────────────
 
-    fn dispatch(&self, ctx: &mut ExecutionContext, cmd: &CommandCall) -> Value {
+    fn dispatch(&self, ctx: &mut ExecutionContext, cmd: &CommandCall, step_num: u32) -> Value {
         match cmd.name.as_str() {
             "LOG" => Self::handle_log(ctx, cmd),
-            "GEN" => self.handle_gen(ctx, cmd),
-            "ANALYZE" => self.handle_analyze(ctx, cmd),
+            "GEN" => self.handle_gen(ctx, cmd, step_num),
+            "ANALYZE" => self.handle_analyze(ctx, cmd, step_num),
             "FETCH" => Self::handle_fetch(ctx, cmd),
             "ESCALATE" => Self::handle_escalate(ctx, cmd),
             "ROUTE" => Self::handle_route(ctx, cmd),
@@ -782,7 +906,20 @@ impl Executor {
             "RECALL" => Value::Null,
             "RUN" => {
                 let macro_name = cmd.args.first().cloned().unwrap_or_default();
+                let macro_start = Instant::now();
+                self.audit.record_event(ExecutionEvent::MacroEnter {
+                    macro_name: macro_name.clone(),
+                    call_step_index: step_num,
+                });
+                ctx.event_count += 1;
                 ctx.flags.push(format!("RUN:{macro_name}"));
+                let elapsed_ms = macro_start.elapsed().as_millis() as u64;
+                self.audit.record_event(ExecutionEvent::MacroExit {
+                    macro_name,
+                    call_step_index: step_num,
+                    elapsed_ms,
+                });
+                ctx.event_count += 1;
                 Value::Null
             }
             "ASSIGN" => {
@@ -835,7 +972,7 @@ impl Executor {
         Value::Null
     }
 
-    fn handle_gen(&self, ctx: &ExecutionContext, cmd: &CommandCall) -> Value {
+    fn handle_gen(&self, ctx: &mut ExecutionContext, cmd: &CommandCall, step_num: u32) -> Value {
         let prompt = cmd.args.first().map(|a| {
             if a.starts_with('$') {
                 ctx.get_var(a).as_text()
@@ -843,19 +980,60 @@ impl Executor {
                 a.clone()
             }
         });
-        Value::Text(
-            self.provider
-                .generate(prompt.as_deref().unwrap_or(""), &cmd.modifiers),
-        )
+        let prompt_str = prompt.as_deref().unwrap_or("").to_string();
+        self.audit.record_event(ExecutionEvent::ModelCall {
+            step_index: step_num,
+            command: cmd.name.clone(),
+            input_summary: FieldDescriptor::text(prompt_str.len() as u32),
+        });
+        ctx.event_count += 1;
+        let call_start = Instant::now();
+        let result = self.provider.generate(&prompt_str, &cmd.modifiers);
+        let elapsed_ms = call_start.elapsed().as_millis() as u64;
+        self.audit.record_event(ExecutionEvent::ModelResponse {
+            step_index: step_num,
+            command: cmd.name.clone(),
+            output_summary: FieldDescriptor::text(result.len() as u32),
+            elapsed_ms,
+        });
+        ctx.event_count += 1;
+        Value::Text(result)
     }
 
-    fn handle_analyze(&self, ctx: &ExecutionContext, cmd: &CommandCall) -> Value {
+    fn handle_analyze(
+        &self,
+        ctx: &mut ExecutionContext,
+        cmd: &CommandCall,
+        step_num: u32,
+    ) -> Value {
         let text = cmd
             .args
             .first()
             .map(|a| ctx.get_var(a).as_text())
             .unwrap_or_default();
-        self.provider.analyze(&text, &cmd.flags)
+        self.audit.record_event(ExecutionEvent::ModelCall {
+            step_index: step_num,
+            command: cmd.name.clone(),
+            input_summary: FieldDescriptor::text(text.len() as u32),
+        });
+        ctx.event_count += 1;
+        let call_start = Instant::now();
+        let result = self.provider.analyze(&text, &cmd.flags);
+        let elapsed_ms = call_start.elapsed().as_millis() as u64;
+        let output_summary = match &result {
+            Value::Map(entries) => {
+                FieldDescriptor::map_like(entries.len() as u32, format!("{result:?}").len() as u32)
+            }
+            _ => FieldDescriptor::text(result.as_text().len() as u32),
+        };
+        self.audit.record_event(ExecutionEvent::ModelResponse {
+            step_index: step_num,
+            command: cmd.name.clone(),
+            output_summary,
+            elapsed_ms,
+        });
+        ctx.event_count += 1;
+        result
     }
 
     fn handle_fetch(_ctx: &ExecutionContext, cmd: &CommandCall) -> Value {

@@ -1,7 +1,7 @@
 ---
 phase: 4
 name: "Observability & Extension Framework"
-status: Todo
+status: Done
 subsystem: "crates/nodus"
 requires:
   - phase-3
@@ -20,7 +20,7 @@ duration_minutes: 0
 
 # Phase 4 — Observability & Extension Framework
 
-**Status:** Todo
+**Status:** Done
 **Execution Mode:** Sequential (strict dep chain A → B01 → B02 → B03 → B04 → C → T)
 **Specs:** [l2-nodus-observability.md](../specifications/l2-nodus-observability.md) · [l2-nodus-runtime.md](../specifications/l2-nodus-runtime.md)
 
@@ -48,8 +48,9 @@ API functions to `workflows.rs`. Culminates with a `l2-nodus-runtime.md` spec sy
 ### T-4A02: Unit tests for observability types
 
 - [ ] Add `#[cfg(test)] mod tests` block in `observability.rs`
+- [ ] Define `RecordingProvider` test helper struct: holds `Arc<Mutex<Vec<ExecutionEvent>>>` + `Arc<Mutex<Vec<RunManifest>>>`; implements `AuditProvider` by pushing to the vecs; used across all audit unit tests
 - [ ] `noop_provider_discards_all` — call `record_event` for all 10 event variants + `run_complete`; no panic
-- [ ] `step_start_end_emitted` — `RecordingProvider` helper collects events; verify StepStart then StepEnd ordering
+- [ ] `step_start_end_emitted` — `RecordingProvider` collects events; verify StepStart precedes StepEnd for a single GEN step
 - [ ] `constraint_hit_halt_true` — verify `ConstraintHit { halt: true }` variant round-trips correctly
 - [ ] `branch_taken_if` / `branch_taken_else` — BranchTaken variant with both `condition_result` values
 - [ ] `loop_iteration_for` / `loop_iteration_until` — LoopIteration variants
@@ -76,14 +77,16 @@ API functions to `workflows.rs`. Culminates with a `l2-nodus-runtime.md` spec sy
 
 ### T-4B02: Wire `StepStart` / `StepEnd` / `StepError` / `ConstraintHit`
 
+> **Architecture note**: `dispatch` currently has signature `fn dispatch(&self, ctx: &mut ExecutionContext, cmd: &CommandCall) -> Value`. It must be updated to `fn dispatch(&self, ctx: &mut ExecutionContext, cmd: &CommandCall, step_num: u32) -> Value` so `step_num` is available for `ModelCall`/`MacroEnter`/`MacroExit` events emitted inside it.
+
 Hook points in `execute_command`:
 
-- [ ] Before `self.dispatch(ctx, cmd)`: `self.audit.record_event(ExecutionEvent::StepStart { step_index: step_num, step_command: cmd.name.clone(), input_vars: ctx.variables.keys().cloned().collect() })` + record `Instant::now()` for elapsed
-- [ ] After successful `dispatch`: `self.audit.record_event(ExecutionEvent::StepEnd { step_index: step_num, step_command: cmd.name.clone(), output_vars: pipeline_target.iter().cloned().collect(), elapsed_ms })` + increment `ctx.event_count`
-- [ ] In the `check_rules` violation path (before `return Some(Signal::Break)`): `self.audit.record_event(ExecutionEvent::ConstraintHit { rule_name: violation_description, triggering_step_index: step_num, halt: true })`
-- [ ] After `ctx.errors.push(RuntimeError { code: RULE_VIOLATION, ... })`: `self.audit.record_event(ExecutionEvent::StepError { step_index: step_num, step_command: cmd.name.clone(), error_code: RULE_VIOLATION.to_string(), error_detail: violation.clone() })`
+- [ ] Update `dispatch` signature: add `step_num: u32` parameter; update the single call site in `execute_command`
+- [ ] Before `self.dispatch(ctx, cmd, step_num)`: emit `StepStart`; snapshot `ctx.variables.keys()` for `input_vars`; record `Instant::now()` for elapsed
+- [ ] After `dispatch` returns: emit `StepEnd { output_vars: cmd.pipeline_target.iter().cloned().collect(), elapsed_ms }`; increment `ctx.event_count` twice (StepStart + StepEnd)
+- [ ] In the `check_rules` violation path, before `ctx.errors.push`: emit `ConstraintHit { halt: true }`; then emit `StepError`; increment `ctx.event_count` twice; then `ctx.errors.push`; then `return Some(Signal::Break)`
 
-**Verify:** `cargo test -p nodus` — all tests pass; add an in-module test that a rule-violation run emits `ConstraintHit` + `StepError` events.
+**Verify:** `cargo test -p nodus` — all 143 existing tests still pass (no regressions); `cargo check -p nodus` clean; add in-module test that a rule-violation run emits `ConstraintHit` + `StepError` events.
 
 ### T-4B03: Wire `BranchTaken` / `LoopIteration` / `MacroEnter` + `MacroExit`
 
@@ -97,14 +100,18 @@ Hook points in `execute_command`:
 
 ### T-4B04: Wire `ModelCall` / `ModelResponse` + `run_complete` in `execute()`
 
-- [ ] In `handle_gen`, before `self.provider.generate(...)`: `self.audit.record_event(ExecutionEvent::ModelCall { step_index, command: "GEN", input_summary: FieldDescriptor { field_count: 1, type_hints: vec!["Text".into()], total_bytes: prompt.as_deref().map(|s| s.len() as u32).unwrap_or(0) } })` + record `Instant`
-- [ ] In `handle_gen`, after `generate` returns: `self.audit.record_event(ExecutionEvent::ModelResponse { step_index, command: "GEN", output_summary: FieldDescriptor { field_count: 1, type_hints: vec!["Text".into()], total_bytes: result.len() as u32 }, elapsed_ms })`
-- [ ] In `handle_analyze`, same pattern: ModelCall before `self.provider.analyze`, ModelResponse after
-- [ ] Add `execute_with_run_params(&self, ast, input, run_id: &str, started_at: &str)` internal method that threads `run_id` + `started_at` to the manifest
-- [ ] In `execute()` / `execute_with_run_params()`, immediately before returning `RunResult`: call `self.audit.run_complete(RunManifest { workflow_name, schema_version: BUILTIN_SCHEMA_VERSION.into(), run_id, started_at, elapsed_ms: ctx.start_instant.elapsed().as_millis() as u64, status: manifest_status_from(run_status), error_code, total_steps: ctx.event_count, event_count: ctx.event_count })`
-- [ ] `model_call_no_raw_content` invariant: `input_summary` and `output_summary` must never store the actual prompt/result strings
+> **Architecture note**: `handle_gen` and `handle_analyze` currently take `ctx: &ExecutionContext` (immutable). They must be updated to `ctx: &mut ExecutionContext` so they can increment `ctx.event_count` after emitting model events. Both also need a new `step_num: u32` parameter passed down from `dispatch`.
 
-**Verify:** `cargo test -p nodus` — all existing tests pass; `model_call_no_raw_content` unit test passes (no raw text in `FieldDescriptor`); observer-neutrality property (same `RunResult` with and without audit) verified manually.
+- [ ] Update `handle_gen` signature: `fn handle_gen(&self, ctx: &mut ExecutionContext, cmd: &CommandCall, step_num: u32) -> Value`
+- [ ] Update `handle_analyze` signature: same pattern; update call sites in `dispatch`
+- [ ] In `handle_gen`, before `self.provider.generate(...)`: emit `ModelCall { input_summary: FieldDescriptor::text(prompt_bytes) }`; record `Instant`; `ctx.event_count += 1`
+- [ ] In `handle_gen`, after `generate` returns: emit `ModelResponse { output_summary: FieldDescriptor::text(result_bytes), elapsed_ms }`; `ctx.event_count += 1`
+- [ ] In `handle_analyze`: same pattern — `ModelCall` before `provider.analyze`, `ModelResponse` after
+- [ ] Add `pub fn execute_with_params(&self, ast, input, run_id: &str, started_at: &str) -> RunResult` that delegates to a shared `execute_inner` private function
+- [ ] `execute()` delegates to `execute_inner(ast, input, "", "")` for backward compat
+- [ ] In `execute_inner`, immediately before building `RunResult`: `self.audit.run_complete(RunManifest { ... elapsed_ms: ctx.start_instant.elapsed().as_millis() as u64, event_count: ctx.event_count, total_steps: ctx.log.len() as u32, ... })`
+
+**Verify:** `cargo test -p nodus` — all existing 143 tests pass; `model_call_no_raw_content` unit test confirms no raw text in `FieldDescriptor` fields.
 
 ## Track C — `workflows.rs` delta
 

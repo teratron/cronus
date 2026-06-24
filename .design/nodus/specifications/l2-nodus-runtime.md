@@ -1,6 +1,6 @@
 # Nodus Runtime (Rust)
 
-**Version:** 1.0.2
+**Version:** 1.0.3
 **Status:** Stable
 **Layer:** implementation
 **Implements:** l1-nodus-language.md
@@ -55,8 +55,9 @@ crates/nodus/src/
 ├── vocab.rs         — Schema, KNOWN_COMMANDS, RESERVED_VARIABLES, RUNTIME_OWNED_VARIABLES, VALID_TONES, error_code
 ├── validator.rs     — Diagnostic, Severity, Validator
 ├── executor.rs      — Value, Executor, ModelProvider trait, StubProvider, RunResult, Status
+├── observability.rs — AuditProvider trait, ExecutionEvent (10 variants), NoopAuditProvider, RunManifest, FieldDescriptor, RunStatus, LoopType
 ├── transpiler.rs    — Transpiler (to_nodus / to_human)
-└── workflows.rs     — public library API (scaffold / validate / run / transpile / test / run_with_provider)
+└── workflows.rs     — public library API (scaffold / validate / run / transpile / test / run_with_provider / run_with_audit / run_with_provider_and_audit)
 ```
 
 ### 4.2 AST node summary
@@ -107,8 +108,10 @@ pub enum Value {
 | `transpile` | `(source, mode: TranspileMode) -> Result<String>` | `Compact` = lossless round-trip; `Human` = one-way prose |
 | `test` | `(source, filename) -> Result<TestReport>` | Executes all `@test:` blocks; aggregates `passed`/`failed` counts |
 | `run_with_provider` | `(source, filename, input?, provider) -> Result<RunResult, Vec<Diagnostic>>` | Like `run` but with injected `ModelProvider` |
+| `run_with_audit` | `(source, filename, input?, audit, run_id, started_at) -> Result<RunResult, Vec<Diagnostic>>` | Like `run` but with injected `AuditProvider`; forwards run metadata to the manifest |
+| `run_with_provider_and_audit` | `(source, filename, input?, provider, audit, run_id, started_at) -> Result<RunResult, Vec<Diagnostic>>` | Full injection: custom `ModelProvider` + `AuditProvider` |
 
-The `ModelProvider` trait is the sole extension point for real model integration. Any host (Cronus core, CLI, test harness) may supply a concrete provider; the crate itself is provider-agnostic.
+The `ModelProvider` and `AuditProvider` traits are the two extension points. Any host may supply concrete implementations; the crate itself is provider-agnostic. `NoopAuditProvider` is the zero-cost built-in used when no observability is required.
 
 ### 4.6 Vocabulary schema (v0.4.6)
 
@@ -154,6 +157,7 @@ Reserved variables: `$in` `$out` `$error` `$meta` `$raw` `$draft` `$ctx` `$user`
 
 | Version | Date | Change |
 | --- | --- | --- |
+| 1.0.3 | 2026-06-24 | §4.1: add `observability.rs` module; §4.5: add `run_with_audit` and `run_with_provider_and_audit` rows; note `AuditProvider` as second extension point |
 | 1.0.2 | 2026-06-24 | §4.6: BUILTIN_SCHEMA_VERSION v0.4.6, 51 commands (RUN added as meta-command), RUNTIME_OWNED_VARIABLES constant documented; §3: NL-8→E013, NL-10→E014 enforced |
 | 1.0.1 | 2026-06-23 | §4.6: documented vocabulary alignment (50 commands verified against `vocab.rs`), added `RUN` meta-command gap note |
 | 1.0.0 | 2026-06-23 | Initial spec — module structure, AST nodes, Value type, executor boot sequence, public API, vocabulary schema v0.4.5 |
