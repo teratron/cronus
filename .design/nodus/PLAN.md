@@ -1,9 +1,9 @@
 # Implementation Plan
 
-**Version:** 1.4.0
+**Version:** 1.7.0
 **Generated:** 2026-06-24
-**Based on:** .design/nodus/INDEX.md v1.0.6
-**Status:** Complete
+**Based on:** .design/nodus/INDEX.md v1.0.9
+**Status:** Active
 
 ## Overview
 
@@ -69,7 +69,39 @@ Execution mode: **Sequential** (spec correctness must precede hardening; hardeni
 
 - [x] **Nodus Runtime delta** ([l2-nodus-runtime.md](specifications/l2-nodus-runtime.md)) [L2] — §4.1 updated (observability.rs added), §4.5 updated (run_with_audit/run_with_provider_and_audit), version bumped 1.0.2 → 1.0.3
 
+## Phase 5 — Portability Implementation
+
+*Implement the `SchemaProvider` vocabulary-extension seam and define the pending `StorageProvider`/`PolicyProvider` trait interfaces in `crates/nodus`. Raises nodus from "observability-capable" to "fully-portable" per the LP-invariants.*
+
+> **Status:** Complete — all tracks A/B/C/T delivered. Atomic tasks in `archives/tasks/phase-5.md`.
+
+- [x] **L2 Nodus Portability** ([l2-nodus-portability.md](specifications/l2-nodus-portability.md)) [L2]
+  - ✅ `portability.rs` module: SchemaProvider + BuiltinSchemaProvider, StorageProvider + NoopStorageProvider, PolicyProvider + NoopPolicyProvider
+  - ✅ `vocab.rs` delta: `Schema::with_provider()` constructor, `is_host_command()` helper, `host_commands`/`host_reserved` fields
+  - ✅ `lexer.rs` delta: schema-aware lexing (`new_with_schema`, `tokenize_str_with_schema`, `extra_commands` field)
+  - ✅ `parser.rs` delta: `parse_with_schema()` using extended lexer
+  - ✅ `workflows.rs` delta: `run_with_schema` + `run_with_schema_and_audit` public functions
+  - ✅ `lib.rs` re-exports for all portability types and new workflow functions
+  - ✅ `l2-nodus-runtime.md` spec sync v1.0.3 → v1.0.4
+  - ✅ 166 tests pass (107 unit + 17 invariant + 4 observability + 34 parity + 3 portability + 1 doctest); clippy clean; fmt clean; docs zero warnings
+
+## Phase 6 — Testing Implementation
+
+*Implement the full `@test:` block contract from `l1-nodus-testing.md`. Raises nodus from a
+stub-level runner to an assertion-evaluating test facility (NT-1…NT-10).*
+
+- [ ] **L2 Nodus Testing** ([l2-nodus-testing.md](specifications/l2-nodus-testing.md)) [L2 — to be authored in Track T]
+  - [ ] Track A: `ast.rs` — structured `TestBlock` (input/expected/tags typed fields)
+  - [ ] Track A: `parser.rs` — `parse_test_block()` populates structured fields; E015 on duplicate name
+  - [ ] Track A: `transpiler.rs` — round-trip fidelity for structured test blocks
+  - [ ] Track B: `workflows.rs` — `evaluate_test_block()` helper; rewrite `test()` for per-block assertion evaluation (NT-1, NT-2, NT-3, NT-4, NT-5)
+  - [ ] Track C: `validator.rs` — W001 (route uncovered), W002 (no expected:) diagnostics
+  - [ ] Track C: public API — tag filtering in `test()` (NT-6)
+  - [ ] Track T: `tests/testing.rs` — 6 integration tests covering NT-1…NT-7
+  - [ ] Track T: `l2-nodus-testing.md` — L2 spec authored; NT compliance table
+  - [ ] Track T: Quality gates (clippy/fmt/test/doc all green; target 175+ tests)
+
 ## Backlog
 
-<!-- All 5 registered specs are scheduled across Phases 0–4. All phases complete. -->
-<!-- Next evolution: author l2-nodus-portability.md when StorageProvider/PolicyProvider extension points are ready (see l1-nodus-portability.md LP-7). -->
+<!-- StorageProvider/PolicyProvider executor integration deferred pending LP-3 satisfied. -->
+<!-- Future: l2-nodus-transpiler.md — dedicated transpiler L2 spec (currently covered by l2-nodus-runtime.md §4). -->

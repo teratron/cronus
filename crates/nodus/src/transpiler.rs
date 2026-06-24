@@ -112,6 +112,30 @@ impl Transpiler {
             lines.push(format!("ON ERROR: {}", Self::humanize_error(&err.raw)));
         }
 
+        for test in &ast.tests {
+            lines.push(String::new());
+            lines.push(format!("TEST CASE: {}", test.name));
+            if !test.input.is_empty() {
+                let inputs: Vec<String> = test
+                    .input
+                    .iter()
+                    .map(|(k, v)| format!("{k} = {v}"))
+                    .collect();
+                lines.push(format!("  Inputs: {}", inputs.join(", ")));
+            }
+            if !test.expected.is_empty() {
+                let asserts: Vec<String> = test
+                    .expected
+                    .iter()
+                    .map(|(k, v)| format!("{} → {}", Self::humanize_var(k), v))
+                    .collect();
+                lines.push(format!("  Expects: {}", asserts.join(", ")));
+            }
+            if !test.tags.is_empty() {
+                lines.push(format!("  Tags: {}", test.tags.join(", ")));
+            }
+        }
+
         lines.join("\n")
     }
 
@@ -219,8 +243,27 @@ impl Transpiler {
         for test in &ast.tests {
             lines.push(String::new());
             lines.push(format!("@test:{} {{", test.name));
-            for raw in &test.raw_lines {
-                lines.push(format!("  {raw}"));
+            let has_structured =
+                !test.input.is_empty() || !test.expected.is_empty() || !test.tags.is_empty();
+            if has_structured {
+                if !test.input.is_empty() {
+                    lines.push("  input:".to_string());
+                    for (k, v) in &test.input {
+                        lines.push(format!("    {k}: {v}"));
+                    }
+                }
+                if !test.expected.is_empty() {
+                    lines.push("  expected:".to_string());
+                    for (k, v) in &test.expected {
+                        lines.push(format!("    {k}: {v}"));
+                    }
+                }
+                if !test.tags.is_empty() {
+                    lines.push(format!("  tags: [{}]", test.tags.join(", ")));
+                }
+            } else if !test.raw_lines.is_empty() {
+                // Backward compat: emit raw token values joined as a single body line
+                lines.push(format!("  {}", test.raw_lines.join(" ")));
             }
             lines.push("}".to_string());
         }

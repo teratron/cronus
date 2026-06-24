@@ -13,6 +13,7 @@ Nodus is runtime-agnostic at L1: any conforming implementation must honour the i
 ## Related Specifications
 
 - [l2-nodus-runtime.md](l2-nodus-runtime.md) — Rust implementation of this language
+- [l1-nodus-testing.md](l1-nodus-testing.md) — Full testing contract for `@test:` blocks (NT-1…NT-10 invariants, execution protocol, TestReport contract)
 - [../../main/specifications/l2-workflow-runtime.md](../../main/specifications/l2-workflow-runtime.md) — Cronus integration layer (step binding, subsystem dispatch, platform constraints)
 
 ## 1. Motivation

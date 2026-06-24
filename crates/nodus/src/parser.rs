@@ -35,6 +35,43 @@ impl Parser {
         let mut p = Parser { tokens, pos: 0 };
         p.skip_noise();
         if p.at_end() {
+            return Err(crate::error::Error::Parse {
+                span: crate::error::Span::new(0, 0),
+                message: "empty source — expected a § declaration".to_string(),
+            });
+        }
+        if p.cur_ty() != TokenType::Section {
+            return Err(crate::error::Error::Parse {
+                span: p.span(),
+                message: "expected a § declaration at the start of the file".to_string(),
+            });
+        }
+        let val = p.cur_val();
+        if val.starts_with("\u{00a7}wf:") {
+            Ok(p.parse_workflow())
+        } else if val.starts_with("\u{00a7}schema:") || val.starts_with("\u{00a7}config:") {
+            Err(crate::error::Error::Parse {
+                span: p.span(),
+                message: "schema/config file parsing is not yet implemented".to_string(),
+            })
+        } else {
+            Err(crate::error::Error::Parse {
+                span: p.span(),
+                message: format!("unknown file type: {val}"),
+            })
+        }
+    }
+
+    /// Parse `source` into a [`WorkflowFile`] using a schema-extended vocabulary.
+    ///
+    /// Host commands registered in `schema` (via [`crate::vocab::Schema::with_provider`])
+    /// are recognized as valid command tokens during lexing, allowing workflows that
+    /// use host-declared commands to parse successfully.
+    pub fn parse_with_schema(source: &str, schema: &crate::vocab::Schema) -> Result<WorkflowFile> {
+        let tokens = Lexer::tokenize_str_with_schema(source, schema)?;
+        let mut p = Parser { tokens, pos: 0 };
+        p.skip_noise();
+        if p.at_end() {
             return Err(Error::Parse {
                 span: Span::new(0, 0),
                 message: "empty source — expected a § declaration".to_string(),
@@ -1046,8 +1083,85 @@ impl Parser {
         self.advance(); // skip @test:name
         self.skip_noise();
         let raw_lines = self.collect_braced_raw_lines();
+        let (input, expected, tags) = Self::parse_test_body(&raw_lines);
         self.skip_to_newline();
-        TestBlock { name, raw_lines }
+        TestBlock {
+            name,
+            input,
+            expected,
+            tags,
+            raw_lines,
+        }
+    }
+
+    /// Parse structured `input:` / `expected:` / `tags:` fields from the flat
+    /// list of raw token values collected from a `@test:` block body.
+    ///
+    /// Section keywords ("input", "expected", "tags") followed by ":" switch
+    /// the active section. Within Input/Expected, consecutive triples
+    /// `key ":" value` are collected. Within Tags, identifiers between `[` `]`
+    /// are collected as tag strings.
+    #[allow(clippy::type_complexity)]
+    fn parse_test_body(
+        raw: &[String],
+    ) -> (Vec<(String, String)>, Vec<(String, String)>, Vec<String>) {
+        #[derive(PartialEq, Clone, Copy)]
+        enum Section {
+            None,
+            Input,
+            Expected,
+            Tags,
+        }
+
+        let mut input = Vec::new();
+        let mut expected = Vec::new();
+        let mut tags = Vec::new();
+        let mut section = Section::None;
+        let mut i = 0usize;
+
+        while i < raw.len() {
+            let tok = &raw[i];
+
+            // Detect section header: section keyword followed by ":"
+            if matches!(tok.as_str(), "input" | "expected" | "tags")
+                && raw.get(i + 1).map(|s| s == ":").unwrap_or(false)
+            {
+                section = match tok.as_str() {
+                    "input" => Section::Input,
+                    "expected" => Section::Expected,
+                    "tags" => Section::Tags,
+                    _ => Section::None,
+                };
+                i += 2; // consume keyword + ":"
+                continue;
+            }
+
+            match section {
+                Section::Input | Section::Expected => {
+                    // key ":" value pattern: key is identifier or $variable
+                    if raw.get(i + 1).map(|s| s == ":").unwrap_or(false)
+                        && let Some(val) = raw.get(i + 2)
+                    {
+                        if section == Section::Input {
+                            input.push((tok.clone(), val.clone()));
+                        } else {
+                            expected.push((tok.clone(), val.clone()));
+                        }
+                        i += 3;
+                        continue;
+                    }
+                }
+                Section::Tags => {
+                    if !matches!(tok.as_str(), "[" | "]" | ",") {
+                        tags.push(tok.clone());
+                    }
+                }
+                Section::None => {}
+            }
+            i += 1;
+        }
+
+        (input, expected, tags)
     }
 
     fn parse_macro_block(&mut self) -> MacroBlock {
@@ -1455,5 +1569,66 @@ mod tests {
             }
             other => panic!("expected until loop, got {other:?}"),
         }
+    }
+
+    #[test]
+    fn parse_test_body_extracts_structured_fields() {
+        // raw_lines as the lexer would produce for:
+        //   {
+        //     input:
+        //       query: "hello"
+        //     expected:
+        //       $out: "hello"
+        //     tags: [smoke, unit]
+        //   }
+        let raw: Vec<String> = vec![
+            "input", ":", "query", ":", "hello", "expected", ":", "$out", ":", "hello", "tags",
+            ":", "[", "smoke", ",", "unit", "]",
+        ]
+        .into_iter()
+        .map(str::to_owned)
+        .collect();
+
+        let (input, expected, tags) = Parser::parse_test_body(&raw);
+
+        assert_eq!(input, vec![("query".to_owned(), "hello".to_owned())]);
+        assert_eq!(expected, vec![("$out".to_owned(), "hello".to_owned())]);
+        assert_eq!(tags, vec!["smoke".to_owned(), "unit".to_owned()]);
+    }
+
+    #[test]
+    fn parse_test_body_empty_sections() {
+        let raw: Vec<String> = vec![];
+        let (input, expected, tags) = Parser::parse_test_body(&raw);
+        assert!(input.is_empty());
+        assert!(expected.is_empty());
+        assert!(tags.is_empty());
+    }
+
+    #[test]
+    fn parse_test_block_structured() {
+        let src = "\
+§wf:tb_test v1.0
+§runtime: { core: schema.nodus }
+@in: { query }
+@out: $out
+@err: ESCALATE(human)
+@steps:
+  1. GEN($in.query) → $out
+@test: smoke {
+  input:
+    query: \"world\"
+  expected:
+    $out: \"world\"
+  tags: [unit]
+}
+";
+        let wf = Parser::parse(src).unwrap();
+        assert_eq!(wf.tests.len(), 1);
+        let tb = &wf.tests[0];
+        assert_eq!(tb.name, "smoke");
+        assert_eq!(tb.input, vec![("query".to_owned(), "world".to_owned())]);
+        assert_eq!(tb.expected, vec![("$out".to_owned(), "world".to_owned())]);
+        assert_eq!(tb.tags, vec!["unit".to_owned()]);
     }
 }

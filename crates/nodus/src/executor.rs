@@ -138,6 +138,9 @@ pub struct RunResult {
     pub errors: Vec<RuntimeError>,
     /// Flags emitted by routing, escalation, and unknown-command paths.
     pub flags: Vec<String>,
+    /// Final variable environment: variable name (without `$`) → value.
+    /// Enables test runners and debuggers to inspect all pipeline bindings.
+    pub vars: HashMap<String, Value>,
 }
 
 // ─── ModelProvider ────────────────────────────────────────────────────────────
@@ -475,6 +478,7 @@ impl Executor {
             log: ctx.log,
             errors: ctx.errors,
             flags: ctx.flags,
+            vars: ctx.variables,
         }
     }
 

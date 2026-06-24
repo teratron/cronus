@@ -223,12 +223,18 @@ pub struct Comment {
     pub text: String,
 }
 
-/// An inline `@test:` block (raw body lines preserved).
+/// An inline `@test:` block with structured fields parsed from the block body.
 #[derive(Debug, Clone, PartialEq, Eq, Default)]
 pub struct TestBlock {
-    /// The test name.
+    /// The test name (from `@test: name`).
     pub name: String,
-    /// The raw body token values.
+    /// `input:` key-value pairs that override `@in:` fields for this test run.
+    pub input: Vec<(String, String)>,
+    /// `expected:` assertions: variable name → expected literal value.
+    pub expected: Vec<(String, String)>,
+    /// `tags:` labels for filtering; no semantic effect on pass/fail.
+    pub tags: Vec<String>,
+    /// Raw body token values preserved for backward-compat (transpiler fallback).
     pub raw_lines: Vec<String>,
 }
 

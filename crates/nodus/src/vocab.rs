@@ -177,6 +177,8 @@ pub fn is_known_command(name: &str) -> bool {
 #[derive(Debug, Clone)]
 pub struct Schema {
     version: &'static str,
+    host_commands: Vec<String>,
+    host_reserved: Vec<String>,
 }
 
 impl Schema {
@@ -184,6 +186,35 @@ impl Schema {
     pub fn builtin() -> Self {
         Schema {
             version: BUILTIN_SCHEMA_VERSION,
+            host_commands: Vec::new(),
+            host_reserved: Vec::new(),
+        }
+    }
+
+    /// Build an extended schema merging the builtin baseline with host additions.
+    ///
+    /// Host commands that collide with `KNOWN_COMMANDS` are silently deduplicated.
+    /// Host reserved variables that collide with `RESERVED_VARIABLES` are silently
+    /// deduplicated. This preserves LP-4: builtin constants are never mutated.
+    pub fn with_provider(provider: &dyn crate::portability::SchemaProvider) -> Self {
+        let host_commands = provider
+            .host_commands()
+            .iter()
+            .filter(|&&cmd| !is_known_command(cmd))
+            .map(|&cmd| cmd.to_string())
+            .collect();
+
+        let host_reserved = provider
+            .host_reserved_variables()
+            .iter()
+            .filter(|&&var| !RESERVED_VARIABLES.contains(&var))
+            .map(|&var| var.to_string())
+            .collect();
+
+        Schema {
+            version: BUILTIN_SCHEMA_VERSION,
+            host_commands,
+            host_reserved,
         }
     }
 
@@ -197,14 +228,24 @@ impl Schema {
         KNOWN_COMMANDS
     }
 
-    /// Is `name` a known command?
-    pub fn is_command(&self, name: &str) -> bool {
-        is_known_command(name)
+    /// All host-added command names (those not in the builtin `KNOWN_COMMANDS`).
+    pub fn host_commands(&self) -> &[String] {
+        &self.host_commands
     }
 
-    /// Is `name` (with leading `$`) a reserved variable?
+    /// Is `name` a known command (builtin or host-added)?
+    pub fn is_command(&self, name: &str) -> bool {
+        is_known_command(name) || self.host_commands.iter().any(|c| c == name)
+    }
+
+    /// Is `name` a host-added command (i.e., not in the builtin `KNOWN_COMMANDS`)?
+    pub fn is_host_command(&self, name: &str) -> bool {
+        self.host_commands.iter().any(|c| c == name)
+    }
+
+    /// Is `name` (with leading `$`) a reserved variable (builtin or host-added)?
     pub fn is_reserved_var(&self, name: &str) -> bool {
-        RESERVED_VARIABLES.contains(&name)
+        RESERVED_VARIABLES.contains(&name) || self.host_reserved.iter().any(|v| v == name)
     }
 
     /// Is `name` (with leading `$`) a runtime-owned variable that user steps must not shadow?
@@ -304,5 +345,64 @@ mod tests {
                 "{var} must not be in RUNTIME_OWNED_VARIABLES (it is user-writable)"
             );
         }
+    }
+
+    #[test]
+    fn with_provider_extends_schema() {
+        use crate::portability::SchemaProvider;
+
+        struct TestProvider;
+        impl SchemaProvider for TestProvider {
+            fn host_commands(&self) -> &[&str] {
+                &["MY_CMD"]
+            }
+            fn host_reserved_variables(&self) -> &[&str] {
+                &["$myvar"]
+            }
+        }
+
+        let schema = Schema::with_provider(&TestProvider);
+        assert!(
+            schema.is_command("MY_CMD"),
+            "host command must be recognized"
+        );
+        assert!(
+            schema.is_host_command("MY_CMD"),
+            "MY_CMD must be flagged as host command"
+        );
+        assert!(
+            schema.is_command("GEN"),
+            "builtin command must remain recognized"
+        );
+        assert!(
+            !schema.is_host_command("GEN"),
+            "builtin command must not be flagged as host"
+        );
+    }
+
+    #[test]
+    fn with_provider_deduplicates_builtins() {
+        use crate::portability::SchemaProvider;
+
+        struct CollidingProvider;
+        impl SchemaProvider for CollidingProvider {
+            fn host_commands(&self) -> &[&str] {
+                &["GEN"]
+            }
+            fn host_reserved_variables(&self) -> &[&str] {
+                &[]
+            }
+        }
+
+        let schema = Schema::with_provider(&CollidingProvider);
+        assert!(schema.is_command("GEN"), "GEN must remain recognized");
+        assert!(
+            !schema.is_host_command("GEN"),
+            "GEN must not be treated as host-added"
+        );
+        assert!(
+            schema.host_commands().is_empty(),
+            "deduplicated GEN must not appear in host list"
+        );
     }
 }

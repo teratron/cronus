@@ -239,10 +239,11 @@ pub struct Lexer {
     line: u32,
     column: u32,
     tokens: Vec<Token>,
+    extra_commands: Vec<String>,
 }
 
 impl Lexer {
-    /// Initialize the lexer over `source`.
+    /// Initialize the lexer over `source` with the builtin vocabulary only.
     pub fn new(source: &str) -> Self {
         Lexer {
             source: source.chars().collect(),
@@ -250,12 +251,37 @@ impl Lexer {
             line: 1,
             column: 1,
             tokens: Vec::new(),
+            extra_commands: Vec::new(),
         }
     }
 
-    /// Convenience: tokenize `source` in one call.
+    /// Initialize the lexer with an extended vocabulary from `schema`.
+    ///
+    /// Host commands in `schema` are recognized as `CommandName` tokens
+    /// in addition to the builtin `KNOWN_COMMANDS`. Use this variant inside
+    /// `run_with_schema` to enable host-declared command parsing.
+    pub fn new_with_schema(source: &str, schema: &crate::vocab::Schema) -> Self {
+        Lexer {
+            source: source.chars().collect(),
+            pos: 0,
+            line: 1,
+            column: 1,
+            tokens: Vec::new(),
+            extra_commands: schema.host_commands().to_vec(),
+        }
+    }
+
+    /// Convenience: tokenize `source` in one call with the builtin vocabulary.
     pub fn tokenize_str(source: &str) -> Result<Vec<Token>> {
         Lexer::new(source).tokenize()
+    }
+
+    /// Convenience: tokenize `source` with an extended vocabulary from `schema`.
+    pub fn tokenize_str_with_schema(
+        source: &str,
+        schema: &crate::vocab::Schema,
+    ) -> Result<Vec<Token>> {
+        Lexer::new_with_schema(source, schema).tokenize()
     }
 
     /// Convert the entire source into a list of tokens, terminated by `Eof`.
@@ -469,6 +495,16 @@ impl Lexer {
         }
     }
 
+    /// Skip horizontal whitespace (spaces and tabs) without consuming newlines.
+    fn skip_inline_whitespace(&mut self) {
+        while self.pos < self.source.len()
+            && (self.source[self.pos] == ' ' || self.source[self.pos] == '\t')
+        {
+            self.pos += 1;
+            self.column += 1;
+        }
+    }
+
     /// Accumulate alphanumeric / underscore characters into a word, advancing
     /// the cursor and column (words never span newlines).
     fn read_word(&mut self) -> String {
@@ -622,10 +658,12 @@ impl Lexer {
             self.tokens
                 .push(Token::new(ty, format!("@{key}"), self.line, col));
         } else if word == "test" && has_colon {
+            self.skip_inline_whitespace();
             let name = self.read_word();
             self.tokens
                 .push(Token::new(TokenType::AtTest, name, self.line, col));
         } else if word == "macro" && has_colon {
+            self.skip_inline_whitespace();
             let name = self.read_word();
             self.tokens
                 .push(Token::new(TokenType::AtMacro, name, self.line, col));
@@ -850,10 +888,10 @@ impl Lexer {
             _ => {}
         }
 
-        // An ALL_CAPS word is a command only when the schema knows it; every
-        // known command is uppercase and longer than one char, so the schema
-        // lookup alone is the faithful gate.
-        if vocab::is_known_command(&word) {
+        // An ALL_CAPS word is a command when the builtin schema knows it, or
+        // when it appears in the host-supplied extra_commands list from a
+        // schema extension. The builtin check is first for performance.
+        if vocab::is_known_command(&word) || self.extra_commands.iter().any(|c| c == &word) {
             self.tokens
                 .push(Token::new(TokenType::CommandName, word, self.line, col));
             return;

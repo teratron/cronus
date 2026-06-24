@@ -80,6 +80,7 @@ impl Validator {
         d.extend(Self::e012_name_matches_file(ast, filename));
         d.extend(Self::e013_no_reserved_pipeline_target(ast, filename));
         d.extend(Self::e014_no_forward_references(ast, filename));
+        d.extend(Self::e015_no_duplicate_test_names(ast, filename));
 
         // Warnings
         d.extend(Self::w001_err_handler(ast, filename));
@@ -90,7 +91,7 @@ impl Validator {
         d.extend(Self::w006_route_test_coverage(ast, filename));
         d.extend(Self::w007_out_assigned(ast, filename));
         d.extend(Self::w008_log_last(ast, filename));
-        // W009: ctx-in-config — N/A for workflow files
+        d.extend(Self::w009_test_no_expected(ast, filename));
         // W010: extends resolve filesystem check — deferred
 
         // Info
@@ -318,6 +319,22 @@ impl Validator {
         diags
     }
 
+    fn e015_no_duplicate_test_names(wf: &WorkflowFile, filename: &str) -> Vec<Diagnostic> {
+        let mut seen = std::collections::HashSet::new();
+        let mut diags = Vec::new();
+        for tb in &wf.tests {
+            if !seen.insert(tb.name.clone()) {
+                diags.push(Diagnostic::new(
+                    Severity::Error,
+                    "E015",
+                    format!("Duplicate @test: name '{}'.", tb.name),
+                    filename,
+                ));
+            }
+        }
+        diags
+    }
+
     // ─── Warnings ─────────────────────────────────────────────────────────────
 
     fn w001_err_handler(wf: &WorkflowFile, filename: &str) -> Vec<Diagnostic> {
@@ -464,6 +481,24 @@ impl Validator {
             )];
         }
         vec![]
+    }
+
+    fn w009_test_no_expected(wf: &WorkflowFile, filename: &str) -> Vec<Diagnostic> {
+        wf.tests
+            .iter()
+            .filter(|tb| tb.expected.is_empty())
+            .map(|tb| {
+                Diagnostic::new(
+                    Severity::Warning,
+                    "W009",
+                    format!(
+                        "@test: '{}' has no expected: section — passes trivially on Status::Ok.",
+                        tb.name
+                    ),
+                    filename,
+                )
+            })
+            .collect()
     }
 
     // ─── Info ─────────────────────────────────────────────────────────────────
@@ -1180,6 +1215,110 @@ mod tests {
     fn all_severities_order_correctly() {
         assert!(Severity::Error < Severity::Warning);
         assert!(Severity::Warning < Severity::Info);
+    }
+
+    #[test]
+    fn e015_fires_on_duplicate_test_names() {
+        let src = "\
+§wf:e015_wf v1.0
+§runtime: { core: schema.nodus }
+@in: { query }
+@out: $out
+@err: ESCALATE(human)
+@steps:
+  1. GEN($in.query) → $out
+@test: smoke {
+  input:
+    query: hello
+}
+@test: smoke {
+  input:
+    query: world
+}
+";
+        let ast = Parser::parse(src).expect("parse");
+        let diags = Validator::validate(&ast, "e015_wf.nodus");
+        assert!(
+            diags.iter().any(|d| d.code == "E015"),
+            "expected E015 for duplicate test name; got: {:?}",
+            diags.iter().map(|d| &d.code).collect::<Vec<_>>()
+        );
+    }
+
+    #[test]
+    fn e015_absent_with_unique_test_names() {
+        let src = "\
+§wf:e015_ok v1.0
+§runtime: { core: schema.nodus }
+@in: { query }
+@out: $out
+@err: ESCALATE(human)
+@steps:
+  1. GEN($in.query) → $out
+@test: alpha {
+  input:
+    query: hello
+}
+@test: beta {
+  input:
+    query: world
+}
+";
+        let ast = Parser::parse(src).expect("parse");
+        let diags = Validator::validate(&ast, "e015_ok.nodus");
+        assert!(
+            !diags.iter().any(|d| d.code == "E015"),
+            "unexpected E015 for unique test names"
+        );
+    }
+
+    #[test]
+    fn w009_fires_when_test_block_has_no_expected() {
+        let src = "\
+§wf:w009_wf v1.0
+§runtime: { core: schema.nodus }
+@in: { query }
+@out: $out
+@err: ESCALATE(human)
+@steps:
+  1. GEN($in.query) → $out
+@test: smoke {
+  input:
+    query: hello
+}
+";
+        let ast = Parser::parse(src).expect("parse");
+        let diags = Validator::validate(&ast, "w009_wf.nodus");
+        assert!(
+            diags.iter().any(|d| d.code == "W009"),
+            "expected W009 for test block with no expected:; got: {:?}",
+            diags.iter().map(|d| &d.code).collect::<Vec<_>>()
+        );
+    }
+
+    #[test]
+    fn w009_absent_when_expected_section_present() {
+        let src = "\
+§wf:w009_ok v1.0
+§runtime: { core: schema.nodus }
+@in: { query }
+@out: $out
+@err: ESCALATE(human)
+@steps:
+  1. GEN($in.query) → $out
+@test: smoke {
+  input:
+    query: hello
+  expected:
+    $out: \"[STUB gen(hello) tone=brand]\"
+}
+";
+        let ast = Parser::parse(src).expect("parse");
+        let diags = Validator::validate(&ast, "w009_ok.nodus");
+        assert!(
+            !diags.iter().any(|d| d.code == "W009"),
+            "unexpected W009 when expected: section is present"
+        );
     }
 
     #[test]
