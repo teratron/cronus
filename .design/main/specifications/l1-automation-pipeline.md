@@ -1,6 +1,6 @@
 # Automation Pipeline
 
-**Version:** 1.0.0
+**Version:** 1.1.0
 **Status:** Stable
 **Layer:** concept
 
@@ -24,6 +24,8 @@ The choice between the two is not either/or: implicit rules handle routine per-w
 - [l1-automation-canvas.md](l1-automation-canvas.md) — the visual rendering of the pipeline graph (explicit mode)
 - [l2-trigger-triage.md](l2-trigger-triage.md) — event intake and classification that feeds automation triggers
 - [l2-scheduler.md](l2-scheduler.md) — schedule-based trigger implementation
+- [l2-agent-migration.md](l2-agent-migration.md) — staged, non-destructive apply pattern reused by portable-bundle import (AP-11)
+- [l1-memory-model.md](l1-memory-model.md) — distinct from durable node memory (AP-8); node memory is pipeline-local, not the office memory store
 - [../../nodus/specifications/l1-nodus-language.md](../../nodus/specifications/l1-nodus-language.md) — `@ON:` trigger syntax in workflow files (implicit mode)
 - [../../nodus/specifications/l1-nodus-observability.md](../../nodus/specifications/l1-nodus-observability.md) — AuditProvider that records every pipeline execution
 
@@ -62,6 +64,14 @@ Rules that every Layer 2 implementation MUST NOT violate:
 - **AP-6 Observable execution**: every pipeline run produces a structured trace via AuditProvider (per `l1-nodus-observability.md` HO-1…HO-6). The trace records each node's start, completion or failure, and elapsed time. A run without a trace is incomplete.
 
 - **AP-7 Office isolation**: a pipeline defined in office A MUST NOT read or mutate the state of office B. Cross-office triggers require an explicit permission gate and user approval before the pipeline can be activated.
+
+- **AP-8 Durable node memory**: a node MAY retain durable memory that persists across independent firings (e.g., the last-seen value for change detection, a rolling baseline for spike detection, the set of already-emitted keys for deduplication, an accumulator for digests). Node memory is office-scoped (AP-7), schema-bounded, individually resettable, and subject to the same content exclusions as event payloads (AP-4 — never raw user message text, session context, credentials, or memory-store contents). `transform` nodes remain pure and stateless; memory is an opt-in capability of nodes that need continuity, and is distinct from the office memory store.
+
+- **AP-9 Control plane separate from data plane**: pipelines connect through two distinct edge kinds — *data edges*, along which an emitted event flows from one node to another, and *control edges*, along which one automation enables, disables, or manually fires another. The two graphs are independent: a control edge never carries an event payload, and a data edge never changes a target's enabled state. Control actions obey AP-5 (no privilege escalation) and AP-7 (office isolation); a cross-office control edge requires the same explicit gate as a cross-office trigger.
+
+- **AP-10 Event lifecycle**: an emitted event has a bounded lifetime. Each node declares an event-retention policy; events past their retention are expired and garbage-collected — except the single most-recent retained event a downstream change-detector depends on for continuity. Propagation timing is declared per data edge: *immediate* (the event flows the instant it is emitted) or *deferred* (delivered on the receiver's next scheduled evaluation). Every node exposes a health signal — last-evaluated, last-received, last-error, and a working/not-working predicate — derived from its recent run history (AP-6).
+
+- **AP-11 Portable automation bundles**: a set of pipelines and their edges (data and control) MAY be packaged as a portable bundle — a self-contained, attributed artifact (stable identity, optional origin reference, human label, tags) that can be exported, shared, and imported into another office to re-instantiate the same automation graph. Import is non-destructive (it instantiates new pipelines; it never silently overwrites existing ones) and re-validates AP-5/AP-7 in the destination office before activation. A bundle carries *definitions only* — never node memory, event history, credentials, or office-specific identifiers.
 
 ## 4. Detailed Design
 
@@ -166,6 +176,64 @@ Each pipeline (implicit or explicit) is a versioned artifact. Versioning follows
 
 Implicit pipeline versions are derived from the enclosing workflow file version. Explicit pipeline definitions are versioned independently and stored in the office's pipeline registry.
 
+### 4.7 Durable Node Memory (AP-8)
+
+Most nodes are stateless: a `filter` or `transform` produces output purely from its input. Some reactive behaviors, however, require continuity across firings, and that state belongs to the node, not to a side channel:
+
+| Stateful behavior | What memory holds |
+| --- | --- |
+| Change detection | The last-seen value; emit only when the new value differs |
+| Spike / peak detection | A rolling baseline and recent window statistics |
+| Gap detection | The timestamp of the last received event; alert when the gap exceeds a bound |
+| Deduplication | The set of keys already emitted within a horizon |
+| Digest accumulation | Pending items collected until a flush condition (time or count) |
+
+Node memory is a schema-bounded map, office-scoped (AP-7), individually resettable, and bound by the same content exclusions as event payloads (AP-4). It is **not** the office memory store (`l1-memory-model.md`): it is pipeline-local working state with no cross-office recall and no semantic indexing. A node that declares no memory is guaranteed stateless and freely retryable.
+
+### 4.8 Control Plane (AP-9)
+
+Beyond the event-flow graph, automations can govern one another through a separate control graph:
+
+| Edge kind | Carries | Effect on target |
+| --- | --- | --- |
+| Data edge | An event payload | The target evaluates the event (normal §4.3 flow) |
+| Control edge | A control verb | The target's enabled state or firing is changed |
+
+Control verbs are `enable`, `disable`, and `trigger` (fire once now). This separates *what flows* from *what governs*: a window-controller automation can enable a set of targets during business hours and disable them after; a commander automation can manually fire a target on demand. Control edges never carry event data, and an enabled/disabled state change never rides a data edge. All control actions are traced (AP-6) and bound by AP-5/AP-7.
+
+### 4.9 Event Lifecycle (AP-10)
+
+```text
+[REFERENCE]
+Event lifecycle:
+  EMIT       — a node emits an event with a retention policy (keep-for duration; 0 = do not store)
+  PROPAGATE  — per edge: immediate (flow now) | deferred (flow on receiver's next evaluation)
+  RETAIN     — event persists until its retention horizon
+  EXPIRE     — past horizon, the event is garbage-collected,
+               EXCEPT the single most-recent event a downstream change-detector needs
+  HEALTH     — each node reports last-evaluated / last-received / last-error + working? predicate
+```
+
+A node may be **dry-run** against a sample event to preview its output and downstream effect without persisting side effects or emitting real events — the safe way to validate a node before activation (rendered interactively in `l1-automation-canvas.md`).
+
+### 4.10 Portable Automation Bundles (AP-11)
+
+A bundle packages a working automation graph for sharing and reuse:
+
+```text
+[REFERENCE]
+AutomationBundle {
+  bundle_id   : Text     — stable identity for update detection across imports
+  label       : Text     — human-readable name
+  origin      : Text?     — optional source/author reference (provenance)
+  tags        : Text[]    — categorization
+  pipelines   : Definition[]  — member pipeline definitions (no memory, no history)
+  edges       : Edge[]        — data + control edges among members
+}
+```
+
+Export serializes the member pipeline definitions and their edges — **definitions only**, never node memory, event history, credentials, or office-specific identifiers. Import is non-destructive: it instantiates new pipelines (resolving naming collisions rather than overwriting), re-binds external-service action nodes to the destination office's own credentials, and re-validates AP-5/AP-7 before any pipeline is activated. Import reuses the staged, reversible apply pattern of `l2-agent-migration.md` (dry-run → instantiate → review → activate). `bundle_id` lets an office detect that an imported bundle has a newer revision available.
+
 ## 5. Implementation Notes
 
 1. Implement trigger-triage intake first — nothing can reach the automation engine without it.
@@ -183,6 +251,12 @@ Implicit pipeline versions are derived from the enclosing workflow file version.
 
 **Alternative: implicit-only (no canvas)** — ship only per-worker embedded automation, skip the visual layer entirely. Viable for the first release but insufficient for cross-role orchestration and for users who need to inspect automation without reading workflow files. The canvas surfaces value proportional to the complexity of the office's automation graph; it becomes essential beyond 5–6 concurrent automation rules.
 
+**Alternative: stateless-only nodes (no node memory)** — forbid AP-8 and force every continuity need (change detection, deduplication, digests) into the office memory store or external state. Rejected: it conflates pipeline-local working state with durable office knowledge, defeats clean retryability boundaries, and makes common reactive patterns awkward. Pipeline-local memory keeps the boundary crisp — stateless nodes are freely retryable, stateful nodes declare their memory explicitly.
+
+**Alternative: single edge type (no control plane)** — model enable/disable/trigger as ordinary events on data edges. Rejected: it overloads the payload contract (AP-4) with control semantics and makes "is this automation currently active?" unanswerable from the graph. A separate control plane (AP-9) keeps governance legible and auditable.
+
+**Alternative: no portable bundles** — keep every automation graph office-local and non-exportable. Rejected: it blocks templating and sharing of proven automations and forces re-authoring per office. AP-11's definitions-only, non-destructive, credential-rebinding import makes sharing safe without leaking state.
+
 ## Canonical References
 
 | Alias | Path | Purpose |
@@ -198,3 +272,4 @@ Implicit pipeline versions are derived from the enclosing workflow file version.
 | Version | Date | Author | Notes |
 | --- | --- | --- | --- |
 | 1.0.0 | 2026-06-24 | Core Team | Initial spec — AP-1…AP-7, node taxonomy, trigger types, dual-mode architecture, event payload contract |
+| 1.1.0 | 2026-06-25 | Core Team | AP-8…AP-11 added — durable node memory (change/spike/gap/dedup/digest continuity), control plane separate from data plane (enable/disable/trigger edges), event lifecycle (per-node retention, TTL/GC with change-detector continuity, immediate-vs-deferred propagation, node health predicate, dry-run preview), and portable definitions-only automation bundles (export/import, non-destructive, credential-rebinding, staged apply). §4.7–4.10 added. |
