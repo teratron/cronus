@@ -1,6 +1,6 @@
 # Tool Composition Model
 
-**Version:** 1.0.0
+**Version:** 1.1.0
 **Status:** Stable
 **Layer:** concept
 
@@ -42,6 +42,7 @@ Rules every Layer 2 implementation MUST NOT violate:
 - **TC-4 (Parallel execution of independent tools):** tools within a toolkit that share no declared dependency relation MAY execute concurrently. The executor determines concurrency from the dependency DAG; no explicit parallelism annotation is required on the caller's side.
 - **TC-5 (Single authorization surface):** permission to invoke a toolkit grants access to all member tools. Member tools do not carry separate authorization checks beyond the toolkit grant. This invariant is enforced by the executor; a caller invoking a member tool directly (bypassing the toolkit) receives the same authorization outcome as invoking via the dispatcher.
 - **TC-6 (Nested toolkits as opaque members):** a toolkit may include another toolkit as a member. The nested toolkit appears as a single, opaque tool in the parent dispatcher; its internal structure is invisible to the parent. Nesting depth is bounded at compile/registration time to prevent unbounded recursion.
+- **TC-7 (Deferred tool resolution at scale):** when the catalog of tools/toolkits available to an agent exceeds a configured size threshold, the surface presented to the agent MUST reduce to a *searchable index* rather than the full union of member schemas. A tool's full schema is materialized on demand by a relevance query; until materialized, only its name and a short descriptor are visible and it cannot be invoked. Once materialized, a tool is callable identically to an eagerly-loaded one and retains its toolkit membership, single authorization surface (TC-5), dependency ordering (TC-3), and dispatcher routing (TC-2). Below the threshold, all tools are exposed directly. The threshold and search breadth are configurable (defaults ship); the reduction MUST be observable — the agent can tell that more tools exist beyond the currently loaded set, so it never assumes the loaded subset is exhaustive.
 
 ## 4. Detailed Design
 
@@ -141,6 +142,31 @@ Direct member invocation (bypassing dispatcher):
 
 This ensures that splitting a toolkit into sub-toolkits (refactoring) never changes the effective authorization surface.
 
+### 4.7 Deferred Tool Resolution at Scale (TC-7)
+
+Toolkits organize tools so an agent selects within a coherent domain (§1). But organization alone does not bound *context cost*: an active toolkit still presents the union of its member schemas (TC-2), and an office wired to many external tool providers can accumulate hundreds of tools whose schemas, loaded eagerly, would flood the agent's working context with capabilities it will not use this turn. Static grouping narrows *which domain*; it does not by itself narrow *how many schemas are resident*.
+
+Deferred resolution adds the missing axis. Past a configured catalog size, the surface becomes a searchable index instead of a wall of schemas:
+
+```plaintext
+[REFERENCE]
+
+Catalog size ≤ threshold:
+  expose all tool schemas directly (eager — unchanged TC-1…TC-6 behavior)
+
+Catalog size > threshold:
+  1. INDEX      — present names + short descriptors only; full schemas withheld
+  2. SEARCH     — agent queries the index by relevance (keywords / intent)
+  3. MATERIALIZE— the matched tool's full schema loads on demand
+  4. INVOKE     — the materialized tool is called exactly as an eager one
+                  (same toolkit membership, auth TC-5, deps TC-3, routing TC-2)
+
+Invariant: the reduction is observable — the agent is told more tools exist
+beyond the loaded set, so it never treats the resident subset as exhaustive.
+```
+
+This is complementary to toolkits, not a replacement: toolkits decide membership, authorization, and dependency ordering; deferred resolution decides *materialization timing* so a large catalog stays affordable. A frequently-used tool is typically pre-materialized (or sits in a small always-on core toolkit); a rarely-used one costs one extra search round-trip before its first call and nothing thereafter.
+
 ## 5. Implementation Notes
 
 1. Register toolkits eagerly (not lazily) — the dispatcher schema is built once at registration time so schema errors surface before any invocation.
@@ -154,6 +180,7 @@ This ensures that splitting a toolkit into sub-toolkits (refactoring) never chan
 - **Alternative — flat tool list with tags:** simpler to implement but does not provide automatic dispatcher derivation or dependency enforcement. Scales poorly beyond ~20 tools per agent context.
 - **Alternative — explicit tool routing in agent prompt:** agents can be instructed to call tools in order, but this burdens the agent context and is unreliable — agents can deviate. Toolkit dependencies are enforced by the executor regardless of agent behavior.
 - **Nesting vs. inheritance:** nesting (a toolkit as a member) is preferred over capability inheritance (toolkit B extends toolkit A) because nesting keeps authorization surfaces explicit and avoids MRO-style ambiguities.
+- **Alternative — eager-load every schema regardless of catalog size:** simplest, but a large externally-backed catalog floods the agent's context with hundreds of unused schemas, raising token cost and selection error. TC-7's deferred, searchable surface keeps context lean; the trade-off is a possible extra search round-trip before a rarely-used tool's first call, and a discovery dependency on index quality (mitigated by keeping high-frequency tools in an always-resident core).
 
 ## Canonical References
 
@@ -169,3 +196,4 @@ This ensures that splitting a toolkit into sub-toolkits (refactoring) never chan
 | Version | Date | Summary |
 | --- | --- | --- |
 | 1.0.0 | 2026-06-24 | Initial stable spec — toolkit unit, dispatcher auto-derivation, dependency DAG, parallel execution, nested toolkits, single authorization surface |
+| 1.1.0 | 2026-06-25 | TC-7 added — deferred tool resolution at scale: past a configured catalog-size threshold the agent surface reduces to a relevance-searchable index with on-demand schema materialization, complementing static toolkit grouping by bounding context cost; materialized tools retain membership/auth/deps/routing; reduction is observable. §4.7 added; drawbacks extended. No downstream L2 declares `Implements:` this spec — no cascade. |
