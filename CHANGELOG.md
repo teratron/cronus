@@ -67,4 +67,5 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Added specification `task-graph-model` (main)
 - Added specification `application-shell` (main)
 - Added specification `spec-driven-governance` (main)
+- Added specification `practice-analytics` (main)
 
