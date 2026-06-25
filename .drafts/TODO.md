@@ -48,7 +48,7 @@
 - [x] мастер кнопка включения/выключения работы офиса/"всех кронов"/тасков и т.д.
 - [x] если заканачиваются токены то вся корпорация выходит в непродолжительный отпуск, в спячку или если по конкретной модели закончились токены и какой-то работник на ней сидит, то менеджер должен продумать что делать дальше, как организовать процесс дальше: может другая менее продвинутая модель и и что-то другое
 - [x] git-паттерны: git flow, trunk-based development и правильно подобрать к какой должности относятся обязанности работы с git и удалёнными серверами типа GitHub, GitLab, Bitbucket и т.д., надо предусмотреть весь спектр версионирования кроме git
-- [x] внеси в спецификации, что проект использует технологию nodus <crates\nodus>
+- [x] внеси в спецификации, что проект использует технологию nodus <crates/nodus>
 - [x] gui: Tauri 2 + React + shadcn/ui + Tailwind CSS
 - [x] сбор статистики (сколько потрачено токенов, какая модель и т.д.) для анализа во время работы офиса для последующего лечения, улучшения и т.д.
 - [x] ACP (Agent Client Protocol)
@@ -56,10 +56,6 @@
 - [x] ральф-луп обёрнут в мета-луп, что бы поколения не выраждались в один и тот же монолог
 - [x] автономное мыслящее существо
 - [x] аналог n8n системы автоматизации для офиса, как отдельный раздел, надо продумать только ли под капотом реализовать для каждого работника или дополнительно визуализировать, изучи и проанализируй референсы:
-  - <D:\Projects\src\github.com\teratron\cronus\.references\tools\n8n-master>
-  - <D:\Projects\src\github.com\teratron\cronus\.references\tools\zapier-platform-main>
-  - <D:\Projects\src\github.com\teratron\cronus\.references\tools\node-red-main>
-  - <D:\Projects\src\github.com\teratron\cronus\.references\tools\huginn-master>
 - [x] глобальная оркестрация, в рамках проекта/офиса, из существующих спецификаций, продумывать сразу что на каком этапе планировать и делать, например: сама суть движка приложения сформирована, но надо сразу учитывать при кодинге такие вещи как языковая поддержка и т.д.
 - [x] nodus вынести в отдельный воркспейс sdd .design/
 - [x] при создании cronus должны приходить фидбэки для улучшения nodus, добавлять универсальные механизмы, фичи, патерны, которые могут быть использованны в других проекта
@@ -112,13 +108,6 @@
 ---
 
 - [x] надо глубоко изучить тему harness AI engineeniring и новое направление dynamic harness, возможности применения этих технологий в нашем проекте cronus и особенно возможность интегрировать в паралельный проект-библиотеку nodus <D:\Projects\src\github.com\teratron\cronus\crates\nodus>, предлагаю изучить и проанализировать несколько референсов и выделить идеи, которые могут нам пригодится:
-  - <D:\Projects\src\github.com\teratron\cronus\.references\tools\agentic-harness-engineering-main>
-  - <D:\Projects\src\github.com\teratron\cronus\.references\harness\meta-harness-main>
-  - <D:\Projects\src\github.com\teratron\cronus\.references\harness\Meta-Harness-master>
-  - <D:\Projects\src\github.com\teratron\cronus\.references\harness\omnigent-main>
-  - <D:\Projects\src\github.com\teratron\cronus\.references\harness\ruflo-main>
-  - <D:\Projects\src\github.com\teratron\cronus\.references\harness\gigachain>
-  - <D:\Projects\src\github.com\teratron\cronus\.references\harness\Harness_материалы.pdf>
 примечание: ...
 
 ---
