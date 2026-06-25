@@ -72,3 +72,5 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Added specification `browser-control` (main)
 - Updated specification `voice-input` (main)
 - Updated specification `automation-pipeline` (main)
+- Updated specification `model-runtime` (main)
+

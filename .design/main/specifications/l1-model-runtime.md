@@ -1,6 +1,6 @@
 # Model Runtime
 
-**Version:** 1.0.0
+**Version:** 1.1.0
 **Status:** Stable
 **Layer:** concept
 
@@ -31,6 +31,8 @@ the substrate that routing schedules onto and that the provider catalog implemen
 - [l1-doctor.md](l1-doctor.md) - Health checks and safe repair; runtime status and loaded-model state (MR-10) are doctor probes.
 - [l1-security.md](l1-security.md) - Secret isolation and egress gate; remote-backend credentials and the on-device-first boundary (MR-1) are governed there.
 - [l1-architecture.md](l1-architecture.md) - Layered core + frontends; the runtime is a core subsystem fronted by thin clients (MR-11).
+- [l2-dashboard.md](l2-dashboard.md) - Runtime analytics (measured residency/throughput) that recalibrate fit estimates (MR-14).
+- [l1-telemetry.md](l1-telemetry.md) - Consent gate governing any opt-in sharing of measured performance beyond the device (MR-14).
 
 ## 1. Motivation
 
@@ -130,6 +132,22 @@ Layer 2 realizations and concrete backends MUST NOT violate these.
   or exact (a digest); the exact digest is what guarantees reproducibility. The runtime
   records which digest actually served each request, so any result is traceable to the
   precise weights and parameters that produced it.
+- **MR-13 Multi-device placement.** The feasibility gate (MR-7) considers the *set* of
+  available accelerators, not a single device. A model whose footprint exceeds any one
+  device MAY be placed split across multiple accelerators (and/or accelerator-plus-CPU)
+  before falling back to CPU-only; the chosen placement names per-device residency, and a
+  shortfall is reported per device. The footprint estimate distinguishes a model's **total
+  resident parameters** from its **active-per-token parameters**, so sparsely-activated
+  (mixture-of-expert) models are sized by what must be resident, not only by what computes
+  per token. The concrete split strategy and per-device scoring delegate to routing and the
+  provider catalog; the runtime owns only the multi-device feasibility gate.
+- **MR-14 Calibrated, honest estimates.** Fit and throughput figures the runtime reports
+  before load are explicitly *estimates*, never presented as measured fact. Where the
+  runtime has recorded real residency/throughput for a `(model, placement, hardware)`
+  combination, that measurement recalibrates subsequent estimates for the same combination;
+  an estimate and a measurement remain distinguishable in everything the runtime reports.
+  Sharing measurements beyond the device is opt-in under the telemetry consent gate and is
+  never a precondition for local calibration.
 
 > A Layer 2 spec cannot reach RFC status until every MR-n invariant above is addressed in
 > its "Invariant Compliance" section.
@@ -204,6 +222,26 @@ the nearest viable alternative — it is never loaded into a guaranteed failure.
 owns only this **feasibility gate**; the comparative scoring that picks among feasible models
 for a task belongs to routing.
 
+**Multi-device placement (MR-13).** "Available accelerators" is a *set*, not one device. The
+gate considers placements that span devices — a model split across two or more accelerators,
+or across accelerators and CPU — before it concludes CPU-only or unfeasible. The footprint
+itself is computed honestly for sparsely-activated models: a mixture-of-expert model must
+keep its **total** parameters resident even though only a subset is **active per token**, so
+the residency estimate sizes the resident total while the throughput estimate uses the
+active fraction. The placement result reports what sits on each device; the shortfall, when
+one exists, says which device is short and by how much. *How* to split (which layers/tensors
+to which device) is a routing/provider-catalog concern; the runtime owns only whether the
+device set can host the model.
+
+**Estimates vs. measurements (MR-14).** Every figure the gate produces before load is an
+estimate and is labeled as one. The runtime keeps a small record of real residency and
+throughput observed for each `(model, placement, hardware)` it has actually run, and uses
+those measurements to correct future estimates for the same combination — closing the loop
+between predicted and observed fit. A measurement always overrides an estimate for that exact
+combination, and the two are never conflated in what the runtime reports. Measured numbers
+stay on-device by default; contributing them to any shared corpus is an explicit opt-in
+through the telemetry consent gate, and local calibration works with or without it.
+
 ### 5.6 Serving contract and compatibility surface
 
 Inference is exposed through a stable contract (MR-8) covering generation, chat, and
@@ -238,6 +276,11 @@ named by structural idea, not by product.
 | Fit estimation before load | Feasibility gate with shortfall + nearest-viable; placement selection. | MR-7 / §5.5; the gate side of the model-router's hardware-fit scoring. |
 | Streaming contract + industry-compatible surface | First-class streaming/cancellation; drop-in compatibility for external clients. | **New** as MR-8 / §5.6. |
 | Thin CLI/SDK over the daemon | Single source of truth in the server; clients degrade when offline. | MR-11 / §5.7; the CLI-grammar/library-source-of-truth stance applied to models. |
+| Multi-accelerator fit (split a model across devices) | A model too large for one device fits across several before CPU fallback. | **New** as MR-13 / §5.5; extends the single-device feasibility gate to a device set. |
+| Mixture-of-expert sizing (resident-total vs active-per-token) | Sparsely-activated models sized by what must be resident, not only what computes. | **New** in MR-13 / §5.5; corrects the footprint estimate for MoE architectures. |
+| Measured throughput/residency corrects the estimate | A predicted fit recalibrated by real observed numbers; estimate ≠ measurement. | **New** as MR-14 / §5.5; the loop the runtime-analytics feed (`l2-dashboard.md`) closes. |
+| Named hardware-preset simulation ("what runs on an M-class / high-VRAM box?") | Compare feasibility on hardware you do not own, before buying or scheduling. | Routing/L2 affordance over MR-13/MR-7 (extends the model-router's upgrade-delta planning). |
+| Community-measured performance corpus | Real tok/s · TTFT · VRAM from peers on the same hardware, bridging estimate→actual. | Opt-in extension of MR-14 under the telemetry consent gate; never a default or precondition. |
 
 ## 7. Drawbacks & Alternatives
 
@@ -272,3 +315,4 @@ named by structural idea, not by product.
 | Version | Date | Change |
 | --- | --- | --- |
 | 1.0.0 | 2026-06-25 | Initial model: local-first provider-abstracted serving runtime — content-addressed model store with verifiable registry acquisition, portable declarative model definition, explicit load/unload lifecycle with fit-gated hardware scheduling, streaming inference contract with an industry-compatible surface, managed observable server, thin clients, and digest-reproducible references (MR-1…MR-12). |
+| 1.1.0 | 2026-06-25 | MR-13…MR-14 added — multi-device placement (split across an accelerator set before CPU fallback) with mixture-of-expert footprint sizing (resident-total vs active-per-token); calibrated honest estimates (figures labeled estimate vs measurement, recalibrated by recorded `(model, placement, hardware)` residency/throughput, community sharing opt-in under the telemetry gate). §5.5 extended; ideas-to-adopt rows added for multi-accelerator fit, MoE sizing, measured calibration, hardware-preset simulation, and a community-measured corpus. |
