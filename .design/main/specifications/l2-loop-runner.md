@@ -1,0 +1,314 @@
+# Loop Runner
+
+**Version:** 0.1.0
+**Status:** Draft
+**Layer:** implementation
+**Implements:** l1-loop-governance.md
+
+## Overview
+
+The engine-side mechanic that turns the loop-governance concept into a running
+component: a **loop runner** that drives an autonomous loop turn after turn, plus a
+**loop governor** that enforces the declared class, mutation manifest, oracle, and
+ceiling. It is the single place where "run an agent in a loop" is implemented, so every
+loop in the system — execution or evolution — inherits the same governance instead of
+each subsystem re-deriving its own retry-until-done logic.
+
+The runner does not re-implement isolation, budgeting, task selection, or model routing.
+It *composes* the existing engine subsystems behind one governed loop contract:
+execution workspaces for isolation, the task graph for work, the budget engine for the
+ceiling, the model router for oracle/judge lineage, version control for rollback, and
+session checkpoints for state externalization.
+
+Placement: domain logic in `crates/core` (the runner, governor, and the
+`LoopSpec`/`MutationManifest`/`Oracle` types); the portable contract seams it leans on
+live in `crates/nodus` (provider traits already defined there). The CLI/TUI expose thin
+bindings; the library method is the source of truth.
+
+## Related Specifications
+
+- [l1-loop-governance.md](l1-loop-governance.md) - The L1 concept this implements (LG-1…LG-9).
+- [l2-execution-workspace.md](l2-execution-workspace.md) - Worktree isolation + finalize write-back; the per-iteration sandbox and the rollback substrate for the immutable set.
+- [l2-budget-engine.md](l2-budget-engine.md) - Hierarchical cost ceiling feeding LG-6 termination.
+- [l2-agent-autonomy.md](l2-agent-autonomy.md) - Action caps + approval gate; the human-oracle path and an independent ceiling source.
+- [l2-model-router.md](l2-model-router.md) - Distinct-lineage binding selection for the independent-judge oracle (LG-4).
+- [l2-agent-session.md](l2-agent-session.md) - The turn skeleton each iteration runs; loop/stop seams.
+- [l2-session-checkpoint.md](l2-session-checkpoint.md) - Plan/status externalization and fresh-context reconstruction (LG-5).
+- [l2-orchestration.md](l2-orchestration.md) - The /goal+judge+budget loop and wave executor that become callers of the runner.
+- [l2-workflow-runtime.md](l2-workflow-runtime.md) - nodus executor (`~UNTIL MAX:n`, `AuditProvider`, validators) the runner binds to.
+
+## 1. Motivation
+
+Today the engine has several independent loops: the orchestration /goal loop, the
+kanban execution loop, the harness evolution loop, the deep-research loop, the heartbeat.
+Each enforces termination, retries, and (sometimes) verification its own way, and none of
+them declares whether it is allowed to mutate its own plan or criteria. Consolidating the
+loop mechanic gives three concrete wins: a single audited place where ceilings and
+oracles are enforced; a structural guarantee that no loop can edit the criteria that
+judge it; and a uniform run record so any loop's iterations, mutations, and verdicts are
+inspectable the same way.
+
+## 2. Constraints & Assumptions
+
+- The runner never pushes to a git remote; iteration isolation and rollback use the
+  local worktree / virtual-staging machinery (no-remote-git contract).
+- `criteria` is not representable in a `MutationManifest`'s mutable set — LG-3 holds by
+  construction, not by a runtime check that could be bypassed.
+- The ceiling is owned by the runner and is enforced even if the actor never yields a
+  stop; a model-produced tool call cannot raise it.
+- Oracle lineage comparison uses the model router's binding identity; when only one
+  lineage is available, the runner records `reduced_confidence` rather than failing.
+- The runner is host-agnostic in its core types; nodus provider traits are the only
+  abstraction it requires, satisfying the portability contract.
+
+## 3. Invariant Compliance (Layer 2 only)
+
+| L1 Invariant | Implementation |
+| --- | --- |
+| LG-1 Declared loop class | `LoopSpec.class: LoopClass {Execution, Evolution}` is required to construct a runner; a spec without a class fails to build. Evolution loops nest an execution `LoopSpec` for candidate evaluation. |
+| LG-2 Mutation manifest | `LoopSpec.manifest: MutationManifest`; the governor consults it before every artifact write and rejects writes to kinds outside `mutable`. Manifest is serialized into the run record. |
+| LG-3 Criteria immutability | `MutationManifest.mutable` is a `Vec<MutableArtifact>` whose enum has **no `Criteria` variant**; criteria are unreachable through the manifest. A criteria change is only performed by an enclosing evolution runner via the §4.6 escalation path. |
+| LG-4 Oracle ownership | `Oracle` enum: `Deterministic(Validator)`, `Judge(ModelBinding)`, `Human(ApprovalGate)`. The governor compares actor vs oracle binding lineage (via model-router identity) and stamps `reduced_confidence` on the iteration record when equal. |
+| LG-5 State externalization | Plan + status persisted via the session-checkpoint three-file hierarchy; each iteration calls `reconstruct_context()` (fresh context from artifacts) rather than inheriting the prior transcript. |
+| LG-6 Independent ceiling | `Ceiling { max_iterations, budget_ref, deadline, patience }` evaluated by the runner before each iteration; budget drawn from the budget engine, action caps from agent-autonomy. Stop fires regardless of actor/oracle state. |
+| LG-7 Tier-escalation gate | `escalate()` requires a separated oracle, an external-novelty source handle, and a held-out evaluation; promotes only on `delta >= margin && regression <= bound`, recording the attempt either way. Reuses the dynamic-harness promotion gate machinery. |
+| LG-8 Mutation ledger | Every applied mutation appends an `AuditProvider` event `(run_id, step_index, artifact_kind, summary, why)`; evolution iterations add `predicted_flip` scored into `keep/revert/partial`. Append-only; never overwritten. |
+| LG-9 Cheapest trustworthy oracle | The runner prefers a `Deterministic` oracle for the inner done-check when the `LoopSpec` provides a validator; `Judge`/`Human` are used only when no deterministic validator is declared. Advisory — logged, not blocked. |
+
+## 4. Detailed Design
+
+### 4.1 Core types
+
+```text
+[REFERENCE]  // crates/core — domain types
+enum LoopClass { Execution, Evolution }
+
+enum MutableArtifact {            // NOTE: no `Criteria` variant — LG-3 by construction
+  Scratch, Plan, Knowledge, ValidationInput, Prompt, Tools,
+}
+
+struct MutationManifest {
+  class:   LoopClass,
+  tier:    u8,                    // 0..=4 (l1-loop-governance §4.2)
+  mutable: Vec<MutableArtifact>,
+}
+
+enum Oracle {
+  Deterministic(Validator),       // tests / exit code / output-contract validator
+  Judge(ModelBinding),            // independent lineage via model router
+  Human(ApprovalGate),            // l2-agent-autonomy approval path
+}
+
+struct Ceiling {
+  max_iterations: u32,
+  budget_ref:     BudgetHandle,   // l2-budget-engine
+  deadline:       Option<Instant>,
+  patience:       u32,            // consecutive no-progress iterations before stop
+}
+
+struct LoopSpec {
+  class:    LoopClass,
+  manifest: MutationManifest,
+  oracle:   Oracle,
+  ceiling:  Ceiling,
+  workspace_kind: ProviderType,   // l2-execution-workspace (worktree default)
+}
+```
+
+### 4.2 Execution-loop runner
+
+The execution runner re-attempts a fixed unit until the oracle passes or the ceiling
+fires. It composes the task graph (work), execution workspace (isolation), session
+(the turn), and version control (commit/rollback).
+
+```text
+[REFERENCE]
+run_execution(spec: LoopSpec, unit: WorkUnit) -> LoopOutcome:
+  workspace = allocate_workspace(spec.workspace_kind, unit)     // isolated worktree
+  iteration = 0
+  loop:
+    governor.check_ceiling(spec.ceiling, iteration)             // LG-6 — may stop here
+    ctx = reconstruct_context(unit, plan, status)               // LG-5 fresh context
+    result = run_turn(ctx)                                      // l2-agent-session
+    governor.guard_writes(result.mutations, spec.manifest)      // LG-2/LG-3 — reject illegal
+    verdict = oracle.judge(result)                              // LG-4
+    record_iteration(run_id, iteration, result, verdict)        // LG-8 ledger
+    if verdict.done:
+      finalize_workspace(workspace)                             // write-back, commit
+      return Done(verdict)
+    else:
+      rollback_to_snapshot(workspace)                           // VC-4 — discard attempt
+      append_status(status, verdict.feedback)                   // carried via plan/status
+      iteration += 1
+```
+
+Key points: the actor's "I think I'm done" is *advisory*; only `oracle.judge` sets
+`verdict.done` (LG-4). A failed attempt is rolled back so the next iteration starts from a
+clean snapshot, and only the compact status note carries forward (LG-5). Any write to an
+artifact kind outside the manifest is rejected by `guard_writes` before it reaches disk
+(LG-2); since `Criteria` is not a `MutableArtifact`, criteria writes are unreachable
+(LG-3).
+
+### 4.3 Evolution-loop runner
+
+The evolution runner wraps the harness EVALUATE→ANALYZE→IMPROVE loop. It changes harness
+components (its manifest's `mutable` set) but holds the evaluation pipeline (the oracle)
+frozen, and it nests an execution runner to *score* each candidate.
+
+```text
+[REFERENCE]
+run_evolution(spec: LoopSpec, harness, task_set, held_out) -> Harness:
+  loop:
+    governor.check_ceiling(spec.ceiling, gen)                   // LG-6
+    scores = for task in task_set:                              // EVALUATE
+               run_execution(inner_spec(harness), task)         // nested execution loop
+    artifact = analyze(scores)                                  // ANALYZE → durable artifact (HE-8)
+    candidate = improve(artifact, harness)                      // IMPROVE — manifest-bounded mutation
+    governor.guard_writes(candidate.diff, spec.manifest)        // LG-2 — never touches criteria
+    predicted = candidate.predicted_flips
+    actual = re-evaluate(candidate, task_set)
+    verdict = score(predicted, actual)                          // keep/revert/partial (DH-8)
+    record_generation(run_id, gen, candidate, verdict)          // LG-8
+    if verdict == keep: harness = candidate
+    if target_reached or patience_exhausted: break
+  assert transfer_valid(harness, held_out)                      // HE-6
+  return harness
+```
+
+The oracle here is the frozen evaluation pipeline (HE-3); it is never in
+`spec.manifest.mutable`. Making criteria mutable for a *lower* loop is the only thing that
+routes through §4.6.
+
+### 4.4 The governor
+
+A single enforcement object every runner calls, analogous to the autonomy
+`gate_decision` single-enforcement-point pattern:
+
+```text
+[REFERENCE]
+impl Governor {
+  check_ceiling(c: Ceiling, n: u32) -> Continue | Stop(reason)
+     // iterations / budget / deadline / patience — independent of actor & oracle (LG-6)
+
+  guard_writes(muts: &[Mutation], m: &MutationManifest) -> Result<(), GuardError>
+     // each mutation's artifact_kind must be in m.mutable; else GuardError::IllegalMutation
+     // (criteria can't even be expressed, so it can't be requested) (LG-2/LG-3)
+
+  judge(o: &Oracle, r: &TurnResult) -> Verdict
+     // dispatches to deterministic/judge/human; stamps reduced_confidence on lineage match (LG-4)
+}
+```
+
+`GuardError::IllegalMutation` rolls the iteration back via VC-4 and records the
+violation in the ledger — an attempt to mutate outside the manifest is a recorded event,
+not a silent drop.
+
+### 4.5 Oracle wiring
+
+```text
+[REFERENCE]
+Deterministic — reuses l1-output-contracts validators: schema, callable (exit code /
+                grep / test command), and LLM-criteria (only when no mechanical check
+                exists — LG-9 keeps this the last resort).
+Judge         — model-router selects a binding whose lineage != actor's; if none is
+                available, run with actor's lineage and set reduced_confidence=true.
+Human         — routes through the agent-autonomy approval gate (10-min TTL); in
+                background/cron context, falls back to deterministic or stops (no silent
+                self-approval).
+```
+
+### 4.6 Escalation path (criteria change / self-evolution)
+
+A criteria change or a Tier-4 self-modification is performed by an *enclosing* evolution
+runner, never inside the judged loop:
+
+```text
+[REFERENCE]
+escalate(target_loop, change) -> Promoted | Rejected:
+  require target_loop.oracle.lineage != actor.lineage           // separated oracle (LG-7)
+  require novelty_source.has_external_input()                   // AFS-13 / LG-7
+  candidate = apply(change, target_loop.spec)                   // may touch prompt/tools/criteria
+  before = evaluate(target_loop, held_out)
+  after  = evaluate(candidate,   held_out)                      // held-out, not search set
+  if after.metric - before.metric >= margin and regression(after) <= bound:
+      record_promotion(run_id, change); return Promoted
+  else:
+      record_rejection(run_id, change); return Rejected
+```
+
+### 4.7 Command surface
+
+| Action | CLI | TUI | Library (no code) |
+| --- | --- | --- | --- |
+| run an execution loop on a unit | `cronus loop run <unit-id> [--tier N] [--max-iter N]` | `/loop run <unit-id> …` | `loop.run_execution(spec, unit) -> LoopOutcome` |
+| run an evolution loop | `cronus loop evolve <harness-id> [--target <score>]` | `/loop evolve …` | `loop.run_evolution(spec, harness, set) -> Harness` |
+| inspect a loop's ledger | `cronus loop log <run-id>` | `/loop log <run-id>` | `loop.ledger(run_id) -> Vec<LedgerEntry>` |
+| show a loop's manifest/oracle/ceiling | `cronus loop show <run-id>` | `/loop show <run-id>` | `loop.spec(run_id) -> LoopSpec` |
+
+### 4.8 Crate placement
+
+```text
+[REFERENCE]
+crates/core/
+  loop/
+    spec.rs        // LoopSpec, MutationManifest, MutableArtifact, LoopClass, Ceiling
+    governor.rs    // Governor: check_ceiling / guard_writes / judge
+    execution.rs   // run_execution
+    evolution.rs   // run_evolution (wraps harness EVALUATE→ANALYZE→IMPROVE)
+    oracle.rs      // Oracle enum + lineage comparison
+    escalate.rs    // §4.6 promotion gate
+crates/nodus/      // (existing seams, reused — no host types added)
+  ModelProvider    // judge-oracle lineage
+  AuditProvider    // mutation ledger event stream
+  PolicyProvider / StorageProvider   // escalation gate + provisional-vs-promoted state
+```
+
+Dependencies point inward to `core`; `nodus` stays std-only and host-agnostic. The
+runner is a `core` consumer of nodus's provider traits, exercising the same two-host rule
+the dynamic-harness spec relies on.
+
+## 5. Implementation Notes
+
+1. `spec.rs` first — the types are the contract; with `MutableArtifact` lacking a
+   `Criteria` variant, LG-3 is enforced by the type system before any logic exists.
+2. `governor.rs` — the three enforcement methods, unit-tested against illegal-mutation
+   and ceiling-overrun cases.
+3. `execution.rs` over the existing workspace + session + version-control machinery.
+4. `oracle.rs` with the deterministic path first (reuse output-contract validators),
+   then judge (model-router lineage), then human (approval gate).
+5. `evolution.rs` wrapping the harness loop, nesting `run_execution` for candidate
+   scoring; `escalate.rs` last (needs held-out + novelty + separated oracle wired).
+
+## 6. Drawbacks & Alternatives
+
+- **Consolidation churn.** Existing loops (orchestration /goal, kanban execution, deep
+  research) must be migrated to call the runner to gain the governance. Mitigation:
+  migrate incrementally — each subsystem becomes a *caller* of the runner with its own
+  `LoopSpec`; the runner does not change their behavior, only enforces a declared
+  contract around it.
+- **Ceiling double-counting.** Both the runner and the budget engine track spend.
+  Mitigation: the runner holds a `BudgetHandle` into the engine rather than a private
+  counter — one source of truth.
+- **Judge lineage may be unavailable.** With a single local model, every judge oracle is
+  same-lineage. The runner degrades to `reduced_confidence` (LG-4) rather than failing,
+  but the limitation is real and surfaced in the run record.
+- **Alternative — keep per-subsystem loops.** Rejected: it perpetuates inconsistent
+  ceiling/oracle handling and leaves criteria-drift unguarded in any loop that evolves
+  its own artifacts.
+
+## Canonical References
+
+| Alias | Path | Purpose |
+| --- | --- | --- |
+| `[LOOP-GOV]` | `.design/main/specifications/l1-loop-governance.md` | The governed contract (LG-1…LG-9) this crate enforces. |
+| `[EXEC-WS]` | `.design/main/specifications/l2-execution-workspace.md` | Worktree isolation + finalize + VC-4 rollback substrate. |
+| `[BUDGET]` | `.design/main/specifications/l2-budget-engine.md` | Cost ceiling feeding LG-6. |
+| `[AUTONOMY]` | `.design/main/specifications/l2-agent-autonomy.md` | Approval gate (human oracle) + independent action caps. |
+| `[ROUTER]` | `.design/main/specifications/l2-model-router.md` | Distinct-lineage binding for the judge oracle (LG-4). |
+| `[CHECKPOINT]` | `.design/main/specifications/l2-session-checkpoint.md` | Plan/status externalization + fresh-context reconstruction (LG-5). |
+
+## Document History
+
+| Version | Date | Author | Notes |
+| --- | --- | --- | --- |
+| 0.1.0 | 2026-06-25 | Core Team | Initial Draft — loop runner + governor mechanic for `crates/core` (composing execution-workspace, budget-engine, agent-autonomy, model-router, session-checkpoint, version-control, nodus provider seams); `LoopSpec`/`MutationManifest`/`Oracle`/`Ceiling` types with `MutableArtifact` having no `Criteria` variant (LG-3 by construction); execution + evolution runners; single-point governor (check_ceiling/guard_writes/judge); oracle wiring (deterministic/judge/human with lineage reduced-confidence); escalation path for criteria change / self-evolution; crate placement. Draft pending L1 parent promotion to Stable. |
