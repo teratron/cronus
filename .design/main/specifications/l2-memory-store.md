@@ -1,6 +1,6 @@
 # Memory Store
 
-**Version:** 1.1.0
+**Version:** 1.2.0
 **Status:** Stable
 **Layer:** implementation
 **Implements:** l1-memory-model.md
@@ -111,6 +111,20 @@ LIMIT ?;
 ```
 
 The fallback keeps lexical recall functional for any script without bundling a language-specific tokenizer (e.g. an ICU build). It is lexical-only and engages just on empty `MATCH` results, so it adds no cost to the common path; semantic recall (`vec0`) and HRR similarity (§4.8) are unaffected and continue to supply cross-lingual signal. The same `MATCH`→`LIKE` degradation pattern is reusable by any FTS5 surface in the system (knowledge store, code index).
+
+#### 4.2.2 Diversity and recency refinements
+
+Two optional ranking refinements apply after the weighted fuse and before truncation to the token budget. Both are config-gated and default to behavior identical to the unrefined fuse, so they are non-breaking; their effect on recall quality is measurable via the retrieval-evaluation harness (see `l1-retrieval-evaluation.md`).
+
+- **MMR diversity** — when enabled, the fused candidate list is re-ordered by Maximal Marginal Relevance instead of pure score: each next pick maximizes `λ · score − (1−λ) · max_similarity_to_already_picked`. `mmr_lambda ∈ [0,1]` trades relevance (1.0 = pure score, the default) for diversity (lower = less redundant). This suppresses near-duplicate memories crowding the top-K when several items restate the same fact.
+- **Opt-in recency** — recency is a third ranking signal, **off by default** (`recency_weight = 0`). When enabled it joins the normalized fuse as `score = (sim_w·sim + util_w·util + rec_w·recency) / (sim_w + util_w + rec_w)`, where `recency` decays with a configurable half-life (`recency_halflife_days`, default 30). Useful for fast-moving projects where fresh memories should outrank stale-but-popular ones; left off, ranking is purely similarity + utility + verification weight as before.
+
+```text
+[REFERENCE] recall ranking knobs (config-gated, defaults = no behavior change)
+mmr_lambda            = 1.0   // 1.0 = pure relevance (off); lower = more diverse
+recency_weight        = 0.0   // 0 = recency off (opt-in)
+recency_halflife_days = 30.0
+```
 
 ### 4.3 Write path
 
@@ -911,6 +925,7 @@ The archivist's `reconcile` stage reads the pending review queue and either:
 
 | Version | Change |
 | --- | --- |
+| 1.2.0 | Added §4.2.2 diversity & recency ranking refinements — config-gated MMR diversity (`mmr_lambda`) and opt-in recency weight (`recency_weight`/`recency_halflife_days`), defaults = no behavior change; effect measurable via the retrieval-evaluation harness |
 | 1.1.0 | Added §4.2.1 multi-script lexical robustness — FTS5 `MATCH`→`LIKE` fallback for scripts the default tokenizer under-segments (CJK / unsegmented text), engaged only on empty `MATCH` results |
 | 1.0.6 | Baseline (history tracking introduced at 1.1.0; see INDEX for prior change log) |
 
