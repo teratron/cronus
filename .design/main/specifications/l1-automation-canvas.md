@@ -1,6 +1,6 @@
 # Automation Canvas
 
-**Version:** 1.0.0
+**Version:** 1.1.0
 **Status:** Stable
 **Layer:** concept
 
@@ -58,6 +58,8 @@ Rules every Layer 2 implementation MUST NOT violate:
 
 - **AC-6 Graceful degradation**: if the pipeline engine is offline or unreachable, the canvas displays last-known state with a staleness indicator. It MUST NOT block the user from viewing or editing pipeline definitions in offline mode — edits are queued for sync when the engine reconnects.
 
+- **AC-7 Pinned partial re-execution requested, not run**: the canvas may pin a node's last observed output and ask the engine to partially re-execute the pipeline from a chosen node against that pinned upstream (the engine capability AP-13 in `l1-automation-pipeline.md`), for fast authoring iteration. The canvas MUST NOT execute the run itself (AC-3 holds): it requests a development run and renders the result from the AuditProvider trace. Partial runs are visibly labelled development and, per AP-13, never fire real side-effecting actions unless the user explicitly opts a specific action live.
+
 ## 4. Detailed Design
 
 ### 4.1 Canvas Structure
@@ -93,8 +95,9 @@ Each node type (§4.1 of `l1-automation-pipeline.md`) has a distinct visual form
 | `delay` | Clock | remaining wait time; paused / resumed |
 | `aggregate` | Funnel | events collected / window threshold |
 | `loop` | Cycle arrow | current iteration / max_iterations |
+| `subpipeline` | Nested-frame box (drill-in) | callee pipeline name + last outcome; double-click opens the callee graph |
 
-Node edges carry the event payload descriptor (field names and types, not values). Clicking an edge in the inspector shows the last observed descriptor.
+Node edges carry the event payload descriptor (field names and types, not values). Clicking an edge in the inspector shows the last observed descriptor. A pinned node (AC-7) shows a pin badge; its edge descriptor reads from the pinned value during a development run.
 
 ### 4.3 Explicit Pipeline Editing
 
@@ -115,6 +118,7 @@ For any pipeline run (explicit or implicit):
 2. **Run trace** — clicking a run expands it to a per-node sequence. Each node entry shows: emitted event type, elapsed time, outcome. Error nodes show error code and detail.
 3. **Replay** — the canvas can re-display a historical run's trace against the current pipeline graph, even if the pipeline definition has changed. This enables post-mortem analysis without re-executing.
 4. **Live mode** — while a pipeline is running, the canvas highlights the currently active node in real time, sourced from the AuditProvider event stream.
+5. **Pin and partial re-run (AC-7)** — the author pins a node's last output (a pin badge appears), selects a node to re-run from, and the canvas requests a development partial run (AP-13) from the engine: only the downstream subgraph re-executes against the pinned value, upstream work is skipped, and side-effecting actions are dry-run unless explicitly opted live. The result streams back through the AuditProvider trace exactly like any run, marked development. This is the fast iteration loop — tweak one downstream node, re-run just that part, without re-hitting upstream services. Distinct from **Replay** (which only re-displays history and never executes).
 
 ### 4.5 Implicit Pipeline Surfaces
 
@@ -154,3 +158,4 @@ This conversion does not change execution behavior — it only moves ownership f
 | Version | Date | Author | Notes |
 | --- | --- | --- | --- |
 | 1.0.0 | 2026-06-24 | Core Team | Initial spec — AC-1…AC-6, three-panel layout, node rendering, explicit editing, implicit surfaces, inspection and debugging |
+| 1.1.0 | 2026-06-25 | Core Team | AC-7 added — pin a node's output and request an engine-side partial re-run from a chosen node (AP-13); engine executes, canvas only requests + renders (AC-3 preserved); `subpipeline` node rendering (drill-in) + pin badge added to §4.2; "Pin and partial re-run" added to §4.4 inspection/debugging, distinct from Replay. |

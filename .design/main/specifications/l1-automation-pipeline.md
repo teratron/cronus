@@ -1,6 +1,6 @@
 # Automation Pipeline
 
-**Version:** 1.1.0
+**Version:** 1.2.0
 **Status:** Stable
 **Layer:** concept
 
@@ -73,6 +73,10 @@ Rules that every Layer 2 implementation MUST NOT violate:
 
 - **AP-11 Portable automation bundles**: a set of pipelines and their edges (data and control) MAY be packaged as a portable bundle — a self-contained, attributed artifact (stable identity, optional origin reference, human label, tags) that can be exported, shared, and imported into another office to re-instantiate the same automation graph. Import is non-destructive (it instantiates new pipelines; it never silently overwrites existing ones) and re-validates AP-5/AP-7 in the destination office before activation. A bundle carries *definitions only* — never node memory, event history, credentials, or office-specific identifiers.
 
+- **AP-12 Pipeline composition**: a pipeline MAY be invoked as a single node within another pipeline — a `subpipeline` node references a pipeline by identity, passes an input payload, and receives the sub-pipeline's terminal output as its own. Composition is bounded by a declared maximum nesting depth and is acyclic across the composition graph (a pipeline MUST NOT invoke itself transitively). The sub-pipeline executes under the **caller's** office scope and permission set (AP-5/AP-7) — being invoked grants no broader rights. Composition is the reuse mechanism for portable bundles (AP-11): an imported pipeline becomes a callable building block.
+
+- **AP-13 Pinned partial re-execution (development)**: for authoring iteration, a node's prior output MAY be *pinned* so the engine re-executes only the downstream subgraph against the pinned value, skipping upstream re-computation. A pinned partial run is a **development run**: it reuses the §4.9 dry-run side-effect quarantine — real `action` dispatch is simulated and recorded, not performed, unless the operator explicitly opts a specific action live. It is traced and marked development (AP-6), and never counts as a production pipeline run nor fires production side effects implicitly.
+
 ## 4. Detailed Design
 
 ### 4.1 Automation Node Taxonomy
@@ -89,6 +93,7 @@ A pipeline is a directed acyclic graph of typed nodes. Every execution path from
 | `delay` | Pauses execution for a specified duration or until a condition is met | Durable pause: survives process restart |
 | `aggregate` | Collects N events over a window before passing them downstream | Produces a list payload; emits once when window condition is satisfied |
 | `loop` | Iterates over a list payload, executing the subgraph for each element | Bounded by `max_iterations`; exceeding it raises an error |
+| `subpipeline` | Invokes another pipeline by reference, passing input and receiving its terminal output (AP-12) | Bounded nesting depth; acyclic across the composition graph; runs under the caller's scope/permissions |
 
 ### 4.2 Trigger Types
 
@@ -234,6 +239,37 @@ AutomationBundle {
 
 Export serializes the member pipeline definitions and their edges — **definitions only**, never node memory, event history, credentials, or office-specific identifiers. Import is non-destructive: it instantiates new pipelines (resolving naming collisions rather than overwriting), re-binds external-service action nodes to the destination office's own credentials, and re-validates AP-5/AP-7 before any pipeline is activated. Import reuses the staged, reversible apply pattern of `l2-agent-migration.md` (dry-run → instantiate → review → activate). `bundle_id` lets an office detect that an imported bundle has a newer revision available.
 
+### 4.11 Composition and Development Execution (AP-12, AP-13)
+
+**Pipeline composition (AP-12).** A `subpipeline` node turns a whole pipeline into a reusable building block. It references a pipeline by identity, hands it an input payload, and adopts that pipeline's terminal output as its own — the same way an `action` node delegates, except the callee is another pipeline rather than a role:
+
+```text
+[REFERENCE]
+subpipeline node:
+  target      : pipeline identity (local or imported via an AP-11 bundle)
+  input       : EventPayload passed as the callee's trigger payload
+  output      : the callee's terminal output, returned to the caller graph
+  depth_guard : declared max nesting depth; transitive self-invocation rejected
+  scope       : executes under the CALLER's office + permission set (AP-5/AP-7)
+```
+
+Composition makes shared automations DRY: import a bundle once (AP-11), then invoke it from many callers. The acyclic + depth-bounded rule keeps a composed graph finite, the same guarantee §4.3 makes for a single graph.
+
+**Pinned partial re-execution (AP-13).** While authoring, re-running a whole pipeline to test one downstream change is wasteful — and re-hits upstream side effects. Pinning fixes that: the operator pins a node's last observed output, and the engine re-runs only the subgraph downstream of a chosen node against that pinned value.
+
+```text
+[REFERENCE]
+Pinned partial run:
+  PIN        — capture a node's prior output as a fixed value
+  SELECT     — choose the node to re-run from
+  EXECUTE    — engine runs only the downstream subgraph; upstream is the pinned value
+  QUARANTINE — action dispatch is dry-run (simulated + recorded) per §4.9,
+               unless a specific action is explicitly opted live
+  MARK       — the run is traced (AP-6) and labelled "development", never production
+```
+
+This is an engine capability, not a canvas one: the canvas (`l1-automation-canvas.md` AC-7) only *requests* a pinned partial run and renders the result — it never executes (AC-3). Pinned data is explicitly not real triggering data, so a development run can never silently fire a production action.
+
 ## 5. Implementation Notes
 
 1. Implement trigger-triage intake first — nothing can reach the automation engine without it.
@@ -273,3 +309,4 @@ Export serializes the member pipeline definitions and their edges — **definiti
 | --- | --- | --- | --- |
 | 1.0.0 | 2026-06-24 | Core Team | Initial spec — AP-1…AP-7, node taxonomy, trigger types, dual-mode architecture, event payload contract |
 | 1.1.0 | 2026-06-25 | Core Team | AP-8…AP-11 added — durable node memory (change/spike/gap/dedup/digest continuity), control plane separate from data plane (enable/disable/trigger edges), event lifecycle (per-node retention, TTL/GC with change-detector continuity, immediate-vs-deferred propagation, node health predicate, dry-run preview), and portable definitions-only automation bundles (export/import, non-destructive, credential-rebinding, staged apply). §4.7–4.10 added. |
+| 1.2.0 | 2026-06-25 | Core Team | AP-12…AP-13 added — pipeline composition (`subpipeline` node invokes another pipeline by identity, bounded depth + acyclic, caller-scoped, the reuse mechanism for AP-11 bundles) and pinned partial re-execution for authoring (pin a node's output, re-run only the downstream subgraph against it, reusing the §4.9 dry-run side-effect quarantine, marked development-not-production). `subpipeline` node type added to §4.1 taxonomy; §4.11 added. |
