@@ -1,6 +1,6 @@
 # Memory Store
 
-**Version:** 1.0.6
+**Version:** 1.1.0
 **Status:** Stable
 **Layer:** implementation
 **Implements:** l1-memory-model.md
@@ -92,6 +92,25 @@ graph TD
     FUSE --> MERGE[Merge across scopes: employee>workspace>global]
     MERGE --> BUD[Truncate to token budget]
 ```
+
+#### 4.2.1 Multi-script lexical robustness
+
+The default FTS5 tokenizer splits on whitespace and ASCII punctuation, so it under-tokenizes scripts that lack explicit word boundaries (e.g. CJK) or segment differently — a `MATCH` query over such content can return zero rows even when a matching fact exists. The lexical recall pass is therefore two-stage:
+
+1. **Primary** — `memory_fts MATCH ?` (BM25-ranked), with the query's whitespace-separated terms OR-combined.
+2. **Fallback** — only when the `MATCH` pass yields zero rows, run a substring scan, preserving the same trust and category filters and ordering by trust:
+
+```sql
+-- [REFERENCE] fallback when FTS5 MATCH returns no rows
+SELECT … FROM memory_item
+WHERE content LIKE '%' || ? || '%'
+  AND trust_score >= ?           -- TRUST_MIN_SEARCH (§4.6)
+  [AND type = ?]                 -- optional category filter
+ORDER BY trust_score DESC
+LIMIT ?;
+```
+
+The fallback keeps lexical recall functional for any script without bundling a language-specific tokenizer (e.g. an ICU build). It is lexical-only and engages just on empty `MATCH` results, so it adds no cost to the common path; semantic recall (`vec0`) and HRR similarity (§4.8) are unaffected and continue to supply cross-lingual signal. The same `MATCH`→`LIKE` degradation pattern is reusable by any FTS5 surface in the system (knowledge store, code index).
 
 ### 4.3 Write path
 
@@ -887,6 +906,13 @@ The archivist's `reconcile` stage reads the pending review queue and either:
 - **Review** at 0.5–0.9: surfaces to the user with a diff of the code change before acting.
 - **Update** at 0.7: prompts the agent to refresh the `CodeLink.node_id` / `line_range`.
 - **None**: discards the suggestion without action.
+
+## Document History
+
+| Version | Change |
+| --- | --- |
+| 1.1.0 | Added §4.2.1 multi-script lexical robustness — FTS5 `MATCH`→`LIKE` fallback for scripts the default tokenizer under-segments (CJK / unsegmented text), engaged only on empty `MATCH` results |
+| 1.0.6 | Baseline (history tracking introduced at 1.1.0; see INDEX for prior change log) |
 
 ## 5. Drawbacks & Alternatives
 
