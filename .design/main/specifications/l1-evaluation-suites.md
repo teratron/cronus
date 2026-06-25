@@ -1,6 +1,6 @@
 # Evaluation Suites
 
-**Version:** 1.0.0
+**Version:** 1.1.0
 **Status:** Stable
 **Layer:** concept
 
@@ -70,6 +70,14 @@ Rules every Layer 2 implementation MUST NOT violate:
 - **ES-11 No production side effects**: an evaluation run is sandboxed. Side-effecting actions are dry-run, simulated, and recorded (reusing the quarantine of `l1-automation-pipeline.md` §4.9); a grader that requires a real side effect (a file created, a config written) observes the isolated workspace, never production state. An eval run MUST NOT mutate user data.
 
 - **ES-12 Scaffold then maintain**: a suite MAY be bootstrapped from its customization — a scaffold derives starter tasks and default graders from the customization's declared triggers and intents — but the scaffold is a starting point, never authoritative coverage. Coverage gaps are the author's responsibility; the suite is a maintained artifact, not a generated one.
+
+- **ES-13 Control-arm attribution**: a run MAY evaluate, alongside the candidate customization and the no-customization baseline (ES-9), one or more *control arms* — cheap instructions that state the same surface intent without the customization's structure. A metric gain is credited to the customization only to the extent it exceeds the **best** control arm, not merely the baseline; a customization that does not beat a naive prompt stating the same intent has not earned its complexity. A control arm that matches the candidate is a reportable finding (the effect is achievable without the customization), not a harness failure.
+
+- **ES-14 Separated non-negotiable quality tier**: metrics partition into an efficiency/behavior tier and a quality/safety tier, scored independently. The quality tier is a hard floor — a run where the candidate improves efficiency metrics while regressing the quality tier **fails outright**, regardless of weighted total (no efficiency gain buys back a quality regression). Quality-tier tasks MAY state their requirement *implicitly* (as a real task reads) so a customization that silently drops it is caught, and MAY execute the produced artifact against adversarial input within the ES-11 sandbox.
+
+- **ES-15 Judge trust gate**: a judgment grader's verdicts are trusted for a run only after the judge passes a discrimination self-test — for a reference pair it MUST rank the known-worse artifact strictly worse than the known-better one on the judged axis; a judge that cannot tell the references apart is not used. A trusted judgment grader is auditable: fixed judge model and settings, a published rubric, and every verdict cites the specific construct/evidence it scored (or "none").
+
+- **ES-16 Signed metrics**: a metric declares its direction, and a minimization metric measures *unnecessary* volume, not total volume. An output that is a positive signal — a test written, an explanation the user explicitly requested — MUST NOT be counted against a size/cost metric. A suite never penalizes a necessary addition as bloat.
 
 > L2 specs cannot reach RFC status until all invariants here are addressed in their "Invariant Compliance" section.
 
@@ -170,7 +178,33 @@ A scaffold reads the customization's declared triggers and intents and emits sta
 | Cost | cheap, no execution | requires running the customization |
 | Blindspot | cannot see runtime behavior | cannot see latent document defects that this task set happens not to exercise |
 
-A mature customization pairs both: lint the document, then run the suite. ES-13 of neither spec is satisfied by the other.
+A mature customization pairs both: lint the document, then run the suite. Neither half's job is satisfied by the other.
+
+### 4.9 Control Arms, Quality Tier, and Judge Trust (ES-13…ES-16)
+
+**Control arms (ES-13).** Baseline comparison (ES-9) answers "is the customization better than nothing?" — but a topic-shaped instruction with no real structure can move a metric too. To attribute a gain to the customization's *design*, a run adds control arms: cheap prompts stating the same surface intent ("be concise", "prefer the simplest solution") without the customization's machinery. The credited effect is the candidate's margin over the best control, not over baseline.
+
+```text
+[REFERENCE]
+arms = { baseline (no customization), candidate, control₁…controlₙ (naive, same intent) }
+credited_effect(metric) = candidate_score − max(control_scores)     -- not − baseline_score
+A candidate that fails to beat its best control on its headline metric has not earned its complexity.
+```
+
+**Quality tier as a hard floor (ES-14).** Metrics split into two independently scored tiers:
+
+| Tier | Measures | Gate |
+| --- | --- | --- |
+| Efficiency / behavior | size, tokens, cost, latency, budget adherence | weighted + thresholded (ES-5) |
+| Quality / safety | correctness, validation, error-handling, security, accessibility | hard floor — any regression fails the run |
+
+Quality-tier tasks may leave the requirement **implicit** (the way a real ticket reads) so an arm that silently drops it is caught, and may execute the produced artifact against adversarial input inside the ES-11 sandbox. No efficiency gain buys back a quality-tier regression — the run fails even if the weighted total rose.
+
+**Judge trust (ES-15).** Before a judgment grader's verdicts count, the judge runs a self-test on reference pairs: it must rank a known-worse artifact strictly below a known-better one on the judged axis. A judge that cannot separate the references is not trusted for that run. Trusted judges are auditable — fixed model and settings, a published rubric, and every verdict cites the specific construct it scored (or "none").
+
+**Signed metrics (ES-16).** A minimization metric measures *unnecessary* volume, not total volume. Positive-signal outputs — a test written, an explicitly requested explanation — are excluded from size/cost metrics, never counted as bloat. This keeps a "less code" metric from punishing the check that makes the code safe.
+
+This methodology is customization-agnostic: it scores a skill, a role, or a workflow definition (including a workflow authored in the agent workflow DSL) the same way — candidate against baseline and naive controls, efficiency separate from a quality floor.
 
 ## 5. Drawbacks & Alternatives
 
@@ -194,6 +228,10 @@ A mature customization pairs both: lint the document, then run the suite. ES-13 
 | Sandboxed, side-effect-free runs | ES-11 — reuses AP-13 §4.9 quarantine |
 | Scaffold-then-maintain authoring | ES-12, §4.7 |
 | Static lint as complementary half | §4.8 — `l2-quality-pipeline.md` |
+| Control-arm attribution (beat a naive control, not just baseline) | ES-13, §4.9 — extends ES-9 |
+| Separated non-negotiable quality/safety tier (implicit requirement, adversarial exec) | ES-14, §4.9 |
+| Judge trust self-test + cite-the-construct auditability | ES-15, §4.9 — strengthens ES-3 Judgment |
+| Signed metrics (tests / requested explanation never counted as bloat) | ES-16, §4.9 |
 
 ## Canonical References
 
@@ -210,3 +248,4 @@ A mature customization pairs both: lint the document, then run the suite. ES-13 
 | Version | Date | Notes |
 | --- | --- | --- |
 | 1.0.0 | 2026-06-25 | Initial spec — evaluation suites as companion artifacts (ES-1, ES-2); typed grader taxonomy across five families composing existing validators (ES-3); global/task grader scopes (ES-4); weighted thresholded metrics with hard-gate (ES-5); stability via trials (ES-6); frozen+isolated runs (ES-7); immutable diffable results (ES-8); baseline/regression gate (ES-9); first-class activation-correctness testing (ES-10); sandboxed no-production-side-effects (ES-11); scaffold-then-maintain authoring (ES-12); static-vs-dynamic quality framing (§4.8). |
+| 1.1.0 | 2026-06-25 | Minor — control-arm attribution: credit a customization only for its margin over the best naive same-intent control (ES-13); separated non-negotiable quality/safety tier with implicit-requirement adversarial tasks, no efficiency gain buys back a quality regression (ES-14); judge trust self-test + auditable cite-the-construct verdicts (ES-15); signed metrics that never penalize necessary additions as bloat (ES-16); §4.9 added; fixed a stray "ES-13" phrasing in §4.8. Mined from an external code-minimalism customization's benchmark methodology. Re-reviewed (spec-critic + prompt-engineer PASS). |

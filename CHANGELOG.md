@@ -76,3 +76,4 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Updated specification `tool-security` (main)
 - Added specification `evaluation-suites` (main)
 - Added specification `facilitation` (main)
+- Updated specification `evaluation-suites` (main)

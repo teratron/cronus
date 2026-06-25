@@ -77,3 +77,8 @@
 - пример GUI: <https://github.com/CapSoftware/Cap>
 - пример GUI: <https://github.com/janhq/jan>
 - пример GUI: <https://github.com/mountain-loop/yaak>
+
+## Misc
+
+- [Ralph loop агенты, оракул и право на мутацию: как не путать execution loop с evolution loop](https://habr.com/ru/articles/1017180/)
+- [Loop Engineering: как перестать промптить вручную и начать проектировать циклы для ИИ-агентов](https://ai4dev.ru/posts/loop-engineering/)
