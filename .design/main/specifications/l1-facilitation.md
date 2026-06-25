@@ -1,6 +1,6 @@
 # Facilitated Cognition
 
-**Version:** 1.0.0
+**Version:** 1.1.0
 **Status:** Stable
 **Layer:** concept
 
@@ -28,6 +28,7 @@ This complements the office's *decision* and *reflection* machinery: deliberatio
 - [l1-extensions.md](l1-extensions.md) — the method catalog is a user-extensible asset, distributed and overridable like skills.
 - [l1-security.md](l1-security.md) — facilitation content is user data; on-device-by-default, consent-gated egress (FC-11).
 - [l1-memory-model.md](l1-memory-model.md) — durable session memory (memlog) is a scoped, append-only artifact distinct from long-term memory.
+- [l1-operational-ledger.md](l1-operational-ledger.md) — sibling data-driven, id-addressable, layered registry; informs the optional `counters` failure-mode field and activity scoping (FC-1).
 
 ## 1. Motivation
 
@@ -54,8 +55,8 @@ These are facilitation problems, not decision problems. Treating them as decisio
 
 Rules that any Layer 2 implementation MUST NOT violate:
 
-- **FC-1 Catalog as portable registry**: reasoning/critique/ideation techniques live in a data-driven catalog where each entry declares at minimum a category, a name, a description (what it does, when to use it, why it helps), and an output shape. The catalog is extensible without engine changes and may be layered (built-in < project < personal) with id-stable overrides.
-- **FC-2 Context-aware, bounded selection**: when offering techniques, the agent selects a small short-list (a handful, not the whole library) ranked by the current context — content type, complexity, risk level, stakeholder needs. The full library is never dumped into the working context to make a choice; it is queried.
+- **FC-1 Catalog as portable registry**: reasoning/critique/ideation techniques live in a data-driven catalog where each entry declares at minimum a category, a name, a description (what it does, when to use it, why it helps), and an output shape. The catalog is extensible without engine changes and may be layered (built-in < project < personal) with id-stable overrides. An entry MAY additionally declare the failure mode it counters and an activity scope, enabling **failure-driven selection** — reaching for the technique that counters an observed or anticipated failure, not only goal-driven selection.
+- **FC-2 Context-aware, bounded selection**: when offering techniques, the agent selects a small short-list (a handful, not the whole library) ranked by the current context — content type, complexity, risk level, stakeholder needs. The full library is never dumped into the working context to make a choice; it is queried. When two selected techniques overlap or interact, a declared resolution order determines which runs first (e.g. identify the hardest constraint before enumerating the failure modes around it).
 - **FC-3 Elicitation operates on existing output, change-gated**: an elicitation method is applied to the agent's most recent output to reconsider/refine/improve it. Any resulting change to a durable artifact is proposed and applied **only on explicit acceptance**; a rejected proposal is discarded, not silently retained. Elicitation complements, and never substitutes for, the post-task quality gates.
 - **FC-4 Non-committal selection surface**: the facilitation surface always offers reshuffle / list-all / **proceed**, and never forces a pick. "Proceed" (do nothing further) is always reachable in one step. The surface is never a wall of stacked questions.
 - **FC-5 Declared stance, held for the run**: an ideation session runs in exactly one stance — *facilitator* (the agent supplies no ideas; a forcing function for the user's), *partner* (the agent co-generates, with authorship of each idea attributed), or *autonomous* (the agent runs the whole session and presents the result). The stance is fixed at the start and holds for the entire run.
@@ -84,6 +85,8 @@ The shared backbone of all three faces. A catalog is a set of technique entries;
 | `provenance` *(opt)* | `classic` / `signature` / `playful` — lets a "proven & professional" lead group surface recognised methods first. |
 | `goal_affinity` *(opt)* | Multi-valued tags (feature / strategy / diagnosis / unstuck / …) powering goal → technique routing. |
 | `audience` *(opt)* | `solo` / `group` / `either` — flags methods that silently assume a multi-human room. |
+| `counters` *(opt)* | The failure mode this technique is designed to counter — powers failure-driven selection (FC-1). |
+| `activity_scope` *(opt)* | Activity/phase clusters where the technique applies (planning / execution / research / review / debug) — scopes selection to the current kind of work. |
 
 Catalog mechanics:
 
@@ -210,3 +213,4 @@ These are adoption *candidates* for the nodus workspace, recorded here at concep
 | Version | Date | Author | Notes |
 | --- | --- | --- | --- |
 | 1.0.0 | 2026-06-25 | Core Team | Initial spec — FC-1…FC-12; method catalog, elicitation loop, divergence-first ideation lifecycle, multi-persona roundtable; ideas-to-adopt + nodus-relevance mapping (mined from an external agile multi-agent facilitation framework) |
+| 1.1.0 | 2026-06-25 | Core Team | Minor — catalog gains optional `counters` (failure-mode) + `activity_scope` fields enabling failure-driven, activity-scoped selection (FC-1); inter-technique conflict-resolution ordering (FC-2); cross-link to l1-operational-ledger. Mined from a second external development-workflow framework's phase-bound thinking-model libraries. Re-reviewed (spec-critic + prompt-engineer PASS). |
