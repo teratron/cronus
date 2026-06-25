@@ -1,9 +1,9 @@
 # Code Graph
 
-**Version:** 1.0.1
+**Version:** 1.1.0
 **Status:** Stable
 **Layer:** implementation
-**Implements:** l1-storage-model.md
+**Implements:** l1-code-intelligence.md
 
 ## Overview
 
@@ -11,6 +11,7 @@ An in-workspace code intelligence index: language-aware entity extraction builds
 
 ## Related Specifications
 
+- [l1-code-intelligence.md](l1-code-intelligence.md) - **L1 parent.** This spec realizes the code-intelligence concept (CI-1…CI-13): the graph index, extraction pipeline, hybrid retrieval, and graph analysis.
 - [l1-storage-model.md](l1-storage-model.md) - STO-8 (SQLite as the durable local store); `codegraph.db` follows the same placement rules.
 - [l2-filesystem-layout.md](l2-filesystem-layout.md) - `codegraph.db` lives in the workspace state tier.
 - [l2-memory-store.md](l2-memory-store.md) - Memory store uses the same `sqlite-vec` extension for dense embeddings; shared pattern.
@@ -30,10 +31,25 @@ Agents working on code tasks need to find where a function is defined, which mod
 
 ## 3. Invariant Compliance (Layer 2 only)
 
+Mapping of every `l1-code-intelligence.md` invariant to this implementation. Capabilities not yet built are marked **Roadmap** with the section that would host them — honest gaps, not regressions; the index's existing core (extraction, graph, fusion, incremental, multi-project, analysis) is fully realized.
+
 | L1 Invariant | Implementation |
 | --- | --- |
-| STO-2 Immutable program / mutable state | `codegraph.db` is state-tier; the source code being indexed is program-tier (read-only from the index's perspective). |
-| STO-8 SQLite as durable store | `codegraph.db` uses WAL mode; all writes are transactional. |
+| CI-1 Parser-agnostic core | §4.1 — extraction is grammar-driven via the `CodeGraphGrammar` plugin interface; the SQLite graph store and query layer are language-neutral. |
+| CI-2 Typed entity + edge taxonomy | §4.1 — fixed entity kinds and edge types; per-symbol attributes (`signature`, `docstring`, line span, `lang`) and per-edge `file`/`line`. |
+| CI-3 Cache-not-authority | §2 — best-effort, ≤ one file-save cycle stale; agents validate symbol locations before acting. |
+| CI-4 Persistent / incremental / namespaced | §4.2 (WAL SQLite, durable), §4.5 (mtime-keyed incremental upsert), §4.10 (stat-fastpath + content-hash cache), §4.15 (global graph, per-repo node prefixing = namespace isolation, source-hash skip). |
+| CI-5 Structural analysis family | **Partial.** Implemented: §4.14 affected subgraph (impact/blast-radius), §4.13 import-cycle detection + god nodes. **Roadmap (§4.13):** hot paths, dead/unused detection, entry-point discovery, complexity metrics, module summary; change-kind classification (rename / signature-vs-body) for impact. |
+| CI-6 Intent-aware budgeted context + compression accounting | **Roadmap.** New `codegraph.context(focus, intent, budget)` surface returning payload + `{entities_in_graph, traversed, kept}` accounting. |
+| CI-7 Composite edit / PR bundles | **Roadmap.** New composite calls joining graph + version-control + tests + memory (edit bundle; PR blast-radius/test-gap/reviewer/commit-hint bundle). |
+| CI-8 Hybrid + lazy + graph-only | **Partial.** §4.4 RRF lexical+semantic fusion and §4.6 lazy embeddings implemented. **Roadmap:** explicit model-free `--graph-only` mode serving structural tools with no embedding load. |
+| CI-9 Docs↔design verification | **Partial.** §4.8 Pass-3 ingests docs into the graph. **Roadmap:** forward/reverse verification, design-gap detection, architecture-doc generation. |
+| CI-10 Memory anchoring | Satisfied externally by [l2-memory-store.md](l2-memory-store.md) (CodeLink anchors, graph-proximity recall boost, `CodeChangeType`→`SuggestedAction` invalidation); this index supplies the entity identity + proximity signal. |
+| CI-11 Capability-surface profiling | Satisfied externally by `ToolSurfaceProfile` in [l2-agent-session.md](l2-agent-session.md) and TC-7 deferred tools in `l1-tool-composition.md`; the §4.7 command surface is itself the structural profile. |
+| CI-12 Interoperable export | **Roadmap (§4.7).** Add `codegraph export --format {dot,json,csv,triples}` over the live graph. |
+| CI-13 Secret-exclusion at ingestion | **Partial.** §2/§4.1 exclude generated/vendored files via `.codegraphignore`. **Roadmap:** unconditional exclusion of credential dirs and secret-bearing file classes regardless of ignore config. |
+
+> Storage placement (formerly the parent contract): `codegraph.db` is state-tier mutable data over program-tier read-only source (STO-2) and uses durable WAL SQLite with transactional writes (STO-8) — see [l1-storage-model.md](l1-storage-model.md).
 
 ## 4. Detailed Design
 
@@ -521,6 +537,7 @@ Operations:
 
 | Version | Change |
 | --- | --- |
+| 1.1.0 | Re-parented from `l1-storage-model.md` to the new `l1-code-intelligence.md` concept; rewrote §3 to map CI-1…CI-13 (implemented vs roadmap); storage-model retained as a Related placement contract |
 | 1.0.1 | Added §4.8–§4.15: three-pass pipeline, confidence taxonomy, dual-layer cache, community detection, entity deduplication, graph analysis, affected subgraph, global multi-project graph |
 | 1.0.0 | Initial spec |
 
@@ -535,6 +552,7 @@ Operations:
 
 | Alias | Path | Purpose |
 | --- | --- | --- |
+| `[CONCEPT]` | `.design/main/specifications/l1-code-intelligence.md` | L1 parent — CI-1…CI-13 invariant contract |
 | `[STORAGE]` | `.design/main/specifications/l1-storage-model.md` | STO-8 SQLite invariant |
 | `[LAYOUT]` | `.design/main/specifications/l2-filesystem-layout.md` | `codegraph.db` placement |
 | `[MEM]` | `.design/main/specifications/l2-memory-store.md` | sqlite-vec pattern (shared) |

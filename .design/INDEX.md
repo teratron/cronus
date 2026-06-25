@@ -24,4 +24,4 @@ Global registry aggregating all project specifications across workspaces.
 
 - **Maintainer**: Core Team
 - **License**: MIT
-- **Last Updated**: 2026-06-23
+- **Last Updated**: 2026-06-25

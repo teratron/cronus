@@ -79,4 +79,3 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Updated specification `evaluation-suites` (main)
 - Added specification `change-merge` (main)
 - Added specification `requirement-checklists` (main)
-
