@@ -1,6 +1,6 @@
 # Nodus DSL Language
 
-**Version:** 1.0.1
+**Version:** 1.1.0
 **Status:** Stable
 **Layer:** concept
 
@@ -146,6 +146,8 @@ if no handler is declared). `NODUS:RULE_VIOLATION` bypasses `@err:` entirely
 per NL-2. Runtimes that execute `~PARALLEL` branches sequentially (permitted by
 the "scheduling hint" clause) apply the same fail-fast semantics.
 
+> **v0.7 target additions (see §4.6):** `?SWITCH` multi-branch dispatch, `~MAP` collection transform, `~RETRY:n` step retry, `!HALT` (fatal), `!PAUSE` (suspend).
+
 ### 4.5 Error model
 
 A runtime error carries a typed `NODUS:*` code. The `@err:` handler is invoked for uncaught step errors. If no handler is declared, an unhandled error terminates the workflow with `NODUS:UNHANDLED_ERROR`. Hard-constraint violations (`!!`) bypass the error handler entirely and terminate with `NODUS:RULE_VIOLATION`.
@@ -164,6 +166,55 @@ A runtime error carries a typed `NODUS:*` code. The `@err:` handler is invoked f
 | `NODUS:NO_TRIGGER` | No `@ON:` matched the current input |
 | `NODUS:UNHANDLED_ERROR` | Step error reached no `@err:` handler |
 
+### 4.6 Upstream parity gaps (schema v0.4.6 → v0.7)
+
+<!-- [ADDED] v1.1.0 -->
+
+§4.2–§4.5 specify the **v0.4** generation of the language. The upstream schema has advanced to **v0.7**; the constructs below are defined upstream but not yet here. They are the design target for this spec and its implementation; the crate-side gap is itemized in `l2-nodus-runtime.md` §4.7.
+
+#### Control constructs (extends §4.4)
+
+| Construct | Semantics |
+| --- | --- |
+| `?SWITCH $v:` with `value → action` arms and an optional `* → default` | multi-branch dispatch on a scalar; first match wins, no fallthrough; no match and no `*` → `NODUS:SWITCH_NO_MATCH` (warn, continue) |
+| `~MAP $coll: CMD($it) → $out` | single-line collection transform; implicit `$it`; empty collection → `[]`, never errors |
+| `~RETRY:n` (+`backoff`, +`retry_on`) | step-level retry up to `n` (mandatory, max 10); on exhaustion routes to `@err:` |
+| `!HALT` | fatal stop; status `FAILED`; requires `ESCALATE()` in the same step; no auto-resume |
+| `!PAUSE` | suspend; status `PAUSED`; resumes only on explicit human re-trigger |
+
+#### Operators & expressions
+
+| Element | Semantics |
+| --- | --- |
+| `MATCHES` | deterministic regex operator in conditions (PCRE; `(?i)` prefix for case-insensitive) |
+| `?.` | optional chaining — null-safe path access; short-circuits to `null` without raising `NODUS:UNDEFINED_VAR` |
+| `??` | null-coalescing fallback (`$a?.b ?? default`) |
+| `WHERE` / `FIRST` / `LAST` | inline collection filter/access with implicit `$it`; no match → `[]` (WHERE) or `null` (FIRST/LAST) |
+| String interpolation | `$var` / `$obj.field` expand inside string literals before the step runs (runtime-resolved, not by the model); `\$` suppresses |
+
+#### Human-in-the-loop dialog commands (new command class)
+
+| Command | Semantics |
+| --- | --- |
+| `ASK(prompt)` | blocking typed question that auto-resumes on answer; `+type` = str/bool/confirm/choice/multi_choice, plus `+options`/`+hint`/`+default`/`+validate`/`+timeout` (→ `NODUS:DIALOG_TIMEOUT`) |
+| `CONFIRM(content)` | approval decision; `+msg`/`+actions`/`+default`/`+strict` (reject under `+strict` → `NODUS:DIALOG_REJECTED`) |
+
+#### Selective schema loading
+
+`@needs:` inside `§runtime:` loads only named sections of an `extends:` schema (flat `[§a, §b]` or keyed `{ "x.nodus": [§a] }` form); a schema's `§meta` and `!!` rules always load regardless. Reduces per-execution schema context.
+
+#### Error taxonomy (extends §4.5: 11 → 24)
+
+Adds `UNDEFINED_CMD`, `UNDEFINED_MACRO`, `VALIDATION_FAILED`, `ESCALATION_FAILED`, `CONFIDENCE_LOW`, `KB_UNAVAILABLE`, `MEMORY_FAILED`, `TEST_FAILED`, `SWITCH_NO_MATCH`, `PAUSED`, `COUNTER_OVERFLOW`, `GIT_UNAVAILABLE`, `DIALOG_TIMEOUT`, `DIALOG_REJECTED` — each carrying a severity (error/warn/info) and category (parse/runtime/validation/routing/memory/test/control/dialog). The current `NODUS:EXECUTION_FAILED` (§4.5) is a non-canonical catch-all superseded by these specific codes.
+
+#### Trigger priority
+
+`@ON(priority=N):` — optional trigger priority; lower `N` = higher priority; default is declaration order.
+
+#### Closed vocabulary registries
+
+Beyond commands, the schema declares closed registries for **analysis flags** (`~`), **validators** (`^`), and **primitive types** that a conforming implementation should validate against (strengthening NL-1). The concrete registry contents are enumerated in `l2-nodus-runtime.md` §4.7(f).
+
 ## 5. Drawbacks & Alternatives
 
 - **Not Turing-complete by design**: the `MAX:n` constraint prevents infinite computation; workflows requiring convergence over large iterations must increase `MAX:n` or redesign step logic. This is intentional — safety over expressiveness.
@@ -181,5 +232,6 @@ A runtime error carries a typed `NODUS:*` code. The `@err:` handler is invoked f
 
 | Version | Date | Change |
 | --- | --- | --- |
+| 1.1.0 | 2026-06-25 | Added §4.6 upstream parity gaps (schema v0.4.6 → v0.7): control constructs (`?SWITCH`/`~MAP`/`~RETRY`/`!HALT`/`!PAUSE`), operators/expressions (`MATCHES`, `?.`, `??`, `WHERE`/`FIRST`/`LAST`, string interpolation), HITL dialog command class (`ASK`/`CONFIRM`), `@needs:` selective schema loading, error taxonomy 11 → 24, `@ON(priority=N)`, closed flag/validator/type registries; §4.4 target-additions note |
 | 1.0.1 | 2026-06-23 | Added macro invocation syntax (`RUN(@macro_name)`) to §4.3; added `~PARALLEL` fail-fast error propagation semantics to §4.4 |
 | 1.0.0 | 2026-06-23 | Initial spec — language invariants NL-1..NL-10, file types, section grammar, step syntax, control flow, error taxonomy |

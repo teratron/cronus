@@ -1,6 +1,6 @@
 # Workflow Runtime
 
-**Version:** 1.2.3
+**Version:** 1.3.1
 **Status:** Stable
 **Layer:** implementation
 **Implements:** l1-workflow-language.md
@@ -26,7 +26,7 @@ The language must run on every Cronus target — including the mobile thin clien
 
 - The runtime is an in-monorepo Rust crate the core depends on; it links in-process (no external language runtime is bundled, no separate process).
 - A formal grammar drives the parser; a schema is loaded before execution.
-- The port preserves behavior parity with the reference implementation (same sample workflows produce equivalent validation, execution, and transpilation results).
+- The port preserves behavior parity with the upstream language specification (same sample workflows produce equivalent validation, execution, and transpilation results). The crate currently implements the **v0.4.6** vocabulary generation; the upstream specification has advanced to **v0.7**, and the outstanding parity surface is the implementation target tracked in §4.9.
 - Steps call core subsystems through internal interfaces; the runtime owns no domain logic of its own beyond control flow.
 
 ## 3. Invariant Compliance (Layer 2 only)
@@ -306,7 +306,7 @@ is intentional (e.g., performance-critical hot path with benchmarks to justify i
 
 ### 4.8 Nodus language syntax and built-in vocabulary
 
-The nodus crate (`crates/nodus`) is the concrete runtime. A `.nodus` file carries a typed header, a schema-loading runtime block, reactive triggers, hard constraints, soft preferences, I/O declarations, a sequential step body, and optional test and macro blocks. The schema version embedded in the crate is **v0.4.5** (`BUILTIN_SCHEMA_VERSION`).
+The nodus crate (`crates/nodus`) is the concrete runtime. A `.nodus` file carries a typed header, a schema-loading runtime block, reactive triggers, hard constraints, soft preferences, I/O declarations, a sequential step body, and optional test and macro blocks. The schema version embedded in the crate is **v0.4.6** (`BUILTIN_SCHEMA_VERSION`). The upstream language specification has since advanced to **v0.7**; this section documents the surface the crate implements today, and §4.9 enumerates the v0.5–v0.7 parity gaps that remain the implementation target.
 
 #### File type sigils
 
@@ -320,7 +320,7 @@ The nodus crate (`crates/nodus`) is the concrete runtime. A `.nodus` file carrie
 
 | Keyword | Purpose |
 | --- | --- |
-| `§runtime: { core: … }` | Loads the named schema; `extends:` for overlays; `agents:` for named model bindings |
+| `§runtime: { core: … }` | Loads the named schema; `extends:` for overlays; `@needs:` for selective section loading (target — see §4.9d); `agents:` for named model bindings |
 | `@ON: cond → action` | Reactive trigger — workflow activates when condition holds |
 | `!!NEVER: …` / `!!ALWAYS: …` | Absolute hard constraints; executor halts on violation |
 | `!PREF: X OVER Y IF cond` | Soft preference — advisory; never overrides `!!` rules |
@@ -354,7 +354,7 @@ N. COMMAND(args) +modifier=value ^validator ~flag → $pipeline_target
 
 Conditional branches accept `!BREAK` (exit the enclosing loop), `!SKIP` (skip the current iteration), and `!OVERRIDE` (suppress a soft preference for this branch only).
 
-#### Built-in command vocabulary (schema v0.4.5)
+#### Built-in command vocabulary (schema v0.4.6, current crate surface)
 
 | Category | Commands |
 | --- | --- |
@@ -409,6 +409,8 @@ The executor represents all step results with a closed `Value` enum:
 | `NODUS:NO_TRIGGER` | No `@ON:` trigger matched the current input |
 | `NODUS:UNHANDLED_ERROR` | A step error reached no `@err:` handler |
 
+These 11 codes are the current crate surface. The upstream **v0.7** registry defines 24 severity- and category-tagged codes; the 13 not yet implemented — and the non-canonical `NODUS:EXECUTION_FAILED` they supersede — are listed in §4.9e.
+
 #### Library API (public surface)
 
 | Function | Signature | Purpose |
@@ -433,12 +435,86 @@ When `run` or `run_with_provider` fires, the executor performs these steps in or
 5. Match `@ON` triggers against the current input.
 6. Execute `@steps` sequentially; thread `→` pipeline targets between steps.
 
+### 4.9 Upstream parity gaps (schema v0.4.6 → v0.7)
+
+<!-- [ADDED] v1.3.0 · [MODIFIED] v1.3.1 -->
+
+> **Authoritative ownership:** the language/crate parity gap is owned by the **nodus workspace** — `l1-nodus-language.md` §4.6 (language design) and `l2-nodus-runtime.md` §4.7 (crate implementation). This integration spec mirrors it for `main`-workspace readers (consistent with the §4.8 vocabulary mirror); the host-binding consequences (HITL, lifecycle, scheduler) are this spec's contribution.
+
+The crate implements the **v0.4** vocabulary generation; the upstream language specification has advanced through **v0.5–v0.7**. Each item below is **unimplemented in the current crate** and is the implementation target required to honor WFL-2/WFL-6/WFL-7 against the upstream surface. Most are already declared at the concept level (see `l1-workflow-language.md` §4.1/§4.2 and WFL-6/WFL-7), so closing them realigns the runtime with its own L1 parent.
+
+#### (a) Control constructs
+
+| Construct | Semantics | What to add |
+| --- | --- | --- |
+| `?SWITCH $v:` with `arm → action` lines and an optional `* → default` | multi-branch dispatch on a scalar; top-to-bottom, first match wins, no fallthrough; no match and no `*` → `NODUS:SWITCH_NO_MATCH` (warn, continue) | lexer token, AST node, executor branch |
+| `~MAP $coll: CMD($it) → $out` | single-line collection transform; implicit `$it`; empty collection → `[]`, never errors | lexer keyword, AST node, executor |
+| `~RETRY:n` (+`backoff=int`, +`retry_on=error\|null\|both`) | step-level retry up to `n` (mandatory, max 10); after `n` failures → triggers `@err` normally | step modifier on the command call |
+| `!HALT` | fatal stop; status `FAILED`; requires `ESCALATE()` in the same step; no auto-resume | control keyword + status |
+| `!PAUSE` | suspend; status `PAUSED`; resumes only on explicit human re-trigger; emits `NODUS:PAUSED` | control keyword + `Status::Paused` |
+
+#### (b) Operators & expressions
+
+| Element | Semantics |
+| --- | --- |
+| `MATCHES` | deterministic PCRE-regex operator in conditions (runtime-evaluated, not via model); `(?i)` prefix for case-insensitive |
+| `?.` optional chaining | null-safe path access; short-circuits to `null`; does **not** raise `NODUS:UNDEFINED_VAR` |
+| `??` null-coalescing | fallback value when the left side is `null` (e.g. `$user?.tier ?? "free"`) |
+| `WHERE` / `FIRST` / `LAST` | inline collection filter/access with implicit `$it`; no match → `[]` (WHERE) or `null` (FIRST/LAST), never errors |
+| String interpolation | `$var` / `$obj.field` expand inside string literals before the step runs (runtime-resolved, not by the model); `\$` suppresses; applies in `+msg`, `+hint`, `NOTIFY()`, `ASK()`, `CONFIRM()`, `GEN()` string params |
+
+#### (c) Human-in-the-loop dialog commands
+
+| Command | Semantics |
+| --- | --- |
+| `ASK(prompt)` | blocking typed question that auto-resumes on answer; `+type=str\|bool\|confirm\|choice\|multi_choice`, `+options`, `+hint`, `+default`, `+validate=<pcre>`, `+timeout` (→ `NODUS:DIALOG_TIMEOUT`) |
+| `CONFIRM(content)` | approval decision; `+msg`, `+actions` (returns chosen label), `+default`, `+strict` (reject → `NODUS:DIALOG_REJECTED`) |
+
+Both bind to the HITL subsystem (WFL-7) and realize the "Human interaction" command class of `l1-workflow-language.md` §4.2. Note: the §4.2 step-binding diagram already routes `ask/confirm` to HITL — the commands themselves are simply absent from the crate vocabulary.
+
+#### (d) Selective schema loading — `@needs:`
+
+A `@needs:` directive inside `§runtime:` declares which sections of an `extends:` schema to load — flat (`@needs: [§commands_x, §macros_x]`) or keyed (`@needs: { "x.schema.nodus": [§commands_x] }`). Omit to load the full extension; a schema's `§meta` and `!!` rules always load regardless. Requires a `needs` field on the runtime block plus load-time section filtering — this reduces schema context per execution.
+
+#### (e) Error-code registry — extend 11 → 24
+
+Add the upstream registry's missing codes, each carrying a severity (error/warn/info) and category (parse/runtime/validation/routing/memory/test/control/dialog):
+
+`UNDEFINED_CMD`, `UNDEFINED_MACRO`, `VALIDATION_FAILED`, `ESCALATION_FAILED`, `CONFIDENCE_LOW`, `KB_UNAVAILABLE`, `MEMORY_FAILED`, `TEST_FAILED`, `SWITCH_NO_MATCH`, `PAUSED`, `COUNTER_OVERFLOW`, `GIT_UNAVAILABLE`, `DIALOG_TIMEOUT`, `DIALOG_REJECTED`.
+
+The current catch-all `NODUS:EXECUTION_FAILED` is non-canonical and is superseded by these specific codes.
+
+#### (f) Closed vocabulary registries (model and validate)
+
+The schema declares closed registries the crate currently treats as free-form (so unknown entries pass silently, weakening WFL-2). Load each as data and validate `~flag` / `^validator` / `@in` field types against it:
+
+- **Analysis flags** (`~`): `sentiment`, `intent`, `entities`, `topics`, `lang`, `toxicity`, `urgency`, `formality`, `clarity`, `relevance`, `pii`, `keywords`.
+- **Validators** (`^`): `len:n`, `min_len:n`, `no_pii`, `no_toxic`, `lang:code`, `format:type`, `required:keys`, `sentiment:op:n`, `confidence:n`, `no_links`, `brand_voice`, `approved`.
+- **Primitive types**: `str`, `int`, `float`, `bool`, `list`, `obj`, `url`, `ts`, `null`, `any` (plus extended object types).
+
+#### (g) Execution semantics
+
+- **Macro execution.** `@macro:` bodies must be parsed structurally and **executed** on `RUN(@macro:name)` — caller params bind as `$in`, the last assigned variable is the implicit return. The current crate parses the body and audits enter/exit but does not run it.
+- **`Status` taxonomy.** Add `Paused` (for `!PAUSE`) to the existing `Ok / Partial / Failed / Aborted` set.
+- **`@ON` priority.** Support optional `@ON(priority=N):` — lower `N` = higher priority; default is declaration order.
+
+#### (h) Minor lexer parity
+
+Single-character `;` inline comments (the crate recognizes only `;;`) and the `\$` interpolation escape are small lexer items to align with the upstream grammar.
+
 ## 5. Drawbacks & Alternatives
 
 - **Porting effort:** re-implementing lexer/parser/validator/executor/transpiler in Rust is real work; mitigated by an existing formal grammar and lint catalog to port from.
-- **Schema drift vs runtime:** the runtime must track the schema version it supports. <!-- TBD: runtime↔schema version compatibility checks -->
+- **Schema drift vs runtime:** the runtime must track the schema version it supports. The crate is at **v0.4.6** while the upstream spec is **v0.7**; §4.9 is the authoritative gap list, and a schema-version compatibility check (header `compatible:` range vs crate `BUILTIN_SCHEMA_VERSION`) gates execution, surfacing `NODUS:SCHEMA_MISMATCH` on divergence.
 - **Alternative — embed an external interpreter:** rejected; it breaks the embeddable/mobile constraint (no heavy runtime on device).
 - **Alternative — standalone crate in its own repository:** deferred; vendored in-tree for now since no other consumer needs it. The self-contained crate boundary keeps later extraction cheap if that changes.
+
+## Document History
+
+| Version | Date | Change |
+| --- | --- | --- |
+| 1.3.1 | 2026-06-25 | §4.9: marked the **nodus workspace** (`l1-nodus-language.md` §4.6, `l2-nodus-runtime.md` §4.7) as authoritative owner of the parity gap; this spec retains the integration/host-binding view. |
+| 1.3.0 | 2026-06-25 | Recorded the upstream schema **v0.4.6 → v0.7** parity gap as the implementation target — new §4.9 enumerating control constructs (`?SWITCH`/`~MAP`/`~RETRY`/`!HALT`/`!PAUSE`), operators/expressions (`MATCHES`, `?.`, `??`, `WHERE`/`FIRST`/`LAST`, string interpolation), HITL dialog commands (`ASK`/`CONFIRM`), `@needs:` selective schema loading, the 24-code error registry, closed flag/validator/type registries, macro execution, `Status::Paused`, and `@ON` priority. Corrected the embedded schema version (v0.4.5 → v0.4.6). |
 
 ## Canonical References
 

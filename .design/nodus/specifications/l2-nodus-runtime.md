@@ -1,6 +1,6 @@
 # Nodus Runtime (Rust)
 
-**Version:** 1.0.4
+**Version:** 1.1.0
 **Status:** Stable
 **Layer:** implementation
 **Implements:** l1-nodus-language.md
@@ -138,6 +138,52 @@ Reserved variables: `$in` `$out` `$error` `$meta` `$raw` `$draft` `$ctx` `$user`
 
 **Vocabulary alignment (v0.4.6):** `KNOWN_COMMANDS` contains **51** commands across the 9 categories above. `BUILTIN_SCHEMA_VERSION = "0.4.6"` matches the spec. `RUN` is a meta-command — it bypasses domain-command argument and modifier checks; only decorator rules (`+modifier`, `→ $target`) apply.
 
+### 4.7 Upstream parity gaps (v0.4.6 → v0.7)
+
+<!-- [ADDED] v1.1.0 -->
+
+`BUILTIN_SCHEMA_VERSION` is **v0.4.6**; the upstream schema is **v0.7**, so the crate implements the v0.4 generation. The language-design view of these gaps is in `l1-nodus-language.md` §4.6; this section records the concrete implementation work — each item is absent from today's `lexer` / `parser` / `ast` / `vocab` / `executor` / `validator`.
+
+#### (a) Vocabulary — commands
+
+`KNOWN_COMMANDS` (51) omits the v0.6 human-interaction commands `ASK` and `CONFIRM`. Add both with their dialog modifiers (`+type`, `+options`, `+hint`, `+default`, `+validate`, `+timeout`, `+strict`, `+actions`), bound to the host HITL surface at the integration layer.
+
+#### (b) Control constructs (`lexer` + `ast` + `executor`)
+
+`?SWITCH` (+ `*` wildcard, `SWITCH_NO_MATCH`), `~MAP` (implicit `$it`), `~RETRY:n` (step modifier with `+backoff` / `+retry_on`), `!HALT` (→ `Status::Failed`), `!PAUSE` (→ new `Status::Paused`). None are tokenized or parsed today — `~MAP` / `~RETRY` currently mis-lex as a `Flag`. Semantics: `l1-nodus-language.md` §4.6.
+
+#### (c) Operators & expressions (`lexer`)
+
+`MATCHES` regex operator, `?.` optional chaining, `??` null-coalescing, `WHERE` / `FIRST` / `LAST` collection expressions, and string interpolation in literals (with `\$` escape) are not recognized as distinct tokens.
+
+#### (d) `@needs:` selective schema loading
+
+Add a `needs` field to the runtime-block AST plus load-time section filtering against `extends:` schemas.
+
+#### (e) Error-code registry (`vocab::error_code`: 11 → 24)
+
+Add `UNDEFINED_CMD`, `UNDEFINED_MACRO`, `VALIDATION_FAILED`, `ESCALATION_FAILED`, `CONFIDENCE_LOW`, `KB_UNAVAILABLE`, `MEMORY_FAILED`, `TEST_FAILED`, `SWITCH_NO_MATCH`, `PAUSED`, `COUNTER_OVERFLOW`, `GIT_UNAVAILABLE`, `DIALOG_TIMEOUT`, `DIALOG_REJECTED`, each with a severity and category. `NODUS:EXECUTION_FAILED` is non-canonical and is superseded.
+
+#### (f) Closed vocabulary registries (new `vocab` data + validation)
+
+The crate treats `~flag` and `^validator` tokens as free-form. Add closed registries and validate `~flag` / `^validator` / `@in` field types against them:
+
+- **Analysis flags**: `sentiment`, `intent`, `entities`, `topics`, `lang`, `toxicity`, `urgency`, `formality`, `clarity`, `relevance`, `pii`, `keywords`.
+- **Validators**: `len:n`, `min_len:n`, `no_pii`, `no_toxic`, `lang:code`, `format:type`, `required:keys`, `sentiment:op:n`, `confidence:n`, `no_links`, `brand_voice`, `approved`.
+- **Primitive types**: `str`, `int`, `float`, `bool`, `list`, `obj`, `url`, `ts`, `null`, `any`.
+
+#### (g) Macro execution
+
+`@macro:` bodies are parsed (`MacroBlock`) and audited (`MacroEnter` / `MacroExit`) but **not executed**. `RUN(@macro:name)` must expand and run the body — caller params bind as `$in`, the last assigned variable is the implicit return.
+
+#### (h) `Status` enum
+
+Add `Paused` to the `Ok / Partial / Failed / Aborted` set (for `!PAUSE`).
+
+#### (i) Minor lexer parity
+
+Single-character `;` inline comments (only `;;` is recognized) and the `\$` interpolation escape.
+
 ## 5. Drawbacks & Alternatives
 
 - **`StubProvider` gap**: the stub returns placeholder values; real AI generation requires a concrete `ModelProvider` wired at the host layer. Tests that rely on stub output cannot verify generation quality.
@@ -160,6 +206,7 @@ Reserved variables: `$in` `$out` `$error` `$meta` `$raw` `$draft` `$ctx` `$user`
 
 | Version | Date | Change |
 | --- | --- | --- |
+| 1.1.0 | 2026-06-25 | Added §4.7 upstream parity gaps (v0.4.6 → v0.7): missing `ASK`/`CONFIRM` commands, control constructs (`?SWITCH`/`~MAP`/`~RETRY`/`!HALT`/`!PAUSE`), operators/expressions, `@needs:`, `error_code` 11 → 24, closed flag/validator/type registries, macro execution, `Status::Paused`, lexer parity items |
 | 1.0.4 | 2026-06-24 | §4.1: add `portability.rs` module; §4.5: add `run_with_schema` and `run_with_schema_and_audit` rows; update extension-point note to reference `SchemaProvider` |
 | 1.0.3 | 2026-06-24 | §4.1: add `observability.rs` module; §4.5: add `run_with_audit` and `run_with_provider_and_audit` rows; note `AuditProvider` as second extension point |
 | 1.0.2 | 2026-06-24 | §4.6: BUILTIN_SCHEMA_VERSION v0.4.6, 51 commands (RUN added as meta-command), RUNTIME_OWNED_VARIABLES constant documented; §3: NL-8→E013, NL-10→E014 enforced |

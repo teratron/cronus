@@ -4,7 +4,7 @@
 <!-- Maximum 100 lines. Agent updates AFTER each completed action. -->
 
 **Workspace:** nodus
-**Updated:** 2026-06-24 14:10
+**Updated:** 2026-06-25 06:19
 **Phase:** 6 — Testing Implementation (Complete)
 **Status:** Active
 
@@ -12,7 +12,7 @@
 
 - **Task:** Phase 6 complete — nodus is a first-class assertion-evaluating test facility (NT-1…NT-10)
 - **Spec:** l1-nodus-testing.md v1.0.1, l2-nodus-testing.md v1.0.0 (all 8 specs Stable)
-- **Next Action:** All 6 phases complete. Backlog: StorageProvider/PolicyProvider integration (pending LP-3), l2-nodus-transpiler.md. Run /magic.spec nodus to author new specs when ready.
+- **Next Action:** Run /magic.task nodus to update the plan
 
 ## Progress
 
