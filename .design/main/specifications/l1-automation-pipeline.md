@@ -1,6 +1,6 @@
 # Automation Pipeline
 
-**Version:** 1.2.0
+**Version:** 1.3.0
 **Status:** Stable
 **Layer:** concept
 
@@ -77,6 +77,10 @@ Rules that every Layer 2 implementation MUST NOT violate:
 
 - **AP-13 Pinned partial re-execution (development)**: for authoring iteration, a node's prior output MAY be *pinned* so the engine re-executes only the downstream subgraph against the pinned value, skipping upstream re-computation. A pinned partial run is a **development run**: it reuses the §4.9 dry-run side-effect quarantine — real `action` dispatch is simulated and recorded, not performed, unless the operator explicitly opts a specific action live. It is traced and marked development (AP-6), and never counts as a production pipeline run nor fires production side effects implicitly.
 
+- **AP-14 Scoped automation state with declared durability**: durable node memory (AP-8) generalizes to a small, explicit **scope hierarchy** — *node-private* (the AP-8 default, visible to one node) and *pipeline-shared* (visible to every node of one pipeline definition). Each scope binds to a named **persistence backend** drawn from a registry: at minimum a *volatile* backend (in-process, lost on restart — for caches and within-run scratch) and a *durable* backend (survives restart — for baselines, dedup horizons, digest accumulators), with one configured default and per-scope override. All scoped state remains office-scoped (AP-7), schema-bounded, individually resettable, and bound by the AP-4 content exclusions (never raw user text, session context, credentials, or memory-store contents). Pipeline-shared state is **not** the office memory store (`l1-memory-model.md`): it has no cross-office recall and no semantic indexing. `transform` nodes stay pure and stateless (AP-8) — they declare no scoped state; statefulness is opt-in, so a node that declares none is guaranteed freely retryable (AP-3).
+
+- **AP-15 In-graph lifecycle observers**: a pipeline MAY contain *observer* nodes that subscribe to the **lifecycle events** of a declared scope of other nodes rather than to incoming data. Three observer kinds: *error* (a node failed), *status* (a node reported a status change), and *completion* (a node finished handling an event). An observer's scope is either an explicit set of nodes or the catch-all *unhandled* set; a scoped observer takes precedence over a catch-all one, and an error handled by no observer in the current scope propagates outward to the enclosing scope — across an AP-12 `subpipeline` boundary to the caller — preserving AP-3's stop-on-failure where no handler exists at all. Observers decouple cross-cutting error/status/completion handling from the happy-path graph: one error observer covers many nodes, including ones the author never wired an error branch onto, instead of a branch per node. An observer obeys AP-5/AP-7, is traced like any node (AP-6), and its emitted payload carries descriptors only (AP-4) — never verbatim error context bearing user content. Observers are the inbound mirror of the AP-9 control plane: AP-9 governs other automations (enable/disable/trigger); AP-15 listens to them (error/status/completion).
+
 ## 4. Detailed Design
 
 ### 4.1 Automation Node Taxonomy
@@ -94,6 +98,7 @@ A pipeline is a directed acyclic graph of typed nodes. Every execution path from
 | `aggregate` | Collects N events over a window before passing them downstream | Produces a list payload; emits once when window condition is satisfied |
 | `loop` | Iterates over a list payload, executing the subgraph for each element | Bounded by `max_iterations`; exceeding it raises an error |
 | `subpipeline` | Invokes another pipeline by reference, passing input and receiving its terminal output (AP-12) | Bounded nesting depth; acyclic across the composition graph; runs under the caller's scope/permissions |
+| `observer` | Lifecycle-triggered entry point: fires on the error / status / completion of a declared scope of nodes (AP-15) | No data input; scope is an explicit node set or the catch-all *unhandled* set; scoped precedes catch-all; emits a descriptor payload onto its data edges |
 
 ### 4.2 Trigger Types
 
@@ -193,7 +198,7 @@ Most nodes are stateless: a `filter` or `transform` produces output purely from 
 | Deduplication | The set of keys already emitted within a horizon |
 | Digest accumulation | Pending items collected until a flush condition (time or count) |
 
-Node memory is a schema-bounded map, office-scoped (AP-7), individually resettable, and bound by the same content exclusions as event payloads (AP-4). It is **not** the office memory store (`l1-memory-model.md`): it is pipeline-local working state with no cross-office recall and no semantic indexing. A node that declares no memory is guaranteed stateless and freely retryable.
+Node memory is a schema-bounded map, office-scoped (AP-7), individually resettable, and bound by the same content exclusions as event payloads (AP-4). It is **not** the office memory store (`l1-memory-model.md`): it is pipeline-local working state with no cross-office recall and no semantic indexing. A node that declares no memory is guaranteed stateless and freely retryable. §4.12 generalizes this to a scope hierarchy (node-private vs pipeline-shared) with a declared volatile-vs-durable persistence backend (AP-14).
 
 ### 4.8 Control Plane (AP-9)
 
@@ -270,6 +275,49 @@ Pinned partial run:
 
 This is an engine capability, not a canvas one: the canvas (`l1-automation-canvas.md` AC-7) only *requests* a pinned partial run and renders the result — it never executes (AC-3). Pinned data is explicitly not real triggering data, so a development run can never silently fire a production action.
 
+### 4.12 Scoped State and Lifecycle Observers (AP-14, AP-15)
+
+**Scoped automation state (AP-14).** §4.7 establishes per-node memory. Some reactive behavior needs state shared by a handful of cooperating nodes in one pipeline — a running counter several nodes increment, a token bucket a rate-limiter and its consumers both read. That belongs to a *pipeline-shared* scope, distinct from node-private memory and from the office store:
+
+```text
+[REFERENCE]
+Scope hierarchy (narrowest → widest within an office):
+  node-private    — one node only (the AP-8 default)
+  pipeline-shared — every node of one pipeline definition
+                    (NOT the office memory store: no cross-office recall, no semantic index)
+
+Persistence backend (named, registry-resolved, per-scope override over a default):
+  volatile  — in-process; lost on restart        → caches, within-run scratch
+  durable   — survives restart                    → baselines, dedup horizons, digests
+
+Every scoped store: office-scoped (AP-7), schema-bounded, individually resettable,
+content-excluded (AP-4). A node declaring no scoped state is freely retryable (AP-3).
+```
+
+Choosing *volatile* vs *durable* is a continuity decision the node makes explicitly: a change-detector's last-seen value is durable (it must survive a restart to stay meaningful); a per-run dedup cache is volatile (a restart legitimately resets it). The backend is named, not hard-wired, so an office can route durable state to its own store implementation without changing pipeline definitions.
+
+**Lifecycle observers (AP-15).** Wiring an error branch onto every node (AP-3) is repetitive and silently misses the nodes the author forgot. An `observer` node inverts that: it declares a *scope* of nodes and a *kind*, and the engine routes those nodes' lifecycle events to it.
+
+```text
+[REFERENCE]
+observer node:
+  kind   : error | status | completion
+  scope  : explicit node set  |  "unhandled" (catch-all for the enclosing scope)
+  input  : none — fired by the engine on a scoped node's lifecycle event
+  output : a descriptor payload (AP-4) onto normal data edges
+           (error → failing node id + error code; status → reporting node + state;
+            completion → finishing node id)
+
+Routing & precedence (per kind):
+  1. a scoped observer covering the node handles the event first
+  2. else a catch-all ("unhandled") observer in the same scope handles it
+  3. else (error only) the event propagates OUTWARD to the enclosing scope —
+     across an AP-12 subpipeline boundary to the caller —
+     and, if no observer anywhere handles it, AP-3 stop-on-failure stands
+```
+
+The error observer is a scoped exception handler for the pipeline; the completion observer fires *after* a node (or subgraph) finishes, enabling "do X once Y is fully done" without threading a data edge; the status observer surfaces a node's self-reported state (e.g. a long `delay` or `aggregate` reporting progress) to a handler. All three are the inbound complement to the AP-9 control plane — that plane *governs* automations, this one *listens* to them — and both are traced (AP-6) and bounded by AP-5/AP-7.
+
 ## 5. Implementation Notes
 
 1. Implement trigger-triage intake first — nothing can reach the automation engine without it.
@@ -310,3 +358,4 @@ This is an engine capability, not a canvas one: the canvas (`l1-automation-canva
 | 1.0.0 | 2026-06-24 | Core Team | Initial spec — AP-1…AP-7, node taxonomy, trigger types, dual-mode architecture, event payload contract |
 | 1.1.0 | 2026-06-25 | Core Team | AP-8…AP-11 added — durable node memory (change/spike/gap/dedup/digest continuity), control plane separate from data plane (enable/disable/trigger edges), event lifecycle (per-node retention, TTL/GC with change-detector continuity, immediate-vs-deferred propagation, node health predicate, dry-run preview), and portable definitions-only automation bundles (export/import, non-destructive, credential-rebinding, staged apply). §4.7–4.10 added. |
 | 1.2.0 | 2026-06-25 | Core Team | AP-12…AP-13 added — pipeline composition (`subpipeline` node invokes another pipeline by identity, bounded depth + acyclic, caller-scoped, the reuse mechanism for AP-11 bundles) and pinned partial re-execution for authoring (pin a node's output, re-run only the downstream subgraph against it, reusing the §4.9 dry-run side-effect quarantine, marked development-not-production). `subpipeline` node type added to §4.1 taxonomy; §4.11 added. |
+| 1.3.0 | 2026-06-25 | Core Team | AP-14…AP-15 added — scoped automation state with declared durability (node-private vs pipeline-shared scope hierarchy generalizing AP-8, named volatile-vs-durable persistence backends with a default, still office-scoped + content-excluded, distinct from the office memory store) and in-graph lifecycle observers (`observer` node subscribing to error/status/completion of a declared scope, scoped-precedes-catch-all routing with outward error propagation across `subpipeline` boundaries, the inbound mirror of the AP-9 control plane). `observer` node type added to §4.1 taxonomy; §4.7 cross-linked; §4.12 added. |

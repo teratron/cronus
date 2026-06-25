@@ -1,6 +1,6 @@
 # Automation Canvas
 
-**Version:** 1.1.0
+**Version:** 1.2.0
 **Status:** Stable
 **Layer:** concept
 
@@ -60,6 +60,8 @@ Rules every Layer 2 implementation MUST NOT violate:
 
 - **AC-7 Pinned partial re-execution requested, not run**: the canvas may pin a node's last observed output and ask the engine to partially re-execute the pipeline from a chosen node against that pinned upstream (the engine capability AP-13 in `l1-automation-pipeline.md`), for fast authoring iteration. The canvas MUST NOT execute the run itself (AC-3 holds): it requests a development run and renders the result from the AuditProvider trace. Partial runs are visibly labelled development and, per AP-13, never fire real side-effecting actions unless the user explicitly opts a specific action live.
 
+- **AC-8 Observer scope is visually explicit**: when the canvas renders an `observer` node (the lifecycle-observer capability AP-15 in `l1-automation-pipeline.md`), it MUST make the observer's scope legible — the set of nodes whose error / status / completion it handles — and MUST visually distinguish a scoped observer from a catch-all (*unhandled*) one. A user must be able to see, for any node, which observer catches its failures; an observer whose scope is invisible defeats the canvas's legibility goal (it hides where error handling lives). Selecting an observer highlights its scope on the graph. As with all execution, the canvas only renders this relationship and the observer's trace from the AuditProvider stream — it never performs observer routing itself (AC-3 holds).
+
 ## 4. Detailed Design
 
 ### 4.1 Canvas Structure
@@ -96,8 +98,9 @@ Each node type (§4.1 of `l1-automation-pipeline.md`) has a distinct visual form
 | `aggregate` | Funnel | events collected / window threshold |
 | `loop` | Cycle arrow | current iteration / max_iterations |
 | `subpipeline` | Nested-frame box (drill-in) | callee pipeline name + last outcome; double-click opens the callee graph |
+| `observer` | Hook glyph with a kind badge (error / status / completion) | last caught event + source node; selecting it highlights its scope; a catch-all reads *unhandled* |
 
-Node edges carry the event payload descriptor (field names and types, not values). Clicking an edge in the inspector shows the last observed descriptor. A pinned node (AC-7) shows a pin badge; its edge descriptor reads from the pinned value during a development run.
+Node edges carry the event payload descriptor (field names and types, not values). Clicking an edge in the inspector shows the last observed descriptor. A pinned node (AC-7) shows a pin badge; its edge descriptor reads from the pinned value during a development run. An `observer` node's scope (AC-8) is drawn as a dashed overlay onto the nodes it covers when the observer is selected.
 
 ### 4.3 Explicit Pipeline Editing
 
@@ -119,6 +122,7 @@ For any pipeline run (explicit or implicit):
 3. **Replay** — the canvas can re-display a historical run's trace against the current pipeline graph, even if the pipeline definition has changed. This enables post-mortem analysis without re-executing.
 4. **Live mode** — while a pipeline is running, the canvas highlights the currently active node in real time, sourced from the AuditProvider event stream.
 5. **Pin and partial re-run (AC-7)** — the author pins a node's last output (a pin badge appears), selects a node to re-run from, and the canvas requests a development partial run (AP-13) from the engine: only the downstream subgraph re-executes against the pinned value, upstream work is skipped, and side-effecting actions are dry-run unless explicitly opted live. The result streams back through the AuditProvider trace exactly like any run, marked development. This is the fast iteration loop — tweak one downstream node, re-run just that part, without re-hitting upstream services. Distinct from **Replay** (which only re-displays history and never executes).
+6. **Observer scope view (AC-8)** — selecting an `observer` node (AP-15) highlights, as a dashed overlay, the nodes whose error / status / completion it handles; a catch-all observer is labelled *unhandled*. Inversely, selecting any node surfaces in the inspector which observer would catch its failure (or that none would, i.e. AP-3 stop-on-failure applies). This makes the pipeline's error-handling plane visible without reading definitions — the legibility purpose of the canvas.
 
 ### 4.5 Implicit Pipeline Surfaces
 
@@ -159,3 +163,4 @@ This conversion does not change execution behavior — it only moves ownership f
 | --- | --- | --- | --- |
 | 1.0.0 | 2026-06-24 | Core Team | Initial spec — AC-1…AC-6, three-panel layout, node rendering, explicit editing, implicit surfaces, inspection and debugging |
 | 1.1.0 | 2026-06-25 | Core Team | AC-7 added — pin a node's output and request an engine-side partial re-run from a chosen node (AP-13); engine executes, canvas only requests + renders (AC-3 preserved); `subpipeline` node rendering (drill-in) + pin badge added to §4.2; "Pin and partial re-run" added to §4.4 inspection/debugging, distinct from Replay. |
+| 1.2.0 | 2026-06-25 | Core Team | AC-8 added — `observer` node (AP-15) rendering with a kind badge (error/status/completion) and dashed scope overlay; observer scope must be visually explicit, scoped vs catch-all (*unhandled*) distinguished, canvas renders the relationship + trace only (AC-3 preserved); `observer` row added to §4.2; "Observer scope view" added to §4.4 inspection/debugging. |
