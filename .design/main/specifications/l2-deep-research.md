@@ -1,6 +1,6 @@
 # Deep Research
 
-**Version:** 1.0.0
+**Version:** 1.1.0
 **Status:** Stable
 **Layer:** implementation
 **Implements:** l1-orchestration.md
@@ -17,6 +17,9 @@ An iterative Think→Plan→Search→Extract→Synthesize research engine. The a
 - [l2-agent-session.md](l2-agent-session.md) - Research runs inside a session with its own TurnContext.
 - [l2-memory-store.md](l2-memory-store.md) - Research reports may be saved as documents for later recall.
 - [l2-context-management.md](l2-context-management.md) - Long research sessions trigger compaction; report is a `_protected` message.
+- [l1-output-contracts.md](l1-output-contracts.md) - Caller-supplied report skeleton validated as an output contract (§4.10).
+- [l2-budget-engine.md](l2-budget-engine.md) - Per-task cost estimate, post-run accounting, and hard-threshold gating (§4.10).
+- [l1-acp.md](l1-acp.md) - Typed streaming event protocol reused for research progress (§4.10).
 
 ## 1. Motivation
 
@@ -131,17 +134,67 @@ The report is marked `_protected` in the session history so it is never trimmed 
 
 ### 4.8 Circuit breaker
 
-`max_rounds` (default 5, configurable per research task) caps the loop. On reaching the limit, the engine emits a partial report with `success_criteria_met = false` and a `partial_reason` explaining what gaps remain. The report is still useful; the user can launch a follow-up research task to close specific gaps.
+`max_rounds` (default 5, configurable per research task) caps the loop. On reaching the limit, the engine emits a partial report with `success_criteria_met = false` and a `partial_reason` explaining what gaps remain. The report is still useful; the user can launch a follow-up research task to close specific gaps (a cold follow-up; see §4.10 for threaded continuation that inherits this report's context).
 
 ### 4.9 Command surface
 
 | Action | CLI | TUI | Library (no code) |
 | --- | --- | --- | --- |
-| start research | `cronus research start "<question>" [--rounds 5] [--queries-per-round 4]` | `/research start …` | `research.start(question, opts) -> ResearchJob` |
+| start research | `cronus research start "<question>" [--rounds 5] [--queries-per-round 4] [--format "<skeleton>"] [--detach]` | `/research start …` | `research.start(question, opts) -> ResearchJob` |
 | show status | `cronus research status <job-id>` | `/research status <id>` | `research.getStatus(id) -> ResearchJob` |
-| show report | `cronus research report <job-id>` | `/research report <id>` | `research.getReport(id) -> ResearchReport` |
+| stream progress | `cronus research stream <job-id>` | `/research stream <id>` | `research.stream(id) -> AsyncIterator<ResearchProgress>` |
+| wait for completion | `cronus research wait <job-id>` | `/research wait <id>` | `research.wait(id) -> ResearchReport` |
+| continue (threaded) | `cronus research continue <job-id> "<follow-up>"` | `/research continue <id> …` | `research.continue(id, followUp, opts) -> ResearchJob` |
+| show report | `cronus research report <job-id> [--json \| --raw]` | `/research report <id>` | `research.getReport(id) -> ResearchReport` |
 | list jobs | `cronus research list` | `/research list` | `research.list() -> ResearchJob[]` |
 | cancel | `cronus research cancel <job-id>` | `/research cancel <id>` | `research.cancel(id) -> void` |
+
+### 4.10 Long-running operation lifecycle
+
+A research task runs for minutes, so it is operated as a durable, addressable job rather than a blocking call. Five operational facets extend §4.9 — each wires existing infrastructure rather than re-inventing it.
+
+**Detached vs. attached start.** `start` returns a `ResearchJob` handle immediately. The caller chooses the mode:
+
+- *attached* (default for interactive use): the frontend streams progress until completion.
+- *detached* (`--detach`): the job runs on the durable background tier; the caller gets the job id and disconnects. The job survives frontend exit (durability per the orchestration model's scheduled/queued tiers).
+
+**Streaming progress.** A subscriber receives ordered progress events at phase/round granularity, so the long tail of a task shows motion instead of a frozen prompt:
+
+```text
+[REFERENCE]
+ResearchProgress {
+  job_id, phase: plan|search|extract|synthesize,
+  round, round_of_max, note,
+  queries_in_flight?, pages_fetched?, elapsed_ms
+}
+```
+
+Progress events are advisory and carry only counts and labels — never untrusted page content. Streaming reuses the session's typed event channel (l1-acp); a dropped subscriber never affects the running job.
+
+**Wait.** `wait` blocks on an existing job until it reaches a terminal state (`done | partial | cancelled | error`) and returns the report. Polling (`status`) and waiting are equivalent — they differ only in who owns the wait loop, the caller or the engine.
+
+**Threaded continuation.** `continue <job-id> "<follow-up>"` starts a new job that inherits the parent job's plan, accumulated report, and citations as seed context — distinct from the cold follow-up of §4.8, which starts from nothing. Use it to drill into a single point ("elaborate on finding 2") without re-researching the whole question. The continuation records a `parent_job_id` back-pointer for lineage. The inherited report is wrapped as the office's own prior output (trusted); any newly fetched pages remain untrusted (§4.6).
+
+**Caller-supplied output contract.** `start --format "<skeleton>"` lets the caller declare the report's section structure up front (e.g. `"1. Executive Summary / 2. Comparison Table / 3. Recommendations"`). The skeleton becomes part of the synthesis prompt and an output-validation contract (l1-output-contracts): a missing required section forces one repair pass before the report is returned. Absent a skeleton, the default `ResearchReport` structure (§4.7) applies.
+
+**Cost & time transparency.** Because a task spends real tokens and money, the engine is transparent on both ends:
+
+- *Estimate at start* — a pre-run estimate of rounds, token range, and wall-clock, surfaced before a detached job is launched and recorded on the job.
+- *Accounting at end* — actual input/output tokens and derived cost recorded on the finished job, attributed through the budget engine (l2-budget-engine) under the office/project budget hierarchy. A task that would breach a hard budget threshold is gated by the budget engine, not silently run.
+
+```text
+[REFERENCE]
+ResearchJob (extended) {
+  job_id, parent_job_id?,            // parent set for continuations
+  question, format_skeleton?,        // caller output contract
+  status: planning|searching|extracting|synthesizing|done|partial|cancelled|error,
+  estimate?:  { rounds, input_tokens_range, wall_clock_range },
+  usage?:     { input_tokens, output_tokens, cost },   // filled on completion
+  created_at, finished_at?
+}
+```
+
+These facets compose cleanly with existing subsystems: the durability tier from the orchestration model, streaming from the session event channel, output validation from output-contracts, and cost from the budget engine. The research engine wires them together; it owns none of them.
 
 ## 5. Drawbacks & Alternatives
 
@@ -158,3 +211,12 @@ The report is marked `_protected` in the session history so it is never trimmed 
 | `[TOOLSEC]` | `.design/main/specifications/l2-tool-security.md` | Untrusted-context wrapper |
 | `[CTX]` | `.design/main/specifications/l2-context-management.md` | _protected report + compaction |
 | `[CLI]` | `.design/main/specifications/l2-cli.md` | Command grammar standard |
+| `[OUT]` | `.design/main/specifications/l1-output-contracts.md` | Caller output skeleton validation (§4.10) |
+| `[BUDGET]` | `.design/main/specifications/l2-budget-engine.md` | Per-task cost gating + accounting (§4.10) |
+
+## Document History
+
+| Version | Date | Change |
+| --- | --- | --- |
+| 1.0.0 | 2026-06-22 | Initial specification: iterative Think→Plan→Search→Extract→Synthesize loop, date grounding, ResearchPlan (sub-questions + success criteria), content filtering, untrusted-content wrapping, ResearchReport with citations, `max_rounds` circuit breaker, async-job command surface. |
+| 1.1.0 | 2026-06-25 | Long-running operation lifecycle (§4.10): detached/attached start, streaming progress events, blocking wait, threaded continuation with `parent_job_id` lineage, caller-supplied output-format contract, and cost/time/token transparency with budget-engine gating. Command surface extended (stream/wait/continue, `--format`/`--detach`/`--json`/`--raw`). |
