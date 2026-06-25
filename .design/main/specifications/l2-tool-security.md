@@ -1,6 +1,6 @@
 # Tool Security
 
-**Version:** 1.1.0
+**Version:** 1.2.0
 **Status:** Stable
 **Layer:** implementation
 **Implements:** l1-security.md
@@ -480,7 +480,7 @@ When an agent reads repository content for audit purposes, the content passes th
 
 ### 4.9 Extended Vulnerability Taxonomy
 
-The skill scanner covers 16 vulnerability categories across static, AST, taint, and LLM-semantic analyzers. Each category has a numeric rule prefix for precise finding citations.
+The skill scanner covers 17 vulnerability categories across static, AST, taint, and LLM-semantic analyzers. Each category has a numeric rule prefix for precise finding citations.
 
 | Category | Rule IDs | Typical Severity | Focus |
 | --- | --- | --- | --- |
@@ -500,6 +500,7 @@ The skill scanner covers 16 vulnerability categories across static, AST, taint, 
 | YARA Signatures | YR1–YR4 | MEDIUM–HIGH | Known malware patterns, obfuscated payloads, encoded dropper signatures |
 | MCP Least Privilege | LP1–LP4 | MEDIUM–HIGH | Declared permissions vs code-detected capabilities; wildcard grants |
 | MCP Tool Poisoning | TP1–TP4 | HIGH–CRITICAL | Hidden directives, Unicode confusables, RTL override, description-behavior mismatch |
+| MCP Rug Pull (Manifest Drift) | RP1–RP3 | HIGH–CRITICAL | Post-approval mutation of the tool surface: a tool added/renamed, a description or input schema changed, or capabilities expanded versus the pinned approved manifest |
 
 #### Automatic CRITICAL rules
 
@@ -576,6 +577,32 @@ TP3: Parameter description length > TP3_MAX_PARAM_DESC_LENGTH (500 chars) → ME
 TP4: Description-behavior mismatch (LLM deep scan only)
      Description claims safe behavior; code does otherwise → HIGH
 ```
+
+#### MCP rug-pull / manifest-drift checks (RP1–RP3)
+
+LP1–LP4 and TP1–TP4 vet the tool surface **at the moment of approval** — a spatial check of what is declared versus what the code does. They do not catch a server that passes review, earns trust, then silently changes its tool surface afterward: an MCP server can revise tool names, descriptions, or input schemas at runtime (e.g. via a `tools/list_changed` notification) with no re-review. This temporal vector — clean at approval, malicious later — is a *rug pull*, the capability-surface analogue of a dependency that ships a poisoned update after install.
+
+RP detection pins the approved surface and re-verifies it against the live one:
+
+```text
+[REFERENCE]
+PIN     — at first approval, snapshot a content hash per MCP tool over the
+          tuple (name, description, input schema, declared permissions);
+          store the baseline manifest alongside the server's trust record.
+VERIFY  — on every tool-list refresh, server reconnect, or tools/list_changed
+          notification, recompute the live hashes and diff against the baseline.
+DRIFT   — any mismatch emits an RP finding and re-gates the server: it reverts
+          to needs-approval until the user re-approves the changed surface.
+
+RP1: A tool present in the live surface is absent from the pinned baseline
+     (a new tool appeared after approval)                          → HIGH
+RP2: A pinned tool's description or input schema changed since approval
+     (silent mutation of an already-trusted tool)                  → HIGH
+RP3: A pinned tool's declared permissions/capabilities expanded versus
+     the baseline (post-approval capability escalation)            → CRITICAL
+```
+
+RP is the temporal complement to the static MCP checks: LP/TP confirm the surface is safe **when** approved; RP confirms it **stays** what was approved. The pin reuses the same hash-pinning discipline already applied to hook files and configuration drift elsewhere in the security model (`l2-security.md`), extended here to the MCP tool manifest. Re-gating on drift is non-destructive — the server keeps its prior approval record; only the changed surface awaits re-consent.
 
 ### 4.10 Two-Stage Scan Pipeline
 
@@ -746,3 +773,9 @@ Output trigger:
 | `[L2SEC]` | `.design/main/specifications/l2-security.md` | Secret store, egress gate, sandbox |
 | `[EXT]` | `.design/main/specifications/l2-extension-registry.md` | Extension activation gate |
 | `[SCHED]` | `.design/main/specifications/l2-scheduler.md` | Fire-time prompt injection scan |
+
+## Document History
+
+| Version | Date | Notes |
+| --- | --- | --- |
+| 1.2.0 | 2026-06-25 | RP1–RP3 (MCP rug-pull / manifest drift) category added — post-approval tool-surface drift detection (pin approved manifest hash, re-verify on refresh/reconnect/`tools/list_changed`, re-gate on drift), the temporal complement to the static LP/TP MCP checks; taxonomy 16→17 categories; §4.9 table + RP subsection. (Document History section introduced at this revision per RULES §5; prior version lineage tracked in `INDEX.md`.) |
