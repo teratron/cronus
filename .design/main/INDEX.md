@@ -1,6 +1,6 @@
 # Workspace Specifications Registry
 
-**Version:** 1.0.10
+**Version:** 1.0.11
 **Status:** Active
 **Engine Version:** 2.1.46
 
@@ -111,9 +111,10 @@ Local registry of specifications for this workspace.
 | [l2-knowledge-store.md](specifications/l2-knowledge-store.md) | Knowledge store implementation: SQLite schema (collection/directory/document/chunk); sqlite-vec for ANN; FTS5 for keyword search; RRF hybrid fusion; async ingestion pipeline with file/URL/record adapters; soft-delete GC; knowledge-store crate layout | Stable | 2 | 1.0.0 |
 | [l2-notes.md](specifications/l2-notes.md) | Notes implementation: SQLite schema (note/pinned_note/note_version/note_crdt_update); ProseMirror-compatible JSON content tree; Yjs CRDT binary update log; version history policy; in-memory Yjs doc cache with idle eviction; soft-delete GC; notes crate layout | Stable | 2 | 1.0.0 |
 | [l2-file-store.md](specifications/l2-file-store.md) | File store implementation: SQLite schema (file/file_reference); StorageBackend trait (local FS default, S3-compatible plug-in); SHA-256 content-addressed dedup (hash-to-path sharding); async upload pipeline; magic-byte MIME detection + allowlist; GC scheduler; file-store crate layout | Stable | 2 | 1.0.0 |
+| [l1-spec-driven-governance.md](specifications/l1-spec-driven-governance.md) | Spec-driven governance meta-spec for autonomous agent work: artifact-before-action (SDG-1); two-layer Concept/Implementation model with parent-gated promotion (SDG-2); bounded lifecycle with encapsulated auto-promotion (SDG-3) + adaptive-weight completeness gate (SDG-4); quarantine cascade on foundation destabilization (SDG-5); registry parity with orphans-as-blockers (SDG-6); drift-guard family — version/rules/tooling/config (SDG-7); autonomous decision protocol — decide-and-narrate [DR] grammar + closed escalation whitelist + session-persistent posture (SDG-8); two-stage review — content critic then instruction-quality pass (SDG-9); navigable artifact knowledge graph — god-node/orphan/coverage analysis + token-budgeted recall (SDG-10); one-way traceability containment (SDG-11); finalize-never-auto-commit (SDG-12); closed-loop retrospective with DORA delivery metrics (SDG-13); session continuity + single-next-step briefing (SDG-14); two operating profiles trust/audit over one engine (SDG-15); ideas-to-adopt mapping to existing concept specs (tech-agnostic) | RFC | 1 | 1.0.0 |
 
 ## Meta Information
 
 - **Maintainer**: Core Team
-- **Last Updated**: 2026-06-25 (l1-dynamic-harness added v0.1.0 RFC — run-time complement to harness engineering, DH-1…DH-12)
-- **Spec Count**: 95 (43 L1 + 52 L2)
+- **Last Updated**: 2026-06-25 (l1-spec-driven-governance added v1.0.0 — SDD-governance meta-spec mined from a spec-driven engine reference, SDG-1…SDG-15)
+- **Spec Count**: 96 (44 L1 + 52 L2)
