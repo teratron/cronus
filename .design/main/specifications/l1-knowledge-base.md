@@ -1,6 +1,6 @@
 # Knowledge Base
 
-**Version:** 1.0.0
+**Version:** 1.1.0
 **Status:** Stable
 **Layer:** concept
 
@@ -39,6 +39,8 @@ Rules every Layer 2 implementation MUST NOT violate:
 - **KB-6 (Source attribution):** every retrieved chunk carries a reference to its source document and, where applicable, its position (page, section, byte offset) within that document.
 - **KB-7 (Non-authoritative recall):** the knowledge base stores and retrieves; it does not assert correctness. Agents must treat retrieved content as evidence, not ground truth.
 - **KB-8 (Soft deletion):** removing a document from a collection marks it deleted and removes it from retrieval immediately; physical cleanup (storage + index cleanup) is deferred.
+- **KB-9 (Authorship zones):** within a collection, documents carry an authorship origin that places them in a zone with a declared agent write-boundary — *human-authored* documents (uploaded sources, human-owned records) are agent-read-only, while *agent-synthesized* documents are agent-read-write. The boundary is enforced mechanically at the storage layer: a write to a read-only zone is refused unless an explicit override is supplied, never merely discouraged by guidance. This authorship boundary is orthogonal to KB-4 — KB-4 governs which *workers* may access a collection (resource-sharing), KB-9 governs whether the *agent* may rewrite human-authored material within a collection it can already access.
+- **KB-10 (Curation lifecycle):** every agent-synthesized document carries a curation status advancing `draft → reviewed → stable`. The agent may freely create and revise `draft` documents; advancing to `reviewed` or `stable` requires explicit human action. Downstream consumers MUST treat `draft` content as provisional, and retrieval MAY filter or down-weight by curation status. This editorial-trust lifecycle is distinct from the per-document indexing `status` (pending/indexing/ready/error/deleted), which tracks index state, not trust.
 
 > L2 specs cannot reach RFC status until all invariants here are addressed in their "Invariant Compliance" section.
 
@@ -70,7 +72,9 @@ Document {
   source_file_id: FileId?       // reference to the file subsystem
   source_url    : string?       // web URL when source is remote
   name          : string
-  status        : "pending" | "indexing" | "ready" | "error" | "deleted"
+  status        : "pending" | "indexing" | "ready" | "error" | "deleted"  // index state
+  origin        : "human" | "agent"                                       // authorship zone (KB-9)
+  curation      : "draft" | "reviewed" | "stable"?                        // editorial trust (KB-10); agent docs only
 }
 
 Directory {
@@ -131,6 +135,33 @@ Query flow for a semantic retrieval request:
 | Remove document | Document marked `deleted`; chunks excluded from retrieval immediately. |
 | Delete collection | All documents and chunks removed; index dropped. |
 
+### 4.7 Authorship Zones & Curation Lifecycle
+
+Two orthogonal dimensions govern how the agent may touch a document, layered on top of the indexing pipeline:
+
+**Authorship zone (KB-9).** Each document's `origin` declares who authored it. The storage layer treats `origin = human` documents as a read-only zone for the agent:
+
+```text
+[REFERENCE]
+write(document):
+    if document.origin == "human" and not override_supplied:
+        reject("read-only zone: human-authored material")
+    else:
+        persist(document)
+```
+
+The override exists for explicit, audited operations (e.g. a user-directed correction routed through the agent), never as a silent default. This makes the human/agent boundary an enforced invariant of the store rather than a behavioural request in a prompt — robust against agent drift.
+
+**Curation lifecycle (KB-10).** Agent-synthesized documents advance through editorial-trust states:
+
+```mermaid
+graph LR
+    draft -- "human review" --> reviewed -- "human approval" --> stable
+    reviewed -- "needs work" --> draft
+```
+
+The agent owns `draft`; only human action advances `reviewed`/`stable`. Retrieval may expose a `min_curation` filter so high-trust queries exclude provisional `draft` content. A new agent-synthesized document defaults to `draft`.
+
 ## 5. Implementation Notes
 
 1. Embedding model selection: use the same model for ingestion and query; a model change requires full re-indexing of the collection.
@@ -148,3 +179,10 @@ Query flow for a semantic retrieval request:
 |---|---|---|
 | `[IMPL]` | `.design/main/specifications/l2-knowledge-store.md` | Concrete schema, indexing pipeline, and Rust implementation. |
 | `[MEMORY]` | `.design/main/specifications/l2-memory-store.md` | Memory store also uses sqlite-vec; share the embedding engine pattern. |
+
+## Document History
+
+| Version | Date | Author | Notes |
+| --- | --- | --- | --- |
+| 1.1.0 | 2026-06-26 | Core Team | Added KB-9 (authorship zones — storage-enforced human/agent write boundary) and KB-10 (curation lifecycle draft→reviewed→stable); Document model gains `origin` + `curation` fields; new §4.7. |
+| 1.0.0 | 2026-06-25 | Core Team | Initial spec — collections, ingestion pipeline, retrieval, KB-1…KB-8. |

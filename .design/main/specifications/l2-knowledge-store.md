@@ -1,7 +1,7 @@
 # Knowledge Store (Implementation)
 
 **Version:** 1.0.0
-**Status:** Stable
+**Status:** RFC
 **Layer:** implementation
 **Implements:** l1-knowledge-base.md
 
@@ -40,6 +40,8 @@ The memory store is per-user, conversational, and ephemeral by design. A separat
 | KB-6 Source attribution | Each chunk row carries `document_id`, `position`, and `source_ref` (page/section/byte). |
 | KB-7 Non-authoritative recall | Retrieval API returns `(text, source_ref, score)`; no assertion of correctness in the API surface. |
 | KB-8 Soft deletion | `document.status = 'deleted'`; chunks excluded from all queries; GC job deletes rows + vector entries. |
+| KB-9 Authorship zones | **Pending (v1.1.0 parent).** Add `document.origin` (`human`/`agent`); the `KnowledgeStore` write path must refuse writes to `origin = 'human'` rows unless an explicit override flag is passed. Not yet implemented — drives status RFC. |
+| KB-10 Curation lifecycle | **Pending (v1.1.0 parent).** Add `document.curation` (`draft`/`reviewed`/`stable`, agent docs default `draft`); human-gated transitions; expose a `min_curation` retrieval filter. Not yet implemented — drives status RFC. |
 
 ## 4. Detailed Design
 

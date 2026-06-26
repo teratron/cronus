@@ -1,7 +1,7 @@
 # Nodus Portability Implementation (Rust)
 
 **Version:** 1.0.0
-**Status:** Stable
+**Status:** RFC
 **Layer:** implementation
 **Implements:** l1-nodus-portability.md
 
@@ -64,6 +64,7 @@ Explicit mapping of every LP-invariant to its Rust enforcement mechanism:
 | LP-5 Composable extension | All extension points are independently composable: `run_with_provider`, `run_with_audit`, `run_with_provider_and_audit` accept each provider in orthogonal parameters. No global mutable state; no inheritance. Combinators are pure functions in `workflows.rs`. |
 | LP-6 Semantic versioning contract | Published via `crates/nodus/Cargo.toml` with `version = "{semver}"`. Breaking changes follow the notice protocol in `l1-nodus-portability.md §4.5`. CI enforces `cargo semver-checks` (planned; currently manual). `EXTRACTION.md` documents the release checklist. |
 | LP-7 Feedback loop lifecycle | Operationalised by the `/magic.spec nodus` → `/magic.task nodus` → `/magic.run nodus` pipeline. Discovery and distillation steps happen in `l1-nodus-portability.md §4.2`; spec amendment is the Proposal step; the run pipeline is Implementation; `CHANGELOG.md` + version bump is Release. |
+| LP-8 Capability manifest | **Pending (v1.1.0 parent).** Add a workflow-declared manifest (extension roles / host commands / named capabilities) and a `validate_manifest(host)` gate that runs before executor boot, rejecting fail-fast with the missing-capability set; the same check serves the LP-3 host-substitution test. Not yet implemented — drives status RFC. |
 
 ## 4. Detailed Design
 

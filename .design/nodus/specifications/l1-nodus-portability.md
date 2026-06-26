@@ -1,6 +1,6 @@
 # Nodus Portability and Extension Contract
 
-**Version:** 1.0.1
+**Version:** 1.1.0
 **Status:** Stable
 **Layer:** concept
 
@@ -56,9 +56,11 @@ Rules that every implementation of this spec (and its host projects) MUST NOT vi
 - **LP-7 Feedback loop lifecycle**: host-observed needs travel through a defined lifecycle before entering the library:
   1. *Discovery* — host developer identifies a recurring gap or pattern in production use
   2. *Distillation* — host-specific framing is rephrased as a host-agnostic requirement; LP-3 assessed
-  3. *Proposal* — a spec amendment is authored (`/magic.spec nodus`) capturing the generalised invariant or extension point
-  4. *Implementation* — the `spec → task → run` pipeline delivers and validates the feature
+  3. *Proposal* — a spec amendment is authored capturing the generalised invariant or extension point
+  4. *Implementation* — the spec-to-execution pipeline delivers and validates the feature
   5. *Release* — library version is bumped per LP-6; host updates its dependency
+
+- **LP-8 Capability manifest & pre-run satisfiability**: a workflow declares, in its definition, the set of extension-point roles and named capabilities it requires to execute — for example a model provider, durable storage, a specific audit sink, or named commands drawn from a host schema layer (§4.4). Before execution begins, the runtime validates this manifest against the capabilities the active host actually provides. If any required capability is unsatisfiable, the workflow is rejected fail-fast with a diagnostic naming the missing capability; a partially-capable run never starts. The same manifest is the contract checked when a workflow moves between hosts (LP-3): a workflow is portable to a second host only if that host satisfies its manifest. The manifest references roles from the §4.1 taxonomy and never names a concrete host type (LP-1).
 
 ## 4. Detailed Design
 
@@ -132,6 +134,34 @@ Non-breaking additions (minor version) that introduce new extension-point roles 
 - Provide a default no-op built-in implementation so existing hosts compile without changes
 - Be listed in the extension point taxonomy (§4.1)
 
+### 4.6 Capability Manifest & Pre-Run Validation
+
+A workflow's manifest is a declarative list of what it needs from its host, expressed only in terms of the extension-point taxonomy (§4.1) and named schema capabilities (§4.4) — never concrete host types:
+
+```text
+[REFERENCE]
+manifest := {
+  roles        : set of ExtensionRole      // e.g. { Model, Storage }
+  commands     : set of CommandName        // host-schema commands the workflow calls
+  capabilities : set of NamedCapability    // optional finer-grained features of a role
+}
+```
+
+The runtime resolves the manifest against the active host before the first step executes:
+
+```text
+[REFERENCE]
+validate(manifest, host):
+    missing := []
+    for role in manifest.roles:        if not host.provides(role):        missing.append(role)
+    for cmd  in manifest.commands:     if not host.schema.has(cmd):        missing.append(cmd)
+    for cap  in manifest.capabilities: if not host.satisfies(cap):         missing.append(cap)
+    if missing not empty:
+        reject_fail_fast("unsatisfiable capability manifest", missing)   // LP-8: never start
+```
+
+Two consequences follow. First, failures surface as a precise pre-run diagnostic ("workflow requires Storage; host provides none") instead of an opaque mid-run error after side effects have begun. Second, the manifest is the machine-checkable portability contract: the two-host generalisation rule (LP-3) reduces, for a given workflow, to "does host B satisfy the same manifest host A satisfied?". A built-in host (the in-process test configuration) satisfies a minimal manifest, so manifest-free or model-only workflows remain runnable without any host wiring.
+
 ## 5. Implementation Notes
 
 The LP-invariants are evaluated in the order that minimises rework:
@@ -162,5 +192,6 @@ The LP-invariants are evaluated in the order that minimises rework:
 
 | Version | Date | Author | Notes |
 | --- | --- | --- | --- |
+| 1.1.0 | 2026-06-26 | Core Team | Added LP-8 (capability manifest + pre-run satisfiability validation, fail-fast); new §4.6; manifest reframed as the machine-checkable LP-3 portability contract. |
 | 1.0.1 | 2026-06-24 | Core Team | AuditProvider row filled — references l1-nodus-observability.md; PolicyProvider TBD refined |
 | 1.0.0 | 2026-06-24 | Core Team | Initial spec — portability contract, LP-1…LP-7, extension taxonomy, feedback lifecycle |
