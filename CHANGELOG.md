@@ -82,3 +82,4 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Added specification `policy-governance` (main)
 - Added specification `execution-sandbox` (main)
 - Added specification `context-compression` (main)
+- Added specification `intent-resolution` (main)
