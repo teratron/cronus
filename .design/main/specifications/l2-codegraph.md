@@ -1,6 +1,6 @@
 # Code Graph
 
-**Version:** 1.1.0
+**Version:** 1.3.0
 **Status:** Stable
 **Layer:** implementation
 **Implements:** l1-code-intelligence.md
@@ -48,6 +48,10 @@ Mapping of every `l1-code-intelligence.md` invariant to this implementation. Cap
 | CI-11 Capability-surface profiling | Satisfied externally by `ToolSurfaceProfile` in [l2-agent-session.md](l2-agent-session.md) and TC-7 deferred tools in `l1-tool-composition.md`; the §4.7 command surface is itself the structural profile. |
 | CI-12 Interoperable export | **Roadmap (§4.7).** Add `codegraph export --format {dot,json,csv,triples}` over the live graph. |
 | CI-13 Secret-exclusion at ingestion | **Partial.** §2/§4.1 exclude generated/vendored files via `.codegraphignore`. **Roadmap:** unconditional exclusion of credential dirs and secret-bearing file classes regardless of ignore config. |
+| CI-14 Node summaries for navigation | **Roadmap.** Deterministic-first bounded per-node summary (from docstring/exported symbols/dominant relations/community) surfaced in `codegraph show`/MCP node lookup, optional model upgrade, budget-aware. |
+| CI-15 Vocabulary-grounded query | **Roadmap.** Expand a natural-language query against the index's own symbol/label vocabulary before retrieval; navigable query surface (breadth/depth/shortest-path/explain) under a token budget on top of §4.14 traversal. |
+| CI-16 Resolution & indirect-edge synthesis | **Partial.** §4.1 extracts direct edges; framework/SQL relations present. **Roadmap:** a distinct resolution pass with synthesized dynamic-dispatch edges (callback/observer/event/framework-render/cross-language) carrying `provenance` + wiring site, surfaced inline; close-flow-end-to-end discipline. |
+| CI-17 Measured resolution coverage | **Roadmap.** Per-language/framework cross-file dependent coverage on benchmark repos with disclosed static-analysis frontier; never denominator-gamed. |
 
 > Storage placement (formerly the parent contract): `codegraph.db` is state-tier mutable data over program-tier read-only source (STO-2) and uses durable WAL SQLite with transactional writes (STO-8) — see [l1-storage-model.md](l1-storage-model.md).
 
@@ -537,6 +541,8 @@ Operations:
 
 | Version | Change |
 | --- | --- |
+| 1.3.0 | Mapped new parent invariants CI-16 (resolution & indirect-edge synthesis w/ provenance — partial) and CI-17 (measured resolution coverage — roadmap) in §3 |
+| 1.2.0 | Mapped new parent invariants CI-14 (node summaries) and CI-15 (vocabulary-grounded query) as roadmap rows in §3 |
 | 1.1.0 | Re-parented from `l1-storage-model.md` to the new `l1-code-intelligence.md` concept; rewrote §3 to map CI-1…CI-13 (implemented vs roadmap); storage-model retained as a Related placement contract |
 | 1.0.1 | Added §4.8–§4.15: three-pass pipeline, confidence taxonomy, dual-layer cache, community detection, entity deduplication, graph analysis, affected subgraph, global multi-project graph |
 | 1.0.0 | Initial spec |
