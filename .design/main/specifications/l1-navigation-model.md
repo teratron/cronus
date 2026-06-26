@@ -92,6 +92,7 @@ Global settings are stored in the application's global config file. Local settin
 ### 4.4 IDE Integration
 
 The "Open in IDE" action (NV-5):
+
 1. Reads the office's `workspace_root` path from Local Settings
 2. Reads the `configured_ide` command from Global Settings → Appearance
 3. Shell-spawns: `{configured_ide} {workspace_root}`

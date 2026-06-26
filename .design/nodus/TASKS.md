@@ -1,8 +1,8 @@
 # Master Task Index (Registry)
 
-**Version:** 2.0.0
+**Version:** 2.1.0
 **Generated:** 2026-06-24
-**Based on:** .design/nodus/PLAN.md v1.8.0
+**Based on:** .design/nodus/PLAN.md v1.9.0
 **Based on RULES:** .design/RULES.md v1.4.0
 **Execution Mode:** Sequential
 **Status:** Active
@@ -33,11 +33,18 @@ Tactical registry of all phases. Atomic checklists live in `tasks/phase-{N}.md`.
 
 | [Phase 6](archives/tasks/phase-6.md) | Testing Implementation: ast.rs (structured TestBlock), parser.rs (E015 + input/expected parsing), transpiler round-trip, workflows.rs (assertion evaluator + NT isolation), validator.rs (W001/W002), test() tag filtering, tests/testing.rs (6 integration tests), l2-nodus-testing.md spec | `Done (Archived)` |
 
+## Active Phases (continued)
+
+| Phase | Description | Status |
+| --- | --- | --- |
+| [Phase 7](tasks/phase-7.md) | Capability Manifest (LP-8): portability.rs (CapabilityManifest + ExtensionRole + HostCapabilities), validate_manifest() fail-fast gate wired into executor boot, NODUS:* capability-rejection diagnostic, AST-derived role manifest, run_with_manifest API, LP-3 two-host + pre-run purity tests, l2-nodus-portability.md §4.7 + RFC → Stable | `Todo` |
+
 ## Meta Information
 
-- **Last Updated**: 2026-06-24
+- **Last Updated**: 2026-06-26
 - **Phase 3 Planned**: 2026-06-24 (9 tasks, tracks A/B/C/D/T)
 - **Phase 4 Complete**: 2026-06-24 (9 tasks, tracks A/B/C/T; all archived)
 - **Phase 5 Complete**: 2026-06-24 (7 tasks, tracks A/B/C/T; all archived)
 - **Phase 6 Complete**: 2026-06-24 (9 tasks, tracks A/B/C/T; all archived; 204 tests pass)
+- **Phase 7 Planned**: 2026-06-26 (8 tasks, tracks A/B/C/T/D; restabilizes l2-nodus-portability via LP-8)
 - **Maintainer**: Core Team

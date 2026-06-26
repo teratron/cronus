@@ -1,13 +1,13 @@
 # Implementation Plan
 
-**Version:** 1.8.0
+**Version:** 1.9.0
 **Generated:** 2026-06-24
-**Based on:** .design/nodus/INDEX.md v1.0.10
+**Based on:** .design/nodus/INDEX.md v1.0.12
 **Status:** Active
 
 ## Overview
 
-Strategic plan for maturing nodus from an in-tree vendored crate to an independently extractable, production-ready workflow-language library. The plan follows three phases: spec completeness → library hardening → extraction readiness.
+Strategic plan for maturing nodus from an in-tree vendored crate to an independently extractable, production-ready workflow-language library. The arc runs: spec completeness → library hardening → extraction readiness → observability & extension framework → portability → testing → capability manifest (LP-8). Each new contract spec is implemented, then its L2 spec is synced to the realized Rust shape.
 
 Execution mode: **Sequential** (spec correctness must precede hardening; hardening must precede extraction).
 
@@ -102,7 +102,14 @@ stub-level runner to an assertion-evaluating test facility (NT-1…NT-10).*
   - ✅ `l2-nodus-testing.md` v1.0.0 authored; NT-1…NT-10 compliance table; registered in INDEX.md
   - ✅ Quality gates: 204 tests pass (target 175+ met); clippy clean; fmt clean; docs zero new warnings
 
+## Phase 7 — Capability Manifest (LP-8)
+
+*Implement the LP-8 capability manifest + pre-run satisfiability validation (fail-fast) from `l1-nodus-portability.md` §4.6 in `crates/nodus`. A workflow declares the extension-point roles / host commands / named capabilities it needs; the runtime validates that declaration against the active host before the first step runs and rejects fail-fast with the missing-capability set, never starting a partially-capable run. The same manifest is the machine-checkable two-host portability contract (LP-3). Completing this phase restabilizes `l2-nodus-portability` (RFC → Stable, C12.1 Stabilization Exception). Atomic tasks in `tasks/phase-7.md`.*
+
+- [ ] **L2 Nodus Portability** ([l2-nodus-portability.md](specifications/l2-nodus-portability.md)) [L2] — LP-8 implementation: `CapabilityManifest` + `ExtensionRole` + `HostCapabilities` in `portability.rs`; `validate_manifest()` fail-fast gate wired into executor boot before step 1; `NODUS:*` capability-rejection diagnostic; AST-derived required-role manifest; `run_with_manifest` API; LP-3 two-host substitution + pre-run purity tests; §4.7 spec authored and §3 LP-8 row → Implemented; spec v1.0.0 → 1.1.0, RFC → Stable
+
 ## Backlog
 
-<!-- StorageProvider/PolicyProvider executor integration deferred pending LP-3 satisfied. -->
+<!-- Upstream parity gap v0.4.6 → v0.7 (l1-nodus-language §4.6 / l2-nodus-runtime §4.7): control constructs (?SWITCH/~MAP/~RETRY/!HALT/!PAUSE), operators/expressions (MATCHES/?./??/WHERE/FIRST/LAST/string-interpolation), HITL dialog (ASK/CONFIRM), @needs selective schema loading, error taxonomy 11 → 24, @ON(priority=N), closed flag/validator/type registries. Each cluster needs focused L2 implementation-design authoring before it can be decomposed into atomic tasks — not plannable as-is. -->
+<!-- StorageProvider/PolicyProvider executor integration deferred pending LP-3 satisfied (interfaces present in portability.rs; hook points + run_with_storage/run_with_policy variants pending the second documented host context). -->
 <!-- Future: l2-nodus-transpiler.md — dedicated transpiler L2 spec (currently covered by l2-nodus-runtime.md §4). -->

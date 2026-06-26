@@ -84,3 +84,6 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Added specification `context-compression` (main)
 - Added specification `intent-resolution` (main)
 - Added specification `generation-budget` (main)
+- Updated specification `navigation-model` (main)
+- Updated task plan and task index (nodus)
+
