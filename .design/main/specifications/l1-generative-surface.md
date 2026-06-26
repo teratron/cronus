@@ -91,7 +91,7 @@ The automation canvas is one concrete generative surface: an interactive flow-gr
 ## Canonical References
 
 | Alias | Path | Purpose |
-|---|---|---|
+| --- | --- | --- |
 | `[CANVAS]` | `.design/main/specifications/l1-automation-canvas.md` | The concrete engine-backed surface this concept generalizes. |
 | `[APP-UI]` | `.design/main/specifications/l2-app-ui.md` | Host that renders surfaces across frontends. |
 | `[SANDBOX]` | `.design/main/specifications/l1-execution-sandbox.md` | Confinement model for untrusted generated content. |
