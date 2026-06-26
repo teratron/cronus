@@ -1,6 +1,6 @@
 # Navigation Model
 
-**Version:** 1.0.0
+**Version:** 1.1.0
 **Status:** Stable
 **Layer:** concept
 
@@ -14,6 +14,7 @@ The model also defines the two-tier settings hierarchy (global application setti
 
 - [l1-office-model.md](l1-office-model.md) — the office concept the navigation surfaces expose
 - [l1-office-control.md](l1-office-control.md) — OfficeState taxonomy driving the office tab status icons
+- [l1-project-wiki.md](l1-project-wiki.md) — client-facing living project documentation surfaced through the Wiki tab
 - [l2-workspace-management.md](l2-workspace-management.md) — office creation, naming, and lifecycle
 - [l2-app-ui.md](l2-app-ui.md) — rendering implementation of this model
 
@@ -54,7 +55,8 @@ Fixed order; badge shows live pending-item count where applicable.
 | 8 | Office | Automation canvas + agent interaction graph | — |
 | 9 | Kanban | Work board: triage → todo → ready → running → blocked → done | Active + blocked cards |
 | 10 | Security | Sandbox policies, secret vault status, audit log | Policy alerts |
-| 11 | Settings | Two-tier configuration: global + per-office | — |
+| 11 | Wiki | Client-facing living project documentation: overview, areas, decisions, how-to, changelog (read-only, office-maintained) | Updated since last visit |
+| 12 | Settings | Two-tier configuration: global + per-office | — |
 
 ### 4.2 Office Tab Bar
 
@@ -121,3 +123,4 @@ The editor is not embedded; the application is the launcher only. The configured
 | Version | Date | Author | Notes |
 | --- | --- | --- | --- |
 | 1.0.0 | 2026-06-24 | Core Team | Initial spec — NV-1…NV-5, 11-tab catalog, office tab bar, two-tier settings, IDE integration |
+| 1.1.0 | 2026-06-26 | Core Team | Added the Wiki tab (now #11, Settings → #12) — client-facing living project documentation surface (see l1-project-wiki.md). Additive extension of the canonical set; NV-1 unchanged. |
