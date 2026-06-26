@@ -49,7 +49,7 @@ Rules every Layer 2 implementation MUST NOT violate:
 ### 4.1 The Token-Economy Family
 
 | Stage | What it does | Loss | Owner |
-|---|---|---|---|
+| --- | --- | --- | --- |
 | Selection / trim | drops low-priority content to fit budget | content dropped | l2-context-management |
 | Summarization / compaction | condenses old history into a summary | paraphrased, lossy | l2-context-management |
 | **Compression** | re-encodes bulky content densely | none, or bounded+declared | **this spec** |
@@ -84,7 +84,7 @@ When compressed content is sent, the model either reads the dense form directly 
 ## Canonical References
 
 | Alias | Path | Purpose |
-|---|---|---|
+| --- | --- | --- |
 | `[CONTEXT]` | `.design/main/specifications/l2-context-management.md` | The selection/summarization cascade this compression stage precedes. |
 | `[OUTPUT]` | `.design/main/specifications/l1-output-contracts.md` | Size-bounded structured results that compression realizes recoverably. |
 | `[CODE-CTX]` | `.design/main/specifications/l1-code-intelligence.md` | CI-6 compression accounting this concept supplies. |
