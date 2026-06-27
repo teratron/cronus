@@ -1,7 +1,7 @@
 # Nodus Human-in-the-Loop Dialog Contract
 
-**Version:** 1.0.0
-**Status:** Draft
+**Version:** 1.1.0
+**Status:** Stable
 **Layer:** concept
 
 ## Overview
@@ -107,7 +107,17 @@ stateDiagram-v2
     Paused --> Failed: timeout while paused
 ```
 
-<!-- TBD: the concrete representation of paused-run state (resume token vs. serialised execution context) and where it is persisted — host responsibility vs. runtime responsibility — needs design review before this advances to Stable. -->
+**Paused-run state (resolved).** The runtime signals suspension by returning
+`Status::Paused` together with a **resume descriptor** — the workflow identifier,
+a snapshot of the variable environment, and the index of the suspended step.
+The runtime does **not** mandate how that descriptor is stored: persistence and
+re-invocation are a host responsibility (LP-1), so a host may keep the run in
+memory, serialise it to disk, or queue it for a human. The built-in in-process
+configuration is **synchronous**: a dialog with a `+default` resolves
+immediately, and a dialog with no default and no interactive backend returns
+`Status::Paused` rather than blocking. True cross-invocation suspend/resume is a
+host extension over this signal — the executor's run-to-completion model is
+unchanged for the default-resolved common case.
 
 ### 4.4 Dialog backend as an extension point
 
@@ -117,7 +127,14 @@ concrete interactive backends live outside the library). This makes dialog
 workflows runnable unattended in tests and interactively in production without
 edits.
 
-<!-- TBD: whether the dialog backend is a distinct `ExtensionRole::Dialog` in the LP-8 taxonomy, or folded into an existing role. The capability-manifest integration (DG-8) depends on this choice. -->
+**Dialog role (resolved).** The dialog backend is a **distinct extension role**
+— `Dialog` joins the LP-8 extension-point taxonomy alongside Model, Audit,
+Storage, and Policy. This lets the capability manifest derive a `Dialog`
+requirement from any `ASK`/`CONFIRM` in a workflow (mirroring how `Model` is
+derived from `GEN`/`ANALYZE`), so a host that provides no dialog backend is
+rejected fail-fast (DG-8) — unless every dialog in the workflow declares a
+`+default`, in which case the built-in synchronous resolver satisfies them and
+no `Dialog` role is required.
 
 ### 4.5 Error taxonomy (dialog subset)
 
@@ -154,4 +171,5 @@ These extend the language error taxonomy (`l1-nodus-language.md` §4.6, 11 → 2
 
 | Version | Date | Change |
 | --- | --- | --- |
+| 1.1.0 | 2026-06-27 | Resolved both open design questions and promoted Draft → Stable. §4.3: paused-run state = `Status::Paused` + a host-persisted resume descriptor; built-in host is synchronous (default-or-Paused). §4.4: the dialog backend is a distinct `ExtensionRole::Dialog` in the LP-8 taxonomy; workflows whose dialogs all carry `+default` need no Dialog role. |
 | 1.0.0 | 2026-06-27 | Initial Draft — dialog command class (`ASK`/`CONFIRM`), suspend/resume lifecycle (`Status::Paused`), DG-1…DG-8 invariants, dialog backend extension point, dialog error subset (`DIALOG_TIMEOUT`/`DIALOG_REJECTED`/`PAUSED`). Elevates `l1-nodus-language.md` §4.6 HITL sub-section. Open design questions marked TBD (paused-state representation; `ExtensionRole::Dialog` taxonomy placement). |

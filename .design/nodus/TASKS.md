@@ -1,8 +1,8 @@
 # Master Task Index (Registry)
 
-**Version:** 2.3.0
+**Version:** 2.4.0
 **Generated:** 2026-06-24
-**Based on:** .design/nodus/PLAN.md v1.11.0
+**Based on:** .design/nodus/PLAN.md v1.12.0
 **Based on RULES:** .design/RULES.md v1.4.0
 **Execution Mode:** Sequential
 **Status:** Active
@@ -51,6 +51,12 @@ Tactical registry of all phases. Atomic checklists live in `tasks/phase-{N}.md`.
 | --- | --- | --- |
 | [Phase 9](archives/tasks/phase-9.md) | Closed Vocabulary Registries (l2-nodus-registries): vocab.rs KNOWN_FLAGS/KNOWN_VALIDATORS/PRIMITIVE_TYPES constants + Schema query surface; advisory validator warnings for unknown ~flag/^validator/@in type; strengthens NL-1/NL-7/NL-9 | `Done (Archived)` |
 
+## Active Phases (continued)
+
+| Phase | Description | Status |
+| --- | --- | --- |
+| [Phase 10](tasks/phase-10.md) | HITL Dialog (l2-nodus-dialog): ASK/CONFIRM commands, Status::Paused + ResumeDescriptor, DialogProvider + DefaultDialogProvider, ExtensionRole::Dialog + from_workflow derivation, executor dispatch, run_with_dialog combinators; DG-1…DG-8 | `Todo` |
+
 ## Meta Information
 
 - **Last Updated**: 2026-06-27
@@ -61,5 +67,6 @@ Tactical registry of all phases. Atomic checklists live in `tasks/phase-{N}.md`.
 - **Phase 7 Complete**: 2026-06-27 (9 tasks, tracks A/B/C/T/D; all archived; l2-nodus-portability v1.1.0 Stable via LP-8; 217 tests pass)
 - **Phase 8 Complete**: 2026-06-27 (7 tasks, tracks A/B/T; all archived; l2-nodus-errors — 24-code taxonomy; 222 tests pass)
 - **Phase 9 Complete**: 2026-06-27 (tracks A/B/T; all archived; l2-nodus-registries — closed flag/validator/type registries + advisory W011/W012/W013; 228 tests pass)
-- **Backlog**: l1-nodus-dialog (Draft, pending TBD review); remaining parity clusters (control-flow, operators [MATCHES/PCRE design fork], @needs, @ON priority, macro execution); Storage/Policy executor integration (LP-3)
+- **Phase 10 Planned**: 2026-06-27 (tracks A–E/T; implements l2-nodus-dialog — ASK/CONFIRM + Status::Paused + DialogProvider + ExtensionRole::Dialog; largest remaining cluster)
+- **Backlog**: remaining parity clusters (control-flow, operators [MATCHES/PCRE design fork], @needs, @ON priority, macro execution); Storage/Policy executor integration (LP-3)
 - **Maintainer**: Core Team
