@@ -143,11 +143,19 @@ stub-level runner to an assertion-evaluating test facility (NT-1…NT-10).*
   - ✅ `validator.rs`: advisory W011 (unknown `~flag`) / W012 (unknown `^validator`) / W013 (unknown `@in` type); warnings never set `has_errors`
   - ✅ 228 tests pass (was 222; +6); clippy clean; fmt clean; docs zero new warnings; SDD §6 clean; no fixture regressions
 
-## Phase 10 — Human-in-the-Loop Dialog (l2-nodus-dialog)
+## Phase 10 — Human-in-the-Loop Dialog (l2-nodus-dialog) ✓
 
 *Implement the dialog contract (`l1-nodus-dialog.md`, now Stable) in `crates/nodus`, per `l2-nodus-dialog.md`. Adds the `ASK`/`CONFIRM` commands, the `Status::Paused` run state + `ResumeDescriptor`, the `DialogProvider` extension point with a built-in synchronous `DefaultDialogProvider` (default-or-pause, no I/O), the `ExtensionRole::Dialog` manifest binding, executor dispatch, and the `run_with_dialog` combinators. The built-in resolver keeps non-interactive runs deterministic; true cross-invocation suspend/resume is a host concern over the `Status::Paused` signal. This is the largest remaining cluster — it touches vocab, executor, portability, and workflows. Atomic tasks in `tasks/phase-10.md`.*
 
-- [ ] **L2 Nodus Dialog** ([l2-nodus-dialog.md](specifications/l2-nodus-dialog.md)) [L2] — `ASK`/`CONFIRM` in `KNOWN_COMMANDS`; `Status::Paused` variant; `DialogProvider` + `DialogOutcome` + `DefaultDialogProvider`; `ResumeDescriptor` on `RunResult`; executor dispatch (Answer/Pause/Timeout/Rejected) emitting `DIALOG_TIMEOUT`/`DIALOG_REJECTED`/`PAUSED`; `ExtensionRole::Dialog` + `from_workflow` derivation; `run_with_dialog`/`run_with_dialog_and_audit`; DG-1…DG-8 tests
+> **Status:** Complete — all tracks A–E/T delivered.
+
+- [x] **L2 Nodus Dialog** ([l2-nodus-dialog.md](specifications/l2-nodus-dialog.md)) [L2]
+  - ✅ `vocab.rs`: `ASK`/`CONFIRM` in `KNOWN_COMMANDS`; `executor.rs`: `Status::Paused` + `Signal::Pause`
+  - ✅ `DialogOutcome` (Answer/Pause/Timeout/Rejected) + `DialogProvider` trait + synchronous `DefaultDialogProvider` (default-or-pause)
+  - ✅ Executor dispatch via `handle_dialog`; `ResumeDescriptor` on `RunResult` (workflow + var snapshot + step index); emits `DIALOG_TIMEOUT`/`DIALOG_REJECTED`/`PAUSED`; `FieldDescriptor`-only events (DG-7)
+  - ✅ `ExtensionRole::Dialog` + `from_workflow` derivation (required only when a dialog lacks `+default`); `HostCapabilities::builtin()` omits Dialog
+  - ✅ `run_with_dialog`/`run_with_dialog_and_audit` (workflows.rs) + lib re-exports
+  - ✅ `tests/dialog.rs` (7 DG-invariant integration tests) + unit tests; 237 tests pass (was 228; +9); clippy clean; fmt clean; docs zero new warnings; SDD §6 clean
 
 ## Backlog
 

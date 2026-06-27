@@ -14,7 +14,7 @@
 //! cannot satisfy them. The same manifest is the machine-checkable two-host
 //! portability contract (LP-3).
 
-use crate::ast::{Conditional, Stmt, WorkflowFile};
+use crate::ast::{CommandCall, Conditional, Stmt, WorkflowFile};
 use crate::executor::Value;
 use crate::vocab;
 use std::collections::BTreeSet;
@@ -107,6 +107,10 @@ impl PolicyProvider for NoopPolicyProvider {
 /// the [`ExtensionRole::Model`] role from its host.
 const MODEL_COMMANDS: &[&str] = &["GEN", "ANALYZE"];
 
+/// Dialog commands — those the executor dispatches to its [`crate::executor::DialogProvider`].
+/// A workflow invoking one without a `+default` requires the [`ExtensionRole::Dialog`] role.
+const DIALOG_COMMANDS: &[&str] = &["ASK", "CONFIRM"];
+
 /// An LP-2 extension-point role a workflow may require from its host.
 ///
 /// Roles name *capabilities*, never concrete host types (LP-1). They mirror the
@@ -124,6 +128,8 @@ pub enum ExtensionRole {
     Policy,
     /// Host vocabulary extension ([`SchemaProvider`]).
     Vocabulary,
+    /// Human-in-the-loop dialog backend ([`crate::executor::DialogProvider`]).
+    Dialog,
 }
 
 /// What a workflow declares it needs from its host to execute (LP-8).
@@ -192,65 +198,71 @@ impl CapabilityManifest {
     /// available. Explicit DSL declaration (an `@needs` section) is a later
     /// refinement; this derives the manifest from invoked commands alone.
     pub fn from_workflow(ast: &WorkflowFile) -> Self {
-        let mut commands = BTreeSet::new();
+        let mut calls: Vec<&CommandCall> = Vec::new();
         for step in &ast.steps {
             if let Some(body) = &step.body {
-                collect_commands(body, &mut commands);
+                collect_command_calls(body, &mut calls);
             }
             for sub in &step.sub_steps {
-                collect_commands(sub, &mut commands);
+                collect_command_calls(sub, &mut calls);
             }
         }
 
         let mut manifest = Self::new();
-        for name in commands {
-            if MODEL_COMMANDS.contains(&name.as_str()) {
+        for cmd in calls {
+            let name = cmd.name.as_str();
+            if MODEL_COMMANDS.contains(&name) {
                 manifest.roles.insert(ExtensionRole::Model);
             }
-            if !vocab::is_known_command(&name) {
+            // A dialog with a `+default` is resolved by the built-in synchronous
+            // provider, so it needs no host dialog backend.
+            if DIALOG_COMMANDS.contains(&name)
+                && !cmd.modifiers.iter().any(|(k, _)| k == "+default")
+            {
+                manifest.roles.insert(ExtensionRole::Dialog);
+            }
+            if !vocab::is_known_command(name) {
                 manifest.roles.insert(ExtensionRole::Vocabulary);
-                manifest.commands.insert(name);
+                manifest.commands.insert(cmd.name.clone());
             }
         }
         manifest
     }
 }
 
-/// Collect every command name reachable from a statement, descending into
+/// Collect every command invocation reachable from a statement, descending into
 /// conditionals, loops, and parallel branches.
-fn collect_commands(stmt: &Stmt, out: &mut BTreeSet<String>) {
+fn collect_command_calls<'a>(stmt: &'a Stmt, out: &mut Vec<&'a CommandCall>) {
     match stmt {
-        Stmt::Command(cmd) => {
-            out.insert(cmd.name.clone());
-        }
+        Stmt::Command(cmd) => out.push(cmd),
         Stmt::Conditional(cond) => collect_from_conditional(cond, out),
         Stmt::ForLoop(fl) => {
             for child in &fl.body {
-                collect_commands(child, out);
+                collect_command_calls(child, out);
             }
         }
         Stmt::UntilLoop(ul) => {
             for child in &ul.body {
-                collect_commands(child, out);
+                collect_command_calls(child, out);
             }
         }
         Stmt::Parallel(pb) => {
             for branch in &pb.branches {
-                collect_commands(branch, out);
+                collect_command_calls(branch, out);
             }
         }
         Stmt::VarRef(_) | Stmt::Comment(_) => {}
     }
 }
 
-/// Collect command names from a conditional chain: inline action, nested body,
-/// every `?ELIF` branch, and the trailing `?ELSE`.
-fn collect_from_conditional(cond: &Conditional, out: &mut BTreeSet<String>) {
+/// Collect command invocations from a conditional chain: inline action, nested
+/// body, every `?ELIF` branch, and the trailing `?ELSE`.
+fn collect_from_conditional<'a>(cond: &'a Conditional, out: &mut Vec<&'a CommandCall>) {
     if let Some(action) = &cond.action {
-        out.insert(action.name.clone());
+        out.push(action);
     }
     for child in &cond.body {
-        collect_commands(child, out);
+        collect_command_calls(child, out);
     }
     for elif in &cond.elif_branches {
         collect_from_conditional(elif, out);

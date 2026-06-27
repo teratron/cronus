@@ -96,6 +96,8 @@ pub enum Status {
     Failed,
     /// A `!BREAK` or rule-violation aborted the run.
     Aborted,
+    /// Execution suspended at a dialog awaiting human re-trigger (`!PAUSE` / unresolved `ASK`/`CONFIRM`).
+    Paused,
 }
 
 /// A single step's execution record in the audit log.
@@ -120,6 +122,18 @@ pub struct RuntimeError {
     pub reason: String,
 }
 
+/// Snapshot a paused run hands to its host so the run can be resumed (DG-4).
+/// The runtime produces this; persistence and re-invocation are host concerns.
+#[derive(Debug, Clone)]
+pub struct ResumeDescriptor {
+    /// `"wf:<name>"` of the suspended workflow.
+    pub workflow: String,
+    /// Variable environment captured at the suspension point.
+    pub vars: HashMap<String, Value>,
+    /// Index of the step that suspended.
+    pub step_index: u32,
+}
+
 /// The structured output of a workflow execution.
 ///
 /// Every execution — successful or not — returns a `RunResult`. Callers
@@ -141,6 +155,8 @@ pub struct RunResult {
     /// Final variable environment: variable name (without `$`) → value.
     /// Enables test runners and debuggers to inspect all pipeline bindings.
     pub vars: HashMap<String, Value>,
+    /// Present only when `status == Paused`: the descriptor a host uses to resume.
+    pub resume: Option<ResumeDescriptor>,
 }
 
 // ─── ModelProvider ────────────────────────────────────────────────────────────
@@ -194,11 +210,64 @@ impl ModelProvider for StubProvider {
     }
 }
 
+// ─── DialogProvider ─────────────────────────────────────────────────────────
+
+/// The outcome of a dialog command (`ASK` / `CONFIRM`).
+#[derive(Debug, Clone, PartialEq)]
+pub enum DialogOutcome {
+    /// Resolved with a typed answer (by a human or a `+default`).
+    Answer(Value),
+    /// No resolution available; the runtime should suspend (`Status::Paused`).
+    Pause,
+    /// A `+timeout` elapsed before an answer.
+    Timeout,
+    /// A `+strict` `CONFIRM` was rejected.
+    Rejected,
+}
+
+/// Pluggable human-in-the-loop backend for `ASK` / `CONFIRM`. Implementations
+/// can drive a real UI or resolve synchronously for tests; the language and
+/// executor never name a concrete channel (host neutrality).
+pub trait DialogProvider {
+    /// Pose a typed question. `modifiers` carries `+type`, `+default`, etc.
+    fn ask(&self, prompt: &str, modifiers: &[(String, String)]) -> DialogOutcome;
+
+    /// Pose an approval decision.
+    fn confirm(&self, content: &str, modifiers: &[(String, String)]) -> DialogOutcome;
+}
+
+/// Built-in synchronous resolver: resolves a dialog from its `+default`
+/// modifier, otherwise signals [`DialogOutcome::Pause`]. Performs no I/O and
+/// never blocks, so non-interactive and test runs stay deterministic.
+pub struct DefaultDialogProvider;
+
+impl DefaultDialogProvider {
+    fn resolve(modifiers: &[(String, String)]) -> DialogOutcome {
+        modifiers
+            .iter()
+            .find(|(k, _)| k == "+default")
+            .map(|(_, v)| DialogOutcome::Answer(Value::Text(v.clone())))
+            .unwrap_or(DialogOutcome::Pause)
+    }
+}
+
+impl DialogProvider for DefaultDialogProvider {
+    fn ask(&self, _prompt: &str, modifiers: &[(String, String)]) -> DialogOutcome {
+        Self::resolve(modifiers)
+    }
+
+    fn confirm(&self, _content: &str, modifiers: &[(String, String)]) -> DialogOutcome {
+        Self::resolve(modifiers)
+    }
+}
+
 // ─── Execution signal ─────────────────────────────────────────────────────────
 
 enum Signal {
     Break,
     Skip,
+    /// A dialog could not resolve; suspend the run (`Status::Paused`).
+    Pause,
 }
 
 // ─── Execution context ────────────────────────────────────────────────────────
@@ -212,6 +281,7 @@ struct ExecutionContext {
     out_locked: bool,
     event_count: u32,
     start_instant: Instant,
+    paused_at: Option<u32>,
 }
 
 impl ExecutionContext {
@@ -225,6 +295,7 @@ impl ExecutionContext {
             out_locked: false,
             event_count: 0,
             start_instant: Instant::now(),
+            paused_at: None,
         }
     }
 
@@ -318,14 +389,17 @@ impl ExecutionContext {
 pub struct Executor {
     provider: Box<dyn ModelProvider>,
     audit: Box<dyn AuditProvider>,
+    dialog: Box<dyn DialogProvider>,
 }
 
 impl Executor {
-    /// Create an executor backed by `provider` with a no-op audit provider.
+    /// Create an executor backed by `provider` with no-op audit and the built-in
+    /// synchronous dialog resolver.
     pub fn new(provider: impl ModelProvider + 'static) -> Self {
         Executor {
             provider: Box::new(provider),
             audit: Box::new(NoopAuditProvider),
+            dialog: Box::new(DefaultDialogProvider),
         }
     }
 
@@ -342,6 +416,29 @@ impl Executor {
         Executor {
             provider: Box::new(provider),
             audit: Box::new(audit),
+            dialog: Box::new(DefaultDialogProvider),
+        }
+    }
+
+    /// Create an executor with the built-in model/audit and a custom
+    /// [`DialogProvider`].
+    pub fn with_dialog(dialog: impl DialogProvider + 'static) -> Self {
+        Executor {
+            provider: Box::new(StubProvider),
+            audit: Box::new(NoopAuditProvider),
+            dialog: Box::new(dialog),
+        }
+    }
+
+    /// Create an executor with a custom [`DialogProvider`] and audit provider.
+    pub fn with_dialog_and_audit(
+        dialog: impl DialogProvider + 'static,
+        audit: impl AuditProvider + 'static,
+    ) -> Self {
+        Executor {
+            provider: Box::new(StubProvider),
+            audit: Box::new(audit),
+            dialog: Box::new(dialog),
         }
     }
 
@@ -430,23 +527,33 @@ impl Executor {
 
         // Boot step 6: execute @steps.
         let mut abort = false;
+        let mut paused = false;
         for step in &ast.steps {
-            if matches!(self.execute_step(&mut ctx, step), Some(Signal::Break)) {
-                abort = true;
-                break;
+            match self.execute_step(&mut ctx, step) {
+                Some(Signal::Break) => {
+                    abort = true;
+                    break;
+                }
+                Some(Signal::Pause) => {
+                    paused = true;
+                    break;
+                }
+                _ => {}
             }
         }
 
         // Finalise.
         let out = ctx.get_var("out");
-        // Rule violations take precedence over the abort flag because they
-        // represent a protocol-level failure, not a user-initiated !BREAK.
+        // Rule violations take precedence (protocol-level failure); a pause is a
+        // clean suspension and outranks abort/partial so the host sees Paused.
         let status = if ctx
             .errors
             .iter()
             .any(|e| e.code == vocab::error_code::RULE_VIOLATION)
         {
             Status::Failed
+        } else if paused {
+            Status::Paused
         } else if abort {
             Status::Aborted
         } else if !ctx.errors.is_empty() {
@@ -455,8 +562,18 @@ impl Executor {
             Status::Ok
         };
 
+        let resume = if paused {
+            Some(ResumeDescriptor {
+                workflow: workflow_id.clone(),
+                vars: ctx.variables.clone(),
+                step_index: ctx.paused_at.unwrap_or(0),
+            })
+        } else {
+            None
+        };
+
         let run_status = match status {
-            Status::Ok | Status::Partial => RunStatus::Ok,
+            Status::Ok | Status::Partial | Status::Paused => RunStatus::Ok,
             Status::Failed | Status::Aborted => RunStatus::ConstraintHalt,
         };
         self.audit.run_complete(RunManifest {
@@ -479,6 +596,7 @@ impl Executor {
             errors: ctx.errors,
             flags: ctx.flags,
             vars: ctx.variables,
+            resume,
         }
     }
 
@@ -633,6 +751,7 @@ impl Executor {
                 let sig = self.execute_node(ctx, child, step_num);
                 match sig {
                     Some(Signal::Break) => return Some(Signal::Break),
+                    Some(Signal::Pause) => return Some(Signal::Pause),
                     Some(Signal::Skip) => {
                         skip_rest = true;
                         break;
@@ -662,9 +781,10 @@ impl Executor {
             });
             ctx.event_count += 1;
             for child in &ul.body {
-                let sig = self.execute_node(ctx, child, step_num);
-                if matches!(sig, Some(Signal::Break)) {
-                    return Some(Signal::Break);
+                match self.execute_node(ctx, child, step_num) {
+                    Some(Signal::Break) => return Some(Signal::Break),
+                    Some(Signal::Pause) => return Some(Signal::Pause),
+                    _ => {}
                 }
             }
             if Self::evaluate_condition(ctx, &ul.condition) {
@@ -839,6 +959,12 @@ impl Executor {
             return Some(Signal::Break);
         }
 
+        // Dialog commands resolve through the DialogProvider and may suspend the
+        // run, so they bypass the standard value-returning dispatch.
+        if cmd.name == "ASK" || cmd.name == "CONFIRM" {
+            return self.handle_dialog(ctx, cmd, step_num);
+        }
+
         let input_vars: Vec<String> = ctx.variables.keys().cloned().collect();
         let step_start = Instant::now();
         self.audit.record_event(ExecutionEvent::StepStart {
@@ -871,6 +997,95 @@ impl Executor {
         }
 
         None
+    }
+
+    /// Resolve an `ASK` / `CONFIRM` step through the [`DialogProvider`].
+    ///
+    /// `Answer` binds the typed value to the pipeline target; `Pause` suspends
+    /// the run (`Status::Paused`) without executing later steps; `Timeout` /
+    /// `Rejected` push the matching runtime error. Dialog events carry only a
+    /// length descriptor — never the raw prompt or answer (DG-7).
+    fn handle_dialog(
+        &self,
+        ctx: &mut ExecutionContext,
+        cmd: &CommandCall,
+        step_num: u32,
+    ) -> Option<Signal> {
+        let input_vars: Vec<String> = ctx.variables.keys().cloned().collect();
+        self.audit.record_event(ExecutionEvent::StepStart {
+            step_index: step_num,
+            step_command: cmd.name.clone(),
+            input_vars,
+        });
+        ctx.event_count += 1;
+
+        let prompt = cmd
+            .args
+            .first()
+            .map(|a| {
+                if a.starts_with('$') {
+                    ctx.get_var(a).as_text()
+                } else {
+                    a.clone()
+                }
+            })
+            .unwrap_or_default();
+
+        // DG-7: emit only a length descriptor, never the raw prompt text.
+        self.audit.record_event(ExecutionEvent::ModelCall {
+            step_index: step_num,
+            command: cmd.name.clone(),
+            input_summary: FieldDescriptor::text(prompt.len() as u32),
+        });
+        ctx.event_count += 1;
+
+        let outcome = if cmd.name == "ASK" {
+            self.dialog.ask(&prompt, &cmd.modifiers)
+        } else {
+            self.dialog.confirm(&prompt, &cmd.modifiers)
+        };
+
+        let signal = match outcome {
+            DialogOutcome::Answer(value) => {
+                ctx.log_step(step_num, &cmd.name, value.clone());
+                if let Some(target) = &cmd.pipeline_target {
+                    ctx.set_var(target, value);
+                }
+                None
+            }
+            DialogOutcome::Pause => {
+                ctx.paused_at = Some(step_num);
+                ctx.flags.push(vocab::error_code::PAUSED.to_string());
+                Some(Signal::Pause)
+            }
+            DialogOutcome::Timeout => {
+                ctx.errors.push(RuntimeError {
+                    code: vocab::error_code::DIALOG_TIMEOUT.to_string(),
+                    step: step_num,
+                    reason: format!("dialog '{}' timed out before an answer", cmd.name),
+                });
+                None
+            }
+            DialogOutcome::Rejected => {
+                ctx.errors.push(RuntimeError {
+                    code: vocab::error_code::DIALOG_REJECTED.to_string(),
+                    step: step_num,
+                    reason: format!("dialog '{}' was rejected", cmd.name),
+                });
+                None
+            }
+        };
+
+        let output_vars: Vec<String> = cmd.pipeline_target.iter().cloned().collect();
+        self.audit.record_event(ExecutionEvent::StepEnd {
+            step_index: step_num,
+            step_command: cmd.name.clone(),
+            output_vars,
+            elapsed_ms: 0,
+        });
+        ctx.event_count += 1;
+
+        signal
     }
 
     // ─── Command dispatch ─────────────────────────────────────────────────────
@@ -1196,6 +1411,18 @@ mod tests {
             let out = stub.generate("hello", &[("+tone".to_string(), "warm".to_string())]);
             assert!(out.contains("hello"), "prompt in output: {out}");
             assert!(out.contains("warm"), "tone in output: {out}");
+        }
+
+        #[test]
+        fn default_dialog_provider_resolves_default_or_pauses() {
+            let p = DefaultDialogProvider;
+            let with_default = vec![("+default".to_string(), "yes".to_string())];
+            assert_eq!(
+                p.ask("q", &with_default),
+                DialogOutcome::Answer(Value::Text("yes".to_string()))
+            );
+            assert_eq!(p.ask("q", &[]), DialogOutcome::Pause);
+            assert_eq!(p.confirm("c", &[]), DialogOutcome::Pause);
         }
 
         #[test]

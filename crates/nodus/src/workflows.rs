@@ -10,7 +10,7 @@
 use crate::Error;
 use crate::ast::{TestBlock, WorkflowFile};
 use crate::executor::{
-    Executor, ModelProvider, RunResult, RuntimeError, Status, StubProvider, Value,
+    DialogProvider, Executor, ModelProvider, RunResult, RuntimeError, Status, StubProvider, Value,
 };
 use crate::observability::AuditProvider;
 use crate::parser::Parser;
@@ -584,6 +584,67 @@ pub fn run_with_manifest_and_audit(
         .execute_with_params(&ast, input, run_id, started_at))
 }
 
+/// Parse, validate, and execute with a custom [`DialogProvider`].
+///
+/// `ASK`/`CONFIRM` steps resolve through `dialog`. A dialog that cannot resolve
+/// (no answer, no `+default`) suspends the run: the result carries
+/// `Status::Paused` and a `ResumeDescriptor`. Uses the built-in stub model.
+pub fn run_with_dialog(
+    source: &str,
+    filename: &str,
+    input: Option<Value>,
+    dialog: impl DialogProvider + 'static,
+) -> Result<RunResult, Vec<Diagnostic>> {
+    let ast = Parser::parse(source).map_err(|e| {
+        vec![Diagnostic {
+            severity: Severity::Error,
+            code: "PARSE_ERROR".to_string(),
+            message: e.to_string(),
+            line: 0,
+            column: 0,
+            filename: filename.to_string(),
+        }]
+    })?;
+
+    let report = ValidationReport::new(Validator::validate(&ast, filename));
+    if report.has_errors {
+        return Err(report.diagnostics);
+    }
+
+    Ok(Executor::with_dialog(dialog).execute(&ast, input))
+}
+
+/// Like [`run_with_dialog`] but with a custom [`AuditProvider`]. `run_id` and
+/// `started_at` are forwarded to the run manifest.
+pub fn run_with_dialog_and_audit(
+    source: &str,
+    filename: &str,
+    input: Option<Value>,
+    dialog: impl DialogProvider + 'static,
+    audit: impl AuditProvider + 'static,
+    run_id: &str,
+    started_at: &str,
+) -> Result<RunResult, Vec<Diagnostic>> {
+    let ast = Parser::parse(source).map_err(|e| {
+        vec![Diagnostic {
+            severity: Severity::Error,
+            code: "PARSE_ERROR".to_string(),
+            message: e.to_string(),
+            line: 0,
+            column: 0,
+            filename: filename.to_string(),
+        }]
+    })?;
+
+    let report = ValidationReport::new(Validator::validate(&ast, filename));
+    if report.has_errors {
+        return Err(report.diagnostics);
+    }
+
+    Ok(Executor::with_dialog_and_audit(dialog, audit)
+        .execute_with_params(&ast, input, run_id, started_at))
+}
+
 /// Build the fail-fast rejection result for an unsatisfiable manifest: status
 /// `Failed`, no steps logged, one `NODUS:CAPABILITY_UNMET` error naming each
 /// missing capability.
@@ -612,6 +673,7 @@ fn capability_rejection(ast: &WorkflowFile, missing: &[Missing]) -> RunResult {
         }],
         flags: Vec::new(),
         vars: HashMap::new(),
+        resume: None,
     }
 }
 

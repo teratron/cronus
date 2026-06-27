@@ -4,7 +4,7 @@
 <!-- Maximum 100 lines. Agent updates AFTER each completed action. -->
 
 **Workspace:** nodus
-**Updated:** 2026-06-27 12:23
+**Updated:** 2026-06-27 12:39
 **Phase:** 10 — HITL Dialog (l2-nodus-dialog)
 **Status:** Active
 
@@ -22,6 +22,8 @@ Overall: [6/6] ██████████ 100%
 
 ## Recent Decisions
 
+- 2026-06-27 **Decision:** Phase 10 complete. HITL dialog implemented in crates/nodus (ASK/CONFIRM, Status::Paused+ResumeDescriptor, DialogProvider+DefaultDialogProvider, ExtensionRole::Dialog, run_with_dialog); 237 tests pass (+9).
+
 - 2026-06-27 **Decision:** Phase 9 complete. Closed vocabulary registries implemented in crates/nodus (KNOWN_FLAGS/KNOWN_VALIDATORS/PRIMITIVE_TYPES + Schema queries + advisory W011/W012/W013); 228 tests pass (+6).
 
 - 2026-06-27 **Decision:** Phase 8 complete. 24-code error taxonomy implemented in crates/nodus/vocab.rs (ErrorSeverity/ErrorCategory enums, 14 new error_code constants, error_meta() registry, EXECUTION_FAILED deprecated, lockstep test); 222 tests pass (+5).
@@ -31,8 +33,6 @@ Overall: [6/6] ██████████ 100%
 - 2026-06-24 **Decision:** Phase 6 complete. Delivers: `ast.rs` TestBlock structured fields (input/expected/tags), `parser.rs` E015 + input/expected parsing, `workflows.rs` evaluate_test_block() + test()/test_with_tags() NT-1…NT-10, `validator.rs` W001/W002, `tests/testing.rs` (7 integration tests), l2-nodus-testing.md v1.0.0 (Stable). 204 tests pass. Phase 6 archived.
 
 - 2026-06-24 **Decision:** Phase 4 complete (reconciled). Delivers: `observability.rs` (AuditProvider trait, 10-variant ExecutionEvent enum, NoopAuditProvider, RunManifest, FieldDescriptor), executor.rs hook points for all 10 event types, `run_with_audit` + `run_with_provider_and_audit` public API, `tests/observability.rs` (observer_neutrality + API integration tests), l2-nodus-runtime.md v1.0.3 (spec sync). Phase 4 archived.
-
-- 2026-06-24 **Decision:** l2-nodus-observability.md v1.0.0 authored — observability implementation spec: AuditProvider trait + ExecutionEvent 10-variant enum + NoopAuditProvider + RunManifest + FieldDescriptor; executor hook-point map; run_with_audit + run_with_provider_and_audit API; 13-test plan. Promoted Stable.
 
 ## Blockers
 

@@ -15,8 +15,9 @@ pub const BUILTIN_SCHEMA_VERSION: &str = "0.4.6";
 
 /// Known command names (ALL_CAPS). The lexer tags an ALL_CAPS word as a
 /// `CommandName` only when it appears here; anything else lexes as a generic
-/// identifier. 51 commands total; `RUN` is the macro meta-command that
+/// identifier. 53 commands total; `RUN` is the macro meta-command that
 /// bypasses schema vocabulary checks and is recognized before the validation pass.
+/// `ASK` / `CONFIRM` are the human-in-the-loop dialog commands.
 pub const KNOWN_COMMANDS: &[&str] = &[
     "FETCH",
     "STORE",
@@ -69,6 +70,8 @@ pub const KNOWN_COMMANDS: &[&str] = &[
     "VERSION_BUMP",
     "GENERATE_DOC",
     "RUN",
+    "ASK",
+    "CONFIRM",
 ];
 
 /// Tone values accepted by the `+tone=` modifier and the `TONE` command.
@@ -720,5 +723,12 @@ mod tests {
         assert!(s.is_known_type("str"));
         assert!(s.is_known_type("any"));
         assert!(!s.is_known_type("widget"));
+    }
+
+    #[test]
+    fn ask_confirm_are_known_commands() {
+        let s = Schema::builtin();
+        assert!(s.is_command("ASK"), "ASK must be a known command");
+        assert!(s.is_command("CONFIRM"), "CONFIRM must be a known command");
     }
 }

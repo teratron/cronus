@@ -55,7 +55,10 @@ pub mod validator;
 pub mod workflows;
 
 pub use error::{Error, Result, Span};
-pub use executor::{Executor, ModelProvider, RunResult, Status, StubProvider, Value};
+pub use executor::{
+    DefaultDialogProvider, DialogOutcome, DialogProvider, Executor, ModelProvider,
+    ResumeDescriptor, RunResult, Status, StubProvider, Value,
+};
 pub use lexer::{Lexer, Token, TokenType};
 pub use observability::{
     AuditProvider, ExecutionEvent, FieldDescriptor, LoopType, NoopAuditProvider, RunManifest,
@@ -71,10 +74,10 @@ pub use transpiler::Transpiler;
 pub use validator::{Diagnostic, Severity, Validator};
 pub use vocab::Schema;
 pub use workflows::{
-    TestReport, TestResult, TranspileMode, ValidationReport, run, run_with_audit,
-    run_with_manifest, run_with_manifest_and_audit, run_with_provider, run_with_provider_and_audit,
-    run_with_schema, run_with_schema_and_audit, scaffold, test, test_with_tags, transpile,
-    validate,
+    TestReport, TestResult, TranspileMode, ValidationReport, run, run_with_audit, run_with_dialog,
+    run_with_dialog_and_audit, run_with_manifest, run_with_manifest_and_audit, run_with_provider,
+    run_with_provider_and_audit, run_with_schema, run_with_schema_and_audit, scaffold, test,
+    test_with_tags, transpile, validate,
 };
 
 #[cfg(test)]
