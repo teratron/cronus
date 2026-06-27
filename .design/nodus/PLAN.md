@@ -117,11 +117,19 @@ stub-level runner to an assertion-evaluating test facility (NT-1…NT-10).*
   - ✅ `l2-nodus-portability.md` §4.7 authored, §3 LP-8 row → Implemented; v1.0.0 → 1.1.0, RFC → Stable
   - ✅ 217 tests pass (was 204; +13); clippy clean; fmt clean; docs zero new warnings
 
-## Phase 8 — Error Taxonomy (l2-nodus-errors)
+## Phase 8 — Error Taxonomy (l2-nodus-errors) ✓
 
 *Implement the 24-code error taxonomy from `l1-nodus-language.md` §4.6 in `crates/nodus`, per `l2-nodus-errors.md`. Adds `ErrorSeverity`/`ErrorCategory` metadata types, the per-code severity×category registry with an `error_meta()` lookup, and the supersede of the catch-all `NODUS:EXECUTION_FAILED`. This is the foundational cluster of the upstream-parity gap: the control-flow, dialog, and operator clusters all reference codes defined here. Codes whose features are not yet built (e.g. `SWITCH_NO_MATCH`, `DIALOG_*`, `KB_UNAVAILABLE`) are defined ahead and wired to emission when their cluster lands. Atomic tasks in `tasks/phase-8.md`.*
 
-- [ ] **L2 Nodus Errors** ([l2-nodus-errors.md](specifications/l2-nodus-errors.md)) [L2] — `ErrorSeverity` (error/warn/info) + `ErrorCategory` (parse/runtime/validation/routing/memory/test/control/dialog) enums; 14 new `error_code` constants; static severity×category registry + `error_meta()` lookup; `EXECUTION_FAILED` deprecated + excluded from canonical set + existing generic emission sites reassigned to specific codes; validator/executor emission map; lockstep test (every constant ↔ metadata); NL-1/NL-2/NL-4/NL-9 preserved
+> **Status:** Complete — all tracks A/B/T delivered.
+
+- [x] **L2 Nodus Errors** ([l2-nodus-errors.md](specifications/l2-nodus-errors.md)) [L2]
+  - ✅ `vocab.rs`: `ErrorSeverity` (Error/Warn/Info) + `ErrorCategory` (Parse/Runtime/Validation/Routing/Memory/Test/Control/Dialog) enums
+  - ✅ 14 new `error_code` constants (UNDEFINED_CMD … DIALOG_REJECTED); `error_meta()` static severity×category registry (24 canonical + CAPABILITY_UNMET)
+  - ✅ `EXECUTION_FAILED` marked `#[deprecated]`, excluded from canonical registry (`error_meta` → `None`)
+  - ✅ No live catch-all emission sites existed; validation-category codes defined-ahead pending the validator↔runtime bridge
+  - ✅ Lockstep test (`error_registry_lockstep`) guards constant↔metadata sync; NL-1/2/4/9 preserved
+  - ✅ 222 tests pass (was 217; +5); clippy clean; fmt clean; docs zero new warnings; SDD §6 clean
 
 ## Backlog
 

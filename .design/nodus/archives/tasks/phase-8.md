@@ -1,13 +1,21 @@
 ---
 phase: 8
 name: "Error Taxonomy (l2-nodus-errors)"
-status: Todo
+status: Done
 subsystem: "crates/nodus"
 requires:
   - phase-7
-provides: []
-key_files: []
-patterns_established: []
+provides:
+  - ErrorSeverity + ErrorCategory metadata enums in vocab.rs
+  - 14 new error_code constants (UNDEFINED_CMD … DIALOG_REJECTED)
+  - error_meta() static severity×category registry (24 canonical codes + CAPABILITY_UNMET)
+  - EXECUTION_FAILED deprecated + excluded from the canonical registry
+  - error_registry_lockstep test guarding constant↔metadata sync
+key_files:
+  - crates/nodus/src/vocab.rs
+patterns_established:
+  - "Two-layer error model kept distinct: validator Diagnostic codes (E0xx/W0xx) vs runtime NODUS:* codes; this phase expands only the runtime taxonomy"
+  - "Defined-ahead codes: constants + metadata for not-yet-built features (dialog/control-flow/KB) ship now; emission sites land with their cluster, guarded by the lockstep test"
 duration_minutes: 0
 ---
 
@@ -33,16 +41,16 @@ lockstep test (Track T) checks metadata presence, not emission.
 
 Pure additions in `vocab.rs`. No behavior change to existing runs.
 
-- [ ] **T-8A01** — Add `ErrorSeverity` + `ErrorCategory` enums to `vocab.rs`
+- [x] **T-8A01** — Add `ErrorSeverity` + `ErrorCategory` enums to `vocab.rs`
   - `ErrorSeverity { Error, Warn, Info }`; `ErrorCategory { Parse, Runtime, Validation, Routing, Memory, Test, Control, Dialog }` (the §4.1 types)
   - Derive `Debug, Clone, Copy, PartialEq, Eq`
   - **Verify**: `cargo test -p nodus` — unit test `error_meta_types_construct` in `vocab.rs #[cfg(test)]` constructs each variant; `cargo check -p nodus` passes
 
-- [ ] **T-8A02** — Add the 14 new `error_code` constants
+- [x] **T-8A02** — Add the 14 new `error_code` constants
   - `UNDEFINED_CMD`, `UNDEFINED_MACRO`, `VALIDATION_FAILED`, `ESCALATION_FAILED`, `CONFIDENCE_LOW`, `KB_UNAVAILABLE`, `MEMORY_FAILED`, `TEST_FAILED`, `SWITCH_NO_MATCH`, `PAUSED`, `COUNTER_OVERFLOW`, `GIT_UNAVAILABLE`, `DIALOG_TIMEOUT`, `DIALOG_REJECTED` — each a `NODUS:*` string constant
   - **Verify**: unit test `new_error_codes_are_namespaced` in `vocab.rs #[cfg(test)]` asserts all 14 start with `"NODUS:"` and are pairwise distinct
 
-- [ ] **T-8A03** — Add the severity×category registry + `error_meta()` lookup
+- [x] **T-8A03** — Add the severity×category registry + `error_meta()` lookup
   - Static table mapping each canonical code → `(ErrorSeverity, ErrorCategory)` per `l2-nodus-errors.md` §4.2; `pub fn error_meta(code: &str) -> Option<(ErrorSeverity, ErrorCategory)>`
   - **Verify**: unit tests in `vocab.rs #[cfg(test)]` — `error_meta("NODUS:PARSE_ERROR") == Some((Error, Parse))`, `error_meta("NODUS:SWITCH_NO_MATCH") == Some((Warn, Control))`, `error_meta("NODUS:PAUSED") == Some((Info, Control))`
 
@@ -50,11 +58,11 @@ Pure additions in `vocab.rs`. No behavior change to existing runs.
 
 Retire the catch-all and route existing generic sites to specific codes.
 
-- [ ] **T-8B01** — Deprecate `EXECUTION_FAILED` and exclude it from the canonical registry
+- [x] **T-8B01** — Deprecate `EXECUTION_FAILED` and exclude it from the canonical registry
   - Mark the constant `#[deprecated(note = "...")]`; `error_meta` returns `None` for it (non-canonical legacy, §4.4)
   - **Verify**: unit test `execution_failed_is_non_canonical` asserts `error_meta("NODUS:EXECUTION_FAILED").is_none()`
 
-- [ ] **T-8B02** — Reassign existing generic emission sites to specific codes
+- [x] **T-8B02** — Reassign existing generic emission sites to specific codes
   - Where the executor/validator currently emit a generic/catch-all failure for a case covered by a specific code, switch to it (per §4.4 table) — e.g. an unknown dispatched command path to `UNDEFINED_CMD`, an undefined `RUN(@x)` macro to `UNDEFINED_MACRO`. Do **not** invent emission for features that do not exist yet (defined-ahead codes stay unemitted).
   - **Verify**: `cargo test -p nodus` — full suite green with no regressions; a targeted unit/integration test asserts the reassigned site now surfaces the specific code
 
@@ -62,18 +70,18 @@ Retire the catch-all and route existing generic sites to specific codes.
 
 Registry integrity guard, then quality gates.
 
-- [ ] **T-8T01** — Registry lockstep test
+- [x] **T-8T01** — Registry lockstep test
   - Assert every canonical `error_code` constant (the 24 + `CAPABILITY_UNMET`, excluding the deprecated `EXECUTION_FAILED`) has an `error_meta` row, and every metadata row names a real constant — the §4.3 guard that keeps constants and metadata in sync
   - **Verify**: `cargo test -p nodus error_registry_lockstep` passes
 
-- [ ] **T-8T02** — Quality gates
+- [x] **T-8T02** — Quality gates
   - `cargo clippy -p nodus --all-targets -- -D warnings` — zero lints (deprecation of `EXECUTION_FAILED` must not trip `-D warnings` at its own definition; gate internal uses with `#[allow(deprecated)]` where unavoidable)
   - `cargo fmt -p nodus` — clean; `cargo test -p nodus` — full suite green; `cargo doc -p nodus --no-deps` — no new warnings beyond the pre-existing `test`-fn baseline
   - **Verify**: all four commands exit 0; new-warning count is zero
 
 ## Status
 
-**Status:** Todo
+**Status:** Done
 
 ## Notes
 

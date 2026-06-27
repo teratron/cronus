@@ -43,7 +43,7 @@ Tactical registry of all phases. Atomic checklists live in `tasks/phase-{N}.md`.
 
 | Phase | Description | Status |
 | --- | --- | --- |
-| [Phase 8](tasks/phase-8.md) | Error Taxonomy (l2-nodus-errors): vocab.rs ErrorSeverity/ErrorCategory enums + 14 new error_code constants + severity×category registry + error_meta() lookup; EXECUTION_FAILED deprecated + site reassignment; validator/executor emission; lockstep test | `Todo` |
+| [Phase 8](archives/tasks/phase-8.md) | Error Taxonomy (l2-nodus-errors): vocab.rs ErrorSeverity/ErrorCategory enums + 14 new error_code constants + severity×category registry + error_meta() lookup; EXECUTION_FAILED deprecated + site reassignment; validator/executor emission; lockstep test | `Done (Archived)` |
 
 ## Meta Information
 

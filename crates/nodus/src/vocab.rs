@@ -147,6 +147,11 @@ pub mod error_code {
     /// A `~UNTIL` loop hit its `MAX:n` limit.
     pub const MAX_REACHED: &str = "NODUS:MAX_REACHED";
     /// A step failed at run time.
+    ///
+    /// Non-canonical catch-all, superseded by the specific codes below.
+    /// Retained for backward-compatible string matches; new emission sites
+    /// must select a specific code instead of this generic one.
+    #[deprecated(note = "non-canonical catch-all; use a specific NODUS:* code")]
     pub const EXECUTION_FAILED: &str = "NODUS:EXECUTION_FAILED";
     /// A variable was referenced before assignment.
     pub const UNDEFINED_VAR: &str = "NODUS:UNDEFINED_VAR";
@@ -164,6 +169,115 @@ pub mod error_code {
     pub const UNHANDLED_ERROR: &str = "NODUS:UNHANDLED_ERROR";
     /// A workflow's capability manifest is unsatisfiable by the active host (LP-8).
     pub const CAPABILITY_UNMET: &str = "NODUS:CAPABILITY_UNMET";
+
+    // ── Taxonomy expansion (schema v0.4.6 → v0.7). Severity/category metadata
+    //    for each code lives in `super::error_meta`.
+
+    /// A dispatched command is absent from the schema vocabulary.
+    pub const UNDEFINED_CMD: &str = "NODUS:UNDEFINED_CMD";
+    /// `RUN(@x)` referenced a macro that is not defined.
+    pub const UNDEFINED_MACRO: &str = "NODUS:UNDEFINED_MACRO";
+    /// A `^validator` rule failed against a step result.
+    pub const VALIDATION_FAILED: &str = "NODUS:VALIDATION_FAILED";
+    /// An `ESCALATE` target could not be reached.
+    pub const ESCALATION_FAILED: &str = "NODUS:ESCALATION_FAILED";
+    /// A model result fell below the required confidence threshold.
+    pub const CONFIDENCE_LOW: &str = "NODUS:CONFIDENCE_LOW";
+    /// A `QUERY_KB` knowledge-base backend was unavailable.
+    pub const KB_UNAVAILABLE: &str = "NODUS:KB_UNAVAILABLE";
+    /// A `REMEMBER` / `RECALL` memory operation failed.
+    pub const MEMORY_FAILED: &str = "NODUS:MEMORY_FAILED";
+    /// A `@test:` assertion failed.
+    pub const TEST_FAILED: &str = "NODUS:TEST_FAILED";
+    /// A `?SWITCH` matched no arm and declared no `*` default.
+    pub const SWITCH_NO_MATCH: &str = "NODUS:SWITCH_NO_MATCH";
+    /// The run is suspended awaiting human re-trigger (`!PAUSE` / dialog).
+    pub const PAUSED: &str = "NODUS:PAUSED";
+    /// A `COUNTER` exceeded its declared bound.
+    pub const COUNTER_OVERFLOW: &str = "NODUS:COUNTER_OVERFLOW";
+    /// A `GIT` / `QUERY_GIT` backend was unavailable.
+    pub const GIT_UNAVAILABLE: &str = "NODUS:GIT_UNAVAILABLE";
+    /// A dialog `+timeout` elapsed before an answer was supplied.
+    pub const DIALOG_TIMEOUT: &str = "NODUS:DIALOG_TIMEOUT";
+    /// A `CONFIRM` was rejected under `+strict`.
+    pub const DIALOG_REJECTED: &str = "NODUS:DIALOG_REJECTED";
+}
+
+/// Severity of a runtime error code.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum ErrorSeverity {
+    /// Fatal — the code marks a failure.
+    Error,
+    /// Advisory — execution may continue.
+    Warn,
+    /// Informational — not a failure.
+    Info,
+}
+
+/// Category of a runtime error code.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum ErrorCategory {
+    /// Source failed to tokenize/parse.
+    Parse,
+    /// A failure during step execution.
+    Runtime,
+    /// A pre-run validation failure.
+    Validation,
+    /// A routing / escalation failure.
+    Routing,
+    /// A knowledge-base / memory failure.
+    Memory,
+    /// A `@test:` failure.
+    Test,
+    /// A control-construct outcome (loops, switch, pause).
+    Control,
+    /// A human-in-the-loop dialog outcome.
+    Dialog,
+}
+
+/// Return the `(severity, category)` metadata for a canonical `NODUS:*` code.
+///
+/// Returns `None` for a non-canonical code — including the deprecated
+/// catch-all [`error_code::EXECUTION_FAILED`] — which lets callers detect
+/// non-canonical usage.
+pub fn error_meta(code: &str) -> Option<(ErrorSeverity, ErrorCategory)> {
+    use ErrorCategory::*;
+    use ErrorSeverity::*;
+    use error_code as ec;
+
+    let meta = match code {
+        // Original codes (the catch-all EXECUTION_FAILED is excluded — superseded).
+        ec::RULE_VIOLATION => (Error, Runtime),
+        ec::PARSE_ERROR => (Error, Parse),
+        ec::MAX_REACHED => (Warn, Control),
+        ec::UNDEFINED_VAR => (Error, Runtime),
+        ec::ROUTE_NOT_FOUND => (Error, Routing),
+        ec::RULE_CONFLICT => (Error, Validation),
+        ec::SCHEMA_MISMATCH => (Error, Validation),
+        ec::NO_SCHEMA => (Error, Validation),
+        ec::NO_TRIGGER => (Warn, Routing),
+        ec::UNHANDLED_ERROR => (Error, Runtime),
+        // Portability-layer code (LP-8).
+        ec::CAPABILITY_UNMET => (Error, Control),
+        // Taxonomy expansion (v0.4.6 → v0.7).
+        ec::UNDEFINED_CMD => (Error, Validation),
+        ec::UNDEFINED_MACRO => (Error, Validation),
+        ec::VALIDATION_FAILED => (Error, Validation),
+        ec::ESCALATION_FAILED => (Error, Routing),
+        ec::CONFIDENCE_LOW => (Warn, Runtime),
+        ec::KB_UNAVAILABLE => (Error, Memory),
+        ec::MEMORY_FAILED => (Error, Memory),
+        ec::TEST_FAILED => (Error, Test),
+        ec::SWITCH_NO_MATCH => (Warn, Control),
+        ec::PAUSED => (Info, Control),
+        ec::COUNTER_OVERFLOW => (Error, Runtime),
+        ec::GIT_UNAVAILABLE => (Error, Runtime),
+        ec::DIALOG_TIMEOUT => (Error, Dialog),
+        ec::DIALOG_REJECTED => (Error, Dialog),
+        // Non-canonical (incl. deprecated EXECUTION_FAILED) → no metadata.
+        _ => return None,
+    };
+    Some(meta)
 }
 
 /// Is `name` a known command?
@@ -406,5 +520,112 @@ mod tests {
             schema.host_commands().is_empty(),
             "deduplicated GEN must not appear in host list"
         );
+    }
+
+    // ── Error taxonomy ──────────────────────────────────────────────────────
+
+    #[test]
+    fn error_meta_types_construct() {
+        assert_ne!(ErrorSeverity::Error, ErrorSeverity::Warn);
+        assert_ne!(ErrorSeverity::Warn, ErrorSeverity::Info);
+        assert_ne!(ErrorCategory::Parse, ErrorCategory::Dialog);
+        let _ = (ErrorSeverity::Info, ErrorCategory::Control);
+    }
+
+    #[test]
+    fn new_error_codes_are_namespaced() {
+        use error_code::*;
+        let new = [
+            UNDEFINED_CMD,
+            UNDEFINED_MACRO,
+            VALIDATION_FAILED,
+            ESCALATION_FAILED,
+            CONFIDENCE_LOW,
+            KB_UNAVAILABLE,
+            MEMORY_FAILED,
+            TEST_FAILED,
+            SWITCH_NO_MATCH,
+            PAUSED,
+            COUNTER_OVERFLOW,
+            GIT_UNAVAILABLE,
+            DIALOG_TIMEOUT,
+            DIALOG_REJECTED,
+        ];
+        assert_eq!(new.len(), 14);
+        for c in new {
+            assert!(c.starts_with("NODUS:"), "{c} must be NODUS:-namespaced");
+        }
+        let mut sorted = new.to_vec();
+        sorted.sort_unstable();
+        sorted.dedup();
+        assert_eq!(sorted.len(), 14, "the 14 new codes must be distinct");
+    }
+
+    #[test]
+    fn error_meta_maps_known_codes() {
+        assert_eq!(
+            error_meta(error_code::PARSE_ERROR),
+            Some((ErrorSeverity::Error, ErrorCategory::Parse))
+        );
+        assert_eq!(
+            error_meta(error_code::SWITCH_NO_MATCH),
+            Some((ErrorSeverity::Warn, ErrorCategory::Control))
+        );
+        assert_eq!(
+            error_meta(error_code::PAUSED),
+            Some((ErrorSeverity::Info, ErrorCategory::Control))
+        );
+        assert_eq!(
+            error_meta(error_code::DIALOG_TIMEOUT),
+            Some((ErrorSeverity::Error, ErrorCategory::Dialog))
+        );
+    }
+
+    #[test]
+    #[allow(deprecated)]
+    fn execution_failed_is_non_canonical() {
+        assert!(error_meta(error_code::EXECUTION_FAILED).is_none());
+        assert!(error_meta("NODUS:NOT_A_REAL_CODE").is_none());
+    }
+
+    #[test]
+    fn error_registry_lockstep() {
+        use error_code::*;
+        // Every canonical code (24 language codes + CAPABILITY_UNMET; the
+        // deprecated EXECUTION_FAILED excluded) must carry metadata.
+        let canonical = [
+            RULE_VIOLATION,
+            PARSE_ERROR,
+            MAX_REACHED,
+            UNDEFINED_VAR,
+            ROUTE_NOT_FOUND,
+            RULE_CONFLICT,
+            SCHEMA_MISMATCH,
+            NO_SCHEMA,
+            NO_TRIGGER,
+            UNHANDLED_ERROR,
+            CAPABILITY_UNMET,
+            UNDEFINED_CMD,
+            UNDEFINED_MACRO,
+            VALIDATION_FAILED,
+            ESCALATION_FAILED,
+            CONFIDENCE_LOW,
+            KB_UNAVAILABLE,
+            MEMORY_FAILED,
+            TEST_FAILED,
+            SWITCH_NO_MATCH,
+            PAUSED,
+            COUNTER_OVERFLOW,
+            GIT_UNAVAILABLE,
+            DIALOG_TIMEOUT,
+            DIALOG_REJECTED,
+        ];
+        assert_eq!(canonical.len(), 25, "24 language codes + CAPABILITY_UNMET");
+        for code in canonical {
+            assert!(
+                error_meta(code).is_some(),
+                "canonical code {code} is missing metadata"
+            );
+        }
     }
 }
