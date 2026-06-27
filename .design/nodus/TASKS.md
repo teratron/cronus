@@ -1,8 +1,8 @@
 # Master Task Index (Registry)
 
-**Version:** 2.1.1
+**Version:** 2.2.0
 **Generated:** 2026-06-24
-**Based on:** .design/nodus/PLAN.md v1.9.1
+**Based on:** .design/nodus/PLAN.md v1.10.0
 **Based on RULES:** .design/RULES.md v1.4.0
 **Execution Mode:** Sequential
 **Status:** Active
@@ -39,6 +39,12 @@ Tactical registry of all phases. Atomic checklists live in `tasks/phase-{N}.md`.
 | --- | --- | --- |
 | [Phase 7](archives/tasks/phase-7.md) | Capability Manifest (LP-8): portability.rs (CapabilityManifest + ExtensionRole + HostCapabilities), validate_manifest() fail-fast gate wired into executor boot, NODUS:* capability-rejection diagnostic, AST-derived role manifest, run_with_manifest API, LP-3 two-host + pre-run purity tests, l2-nodus-portability.md §4.7 + RFC → Stable | `Done (Archived)` |
 
+## Active Phases (continued)
+
+| Phase | Description | Status |
+| --- | --- | --- |
+| [Phase 8](tasks/phase-8.md) | Error Taxonomy (l2-nodus-errors): vocab.rs ErrorSeverity/ErrorCategory enums + 14 new error_code constants + severity×category registry + error_meta() lookup; EXECUTION_FAILED deprecated + site reassignment; validator/executor emission; lockstep test | `Todo` |
+
 ## Meta Information
 
 - **Last Updated**: 2026-06-27
@@ -47,5 +53,6 @@ Tactical registry of all phases. Atomic checklists live in `tasks/phase-{N}.md`.
 - **Phase 5 Complete**: 2026-06-24 (7 tasks, tracks A/B/C/T; all archived)
 - **Phase 6 Complete**: 2026-06-24 (9 tasks, tracks A/B/C/T; all archived; 204 tests pass)
 - **Phase 7 Complete**: 2026-06-27 (9 tasks, tracks A/B/C/T/D; all archived; l2-nodus-portability v1.1.0 Stable via LP-8; 217 tests pass)
-- **All active phases complete**: no Todo tasks; future work (upstream parity v0.4.6→v0.7, Storage/Policy executor integration) held in PLAN.md Backlog pending `/magic.spec` design
+- **Phase 8 Planned**: 2026-06-27 (tracks A/B/T; implements l2-nodus-errors — 24-code taxonomy + severity/category metadata; foundational parity-gap cluster)
+- **Backlog**: l1-nodus-dialog (Draft, pending TBD review); remaining parity clusters (control-flow, operators, @needs, @ON priority, closed registries); Storage/Policy executor integration (LP-3)
 - **Maintainer**: Core Team

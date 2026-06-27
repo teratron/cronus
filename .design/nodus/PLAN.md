@@ -1,8 +1,8 @@
 # Implementation Plan
 
-**Version:** 1.9.1
+**Version:** 1.10.0
 **Generated:** 2026-06-24
-**Based on:** .design/nodus/INDEX.md v1.0.13
+**Based on:** .design/nodus/INDEX.md v1.0.15
 **Status:** Active
 
 ## Overview
@@ -117,8 +117,15 @@ stub-level runner to an assertion-evaluating test facility (NT-1…NT-10).*
   - ✅ `l2-nodus-portability.md` §4.7 authored, §3 LP-8 row → Implemented; v1.0.0 → 1.1.0, RFC → Stable
   - ✅ 217 tests pass (was 204; +13); clippy clean; fmt clean; docs zero new warnings
 
+## Phase 8 — Error Taxonomy (l2-nodus-errors)
+
+*Implement the 24-code error taxonomy from `l1-nodus-language.md` §4.6 in `crates/nodus`, per `l2-nodus-errors.md`. Adds `ErrorSeverity`/`ErrorCategory` metadata types, the per-code severity×category registry with an `error_meta()` lookup, and the supersede of the catch-all `NODUS:EXECUTION_FAILED`. This is the foundational cluster of the upstream-parity gap: the control-flow, dialog, and operator clusters all reference codes defined here. Codes whose features are not yet built (e.g. `SWITCH_NO_MATCH`, `DIALOG_*`, `KB_UNAVAILABLE`) are defined ahead and wired to emission when their cluster lands. Atomic tasks in `tasks/phase-8.md`.*
+
+- [ ] **L2 Nodus Errors** ([l2-nodus-errors.md](specifications/l2-nodus-errors.md)) [L2] — `ErrorSeverity` (error/warn/info) + `ErrorCategory` (parse/runtime/validation/routing/memory/test/control/dialog) enums; 14 new `error_code` constants; static severity×category registry + `error_meta()` lookup; `EXECUTION_FAILED` deprecated + excluded from canonical set + existing generic emission sites reassigned to specific codes; validator/executor emission map; lockstep test (every constant ↔ metadata); NL-1/NL-2/NL-4/NL-9 preserved
+
 ## Backlog
 
-<!-- Upstream parity gap v0.4.6 → v0.7 (l1-nodus-language §4.6 / l2-nodus-runtime §4.7): control constructs (?SWITCH/~MAP/~RETRY/!HALT/!PAUSE), operators/expressions (MATCHES/?./??/WHERE/FIRST/LAST/string-interpolation), HITL dialog (ASK/CONFIRM), @needs selective schema loading, error taxonomy 11 → 24, @ON(priority=N), closed flag/validator/type registries. Each cluster needs focused L2 implementation-design authoring before it can be decomposed into atomic tasks — not plannable as-is. -->
+<!-- l1-nodus-dialog.md (Draft) — human-in-the-loop dialog contract (ASK/CONFIRM, Status::Paused lifecycle). Held in Backlog pending design review of 2 TBDs: paused-state representation, and whether the dialog backend is a distinct ExtensionRole::Dialog. Promote via /magic.spec once resolved, then plan. -->
+<!-- Upstream parity gap v0.4.6 → v0.7 (l1-nodus-language §4.6 / l2-nodus-runtime §4.7) — remaining clusters needing focused spec authoring before they can be planned: control constructs (?SWITCH/~MAP/~RETRY/!HALT/!PAUSE), operators/expressions (MATCHES/?./??/WHERE/FIRST/LAST/string-interpolation), @needs selective schema loading, @ON(priority=N), closed flag/validator/type registries. Addressed so far: error taxonomy 11 → 24 → Phase 8 (l2-nodus-errors, Stable); HITL dialog (ASK/CONFIRM) → l1-nodus-dialog Draft (above). -->
 <!-- StorageProvider/PolicyProvider executor integration deferred pending LP-3 satisfied (interfaces present in portability.rs; hook points + run_with_storage/run_with_policy variants pending the second documented host context). -->
 <!-- Future: l2-nodus-transpiler.md — dedicated transpiler L2 spec (currently covered by l2-nodus-runtime.md §4). -->

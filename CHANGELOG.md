@@ -88,3 +88,4 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Updated task plan and task index (nodus)
 - Completed task `phase-7` (nodus)
 - Added specification `nodus-dialog` (nodus)
+- Added specification `nodus-errors` (nodus)
