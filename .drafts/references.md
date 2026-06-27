@@ -61,6 +61,8 @@
 ### Harness
 
 - <https://gitverse.ru/gigachain/gigachain>
+- <https://github.com/harness/harness>
+- <https://github.com/china-qijizhifeng/agentic-harness-engineering>
 
 ## UI/UX
 
