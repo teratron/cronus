@@ -102,11 +102,20 @@ stub-level runner to an assertion-evaluating test facility (NT-1…NT-10).*
   - ✅ `l2-nodus-testing.md` v1.0.0 authored; NT-1…NT-10 compliance table; registered in INDEX.md
   - ✅ Quality gates: 204 tests pass (target 175+ met); clippy clean; fmt clean; docs zero new warnings
 
-## Phase 7 — Capability Manifest (LP-8)
+## Phase 7 — Capability Manifest (LP-8) ✓
 
 *Implement the LP-8 capability manifest + pre-run satisfiability validation (fail-fast) from `l1-nodus-portability.md` §4.6 in `crates/nodus`. A workflow declares the extension-point roles / host commands / named capabilities it needs; the runtime validates that declaration against the active host before the first step runs and rejects fail-fast with the missing-capability set, never starting a partially-capable run. The same manifest is the machine-checkable two-host portability contract (LP-3). Completing this phase restabilizes `l2-nodus-portability` (RFC → Stable, C12.1 Stabilization Exception). Atomic tasks in `tasks/phase-7.md`.*
 
-- [ ] **L2 Nodus Portability** ([l2-nodus-portability.md](specifications/l2-nodus-portability.md)) [L2] — LP-8 implementation: `CapabilityManifest` + `ExtensionRole` + `HostCapabilities` in `portability.rs`; `validate_manifest()` fail-fast gate wired into executor boot before step 1; `NODUS:*` capability-rejection diagnostic; AST-derived required-role manifest; `run_with_manifest` API; LP-3 two-host substitution + pre-run purity tests; §4.7 spec authored and §3 LP-8 row → Implemented; spec v1.0.0 → 1.1.0, RFC → Stable
+> **Status:** Complete — all tracks A/B/C/T/D delivered.
+
+- [x] **L2 Nodus Portability** ([l2-nodus-portability.md](specifications/l2-nodus-portability.md)) [L2]
+  - ✅ `portability.rs`: `ExtensionRole` enum, `CapabilityManifest` (roles/commands/capabilities), `HostCapabilities` (provides/has_command/satisfies + `builtin()`), `Missing` enum, pure `validate_manifest()` resolver
+  - ✅ `CapabilityManifest::from_workflow` derives required roles by walking the AST (model command → Model; non-builtin command → Vocabulary)
+  - ✅ `workflows.rs`: `run_with_manifest` + `run_with_manifest_and_audit` — fail-fast gate after lint validation, before executor boot; rejected runs emit no audit events
+  - ✅ `vocab.rs`: `NODUS:CAPABILITY_UNMET` diagnostic; `lib.rs` re-exports
+  - ✅ `tests/portability.rs`: LP-3 two-host substitution + pre-run purity (observer-neutrality) + gate rejection/acceptance
+  - ✅ `l2-nodus-portability.md` §4.7 authored, §3 LP-8 row → Implemented; v1.0.0 → 1.1.0, RFC → Stable
+  - ✅ 217 tests pass (was 204; +13); clippy clean; fmt clean; docs zero new warnings
 
 ## Backlog
 

@@ -6,8 +6,18 @@
 //! Each trait ships with a built-in no-op implementation that satisfies the
 //! interface without I/O, matching the LP-2 pattern established by
 //! [`crate::executor::StubProvider`] and [`crate::observability::NoopAuditProvider`].
+//!
+//! It also defines the LP-8 capability manifest ([`CapabilityManifest`]) and the
+//! pre-run satisfiability gate ([`validate_manifest`]): a workflow declares the
+//! extension roles, host commands, and named capabilities it needs, and the
+//! runtime rejects fail-fast — before any step runs — when the active host
+//! cannot satisfy them. The same manifest is the machine-checkable two-host
+//! portability contract (LP-3).
 
+use crate::ast::{Conditional, Stmt, WorkflowFile};
 use crate::executor::Value;
+use crate::vocab;
+use std::collections::BTreeSet;
 
 // ─── SchemaProvider ───────────────────────────────────────────────────────────
 
@@ -90,6 +100,263 @@ impl PolicyProvider for NoopPolicyProvider {
     }
 }
 
+// ─── Capability Manifest (LP-8) ──────────────────────────────────────────────
+
+/// Model-backed commands — those the executor dispatches to its
+/// [`crate::executor::ModelProvider`]. A workflow invoking any of them requires
+/// the [`ExtensionRole::Model`] role from its host.
+const MODEL_COMMANDS: &[&str] = &["GEN", "ANALYZE"];
+
+/// An LP-2 extension-point role a workflow may require from its host.
+///
+/// Roles name *capabilities*, never concrete host types (LP-1). They mirror the
+/// extension-point taxonomy: model inference, audit tracing, durable storage,
+/// policy evaluation, and host vocabulary extension.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
+pub enum ExtensionRole {
+    /// Model inference backend ([`crate::executor::ModelProvider`]).
+    Model,
+    /// Execution-event audit sink ([`crate::observability::AuditProvider`]).
+    Audit,
+    /// Durable cross-invocation storage ([`StorageProvider`]).
+    Storage,
+    /// Runtime policy evaluation ([`PolicyProvider`]).
+    Policy,
+    /// Host vocabulary extension ([`SchemaProvider`]).
+    Vocabulary,
+}
+
+/// What a workflow declares it needs from its host to execute (LP-8).
+///
+/// Expressed only in terms of the extension-point taxonomy ([`ExtensionRole`])
+/// and named schema capabilities — never a concrete host type (LP-1). An empty
+/// manifest is satisfied by any host, so manifest-free and model-only workflows
+/// stay runnable against the built-in in-process host without host wiring.
+#[derive(Debug, Clone, Default, PartialEq, Eq)]
+pub struct CapabilityManifest {
+    roles: BTreeSet<ExtensionRole>,
+    commands: BTreeSet<String>,
+    capabilities: BTreeSet<String>,
+}
+
+impl CapabilityManifest {
+    /// An empty manifest — satisfied by every host.
+    pub fn new() -> Self {
+        Self::default()
+    }
+
+    /// Require an extension-point role.
+    pub fn require_role(mut self, role: ExtensionRole) -> Self {
+        self.roles.insert(role);
+        self
+    }
+
+    /// Require a host-schema command by name.
+    pub fn require_command(mut self, command: impl Into<String>) -> Self {
+        self.commands.insert(command.into());
+        self
+    }
+
+    /// Require a named capability.
+    pub fn require_capability(mut self, capability: impl Into<String>) -> Self {
+        self.capabilities.insert(capability.into());
+        self
+    }
+
+    /// The required extension roles.
+    pub fn roles(&self) -> &BTreeSet<ExtensionRole> {
+        &self.roles
+    }
+
+    /// The required host-schema commands.
+    pub fn commands(&self) -> &BTreeSet<String> {
+        &self.commands
+    }
+
+    /// The required named capabilities.
+    pub fn capabilities(&self) -> &BTreeSet<String> {
+        &self.capabilities
+    }
+
+    /// Whether the manifest requires nothing (satisfied by any host).
+    pub fn is_empty(&self) -> bool {
+        self.roles.is_empty() && self.commands.is_empty() && self.capabilities.is_empty()
+    }
+
+    /// Derive the manifest a workflow requires by walking its AST.
+    ///
+    /// A model-backed command (`GEN`/`ANALYZE`) requires [`ExtensionRole::Model`].
+    /// A command outside the builtin vocabulary is a host-extension command: it
+    /// requires [`ExtensionRole::Vocabulary`] and is recorded as a required
+    /// command name. Builtin non-model commands need nothing — they are always
+    /// available. Explicit DSL declaration (an `@needs` section) is a later
+    /// refinement; this derives the manifest from invoked commands alone.
+    pub fn from_workflow(ast: &WorkflowFile) -> Self {
+        let mut commands = BTreeSet::new();
+        for step in &ast.steps {
+            if let Some(body) = &step.body {
+                collect_commands(body, &mut commands);
+            }
+            for sub in &step.sub_steps {
+                collect_commands(sub, &mut commands);
+            }
+        }
+
+        let mut manifest = Self::new();
+        for name in commands {
+            if MODEL_COMMANDS.contains(&name.as_str()) {
+                manifest.roles.insert(ExtensionRole::Model);
+            }
+            if !vocab::is_known_command(&name) {
+                manifest.roles.insert(ExtensionRole::Vocabulary);
+                manifest.commands.insert(name);
+            }
+        }
+        manifest
+    }
+}
+
+/// Collect every command name reachable from a statement, descending into
+/// conditionals, loops, and parallel branches.
+fn collect_commands(stmt: &Stmt, out: &mut BTreeSet<String>) {
+    match stmt {
+        Stmt::Command(cmd) => {
+            out.insert(cmd.name.clone());
+        }
+        Stmt::Conditional(cond) => collect_from_conditional(cond, out),
+        Stmt::ForLoop(fl) => {
+            for child in &fl.body {
+                collect_commands(child, out);
+            }
+        }
+        Stmt::UntilLoop(ul) => {
+            for child in &ul.body {
+                collect_commands(child, out);
+            }
+        }
+        Stmt::Parallel(pb) => {
+            for branch in &pb.branches {
+                collect_commands(branch, out);
+            }
+        }
+        Stmt::VarRef(_) | Stmt::Comment(_) => {}
+    }
+}
+
+/// Collect command names from a conditional chain: inline action, nested body,
+/// every `?ELIF` branch, and the trailing `?ELSE`.
+fn collect_from_conditional(cond: &Conditional, out: &mut BTreeSet<String>) {
+    if let Some(action) = &cond.action {
+        out.insert(action.name.clone());
+    }
+    for child in &cond.body {
+        collect_commands(child, out);
+    }
+    for elif in &cond.elif_branches {
+        collect_from_conditional(elif, out);
+    }
+    if let Some(else_branch) = &cond.else_branch {
+        collect_from_conditional(else_branch, out);
+    }
+}
+
+/// What a host actually provides — the resolution surface a manifest is checked
+/// against (LP-8). Hosts are built explicitly so the same struct serves both the
+/// built-in in-process configuration and host-substitution tests (LP-3).
+#[derive(Debug, Clone, Default, PartialEq, Eq)]
+pub struct HostCapabilities {
+    roles: BTreeSet<ExtensionRole>,
+    commands: BTreeSet<String>,
+    capabilities: BTreeSet<String>,
+}
+
+impl HostCapabilities {
+    /// A host that provides nothing.
+    pub fn new() -> Self {
+        Self::default()
+    }
+
+    /// The built-in in-process host: it provides [`ExtensionRole::Model`] (the
+    /// [`crate::executor::StubProvider`]), [`ExtensionRole::Audit`] (a sink is
+    /// always wired), and [`ExtensionRole::Vocabulary`] (the builtin schema). It
+    /// declares no host-extension commands and no named capabilities.
+    pub fn builtin() -> Self {
+        let mut host = Self::new();
+        host.roles.insert(ExtensionRole::Model);
+        host.roles.insert(ExtensionRole::Audit);
+        host.roles.insert(ExtensionRole::Vocabulary);
+        host
+    }
+
+    /// Declare that this host provides a role.
+    pub fn with_role(mut self, role: ExtensionRole) -> Self {
+        self.roles.insert(role);
+        self
+    }
+
+    /// Declare that this host provides a host-schema command.
+    pub fn with_command(mut self, command: impl Into<String>) -> Self {
+        self.commands.insert(command.into());
+        self
+    }
+
+    /// Declare that this host satisfies a named capability.
+    pub fn with_capability(mut self, capability: impl Into<String>) -> Self {
+        self.capabilities.insert(capability.into());
+        self
+    }
+
+    /// Does the host provide `role`?
+    pub fn provides(&self, role: ExtensionRole) -> bool {
+        self.roles.contains(&role)
+    }
+
+    /// Does the host provide the host-schema command `command`?
+    pub fn has_command(&self, command: &str) -> bool {
+        self.commands.contains(command)
+    }
+
+    /// Does the host satisfy the named capability `capability`?
+    pub fn satisfies(&self, capability: &str) -> bool {
+        self.capabilities.contains(capability)
+    }
+}
+
+/// A single capability a host failed to provide, named precisely for diagnostics.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum Missing {
+    /// An extension-point role the host does not provide.
+    Role(ExtensionRole),
+    /// A host-schema command the host does not provide.
+    Command(String),
+    /// A named capability the host does not satisfy.
+    Capability(String),
+}
+
+/// Resolve a manifest against a host: return every capability the host fails to
+/// provide (LP-8). An empty result means the manifest is fully satisfiable and
+/// the workflow may run; a non-empty result is the fail-fast rejection set. The
+/// order is stable (roles, then commands, then capabilities, each sorted).
+pub fn validate_manifest(manifest: &CapabilityManifest, host: &HostCapabilities) -> Vec<Missing> {
+    let mut missing = Vec::new();
+    for &role in &manifest.roles {
+        if !host.provides(role) {
+            missing.push(Missing::Role(role));
+        }
+    }
+    for command in &manifest.commands {
+        if !host.has_command(command) {
+            missing.push(Missing::Command(command.clone()));
+        }
+    }
+    for capability in &manifest.capabilities {
+        if !host.satisfies(capability) {
+            missing.push(Missing::Capability(capability.clone()));
+        }
+    }
+    missing
+}
+
 // ─── Tests ────────────────────────────────────────────────────────────────────
 
 #[cfg(test)]
@@ -124,5 +391,119 @@ mod tests {
     fn noop_policy_permits_all() {
         let p = NoopPolicyProvider;
         assert!(p.evaluate("any_gate", &Value::Null));
+    }
+
+    // ── LP-8 capability manifest ────────────────────────────────────────────
+
+    #[test]
+    fn manifest_default_is_empty() {
+        let m = CapabilityManifest::new();
+        assert!(m.is_empty());
+        assert!(m.roles().is_empty());
+        assert!(m.commands().is_empty());
+        assert!(m.capabilities().is_empty());
+    }
+
+    #[test]
+    fn host_caps_reports_wired_roles() {
+        let host = HostCapabilities::new().with_role(ExtensionRole::Model);
+        assert!(host.provides(ExtensionRole::Model));
+        assert!(!host.provides(ExtensionRole::Storage));
+    }
+
+    #[test]
+    fn builtin_host_provides_model_audit_vocabulary() {
+        let host = HostCapabilities::builtin();
+        assert!(host.provides(ExtensionRole::Model));
+        assert!(host.provides(ExtensionRole::Audit));
+        assert!(host.provides(ExtensionRole::Vocabulary));
+        assert!(!host.provides(ExtensionRole::Storage));
+        assert!(!host.provides(ExtensionRole::Policy));
+    }
+
+    #[test]
+    fn validate_manifest_satisfiable_empty() {
+        let manifest = CapabilityManifest::new().require_role(ExtensionRole::Model);
+        let host = HostCapabilities::builtin();
+        assert!(validate_manifest(&manifest, &host).is_empty());
+    }
+
+    #[test]
+    fn validate_manifest_reports_exact_missing() {
+        let manifest = CapabilityManifest::new().require_role(ExtensionRole::Storage);
+        let host = HostCapabilities::builtin(); // builtin host provides no Storage
+        let missing = validate_manifest(&manifest, &host);
+        assert_eq!(missing, vec![Missing::Role(ExtensionRole::Storage)]);
+    }
+
+    #[test]
+    fn validate_manifest_reports_missing_command_and_capability() {
+        let manifest = CapabilityManifest::new()
+            .require_command("HOST_CMD")
+            .require_capability("vision");
+        let host = HostCapabilities::builtin();
+        let missing = validate_manifest(&manifest, &host);
+        assert!(missing.contains(&Missing::Command("HOST_CMD".to_string())));
+        assert!(missing.contains(&Missing::Capability("vision".to_string())));
+    }
+
+    #[test]
+    fn manifest_from_model_workflow_requires_model() {
+        let src = "\
+§wf:m v1.0
+@in: { query }
+@out: $out
+@steps:
+  1. GEN($in.query) → $out
+";
+        let ast = crate::parser::Parser::parse(src).expect("parse");
+        let manifest = CapabilityManifest::from_workflow(&ast);
+        assert!(
+            manifest.roles().contains(&ExtensionRole::Model),
+            "GEN workflow must require the Model role: {manifest:?}"
+        );
+    }
+
+    #[test]
+    fn manifest_from_pure_workflow_is_empty() {
+        // LOG is a builtin, non-model command → no roles required.
+        let src = "\
+§wf:p v1.0
+@out: $out
+@steps:
+  1. LOG($out)
+";
+        let ast = crate::parser::Parser::parse(src).expect("parse");
+        let manifest = CapabilityManifest::from_workflow(&ast);
+        assert!(
+            manifest.is_empty(),
+            "pure builtin workflow needs nothing: {manifest:?}"
+        );
+    }
+
+    #[test]
+    fn manifest_from_host_command_requires_vocabulary() {
+        // A command outside the builtin vocabulary requires Vocabulary + the command.
+        // The host command is recognized only through schema-aware parsing.
+        struct HostSchema;
+        impl SchemaProvider for HostSchema {
+            fn host_commands(&self) -> &[&str] {
+                &["CUSTOM_CMD"]
+            }
+            fn host_reserved_variables(&self) -> &[&str] {
+                &[]
+            }
+        }
+        let schema = crate::vocab::Schema::with_provider(&HostSchema);
+        let src = "\
+§wf:h v1.0
+@out: $out
+@steps:
+  1. CUSTOM_CMD($out) → $out
+";
+        let ast = crate::parser::Parser::parse_with_schema(src, &schema).expect("parse");
+        let manifest = CapabilityManifest::from_workflow(&ast);
+        assert!(manifest.roles().contains(&ExtensionRole::Vocabulary));
+        assert!(manifest.commands().contains("CUSTOM_CMD"));
     }
 }

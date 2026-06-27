@@ -9,12 +9,17 @@
 
 use crate::Error;
 use crate::ast::{TestBlock, WorkflowFile};
-use crate::executor::{Executor, ModelProvider, RunResult, Status, StubProvider, Value};
+use crate::executor::{
+    Executor, ModelProvider, RunResult, RuntimeError, Status, StubProvider, Value,
+};
 use crate::observability::AuditProvider;
 use crate::parser::Parser;
-use crate::portability::SchemaProvider;
+use crate::portability::{
+    CapabilityManifest, HostCapabilities, Missing, SchemaProvider, validate_manifest,
+};
 use crate::transpiler::Transpiler;
 use crate::validator::{Diagnostic, Severity, Validator};
+use crate::vocab;
 use std::collections::HashMap;
 
 // ─── Types ────────────────────────────────────────────────────────────────────
@@ -491,6 +496,132 @@ pub fn run_with_schema_and_audit(
 
     Ok(Executor::with_audit(StubProvider, audit)
         .execute_with_params(&ast, input, run_id, started_at))
+}
+
+/// Parse, validate, check the capability manifest against `host`, then execute.
+///
+/// The manifest gate (LP-8) runs after lint validation but before the executor
+/// boots: if the host cannot satisfy every required role, command, and
+/// capability, the run is rejected fail-fast — no step executes — and the
+/// returned [`RunResult`] carries a `NODUS:CAPABILITY_UNMET` error naming the
+/// missing capabilities. A satisfiable manifest delegates to the built-in stub
+/// executor. This is the machine-checkable two-host portability contract (LP-3):
+/// a workflow is portable to a host exactly when that host satisfies its manifest.
+pub fn run_with_manifest(
+    source: &str,
+    filename: &str,
+    input: Option<Value>,
+    manifest: &CapabilityManifest,
+    host: &HostCapabilities,
+) -> Result<RunResult, Vec<Diagnostic>> {
+    let ast = Parser::parse(source).map_err(|e| {
+        vec![Diagnostic {
+            severity: Severity::Error,
+            code: "PARSE_ERROR".to_string(),
+            message: e.to_string(),
+            line: 0,
+            column: 0,
+            filename: filename.to_string(),
+        }]
+    })?;
+
+    let report = ValidationReport::new(Validator::validate(&ast, filename));
+    if report.has_errors {
+        return Err(report.diagnostics);
+    }
+
+    let missing = validate_manifest(manifest, host);
+    if !missing.is_empty() {
+        return Ok(capability_rejection(&ast, &missing));
+    }
+
+    Ok(Executor::with_stub().execute(&ast, input))
+}
+
+/// Like [`run_with_manifest`] but with a custom [`AuditProvider`].
+///
+/// On a rejected manifest the executor never boots, so the audit sink receives
+/// no events and no run-complete callback — preserving observer neutrality for
+/// runs that never start. `run_id` and `started_at` are forwarded to the run
+/// manifest on a satisfiable run.
+// Composes two orthogonal extension points (the capability gate: `manifest` +
+// `host`, and the audit sink: `audit` + `run_id` + `started_at`); each argument
+// is independent, matching the `run_with_*_and_audit` family. Grouping them
+// would obscure that orthogonality (LP-5).
+#[allow(clippy::too_many_arguments)]
+pub fn run_with_manifest_and_audit(
+    source: &str,
+    filename: &str,
+    input: Option<Value>,
+    manifest: &CapabilityManifest,
+    host: &HostCapabilities,
+    audit: impl AuditProvider + 'static,
+    run_id: &str,
+    started_at: &str,
+) -> Result<RunResult, Vec<Diagnostic>> {
+    let ast = Parser::parse(source).map_err(|e| {
+        vec![Diagnostic {
+            severity: Severity::Error,
+            code: "PARSE_ERROR".to_string(),
+            message: e.to_string(),
+            line: 0,
+            column: 0,
+            filename: filename.to_string(),
+        }]
+    })?;
+
+    let report = ValidationReport::new(Validator::validate(&ast, filename));
+    if report.has_errors {
+        return Err(report.diagnostics);
+    }
+
+    let missing = validate_manifest(manifest, host);
+    if !missing.is_empty() {
+        return Ok(capability_rejection(&ast, &missing));
+    }
+
+    Ok(Executor::with_audit(StubProvider, audit)
+        .execute_with_params(&ast, input, run_id, started_at))
+}
+
+/// Build the fail-fast rejection result for an unsatisfiable manifest: status
+/// `Failed`, no steps logged, one `NODUS:CAPABILITY_UNMET` error naming each
+/// missing capability.
+fn capability_rejection(ast: &WorkflowFile, missing: &[Missing]) -> RunResult {
+    let workflow = ast
+        .header
+        .as_ref()
+        .map(|h| format!("wf:{}", h.name))
+        .unwrap_or_default();
+
+    let names: Vec<String> = missing.iter().map(describe_missing).collect();
+    let reason = format!(
+        "unsatisfiable capability manifest: missing {}",
+        names.join(", ")
+    );
+
+    RunResult {
+        workflow,
+        status: Status::Failed,
+        out: Value::Null,
+        log: Vec::new(),
+        errors: vec![RuntimeError {
+            code: vocab::error_code::CAPABILITY_UNMET.to_string(),
+            step: 0,
+            reason,
+        }],
+        flags: Vec::new(),
+        vars: HashMap::new(),
+    }
+}
+
+/// Render a missing capability into a diagnostic fragment that names it.
+fn describe_missing(missing: &Missing) -> String {
+    match missing {
+        Missing::Role(role) => format!("role {role:?}"),
+        Missing::Command(command) => format!("command {command}"),
+        Missing::Capability(capability) => format!("capability {capability}"),
+    }
 }
 
 // ─── Tests ────────────────────────────────────────────────────────────────────

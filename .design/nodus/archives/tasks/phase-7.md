@@ -1,13 +1,28 @@
 ---
 phase: 7
 name: "Capability Manifest (LP-8)"
-status: Todo
+status: Done
 subsystem: "crates/nodus"
 requires:
   - phase-5
-provides: []
-key_files: []
-patterns_established: []
+provides:
+  - ExtensionRole enum + CapabilityManifest (roles/commands/capabilities) in portability.rs
+  - HostCapabilities resolution surface (provides/has_command/satisfies + builtin())
+  - Missing enum + pure validate_manifest() satisfiability resolver
+  - CapabilityManifest::from_workflow AST-derived required-role manifest
+  - run_with_manifest + run_with_manifest_and_audit fail-fast gate (workflows.rs)
+  - NODUS:CAPABILITY_UNMET diagnostic (vocab.rs)
+  - tests/portability.rs LP-8 coverage (LP-3 two-host substitution + observer-neutral rejection)
+  - l2-nodus-portability.md v1.1.0 (Stable) — §4.7 capability manifest design
+key_files:
+  - crates/nodus/src/portability.rs
+  - crates/nodus/src/workflows.rs
+  - crates/nodus/src/vocab.rs
+  - crates/nodus/src/lib.rs
+  - crates/nodus/tests/portability.rs
+patterns_established:
+  - "Capability gate as a pure resolver in the workflows layer (not executor core), consistent with the orthogonal run_with_* combinator family (LP-5)"
+  - "Fail-fast rejection built as a RunResult without invoking the executor, guaranteeing zero audit events for runs that never start (observer neutrality)"
 duration_minutes: 0
 ---
 
@@ -31,13 +46,13 @@ C12 quarantine under the Stabilization Exception.
 
 Pure additive types in `portability.rs`. No behavior change to existing runs.
 
-- [ ] **T-7A01** — Define `CapabilityManifest` + `ExtensionRole` in `portability.rs`
+- [x] **T-7A01** — Define `CapabilityManifest` + `ExtensionRole` in `portability.rs`
   - `ExtensionRole` enum: `Model`, `Audit`, `Storage`, `Policy`, `Vocabulary` (the §4.2 taxonomy)
   - `CapabilityManifest { roles: BTreeSet<ExtensionRole>, commands: BTreeSet<String>, capabilities: BTreeSet<String> }` mirroring the L1 §4.6 manifest shape; deterministic ordering for diagnostics
   - Provide an empty/`Default` manifest that any built-in host satisfies (manifest-free runs stay runnable)
   - **Verify**: `cargo test -p nodus` — unit test `manifest_default_is_empty` in `portability.rs #[cfg(test)]` asserts the default manifest carries no roles/commands/capabilities; `cargo check -p nodus` passes
 
-- [ ] **T-7A02** — Define the `HostCapabilities` resolution surface
+- [x] **T-7A02** — Define the `HostCapabilities` resolution surface
   - Aggregates what the active host provides: `provides(role: ExtensionRole) -> bool`, `has_command(cmd: &str) -> bool` (delegates to the active `Schema`), `satisfies(cap: &str) -> bool`
   - Construct from the wired providers (Model/Audit/Storage/Policy presence) plus the active `Schema` — no concrete host type named (LP-1)
   - Built-in in-process configuration reports `Model` available (StubProvider) and the builtin schema commands
@@ -47,13 +62,13 @@ Pure additive types in `portability.rs`. No behavior change to existing runs.
 
 The fail-fast gate and its wiring into the executor boot sequence. Highest-risk track.
 
-- [ ] **T-7B01** — Implement `validate_manifest(manifest, host) -> Vec<Missing>`
+- [x] **T-7B01** — Implement `validate_manifest(manifest, host) -> Vec<Missing>`
   - Port the L1 §4.6 algorithm: collect every unsatisfied role, command, and capability into a `missing` list (order-stable); empty list ⇒ satisfiable
   - `Missing` is a typed enum (`Role(ExtensionRole)` / `Command(String)` / `Capability(String)`) so diagnostics name the exact unmet item
   - Pure function, no side effects, no I/O
   - **Verify**: unit tests `validate_manifest_satisfiable_empty` and `validate_manifest_reports_exact_missing` in `portability.rs #[cfg(test)]` — a manifest requiring `Storage` against a storage-less host yields exactly `[Missing::Role(Storage)]`
 
-- [ ] **T-7B02** — Wire the fail-fast gate into executor boot + expose manifest-aware API
+- [x] **T-7B02** — Wire the fail-fast gate into executor boot + expose manifest-aware API
   - Run `validate_manifest` as a new step **before** the first workflow step in the executor boot sequence; on non-empty `missing`, reject before any step runs — no variable mutation, no execution events
   - Add a `NODUS:*` capability-rejection diagnostic in `error.rs` carrying the missing-capability set (extends the existing taxonomy; reuse an existing code only if one fits)
   - Add `run_with_manifest` (and a `_and_audit` combinator consistent with the existing orthogonal `run_with_*` family — LP-5) to `workflows.rs`; re-export from `lib.rs`
@@ -63,7 +78,7 @@ The fail-fast gate and its wiring into the executor boot sequence. Highest-risk 
 
 How a workflow's required roles are determined for validation. Depends on Track A types.
 
-- [ ] **T-7C01** — Derive a workflow's required-role manifest from its AST
+- [x] **T-7C01** — Derive a workflow's required-role manifest from its AST
   - Map invoked command kinds to `ExtensionRole` (e.g., a model-invoking command ⇒ `Model`) by walking the parsed step list; pure-computation workflows yield the empty manifest the built-in host satisfies
   - Scope guard: manifest is **inferred from the AST** in this phase; explicit DSL declaration (an `@needs` section) is deferred to the upstream-parity backlog — do not add grammar here
   - **Verify**: unit tests `manifest_from_model_workflow_requires_model` and `manifest_from_pure_workflow_is_empty` in `portability.rs #[cfg(test)]`
@@ -72,16 +87,16 @@ How a workflow's required roles are determined for validation. Depends on Track 
 
 Integration tests proving the LP-8 + LP-3 contract, then quality gates.
 
-- [ ] **T-7T01** — LP-3 two-host substitution integration test
+- [x] **T-7T01** — LP-3 two-host substitution integration test
   - Host A (provides every role the manifest needs) runs the workflow to completion; Host B (missing one capability) is rejected fail-fast with that capability named
   - Encodes the LP-3 reduction: portability ⇔ "does host B satisfy the same manifest host A satisfied?"
   - **Verify**: `cargo test -p nodus --test portability -- manifest_lp3_two_host_substitution` passes
 
-- [ ] **T-7T02** — Pre-run fail-fast purity test
+- [x] **T-7T02** — Pre-run fail-fast purity test
   - A rejected run emits **no** `ExecutionEvent` and mutates **no** variable — rejection precedes all side effects (ties to the observability observer-neutrality boundary)
   - **Verify**: `cargo test -p nodus --test portability -- manifest_rejects_before_side_effects` passes — audit sink recorded zero events on the rejected run
 
-- [ ] **T-7T03** — Quality gates
+- [x] **T-7T03** — Quality gates
   - `cargo clippy -p nodus --all-targets -- -D warnings` — zero lints
   - `cargo fmt -p nodus` — format clean
   - `cargo test -p nodus` — full suite green (existing 204 + new Phase 7 tests)
@@ -92,7 +107,7 @@ Integration tests proving the LP-8 + LP-3 contract, then quality gates.
 
 Document the realized Rust shape and return the L2 spec to Stable.
 
-- [ ] **T-7D01** — Author `l2-nodus-portability.md` §4.7 and restabilize
+- [x] **T-7D01** — Author `l2-nodus-portability.md` §4.7 and restabilize
   - Add §4.7 "Capability Manifest (Rust)": `CapabilityManifest`, `ExtensionRole`, `HostCapabilities`, `validate_manifest`, the boot-sequence hook point, and the rejection diagnostic — `[REFERENCE]` contracts only, no active code
   - Flip the §3 `LP-8` compliance row from Pending → Implemented with its enforcement mechanism
   - Version `1.0.0 → 1.1.0` (minor — new section); `Status: RFC → Stable`; append Document History row; sync `.design/nodus/INDEX.md` (status + version)
@@ -100,7 +115,7 @@ Document the realized Rust shape and return the L2 spec to Stable.
 
 ## Status
 
-**Status:** Todo
+**Status:** Done
 
 ## Notes
 

@@ -10,12 +10,15 @@
 
 use nodus::{
     executor::{Status, Value},
+    observability::{AuditProvider, ExecutionEvent, RunManifest},
     portability::{
-        BuiltinSchemaProvider, NoopPolicyProvider, NoopStorageProvider, PolicyProvider,
-        SchemaProvider, StorageProvider,
+        BuiltinSchemaProvider, CapabilityManifest, ExtensionRole, HostCapabilities,
+        NoopPolicyProvider, NoopStorageProvider, PolicyProvider, SchemaProvider, StorageProvider,
     },
     workflows,
 };
+use std::sync::Arc;
+use std::sync::atomic::{AtomicUsize, Ordering};
 
 // ─── Workflow fixture ─────────────────────────────────────────────────────────
 
@@ -124,4 +127,178 @@ fn noop_storage_and_policy_compile() {
     let bs = BuiltinSchemaProvider;
     assert!(bs.host_commands().is_empty());
     assert!(bs.host_reserved_variables().is_empty());
+}
+
+// ─── LP-8 capability manifest fixtures ───────────────────────────────────────
+
+const MANIFEST_WF: &str = r#"§wf:manifest_test v1.0
+§runtime: { core: schema.nodus }
+@in: { query }
+@out: $out
+@err: ESCALATE(human)
+@steps:
+  1. GEN($in.query) → $out
+  2. LOG($out)
+"#;
+
+/// Audit sink that counts every event and run-complete callback it receives.
+/// Used to prove a rejected run emits nothing (observer neutrality).
+struct CountingAudit {
+    events: Arc<AtomicUsize>,
+}
+
+impl AuditProvider for CountingAudit {
+    fn record_event(&self, _event: ExecutionEvent) {
+        self.events.fetch_add(1, Ordering::SeqCst);
+    }
+
+    fn run_complete(&self, _manifest: RunManifest) {
+        self.events.fetch_add(1, Ordering::SeqCst);
+    }
+}
+
+// ─── Pre-run fail-fast capability gate ───────────────────────────────────────
+
+#[test]
+fn run_with_manifest_rejects_unmet_capability() {
+    // A workflow needing Storage, run against the builtin host (no Storage), is
+    // rejected before any step executes.
+    let manifest = CapabilityManifest::new().require_role(ExtensionRole::Storage);
+    let host = HostCapabilities::builtin();
+
+    let result =
+        workflows::run_with_manifest(MANIFEST_WF, "manifest_test.nodus", None, &manifest, &host)
+            .expect("the manifest gate returns a RunResult, not a parse error");
+
+    assert_eq!(
+        result.status,
+        Status::Failed,
+        "an unsatisfiable manifest must fail the run"
+    );
+    assert!(
+        result.log.is_empty(),
+        "no step may execute on a rejected run; log: {:?}",
+        result.log
+    );
+    assert!(
+        result
+            .errors
+            .iter()
+            .any(|e| { e.code == "NODUS:CAPABILITY_UNMET" && e.reason.contains("Storage") }),
+        "rejection must name the missing Storage capability; errors: {:?}",
+        result.errors
+    );
+}
+
+#[test]
+fn run_with_manifest_runs_when_satisfiable() {
+    // A model-only workflow's derived manifest is satisfied by the builtin host.
+    let manifest = CapabilityManifest::from_workflow(
+        &nodus::parser::Parser::parse(MANIFEST_WF).expect("parse"),
+    );
+    let host = HostCapabilities::builtin();
+
+    let result =
+        workflows::run_with_manifest(MANIFEST_WF, "manifest_test.nodus", None, &manifest, &host)
+            .expect("run");
+
+    assert_eq!(
+        result.status,
+        Status::Ok,
+        "the builtin host satisfies a model-only manifest; errors: {:?}",
+        result.errors
+    );
+    assert!(
+        !result.log.is_empty(),
+        "steps must execute when satisfiable"
+    );
+}
+
+// ─── LP-3 two-host substitution ──────────────────────────────────────────────
+
+#[test]
+fn manifest_lp3_two_host_substitution() {
+    // The LP-3 reduction: portability ⇔ "does host B satisfy the same manifest
+    // host A satisfied?"
+    let manifest = CapabilityManifest::new().require_role(ExtensionRole::Storage);
+
+    // Host A provides Storage → satisfiable → runs to completion.
+    let host_a = HostCapabilities::builtin().with_role(ExtensionRole::Storage);
+    let result_a =
+        workflows::run_with_manifest(MANIFEST_WF, "manifest_test.nodus", None, &manifest, &host_a)
+            .expect("host A run");
+    assert_eq!(
+        result_a.status,
+        Status::Ok,
+        "host A satisfies the manifest; errors: {:?}",
+        result_a.errors
+    );
+
+    // Host B lacks Storage → the same manifest is unsatisfiable → rejected.
+    let host_b = HostCapabilities::builtin();
+    let result_b =
+        workflows::run_with_manifest(MANIFEST_WF, "manifest_test.nodus", None, &manifest, &host_b)
+            .expect("host B run");
+    assert_eq!(
+        result_b.status,
+        Status::Failed,
+        "host B does not satisfy the manifest"
+    );
+    assert!(
+        result_b.errors.iter().any(|e| e.reason.contains("Storage")),
+        "host B rejection must name Storage; errors: {:?}",
+        result_b.errors
+    );
+}
+
+// ─── Rejection precedes side effects (observer neutrality) ───────────────────
+
+#[test]
+fn manifest_rejects_before_side_effects() {
+    let manifest = CapabilityManifest::new().require_role(ExtensionRole::Storage);
+
+    // Rejected run: the audit sink must record nothing.
+    let host = HostCapabilities::builtin();
+    let counter = Arc::new(AtomicUsize::new(0));
+    let result = workflows::run_with_manifest_and_audit(
+        MANIFEST_WF,
+        "manifest_test.nodus",
+        None,
+        &manifest,
+        &host,
+        CountingAudit {
+            events: counter.clone(),
+        },
+        "run-rejected",
+        "2026-06-26T00:00:00Z",
+    )
+    .expect("audited manifest run");
+
+    assert_eq!(result.status, Status::Failed);
+    assert_eq!(
+        counter.load(Ordering::SeqCst),
+        0,
+        "a rejected run must emit no audit events (observer neutrality)"
+    );
+
+    // Control: a satisfiable audited run DOES emit events — proves the sink counts.
+    let host_ok = HostCapabilities::builtin().with_role(ExtensionRole::Storage);
+    let counter_ok = Arc::new(AtomicUsize::new(0));
+    let _ = workflows::run_with_manifest_and_audit(
+        MANIFEST_WF,
+        "manifest_test.nodus",
+        None,
+        &manifest,
+        &host_ok,
+        CountingAudit {
+            events: counter_ok.clone(),
+        },
+        "run-ok",
+        "2026-06-26T00:00:00Z",
+    )
+    .expect("audited ok run");
+    assert!(
+        counter_ok.load(Ordering::SeqCst) > 0,
+        "a real run must emit audit events"
+    );
 }

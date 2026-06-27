@@ -162,6 +162,8 @@ pub mod error_code {
     pub const NO_TRIGGER: &str = "NODUS:NO_TRIGGER";
     /// A step error reached no `@err:` handler.
     pub const UNHANDLED_ERROR: &str = "NODUS:UNHANDLED_ERROR";
+    /// A workflow's capability manifest is unsatisfiable by the active host (LP-8).
+    pub const CAPABILITY_UNMET: &str = "NODUS:CAPABILITY_UNMET";
 }
 
 /// Is `name` a known command?

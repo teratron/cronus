@@ -25,6 +25,7 @@
 - <https://github.com/Rai220/anima>
 - <https://github.com/msitarzewski/agency-agents>
 - <https://github.com/obra/superpowers>
+- <https://github.com/alookai/alook>
 
 ## Spec-Driven Development
 

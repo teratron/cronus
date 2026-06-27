@@ -37,7 +37,7 @@ Tactical registry of all phases. Atomic checklists live in `tasks/phase-{N}.md`.
 
 | Phase | Description | Status |
 | --- | --- | --- |
-| [Phase 7](tasks/phase-7.md) | Capability Manifest (LP-8): portability.rs (CapabilityManifest + ExtensionRole + HostCapabilities), validate_manifest() fail-fast gate wired into executor boot, NODUS:* capability-rejection diagnostic, AST-derived role manifest, run_with_manifest API, LP-3 two-host + pre-run purity tests, l2-nodus-portability.md §4.7 + RFC → Stable | `Todo` |
+| [Phase 7](archives/tasks/phase-7.md) | Capability Manifest (LP-8): portability.rs (CapabilityManifest + ExtensionRole + HostCapabilities), validate_manifest() fail-fast gate wired into executor boot, NODUS:* capability-rejection diagnostic, AST-derived role manifest, run_with_manifest API, LP-3 two-host + pre-run purity tests, l2-nodus-portability.md §4.7 + RFC → Stable | `Done (Archived)` |
 
 ## Meta Information
 

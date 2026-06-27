@@ -1,7 +1,7 @@
 # Nodus Portability Implementation (Rust)
 
-**Version:** 1.0.0
-**Status:** RFC
+**Version:** 1.1.0
+**Status:** Stable
 **Layer:** implementation
 **Implements:** l1-nodus-portability.md
 
@@ -64,7 +64,7 @@ Explicit mapping of every LP-invariant to its Rust enforcement mechanism:
 | LP-5 Composable extension | All extension points are independently composable: `run_with_provider`, `run_with_audit`, `run_with_provider_and_audit` accept each provider in orthogonal parameters. No global mutable state; no inheritance. Combinators are pure functions in `workflows.rs`. |
 | LP-6 Semantic versioning contract | Published via `crates/nodus/Cargo.toml` with `version = "{semver}"`. Breaking changes follow the notice protocol in `l1-nodus-portability.md §4.5`. CI enforces `cargo semver-checks` (planned; currently manual). `EXTRACTION.md` documents the release checklist. |
 | LP-7 Feedback loop lifecycle | Operationalised by the `/magic.spec nodus` → `/magic.task nodus` → `/magic.run nodus` pipeline. Discovery and distillation steps happen in `l1-nodus-portability.md §4.2`; spec amendment is the Proposal step; the run pipeline is Implementation; `CHANGELOG.md` + version bump is Release. |
-| LP-8 Capability manifest | **Pending (v1.1.0 parent).** Add a workflow-declared manifest (extension roles / host commands / named capabilities) and a `validate_manifest(host)` gate that runs before executor boot, rejecting fail-fast with the missing-capability set; the same check serves the LP-3 host-substitution test. Not yet implemented — drives status RFC. |
+| LP-8 Capability manifest | **Implemented (§4.7).** `portability.rs` defines `CapabilityManifest` (roles / host commands / named capabilities), `HostCapabilities`, and the pure `validate_manifest` resolver. `workflows.rs` runs the gate in `run_with_manifest` / `run_with_manifest_and_audit` after lint validation and before the executor boots, rejecting fail-fast with a `NODUS:CAPABILITY_UNMET` error that names the missing-capability set and emitting no audit events (the executor is never invoked). `CapabilityManifest::from_workflow` derives the manifest from invoked commands. The same resolver is the machine-checkable LP-3 host-substitution test. |
 
 ## 4. Detailed Design
 
@@ -204,11 +204,106 @@ LP-6 compliance requires two publishable artifacts already delivered in Phase 3:
 | Extraction procedure | `crates/nodus/EXTRACTION.md` | Seven-step checklist for human extraction to a standalone repository; includes `cargo semver-checks` step |
 | Cargo manifest | `crates/nodus/Cargo.toml` | `version`, `description`, `keywords`, `categories`, `homepage`, `documentation`, `docs.rs` config — all required for crates.io publication |
 
+### 4.7 Capability Manifest & Pre-Run Validation (LP-8)
+
+Realizes `l1-nodus-portability.md` §4.6. A workflow's manifest and the host's
+provisions are two values; a pure resolver compares them before the executor
+boots, so an unsatisfiable run never starts.
+
+The extension-point taxonomy (§4.2) is a closed enum, and the manifest is three
+ordered sets — ordered so diagnostics are deterministic. An empty manifest is
+satisfied by any host:
+
+```text
+[REFERENCE]
+pub enum ExtensionRole { Model, Audit, Storage, Policy, Vocabulary }
+
+pub struct CapabilityManifest {
+    roles:        BTreeSet<ExtensionRole>,
+    commands:     BTreeSet<String>,   // host-schema (non-builtin) commands
+    capabilities: BTreeSet<String>,   // named finer-grained features of a role
+}
+```
+
+A manifest may be authored explicitly (`require_role` / `require_command` /
+`require_capability`) or derived from a workflow's AST:
+
+```text
+[REFERENCE]
+impl CapabilityManifest {
+    pub fn from_workflow(ast: &WorkflowFile) -> Self;
+}
+```
+
+`from_workflow` walks every command (descending into conditionals, loops, and
+parallel branches): a model-backed command (`GEN`/`ANALYZE`) requires `Model`; a
+command outside the builtin vocabulary requires `Vocabulary` and is recorded as a
+required command name; a builtin non-model command requires nothing. Explicit DSL
+declaration (an `@needs` section) is deferred to the upstream-parity backlog.
+
+`HostCapabilities` is what the active host provides. It is constructed
+explicitly, so the same type serves both the built-in in-process configuration
+and host-substitution tests (LP-3):
+
+```text
+[REFERENCE]
+pub struct HostCapabilities { /* roles, commands, capabilities */ }
+
+impl HostCapabilities {
+    pub fn builtin() -> Self;                              // Model + Audit + Vocabulary
+    pub fn provides(&self, role: ExtensionRole) -> bool;
+    pub fn has_command(&self, command: &str) -> bool;
+    pub fn satisfies(&self, capability: &str) -> bool;
+}
+```
+
+The built-in host provides `Model` (the `StubProvider`), `Audit` (a sink is
+always wired), and `Vocabulary` (the builtin schema); it provides neither
+`Storage` nor `Policy`, which remain pending LP-3 (§4.3, §4.4). A model-only or
+manifest-free workflow therefore runs against the built-in host with no wiring.
+
+The resolver is pure — no I/O, no events — and returns every unmet item by name:
+
+```text
+[REFERENCE]
+pub enum Missing { Role(ExtensionRole), Command(String), Capability(String) }
+
+pub fn validate_manifest(
+    manifest: &CapabilityManifest,
+    host: &HostCapabilities,
+) -> Vec<Missing>;   // empty ⇒ satisfiable
+```
+
+The gate lives in `workflows.rs` as two combinators, consistent with the existing
+orthogonal `run_with_*` family (LP-5):
+
+```text
+[REFERENCE]
+pub fn run_with_manifest(
+    source, filename, input,
+    manifest: &CapabilityManifest, host: &HostCapabilities,
+) -> Result<RunResult, Vec<Diagnostic>>;
+
+pub fn run_with_manifest_and_audit(
+    source, filename, input,
+    manifest, host, audit, run_id, started_at,
+) -> Result<RunResult, Vec<Diagnostic>>;
+```
+
+Both run the resolver after lint validation and before the executor boots. A
+non-empty `missing` set yields a fail-fast `RunResult`: `Status::Failed`, zero
+steps logged, and one `NODUS:CAPABILITY_UNMET` error naming each missing
+capability. On the audited variant the audit sink receives nothing — no events,
+no run-complete callback — because the executor is never invoked (observer
+neutrality for runs that never start, HO-3/HO-5). A satisfiable manifest delegates
+to the stub executor. This is the machine-checkable LP-3 contract: a workflow is
+portable to a host exactly when that host satisfies its manifest.
+
 ## 5. Implementation Notes
 
 Order of implementation across future phases:
 
-1. **SchemaProvider** (next phase) — purely additive; `Schema::with_provider` + `portability.rs` module + `run_with_schema` variant. Zero risk to existing API.
+1. **SchemaProvider + capability manifest (LP-8)** — delivered. `Schema::with_provider`, the `run_with_schema` variant, and the `CapabilityManifest` / `validate_manifest` gate (§4.7) are purely additive — zero risk to the existing API.
 2. **StorageProvider** (after LP-3) — requires executor hook points for `STORE`/`LOAD` commands. Plan as a separate phase once the second host usage context is documented.
 3. **PolicyProvider** (after LP-3) — requires a new pre-step evaluation hook in `execute_command`. Plan alongside or after StorageProvider.
 4. **`cargo semver-checks` gate** — add to `ci.yml` once the crate reaches `1.0.0`; this is the LP-6 mechanical enforcement.
@@ -236,4 +331,5 @@ Order of implementation across future phases:
 
 | Version | Date | Author | Notes |
 | --- | --- | --- | --- |
+| 1.1.0 | 2026-06-27 | Core Team | LP-8 implemented: §4.7 capability manifest + pre-run satisfiability gate (`CapabilityManifest`, `ExtensionRole`, `HostCapabilities`, `validate_manifest`, `run_with_manifest` / `run_with_manifest_and_audit`, `NODUS:CAPABILITY_UNMET`); §3 LP-8 row → Implemented; status RFC → Stable |
 | 1.0.0 | 2026-06-24 | Core Team | Initial spec — LP-1…LP-7 compliance table; SchemaProvider seam; StorageProvider + PolicyProvider pending LP-3 interfaces; extraction artifacts |
