@@ -1,10 +1,10 @@
 //! Validator — structural lint and schema-vocabulary checks.
 //!
-//! Runs 31 rules against a parsed [`WorkflowFile`] AST and returns a flat list
+//! Runs 32 rules against a parsed [`WorkflowFile`] AST and returns a flat list
 //! of [`Diagnostic`]s. Rules are grouped by severity:
 //!
 //! - **Error** (E001–E016): block execution when found.
-//! - **Warning** (W001–W013): workflow runs but has unsafe or incomplete patterns.
+//! - **Warning** (W001–W014): workflow runs but has unsafe or incomplete patterns.
 //! - **Info** (I001–I006): style suggestions.
 //!
 //! AST nodes carry no source positions in this iteration; diagnostics therefore
@@ -63,7 +63,7 @@ impl Diagnostic {
 pub struct Validator;
 
 impl Validator {
-    /// Run all 31 lint rules against `ast` and return accumulated diagnostics.
+    /// Run all 32 lint rules against `ast` and return accumulated diagnostics.
     pub fn validate(ast: &WorkflowFile, filename: &str) -> Vec<Diagnostic> {
         let mut d = Vec::new();
 
@@ -95,6 +95,7 @@ impl Validator {
         d.extend(Self::w009_test_no_expected(ast, filename));
         // W010: extends resolve filesystem check — deferred
         d.extend(Self::w011_known_vocabulary(ast, filename));
+        d.extend(Self::w014_switch_has_arms(ast, filename));
 
         // Info
         d.extend(Self::i001_step_comments(ast, filename));
@@ -351,6 +352,19 @@ impl Validator {
     }
 
     // ─── Warnings ─────────────────────────────────────────────────────────────
+
+    fn w014_switch_has_arms(wf: &WorkflowFile, filename: &str) -> Vec<Diagnostic> {
+        let mut diags = Vec::new();
+        for step in &wf.steps {
+            if let Some(body) = &step.body {
+                find_empty_switches_stmt(body, &mut diags, filename);
+            }
+            for sub in &step.sub_steps {
+                find_empty_switches_stmt(sub, &mut diags, filename);
+            }
+        }
+        diags
+    }
 
     fn w001_err_handler(wf: &WorkflowFile, filename: &str) -> Vec<Diagnostic> {
         if wf.error_decl.is_none() {
@@ -692,6 +706,23 @@ fn collect_vars_stmt(
         Stmt::ForLoop(fl) => collect_vars_for(fl, declared, used),
         Stmt::UntilLoop(ul) => collect_vars_until(ul, declared, used),
         Stmt::Parallel(pb) => collect_vars_parallel(pb, declared, used),
+        Stmt::Switch(sw) => {
+            if sw.scrutinee.starts_with('$') {
+                used.insert(
+                    sw.scrutinee
+                        .split('.')
+                        .next()
+                        .unwrap_or(&sw.scrutinee)
+                        .to_string(),
+                );
+            }
+            for (_, action) in &sw.arms {
+                collect_vars_cmd(action, declared, used);
+            }
+            if let Some(default) = &sw.default {
+                collect_vars_cmd(default, declared, used);
+            }
+        }
         Stmt::VarRef(v) => {
             used.insert(v.name.split('.').next().unwrap_or(&v.name).to_string());
         }
@@ -847,6 +878,14 @@ fn extract_commands_stmt<'a>(node: &'a Stmt, out: &mut Vec<&'a CommandCall>) {
                 extract_commands_stmt(child, out);
             }
         }
+        Stmt::Switch(sw) => {
+            for (_, action) in &sw.arms {
+                out.push(action);
+            }
+            if let Some(default) = &sw.default {
+                out.push(default);
+            }
+        }
         Stmt::VarRef(_) | Stmt::Comment(_) => {}
     }
 }
@@ -901,6 +940,56 @@ fn find_halt_branches_stmt(node: &Stmt, diags: &mut Vec<Diagnostic>, filename: &
         Stmt::Parallel(pb) => {
             for child in &pb.branches {
                 find_halt_branches_stmt(child, diags, filename);
+            }
+        }
+        // Switch arms carry command actions, not conditional branches, so no
+        // `!HALT` flag can appear inside a `?SWITCH`.
+        Stmt::Switch(_) | Stmt::Command(_) | Stmt::VarRef(_) | Stmt::Comment(_) => {}
+    }
+}
+
+/// Flag a `?SWITCH` with no value arms — it can only ever run its default (or
+/// nothing), so the multi-branch construct adds no value.
+fn find_empty_switches_stmt(node: &Stmt, diags: &mut Vec<Diagnostic>, filename: &str) {
+    match node {
+        Stmt::Switch(sw) => {
+            if sw.arms.is_empty() {
+                diags.push(Diagnostic::new(
+                    Severity::Warning,
+                    "W014",
+                    "?SWITCH has no value arms.",
+                    filename,
+                ));
+            }
+        }
+        Stmt::Conditional(cond) => {
+            for child in &cond.body {
+                find_empty_switches_stmt(child, diags, filename);
+            }
+            for br in &cond.elif_branches {
+                for child in &br.body {
+                    find_empty_switches_stmt(child, diags, filename);
+                }
+            }
+            if let Some(else_br) = &cond.else_branch {
+                for child in &else_br.body {
+                    find_empty_switches_stmt(child, diags, filename);
+                }
+            }
+        }
+        Stmt::ForLoop(fl) => {
+            for child in &fl.body {
+                find_empty_switches_stmt(child, diags, filename);
+            }
+        }
+        Stmt::UntilLoop(ul) => {
+            for child in &ul.body {
+                find_empty_switches_stmt(child, diags, filename);
+            }
+        }
+        Stmt::Parallel(pb) => {
+            for child in &pb.branches {
+                find_empty_switches_stmt(child, diags, filename);
             }
         }
         Stmt::Command(_) | Stmt::VarRef(_) | Stmt::Comment(_) => {}
@@ -1036,6 +1125,48 @@ mod tests {
         let ast = Parser::parse(src).expect("parse");
         let diags = Validator::validate(&ast, "vp_test.nodus");
         assert!(!diags.iter().any(|d| d.code == "E005"));
+    }
+
+    #[test]
+    fn w014_fires_on_switch_with_no_arms() {
+        let src = "\
+§wf:empty_switch v1.0
+§runtime: { core: schema.nodus }
+@out: $out
+@err: ESCALATE(human)
+@steps:
+  1. ?SWITCH $in.x:
+    * → LOG(y)
+  ~END
+";
+        let ast = Parser::parse(src).expect("parse");
+        let diags = Validator::validate(&ast, "empty_switch.nodus");
+        assert!(
+            diags
+                .iter()
+                .any(|d| d.code == "W014" && d.severity == Severity::Warning),
+            "expected W014 for a ?SWITCH with no value arms; got: {diags:?}"
+        );
+    }
+
+    #[test]
+    fn no_w014_when_switch_has_arms() {
+        let src = "\
+§wf:ok_switch v1.0
+§runtime: { core: schema.nodus }
+@out: $out
+@err: ESCALATE(human)
+@steps:
+  1. ?SWITCH $in.x:
+    urgent → LOG(y)
+  ~END
+";
+        let ast = Parser::parse(src).expect("parse");
+        let diags = Validator::validate(&ast, "ok_switch.nodus");
+        assert!(
+            !diags.iter().any(|d| d.code == "W014"),
+            "a switch with value arms must not trip W014; got: {diags:?}"
+        );
     }
 
     #[test]

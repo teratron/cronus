@@ -640,6 +640,7 @@ impl Executor {
             Stmt::ForLoop(fl) => self.execute_for(ctx, fl, step_num),
             Stmt::UntilLoop(ul) => self.execute_until(ctx, ul, step_num),
             Stmt::Parallel(pb) => self.execute_parallel(ctx, pb, step_num),
+            Stmt::Switch(sw) => self.execute_switch(ctx, sw, step_num),
             Stmt::VarRef(_) | Stmt::Comment(_) => None,
         }
     }
@@ -830,6 +831,42 @@ impl Executor {
         if let Some(target) = &pb.join_target {
             ctx.set_var(target, Value::Map(Vec::new()));
         }
+        None
+    }
+
+    /// Dispatch a `?SWITCH`: run the first arm whose value equals the scrutinee,
+    /// else the `*` default, else record `SWITCH_NO_MATCH` (a warning) and
+    /// continue. First match wins — no fallthrough.
+    fn execute_switch(
+        &self,
+        ctx: &mut ExecutionContext,
+        sw: &crate::ast::SwitchBlock,
+        step_num: u32,
+    ) -> Option<Signal> {
+        let scrutinee = Self::resolve_value(ctx, &sw.scrutinee);
+        for (value, action) in &sw.arms {
+            let arm_val = Self::resolve_value(ctx, value);
+            if Self::compare_values(&scrutinee, "=", &arm_val) {
+                self.audit.record_event(ExecutionEvent::BranchTaken {
+                    step_index: step_num,
+                    branch_label: format!("switch:{value}"),
+                    condition_result: true,
+                });
+                ctx.event_count += 1;
+                return self.execute_command(ctx, action, step_num);
+            }
+        }
+        if let Some(default) = &sw.default {
+            self.audit.record_event(ExecutionEvent::BranchTaken {
+                step_index: step_num,
+                branch_label: "switch:*".to_string(),
+                condition_result: false,
+            });
+            ctx.event_count += 1;
+            return self.execute_command(ctx, default, step_num);
+        }
+        ctx.flags
+            .push(vocab::error_code::SWITCH_NO_MATCH.to_string());
         None
     }
 

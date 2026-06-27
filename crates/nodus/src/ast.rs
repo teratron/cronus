@@ -213,6 +213,17 @@ pub struct ParallelBlock {
     pub join_target: Option<String>,
 }
 
+/// Multi-branch dispatch (`?SWITCH $v: value → action … * → action ~END`).
+#[derive(Debug, Clone, PartialEq, Eq, Default)]
+pub struct SwitchBlock {
+    /// The scrutinee variable compared against each arm value.
+    pub scrutinee: String,
+    /// `value → action` arms, in declaration order (first match wins).
+    pub arms: Vec<(String, CommandCall)>,
+    /// The optional `* → action` default arm.
+    pub default: Option<CommandCall>,
+}
+
 /// A variable reference (`$name.field`).
 #[derive(Debug, Clone, PartialEq, Eq, Default)]
 pub struct Variable {
@@ -265,6 +276,8 @@ pub enum Stmt {
     UntilLoop(UntilLoop),
     /// A `~PARALLEL` block.
     Parallel(ParallelBlock),
+    /// A `?SWITCH` multi-branch dispatch.
+    Switch(SwitchBlock),
     /// A bare variable reference.
     VarRef(Variable),
     /// A raw/comment line the parser could not classify.

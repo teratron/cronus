@@ -10,7 +10,7 @@
 //! the transpiler stays in sync with the schema without duplicating data.
 
 use crate::ast::{
-    CommandCall, Conditional, ForLoop, RuleKind, Step, Stmt, UntilLoop, WorkflowFile,
+    CommandCall, Conditional, ForLoop, RuleKind, Step, Stmt, SwitchBlock, UntilLoop, WorkflowFile,
 };
 use crate::vocab::TRANSPILER_VERB_MAP;
 
@@ -319,10 +319,25 @@ impl Transpiler {
             Some(Stmt::ForLoop(fl)) => Self::humanize_for(fl),
             Some(Stmt::UntilLoop(ul)) => Self::humanize_until(ul),
             Some(Stmt::Parallel(_)) => "Run the following in parallel".to_string(),
+            Some(Stmt::Switch(sw)) => Self::humanize_switch(sw),
             Some(Stmt::Comment(c)) => c.text.trim_start_matches(';').trim().to_string(),
             Some(Stmt::VarRef(v)) => v.name.clone(),
             None => String::new(),
         }
+    }
+
+    fn humanize_switch(sw: &SwitchBlock) -> String {
+        let mut s = format!("Switch on {}", Self::humanize_var(&sw.scrutinee));
+        for (value, action) in &sw.arms {
+            s.push_str(&format!("; {value} → {}", Self::humanize_command(action)));
+        }
+        if let Some(default) = &sw.default {
+            s.push_str(&format!(
+                "; otherwise → {}",
+                Self::humanize_command(default)
+            ));
+        }
+        s
     }
 
     fn humanize_command(cmd: &CommandCall) -> String {
@@ -689,6 +704,29 @@ mod tests {
         assert_eq!(Transpiler::humanize_var("$out.data"), "out \u{2192} data");
         assert_eq!(Transpiler::humanize_var("$draft"), "draft");
         assert_eq!(Transpiler::humanize_var(""), "");
+    }
+
+    #[test]
+    fn humanize_switch_renders_arms_and_default() {
+        use crate::ast::SwitchBlock;
+        let sw = SwitchBlock {
+            scrutinee: "$category".to_string(),
+            arms: vec![(
+                "urgent".to_string(),
+                CommandCall {
+                    name: "ROUTE".to_string(),
+                    ..Default::default()
+                },
+            )],
+            default: Some(CommandCall {
+                name: "LOG".to_string(),
+                ..Default::default()
+            }),
+        };
+        let human = Transpiler::humanize_switch(&sw);
+        assert!(human.contains("Switch on category"), "got: {human}");
+        assert!(human.contains("urgent"), "got: {human}");
+        assert!(human.contains("otherwise"), "got: {human}");
     }
 
     #[test]

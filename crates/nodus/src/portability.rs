@@ -251,6 +251,14 @@ fn collect_command_calls<'a>(stmt: &'a Stmt, out: &mut Vec<&'a CommandCall>) {
                 collect_command_calls(branch, out);
             }
         }
+        Stmt::Switch(sw) => {
+            for (_, action) in &sw.arms {
+                out.push(action);
+            }
+            if let Some(default) = &sw.default {
+                out.push(default);
+            }
+        }
         Stmt::VarRef(_) | Stmt::Comment(_) => {}
     }
 }

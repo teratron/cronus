@@ -65,6 +65,96 @@ fn halt_not_taken_runs_to_completion() {
     );
 }
 
+// ?SWITCH fixtures — scrutinee seeded via an `@in` default.
+const SWITCH_MATCH_WF: &str = r#"§wf:switch_match v1.0
+§runtime: { core: schema.nodus }
+@in: { category?=urgent }
+@out: $out
+@err: ESCALATE(human)
+@steps:
+  1. ?SWITCH $in.category:
+    urgent → ANALYZE(crisis)
+    spam → GEN(reply)
+  ~END
+"#;
+
+const SWITCH_DEFAULT_WF: &str = r#"§wf:switch_default v1.0
+§runtime: { core: schema.nodus }
+@in: { category?=mystery }
+@out: $out
+@err: ESCALATE(human)
+@steps:
+  1. ?SWITCH $in.category:
+    urgent → ANALYZE(crisis)
+    * → GEN(reply)
+  ~END
+"#;
+
+const SWITCH_NO_MATCH_WF: &str = r#"§wf:switch_nomatch v1.0
+§runtime: { core: schema.nodus }
+@in: { category?=mystery }
+@out: $out
+@err: ESCALATE(human)
+@steps:
+  1. ?SWITCH $in.category:
+    urgent → ANALYZE(crisis)
+  ~END
+  2. LOG(after) → $out
+"#;
+
+#[test]
+fn switch_runs_first_matching_arm() {
+    let result = workflows::run(SWITCH_MATCH_WF, "switch_match.nodus", None).expect("run");
+    assert_eq!(result.status, Status::Ok, "errors: {:?}", result.errors);
+    assert!(
+        result.log.iter().any(|e| e.command == "ANALYZE"),
+        "the matching arm must run; log: {:?}",
+        result.log
+    );
+    assert!(
+        !result.log.iter().any(|e| e.command == "GEN"),
+        "a non-matching arm must not run; log: {:?}",
+        result.log
+    );
+}
+
+#[test]
+fn switch_falls_through_to_default() {
+    let result = workflows::run(SWITCH_DEFAULT_WF, "switch_default.nodus", None).expect("run");
+    assert_eq!(result.status, Status::Ok, "errors: {:?}", result.errors);
+    assert!(
+        result.log.iter().any(|e| e.command == "GEN"),
+        "the default arm must run when nothing matches; log: {:?}",
+        result.log
+    );
+    assert!(
+        !result.log.iter().any(|e| e.command == "ANALYZE"),
+        "no value arm matched, so none should run; log: {:?}",
+        result.log
+    );
+}
+
+#[test]
+fn switch_no_match_warns_and_continues() {
+    let result = workflows::run(SWITCH_NO_MATCH_WF, "switch_nomatch.nodus", None).expect("run");
+    assert!(
+        result.flags.iter().any(|f| f == "NODUS:SWITCH_NO_MATCH"),
+        "an unmatched switch with no default must flag SWITCH_NO_MATCH; flags: {:?}",
+        result.flags
+    );
+    assert_eq!(
+        result.status,
+        Status::Ok,
+        "SWITCH_NO_MATCH is advisory; the run continues. errors: {:?}",
+        result.errors
+    );
+    assert!(
+        result.log.iter().any(|e| e.command == "LOG"),
+        "the step after the switch must still run; log: {:?}",
+        result.log
+    );
+}
+
 #[test]
 fn pause_branch_suspends_with_resume() {
     let result = workflows::run(PAUSE_WF, "guard_pause.nodus", None).expect("run");

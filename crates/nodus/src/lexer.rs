@@ -65,6 +65,8 @@ pub enum TokenType {
     QElif,
     /// `?ELSE`
     QElse,
+    /// `?SWITCH`
+    QSwitch,
 
     // `~` keywords
     /// `~FOR`
@@ -99,6 +101,8 @@ pub enum TokenType {
     Gte,
     /// `::`
     DoubleColon,
+    /// `*` (the `?SWITCH` default-arm marker).
+    Star,
 
     // Keywords
     /// `NEVER`
@@ -435,6 +439,11 @@ impl Lexer {
                     self.advance();
                     continue;
                 }
+                '*' => {
+                    self.emit(TokenType::Star, "*");
+                    self.advance();
+                    continue;
+                }
                 _ => {}
             }
 
@@ -740,6 +749,7 @@ impl Lexer {
             "IF" => Some(TokenType::QIf),
             "ELIF" => Some(TokenType::QElif),
             "ELSE" => Some(TokenType::QElse),
+            "SWITCH" => Some(TokenType::QSwitch),
             _ => None,
         };
 
@@ -998,6 +1008,20 @@ mod tests {
 
         let toks = Lexer::tokenize_str("?IF $r > 0.9 → ASK(human) !PAUSE").unwrap();
         assert!(types(&toks).contains(&TokenType::BangPause));
+    }
+
+    #[test]
+    fn switch_keyword_and_default_marker_lex() {
+        let toks = Lexer::tokenize_str(
+            "?SWITCH $category:\n  urgent → ROUTE(wf:crisis)\n  * → LOG($m)\n~END",
+        )
+        .unwrap();
+        let got = types(&toks);
+        assert!(
+            got.contains(&TokenType::QSwitch),
+            "?SWITCH must lex as QSwitch"
+        );
+        assert!(got.contains(&TokenType::Star), "* must lex as Star");
     }
 
     #[test]

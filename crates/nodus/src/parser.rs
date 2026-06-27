@@ -14,7 +14,7 @@
 use crate::ast::{
     AbsoluteRule, CommandCall, Comment, Conditional, ContextDecl, ErrorDecl, FileHeader, FileType,
     ForLoop, InputDecl, InputField, MacroBlock, OutputDecl, ParallelBlock, Preference, RuleKind,
-    RuntimeBlock, Step, Stmt, TestBlock, Trigger, UntilLoop, Variable, WorkflowFile,
+    RuntimeBlock, Step, Stmt, SwitchBlock, TestBlock, Trigger, UntilLoop, Variable, WorkflowFile,
 };
 use crate::error::{Error, Result, Span};
 use crate::lexer::{Lexer, Token, TokenType};
@@ -567,6 +567,14 @@ impl Parser {
                         });
                     }
                 }
+                TokenType::QSwitch => {
+                    let sw = self.parse_switch();
+                    steps.push(Step {
+                        number: 0,
+                        body: Some(Stmt::Switch(sw)),
+                        ..Default::default()
+                    });
+                }
                 _ => self.advance(),
             }
         }
@@ -620,6 +628,10 @@ impl Parser {
                         step.sub_steps.push(Stmt::Conditional(c));
                     }
                 }
+                TokenType::QSwitch => {
+                    let sw = self.parse_switch();
+                    step.sub_steps.push(Stmt::Switch(sw));
+                }
                 TokenType::TildeFor | TokenType::TildeUntil | TokenType::TildeParallel => {
                     if let Some(node) = self.parse_control_flow() {
                         step.sub_steps.push(node);
@@ -644,6 +656,7 @@ impl Parser {
             TokenType::QIf | TokenType::QElif | TokenType::QElse => {
                 self.parse_conditional().map(Stmt::Conditional)
             }
+            TokenType::QSwitch => Some(Stmt::Switch(self.parse_switch())),
             TokenType::TildeFor | TokenType::TildeUntil | TokenType::TildeParallel => {
                 self.parse_control_flow()
             }
@@ -1050,6 +1063,68 @@ impl Parser {
         ParallelBlock {
             branches,
             join_target,
+        }
+    }
+
+    /// Parse `?SWITCH $v: value → action … * → action ~END`. Arms are collected
+    /// in declaration order; a `*` value becomes the default arm. First match
+    /// wins is enforced at execution, not here.
+    fn parse_switch(&mut self) -> SwitchBlock {
+        self.advance(); // skip ?SWITCH
+        self.skip_noise();
+        let mut scrutinee = String::new();
+        if self.check(TokenType::Variable) {
+            scrutinee = self.cur_val();
+            self.advance();
+        }
+        if self.check(TokenType::Colon) {
+            self.advance();
+        }
+        self.skip_to_newline();
+
+        let mut arms = Vec::new();
+        let mut default = None;
+        while !self.at_end() {
+            self.skip_noise();
+            if self.at_end() {
+                break;
+            }
+            match self.cur_ty() {
+                TokenType::TildeEnd => {
+                    self.advance();
+                    self.skip_to_newline();
+                    break;
+                }
+                TokenType::Comment => self.advance(),
+                TokenType::StepNumber
+                | TokenType::Section
+                | TokenType::AtTest
+                | TokenType::AtMacro
+                | TokenType::Eof => break,
+                _ => {
+                    let value = self.consume_until_action_sep();
+                    if self.check(TokenType::Arrow) {
+                        self.advance();
+                        let action_str = self.consume_rest_of_line();
+                        if let Some(action) = self.try_parse_command_from_string(action_str.trim())
+                        {
+                            if value.trim() == "*" {
+                                default = Some(action);
+                            } else {
+                                arms.push((value.trim().to_string(), action));
+                            }
+                        }
+                    } else {
+                        self.skip_to_newline();
+                    }
+                }
+            }
+        }
+
+        SwitchBlock {
+            scrutinee,
+            arms,
+            default,
         }
     }
 
@@ -1562,6 +1637,25 @@ mod tests {
                 assert_eq!(action.args, vec!["wf:crisis"]);
             }
             other => panic!("expected conditional, got {other:?}"),
+        }
+    }
+
+    #[test]
+    fn parses_switch_with_arms_and_default() {
+        let src = "§wf:dispatch v1.0\n§runtime: { core: schema.nodus }\n@steps:\n  1. ?SWITCH $category:\n    urgent → ROUTE(wf:crisis)\n    spam → LOG($m)\n    * → GEN(reply)\n  ~END\n";
+        let wf = Parser::parse(src).unwrap();
+        match wf.steps[0].body.as_ref().unwrap() {
+            Stmt::Switch(sw) => {
+                assert_eq!(sw.scrutinee, "$category");
+                assert_eq!(sw.arms.len(), 2, "two value arms (default excluded)");
+                assert_eq!(sw.arms[0].0, "urgent");
+                assert_eq!(sw.arms[0].1.name, "ROUTE");
+                assert_eq!(sw.arms[1].0, "spam");
+                assert_eq!(sw.arms[1].1.name, "LOG");
+                let default = sw.default.as_ref().expect("default arm parsed");
+                assert_eq!(default.name, "GEN");
+            }
+            other => panic!("expected switch, got {other:?}"),
         }
     }
 

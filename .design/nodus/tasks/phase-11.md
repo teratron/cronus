@@ -36,10 +36,10 @@ The smallest slice — action flags mirroring `!BREAK`, reusing `Signal`/`Status
 
 ## Track B — `?SWITCH` multi-branch dispatch (Slice 2)
 
-- [ ] **T-11B01** — Lexer/AST/parser: `?SWITCH $v:` with `value → action` arms + optional `* → action` (`QSwitch` token, `SwitchBlock` node)
+- [x] **T-11B01** — Lexer/AST/parser: `?SWITCH $v:` with `value → action` arms + optional `* → action` (`QSwitch` + `Star` tokens, `SwitchBlock` node)
   - **Verify**: parser unit test — arms and default parsed into `SwitchBlock`
-- [ ] **T-11B02** — Executor + validator + transpiler: first-match-wins dispatch; no match + no `*` → `NODUS:SWITCH_NO_MATCH` (warn, continue); empty-arms warning; round-trip
-  - **Verify**: integration test — matching arm runs; unmatched-with-no-default surfaces `SWITCH_NO_MATCH` and continues
+- [x] **T-11B02** — Executor + validator + transpiler: first-match-wins dispatch; no match + no `*` → `NODUS:SWITCH_NO_MATCH` (warn, continue); empty-arms warning (W014); human form
+  - **Verify**: integration tests — matching arm runs; default fallthrough; unmatched-with-no-default surfaces `SWITCH_NO_MATCH` and continues. Note: compact-form reconstruction deferred (pre-existing gap for all block constructs).
 
 ## Track C — `~MAP` collection transform (Slice 3)
 
@@ -62,9 +62,9 @@ The smallest slice — action flags mirroring `!BREAK`, reusing `Signal`/`Status
 
 ## Status
 
-**Status:** In Progress — Slice 1 (`!HALT` / `!PAUSE` action flags) landed with all
-gates green (245 tests, clippy/fmt/doc clean); Slices 2–4 (`?SWITCH` / `~MAP` /
-`~RETRY`) remain.
+**Status:** In Progress — Slices 1–2 landed with all gates green (253 tests,
+clippy/fmt/doc clean): `!HALT` / `!PAUSE` action flags and `?SWITCH` multi-branch
+dispatch. Slices 3–4 (`~MAP` / `~RETRY`) remain.
 
 ## Notes
 
