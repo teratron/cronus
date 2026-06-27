@@ -4,15 +4,15 @@
 <!-- Maximum 100 lines. Agent updates AFTER each completed action. -->
 
 **Workspace:** nodus
-**Updated:** 2026-06-27 05:07
-**Phase:** 7 — Capability Manifest (LP-8)
+**Updated:** 2026-06-27 05:28
+**Phase:** 7 — Capability Manifest (LP-8) — Complete
 **Status:** Active
 
 ## Current Position
 
 - **Task:** Phase 6 complete — nodus is a first-class assertion-evaluating test facility (NT-1…NT-10)
 - **Spec:** l1-nodus-testing.md v1.0.1, l2-nodus-testing.md v1.0.0 (all 8 specs Stable)
-- **Next Action:** Plan complete — author new scope via /magic.spec nodus (or /magic.status for a briefing)
+- **Next Action:** Run /magic.task nodus to update the plan
 
 ## Progress
 

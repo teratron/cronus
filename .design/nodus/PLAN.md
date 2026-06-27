@@ -1,8 +1,8 @@
 # Implementation Plan
 
-**Version:** 1.9.0
+**Version:** 1.9.1
 **Generated:** 2026-06-24
-**Based on:** .design/nodus/INDEX.md v1.0.12
+**Based on:** .design/nodus/INDEX.md v1.0.13
 **Status:** Active
 
 ## Overview

@@ -1,8 +1,8 @@
 # Master Task Index (Registry)
 
-**Version:** 2.1.0
+**Version:** 2.1.1
 **Generated:** 2026-06-24
-**Based on:** .design/nodus/PLAN.md v1.9.0
+**Based on:** .design/nodus/PLAN.md v1.9.1
 **Based on RULES:** .design/RULES.md v1.4.0
 **Execution Mode:** Sequential
 **Status:** Active
@@ -41,10 +41,11 @@ Tactical registry of all phases. Atomic checklists live in `tasks/phase-{N}.md`.
 
 ## Meta Information
 
-- **Last Updated**: 2026-06-26
+- **Last Updated**: 2026-06-27
 - **Phase 3 Planned**: 2026-06-24 (9 tasks, tracks A/B/C/D/T)
 - **Phase 4 Complete**: 2026-06-24 (9 tasks, tracks A/B/C/T; all archived)
 - **Phase 5 Complete**: 2026-06-24 (7 tasks, tracks A/B/C/T; all archived)
 - **Phase 6 Complete**: 2026-06-24 (9 tasks, tracks A/B/C/T; all archived; 204 tests pass)
-- **Phase 7 Planned**: 2026-06-26 (8 tasks, tracks A/B/C/T/D; restabilizes l2-nodus-portability via LP-8)
+- **Phase 7 Complete**: 2026-06-27 (9 tasks, tracks A/B/C/T/D; all archived; l2-nodus-portability v1.1.0 Stable via LP-8; 217 tests pass)
+- **All active phases complete**: no Todo tasks; future work (upstream parity v0.4.6→v0.7, Storage/Policy executor integration) held in PLAN.md Backlog pending `/magic.spec` design
 - **Maintainer**: Core Team

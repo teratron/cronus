@@ -87,3 +87,4 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Updated specification `navigation-model` (main)
 - Updated task plan and task index (nodus)
 - Completed task `phase-7` (nodus)
+- Added specification `nodus-dialog` (nodus)
