@@ -1,8 +1,8 @@
 # Master Task Index (Registry)
 
-**Version:** 2.4.0
+**Version:** 2.5.0
 **Generated:** 2026-06-24
-**Based on:** .design/nodus/PLAN.md v1.12.0
+**Based on:** .design/nodus/PLAN.md v1.13.0
 **Based on RULES:** .design/RULES.md v1.4.0
 **Execution Mode:** Sequential
 **Status:** Active
@@ -57,6 +57,12 @@ Tactical registry of all phases. Atomic checklists live in `tasks/phase-{N}.md`.
 | --- | --- | --- |
 | [Phase 10](archives/tasks/phase-10.md) | HITL Dialog (l2-nodus-dialog): ASK/CONFIRM commands, Status::Paused + ResumeDescriptor, DialogProvider + DefaultDialogProvider, ExtensionRole::Dialog + from_workflow derivation, executor dispatch, run_with_dialog combinators; DG-1…DG-8 | `Done (Archived)` |
 
+## Active Phases (continued)
+
+| Phase | Description | Status |
+| --- | --- | --- |
+| [Phase 11](tasks/phase-11.md) | Control-Flow Constructs (l2-nodus-control-flow): ?SWITCH / ~MAP / ~RETRY:n / !HALT / !PAUSE — lexer tokens + SwitchBlock/MapBlock AST + action flags + retry; parser/executor/transpiler/validator; implemented as per-construct vertical slices | `Todo` |
+
 ## Meta Information
 
 - **Last Updated**: 2026-06-27
@@ -68,5 +74,6 @@ Tactical registry of all phases. Atomic checklists live in `tasks/phase-{N}.md`.
 - **Phase 8 Complete**: 2026-06-27 (7 tasks, tracks A/B/T; all archived; l2-nodus-errors — 24-code taxonomy; 222 tests pass)
 - **Phase 9 Complete**: 2026-06-27 (tracks A/B/T; all archived; l2-nodus-registries — closed flag/validator/type registries + advisory W011/W012/W013; 228 tests pass)
 - **Phase 10 Complete**: 2026-06-27 (tracks A–E/T; all archived; l2-nodus-dialog — ASK/CONFIRM + Status::Paused + DialogProvider + ExtensionRole::Dialog; 237 tests pass)
-- **Backlog**: remaining parity clusters (control-flow, operators [MATCHES/PCRE design fork], @needs, @ON priority, macro execution); Storage/Policy executor integration (LP-3)
+- **Phase 11 Planned**: 2026-06-27 (per-construct slices; implements l2-nodus-control-flow — ?SWITCH/~MAP/~RETRY/!HALT/!PAUSE)
+- **Backlog**: operators [MATCHES/PCRE design fork], @needs (blocked), @ON priority, macro execution; Storage/Policy executor integration (LP-3)
 - **Maintainer**: Core Team

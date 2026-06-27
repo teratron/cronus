@@ -1,8 +1,8 @@
 # Implementation Plan
 
-**Version:** 1.12.0
+**Version:** 1.13.0
 **Generated:** 2026-06-24
-**Based on:** .design/nodus/INDEX.md v1.0.18
+**Based on:** .design/nodus/INDEX.md v1.0.19
 **Status:** Active
 
 ## Overview
@@ -157,8 +157,14 @@ stub-level runner to an assertion-evaluating test facility (NT-1…NT-10).*
   - ✅ `run_with_dialog`/`run_with_dialog_and_audit` (workflows.rs) + lib re-exports
   - ✅ `tests/dialog.rs` (7 DG-invariant integration tests) + unit tests; 237 tests pass (was 228; +9); clippy clean; fmt clean; docs zero new warnings; SDD §6 clean
 
+## Phase 11 — Control-Flow Constructs (l2-nodus-control-flow)
+
+*Implement the v0.7 control constructs from `l1-nodus-language.md` §4.6 in `crates/nodus`, per `l2-nodus-control-flow.md`: `?SWITCH` multi-branch dispatch, `~MAP` collection transform, `~RETRY:n` bounded step retry, `!HALT` fatal stop, `!PAUSE` suspension. Implemented as vertical slices (each = lexer + AST + parser + executor + transpiler + validator + tests); reuses the existing `Status::Failed`/`Status::Paused`/`Signal::Pause` and `SWITCH_NO_MATCH`/`PAUSED` codes. Atomic tasks (by construct) in `tasks/phase-11.md`.*
+
+- [ ] **L2 Nodus Control-Flow** ([l2-nodus-control-flow.md](specifications/l2-nodus-control-flow.md)) [L2] — Slice 1: `!HALT`/`!PAUSE` action flags (reuse Signal/Status). Slice 2: `?SWITCH` (+`*` default, `SWITCH_NO_MATCH`). Slice 3: `~MAP` (implicit `$it`). Slice 4: `~RETRY:n` (bounded, NL-5). Each slice carries lexer/AST/parser/executor/transpiler/validator + tests
+
 ## Backlog
 
-<!-- Upstream parity gap v0.4.6 → v0.7 (l1-nodus-language §4.6 / l2-nodus-runtime §4.7) — remaining clusters needing focused spec authoring before they can be planned: control constructs (?SWITCH/~MAP/~RETRY/!HALT/!PAUSE — needs lexer/parser/AST work), operators/expressions (MATCHES/?./??/WHERE/FIRST/LAST/string-interpolation — note MATCHES/PCRE vs the zero-dependency LP-1 constraint is an open design fork), @needs selective schema loading, @ON(priority=N), macro execution (RUN(@x) body expansion). Addressed so far: error taxonomy 11 → 24 → Phase 8 (l2-nodus-errors, Stable); closed flag/validator/type registries → Phase 9 (l2-nodus-registries, Stable); HITL dialog (ASK/CONFIRM) → l1-nodus-dialog Draft (above). -->
+<!-- Upstream parity gap v0.4.6 → v0.7 (l1-nodus-language §4.6 / l2-nodus-runtime §4.7) — remaining clusters needing focused spec authoring before they can be planned: operators/expressions (MATCHES/?./??/WHERE/FIRST/LAST/string-interpolation — note MATCHES/PCRE vs the zero-dependency LP-1 constraint is an open design fork), @needs selective schema loading (blocked: no external-schema loading yet), @ON(priority=N) (triggers not dispatched yet), macro execution (RUN(@x) body expansion — needs structured macro-body parsing). Addressed: error taxonomy → Phase 8; closed registries → Phase 9; HITL dialog → Phase 10 (l2-nodus-dialog, Stable); control constructs → Phase 11 (l2-nodus-control-flow, Stable). -->
 <!-- StorageProvider/PolicyProvider executor integration deferred pending LP-3 satisfied (interfaces present in portability.rs; hook points + run_with_storage/run_with_policy variants pending the second documented host context). -->
 <!-- Future: l2-nodus-transpiler.md — dedicated transpiler L2 spec (currently covered by l2-nodus-runtime.md §4). -->

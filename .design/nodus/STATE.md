@@ -4,8 +4,8 @@
 <!-- Maximum 100 lines. Agent updates AFTER each completed action. -->
 
 **Workspace:** nodus
-**Updated:** 2026-06-27 12:39
-**Phase:** 10 — HITL Dialog (l2-nodus-dialog)
+**Updated:** 2026-06-27 12:57
+**Phase:** 11 — Control-Flow Constructs
 **Status:** Active
 
 ## Current Position
