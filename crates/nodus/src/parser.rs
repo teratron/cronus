@@ -839,14 +839,16 @@ impl Parser {
     fn parse_if_chain(&mut self) -> Conditional {
         self.advance(); // skip ?IF
         let cond = self.consume_until_action_sep();
-        let (action, brk, skip, ovr) = self.parse_branch_tail();
+        let (action, flags) = self.parse_branch_tail();
 
         let mut node = Conditional {
             condition: cond.trim().to_string(),
             action,
-            break_flag: brk,
-            skip_flag: skip,
-            override_flag: ovr,
+            break_flag: flags.break_flag,
+            skip_flag: flags.skip_flag,
+            override_flag: flags.override_flag,
+            halt_flag: flags.halt_flag,
+            pause_flag: flags.pause_flag,
             ..Default::default()
         };
 
@@ -870,53 +872,51 @@ impl Parser {
     fn parse_elif(&mut self) -> Conditional {
         self.advance(); // skip ?ELIF
         let cond = self.consume_until_action_sep();
-        let (action, brk, skip, ovr) = self.parse_branch_tail();
+        let (action, flags) = self.parse_branch_tail();
         Conditional {
             condition: cond.trim().to_string(),
             action,
-            break_flag: brk,
-            skip_flag: skip,
-            override_flag: ovr,
+            break_flag: flags.break_flag,
+            skip_flag: flags.skip_flag,
+            override_flag: flags.override_flag,
+            halt_flag: flags.halt_flag,
+            pause_flag: flags.pause_flag,
             ..Default::default()
         }
     }
 
     fn parse_else(&mut self) -> Conditional {
         self.advance(); // skip ?ELSE
-        let (action, brk, skip, ovr) = self.parse_branch_tail();
+        let (action, flags) = self.parse_branch_tail();
         Conditional {
             condition: String::new(),
             action,
-            break_flag: brk,
-            skip_flag: skip,
-            override_flag: ovr,
+            break_flag: flags.break_flag,
+            skip_flag: flags.skip_flag,
+            override_flag: flags.override_flag,
+            halt_flag: flags.halt_flag,
+            pause_flag: flags.pause_flag,
             ..Default::default()
         }
     }
 
     /// Parse the tail of a conditional branch: either `→ action [flags]` or a
     /// bare rest-of-line carrying only flags. Returns the optional action and
-    /// the three control flags.
-    fn parse_branch_tail(&mut self) -> (Option<CommandCall>, bool, bool, bool) {
+    /// the parsed control flags.
+    fn parse_branch_tail(&mut self) -> (Option<CommandCall>, BranchFlags) {
         if self.check(TokenType::Arrow) {
             self.advance();
             let action_str = self.consume_rest_of_line();
-            let (brk, skip, ovr) = extract_flags(&action_str);
+            let flags = extract_flags(&action_str);
             let stripped = strip_flags(&action_str);
-            (
-                self.try_parse_command_from_string(&stripped),
-                brk,
-                skip,
-                ovr,
-            )
+            (self.try_parse_command_from_string(&stripped), flags)
         } else if self.check(TokenType::Colon) {
             self.advance();
             self.skip_to_newline();
-            (None, false, false, false)
+            (None, BranchFlags::default())
         } else {
             let rest = self.consume_rest_of_line();
-            let (brk, skip, ovr) = extract_flags(&rest);
-            (None, brk, skip, ovr)
+            (None, extract_flags(&rest))
         }
     }
 
@@ -1308,6 +1308,8 @@ impl Parser {
                     | TokenType::BangBreak
                     | TokenType::BangSkip
                     | TokenType::BangOverride
+                    | TokenType::BangHalt
+                    | TokenType::BangPause
             ) {
                 break;
             }
@@ -1393,13 +1395,25 @@ impl Parser {
     }
 }
 
-/// Extract the `!BREAK` / `!SKIP` / `!OVERRIDE` flags present in an action string.
-fn extract_flags(text: &str) -> (bool, bool, bool) {
-    (
-        text.contains("!BREAK"),
-        text.contains("!SKIP"),
-        text.contains("!OVERRIDE"),
-    )
+/// The control-flow flags a conditional branch action may carry.
+#[derive(Debug, Default, Clone, Copy)]
+struct BranchFlags {
+    break_flag: bool,
+    skip_flag: bool,
+    override_flag: bool,
+    halt_flag: bool,
+    pause_flag: bool,
+}
+
+/// Extract the control-flow flags present in an action string.
+fn extract_flags(text: &str) -> BranchFlags {
+    BranchFlags {
+        break_flag: text.contains("!BREAK"),
+        skip_flag: text.contains("!SKIP"),
+        override_flag: text.contains("!OVERRIDE"),
+        halt_flag: text.contains("!HALT"),
+        pause_flag: text.contains("!PAUSE"),
+    }
 }
 
 /// Remove the control-flow flags from an action string.
@@ -1407,6 +1421,8 @@ fn strip_flags(text: &str) -> String {
     text.replace("!BREAK", "")
         .replace("!SKIP", "")
         .replace("!OVERRIDE", "")
+        .replace("!HALT", "")
+        .replace("!PAUSE", "")
         .trim()
         .to_string()
 }
@@ -1544,6 +1560,27 @@ mod tests {
                 let action = c.action.as_ref().unwrap();
                 assert_eq!(action.name, "ROUTE");
                 assert_eq!(action.args, vec!["wf:crisis"]);
+            }
+            other => panic!("expected conditional, got {other:?}"),
+        }
+    }
+
+    #[test]
+    fn parses_conditional_with_halt_and_pause() {
+        let src = "§wf:guard v1\n@steps:\n  1. ?IF $r > 0.9 → ESCALATE(human) !HALT\n  2. ?IF $r > 0.5 → ASK(human) !PAUSE\n";
+        let wf = Parser::parse(src).unwrap();
+        match wf.steps[0].body.as_ref().unwrap() {
+            Stmt::Conditional(c) => {
+                assert!(c.halt_flag, "expected halt_flag set by !HALT");
+                assert!(!c.pause_flag);
+                assert_eq!(c.action.as_ref().unwrap().name, "ESCALATE");
+            }
+            other => panic!("expected conditional, got {other:?}"),
+        }
+        match wf.steps[1].body.as_ref().unwrap() {
+            Stmt::Conditional(c) => {
+                assert!(c.pause_flag, "expected pause_flag set by !PAUSE");
+                assert!(!c.halt_flag);
             }
             other => panic!("expected conditional, got {other:?}"),
         }

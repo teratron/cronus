@@ -175,7 +175,7 @@ pub fn test(source: &str, _filename: &str) -> Result<TestReport, Error> {
     test_with_tags(source, &[])
 }
 
-/// Like [`test`] but only runs blocks whose `tags:` list contains at least one
+/// Like [`test()`] but only runs blocks whose `tags:` list contains at least one
 /// of `tag_filter`. If `tag_filter` is empty, all blocks run (NT-6).
 pub fn test_with_tags(source: &str, tag_filter: &[&str]) -> Result<TestReport, Error> {
     let ast = Parser::parse(source)?;

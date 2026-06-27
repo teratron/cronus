@@ -25,14 +25,14 @@ slices so each track leaves the crate green. Reuses the existing
 
 The smallest slice — action flags mirroring `!BREAK`, reusing `Signal`/`Status`.
 
-- [ ] **T-11A01** — Lexer: tokenize `!HALT` and `!PAUSE` (new `BangHalt`/`BangPause` token types, matched like `!BREAK`)
+- [x] **T-11A01** — Lexer: tokenize `!HALT` and `!PAUSE` (new `BangHalt`/`BangPause` token types, matched like `!BREAK`)
   - **Verify**: lexer unit test — `!HALT` / `!PAUSE` produce the new tokens
-- [ ] **T-11A02** — AST + parser: add `halt_flag` / `pause_flag` to `Conditional` (alongside `break_flag`); parse them on a conditional action
+- [x] **T-11A02** — AST + parser: add `halt_flag` / `pause_flag` to `Conditional` (alongside `break_flag`); parse them on a conditional action
   - **Verify**: parser unit test — `?IF … → CMD !HALT` sets `halt_flag`; `!PAUSE` sets `pause_flag`
-- [ ] **T-11A03** — Executor: `!HALT` → `Status::Failed` (push error, stop); `!PAUSE` → `Signal::Pause` → `Status::Paused` + `ResumeDescriptor`
-  - **Verify**: integration test — a workflow whose taken branch carries `!HALT` ends `Status::Failed`; one with `!PAUSE` ends `Status::Paused` with a resume descriptor and no later step run
-- [ ] **T-11A04** — Validator + transpiler: `!HALT` without an `ESCALATE()` in the same step → error; round-trip `!HALT`/`!PAUSE` in compact + human forms
-  - **Verify**: validator unit test (halt-without-escalate error); transpiler round-trip test
+- [x] **T-11A03** — Executor: `!HALT` → failed status (`Signal::Halt`, stop); `!PAUSE` → `Signal::Pause` → paused status + `ResumeDescriptor`
+  - **Verify**: integration test — a workflow whose taken branch carries `!HALT` ends failed and stops later steps; one with `!PAUSE` ends paused with a resume descriptor and no later step run
+- [x] **T-11A04** — Validator + transpiler: `!HALT` without an `ESCALATE()` in the same step → error (E016); human form renders `!HALT`/`!PAUSE`
+  - **Verify**: validator unit tests (E016 fires / absent with escalate); transpiler human-form test. Note: compact-form reconstruction of conditionals is a pre-existing gap (no branch flag is emitted to compact today) and is tracked separately, not in this slice.
 
 ## Track B — `?SWITCH` multi-branch dispatch (Slice 2)
 
@@ -62,7 +62,9 @@ The smallest slice — action flags mirroring `!BREAK`, reusing `Signal`/`Status
 
 ## Status
 
-**Status:** Todo
+**Status:** In Progress — Slice 1 (`!HALT` / `!PAUSE` action flags) landed with all
+gates green (245 tests, clippy/fmt/doc clean); Slices 2–4 (`?SWITCH` / `~MAP` /
+`~RETRY`) remain.
 
 ## Notes
 

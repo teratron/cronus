@@ -172,6 +172,10 @@ pub struct Conditional {
     pub skip_flag: bool,
     /// `!OVERRIDE` flag present on the action.
     pub override_flag: bool,
+    /// `!HALT` flag present on the action (fatal stop ⇒ failed status).
+    pub halt_flag: bool,
+    /// `!PAUSE` flag present on the action (suspension ⇒ paused status).
+    pub pause_flag: bool,
     /// Chained `?ELIF` branches.
     pub elif_branches: Vec<Conditional>,
     /// A trailing `?ELSE` branch.

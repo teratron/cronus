@@ -367,6 +367,12 @@ impl Transpiler {
         if cond.break_flag {
             s.push_str(", STOP");
         }
+        if cond.halt_flag {
+            s.push_str(", HALT");
+        }
+        if cond.pause_flag {
+            s.push_str(", PAUSE");
+        }
         s
     }
 
@@ -683,6 +689,29 @@ mod tests {
         assert_eq!(Transpiler::humanize_var("$out.data"), "out \u{2192} data");
         assert_eq!(Transpiler::humanize_var("$draft"), "draft");
         assert_eq!(Transpiler::humanize_var(""), "");
+    }
+
+    #[test]
+    fn humanize_conditional_renders_halt_and_pause() {
+        use crate::ast::Conditional;
+        let halt = Conditional {
+            condition: "$r > 0.9".to_string(),
+            halt_flag: true,
+            ..Default::default()
+        };
+        assert!(
+            Transpiler::humanize_conditional(&halt).contains("HALT"),
+            "human form must render !HALT"
+        );
+        let pause = Conditional {
+            condition: "$r > 0.5".to_string(),
+            pause_flag: true,
+            ..Default::default()
+        };
+        assert!(
+            Transpiler::humanize_conditional(&pause).contains("PAUSE"),
+            "human form must render !PAUSE"
+        );
     }
 
     #[test]

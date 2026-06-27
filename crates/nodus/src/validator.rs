@@ -1,9 +1,9 @@
 //! Validator — structural lint and schema-vocabulary checks.
 //!
-//! Runs 30 rules against a parsed [`WorkflowFile`] AST and returns a flat list
+//! Runs 31 rules against a parsed [`WorkflowFile`] AST and returns a flat list
 //! of [`Diagnostic`]s. Rules are grouped by severity:
 //!
-//! - **Error** (E001–E015): block execution when found.
+//! - **Error** (E001–E016): block execution when found.
 //! - **Warning** (W001–W013): workflow runs but has unsafe or incomplete patterns.
 //! - **Info** (I001–I006): style suggestions.
 //!
@@ -63,7 +63,7 @@ impl Diagnostic {
 pub struct Validator;
 
 impl Validator {
-    /// Run all 30 lint rules against `ast` and return accumulated diagnostics.
+    /// Run all 31 lint rules against `ast` and return accumulated diagnostics.
     pub fn validate(ast: &WorkflowFile, filename: &str) -> Vec<Diagnostic> {
         let mut d = Vec::new();
 
@@ -81,6 +81,7 @@ impl Validator {
         d.extend(Self::e013_no_reserved_pipeline_target(ast, filename));
         d.extend(Self::e014_no_forward_references(ast, filename));
         d.extend(Self::e015_no_duplicate_test_names(ast, filename));
+        d.extend(Self::e016_halt_requires_escalate(ast, filename));
 
         // Warnings
         d.extend(Self::w001_err_handler(ast, filename));
@@ -331,6 +332,19 @@ impl Validator {
                     format!("Duplicate @test: name '{}'.", tb.name),
                     filename,
                 ));
+            }
+        }
+        diags
+    }
+
+    fn e016_halt_requires_escalate(wf: &WorkflowFile, filename: &str) -> Vec<Diagnostic> {
+        let mut diags = Vec::new();
+        for step in &wf.steps {
+            if let Some(body) = &step.body {
+                find_halt_branches_stmt(body, &mut diags, filename);
+            }
+            for sub in &step.sub_steps {
+                find_halt_branches_stmt(sub, &mut diags, filename);
             }
         }
         diags
@@ -837,6 +851,62 @@ fn extract_commands_stmt<'a>(node: &'a Stmt, out: &mut Vec<&'a CommandCall>) {
     }
 }
 
+/// Flag a conditional branch carrying `!HALT` whose action is not an
+/// `ESCALATE()`: a fatal stop must route through escalation in the same step.
+fn check_halt_branch(branch: &Conditional, diags: &mut Vec<Diagnostic>, filename: &str) {
+    if !branch.halt_flag {
+        return;
+    }
+    let has_escalate = branch.action.as_ref().is_some_and(|a| a.name == "ESCALATE");
+    if !has_escalate {
+        diags.push(Diagnostic::new(
+            Severity::Error,
+            "E016",
+            "!HALT requires an ESCALATE() action in the same step.",
+            filename,
+        ));
+    }
+}
+
+fn find_halt_branches_stmt(node: &Stmt, diags: &mut Vec<Diagnostic>, filename: &str) {
+    match node {
+        Stmt::Conditional(cond) => {
+            check_halt_branch(cond, diags, filename);
+            for child in &cond.body {
+                find_halt_branches_stmt(child, diags, filename);
+            }
+            for br in &cond.elif_branches {
+                check_halt_branch(br, diags, filename);
+                for child in &br.body {
+                    find_halt_branches_stmt(child, diags, filename);
+                }
+            }
+            if let Some(else_br) = &cond.else_branch {
+                check_halt_branch(else_br, diags, filename);
+                for child in &else_br.body {
+                    find_halt_branches_stmt(child, diags, filename);
+                }
+            }
+        }
+        Stmt::ForLoop(fl) => {
+            for child in &fl.body {
+                find_halt_branches_stmt(child, diags, filename);
+            }
+        }
+        Stmt::UntilLoop(ul) => {
+            for child in &ul.body {
+                find_halt_branches_stmt(child, diags, filename);
+            }
+        }
+        Stmt::Parallel(pb) => {
+            for child in &pb.branches {
+                find_halt_branches_stmt(child, diags, filename);
+            }
+        }
+        Stmt::Command(_) | Stmt::VarRef(_) | Stmt::Comment(_) => {}
+    }
+}
+
 fn find_until_loops_step<F: FnMut(&UntilLoop)>(step: &Step, f: &mut F) {
     if let Some(body) = &step.body {
         find_until_loops_stmt(body, f);
@@ -966,6 +1036,46 @@ mod tests {
         let ast = Parser::parse(src).expect("parse");
         let diags = Validator::validate(&ast, "vp_test.nodus");
         assert!(!diags.iter().any(|d| d.code == "E005"));
+    }
+
+    #[test]
+    fn e016_fires_on_halt_without_escalate() {
+        let src = "\
+§wf:bad_halt v1.0
+§runtime: { core: schema.nodus }
+@out: $out
+@err: ESCALATE(human)
+@steps:
+  1. ?IF 1 > 0 → GEN(x) !HALT
+  2. LOG(done) → $out
+";
+        let ast = Parser::parse(src).expect("parse");
+        let diags = Validator::validate(&ast, "bad_halt.nodus");
+        assert!(
+            diags
+                .iter()
+                .any(|d| d.code == "E016" && d.severity == Severity::Error),
+            "expected E016 for !HALT without ESCALATE; got: {diags:?}"
+        );
+    }
+
+    #[test]
+    fn no_e016_when_halt_has_escalate() {
+        let src = "\
+§wf:good_halt v1.0
+§runtime: { core: schema.nodus }
+@out: $out
+@err: ESCALATE(human)
+@steps:
+  1. ?IF 1 > 0 → ESCALATE(human) !HALT
+  2. LOG(done) → $out
+";
+        let ast = Parser::parse(src).expect("parse");
+        let diags = Validator::validate(&ast, "good_halt.nodus");
+        assert!(
+            !diags.iter().any(|d| d.code == "E016"),
+            "ESCALATE alongside !HALT must not trip E016; got: {diags:?}"
+        );
     }
 
     #[test]

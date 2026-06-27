@@ -266,8 +266,11 @@ impl DialogProvider for DefaultDialogProvider {
 enum Signal {
     Break,
     Skip,
-    /// A dialog could not resolve; suspend the run (`Status::Paused`).
+    /// A dialog could not resolve, or a branch carried `!PAUSE`; suspend the run
+    /// (`Status::Paused`).
     Pause,
+    /// A branch carried `!HALT`; stop the run with a failed status.
+    Halt,
 }
 
 // ─── Execution context ────────────────────────────────────────────────────────
@@ -528,8 +531,13 @@ impl Executor {
         // Boot step 6: execute @steps.
         let mut abort = false;
         let mut paused = false;
+        let mut halted = false;
         for step in &ast.steps {
             match self.execute_step(&mut ctx, step) {
+                Some(Signal::Halt) => {
+                    halted = true;
+                    break;
+                }
                 Some(Signal::Break) => {
                     abort = true;
                     break;
@@ -546,10 +554,11 @@ impl Executor {
         let out = ctx.get_var("out");
         // Rule violations take precedence (protocol-level failure); a pause is a
         // clean suspension and outranks abort/partial so the host sees Paused.
-        let status = if ctx
-            .errors
-            .iter()
-            .any(|e| e.code == vocab::error_code::RULE_VIOLATION)
+        let status = if halted
+            || ctx
+                .errors
+                .iter()
+                .any(|e| e.code == vocab::error_code::RULE_VIOLATION)
         {
             Status::Failed
         } else if paused {
@@ -635,6 +644,31 @@ impl Executor {
         }
     }
 
+    /// Resolve the control signal a taken conditional branch emits from its
+    /// action flags. `!HALT` outranks `!PAUSE`, which outranks `!BREAK`/`!SKIP`;
+    /// `!PAUSE` records the suspension point so the run can resume later.
+    fn branch_exit_signal(
+        ctx: &mut ExecutionContext,
+        branch: &crate::ast::Conditional,
+        step_num: u32,
+    ) -> Option<Signal> {
+        if branch.halt_flag {
+            return Some(Signal::Halt);
+        }
+        if branch.pause_flag {
+            ctx.paused_at = Some(step_num);
+            ctx.flags.push(vocab::error_code::PAUSED.to_string());
+            return Some(Signal::Pause);
+        }
+        if branch.break_flag {
+            return Some(Signal::Break);
+        }
+        if branch.skip_flag {
+            return Some(Signal::Skip);
+        }
+        None
+    }
+
     fn execute_conditional(
         &self,
         ctx: &mut ExecutionContext,
@@ -660,13 +694,7 @@ impl Executor {
                     return sig;
                 }
             }
-            if cond.break_flag {
-                return Some(Signal::Break);
-            }
-            if cond.skip_flag {
-                return Some(Signal::Skip);
-            }
-            return None;
+            return Self::branch_exit_signal(ctx, cond, step_num);
         }
 
         for elif_br in &cond.elif_branches {
@@ -689,13 +717,7 @@ impl Executor {
                         return sig;
                     }
                 }
-                if elif_br.break_flag {
-                    return Some(Signal::Break);
-                }
-                if elif_br.skip_flag {
-                    return Some(Signal::Skip);
-                }
-                return None;
+                return Self::branch_exit_signal(ctx, elif_br, step_num);
             }
         }
 
@@ -718,9 +740,7 @@ impl Executor {
                     return sig;
                 }
             }
-            if else_br.break_flag {
-                return Some(Signal::Break);
-            }
+            return Self::branch_exit_signal(ctx, else_br, step_num);
         }
 
         None
@@ -750,6 +770,7 @@ impl Executor {
             for child in &fl.body {
                 let sig = self.execute_node(ctx, child, step_num);
                 match sig {
+                    Some(Signal::Halt) => return Some(Signal::Halt),
                     Some(Signal::Break) => return Some(Signal::Break),
                     Some(Signal::Pause) => return Some(Signal::Pause),
                     Some(Signal::Skip) => {
@@ -782,6 +803,7 @@ impl Executor {
             ctx.event_count += 1;
             for child in &ul.body {
                 match self.execute_node(ctx, child, step_num) {
+                    Some(Signal::Halt) => return Some(Signal::Halt),
                     Some(Signal::Break) => return Some(Signal::Break),
                     Some(Signal::Pause) => return Some(Signal::Pause),
                     _ => {}

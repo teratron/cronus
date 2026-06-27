@@ -4,15 +4,15 @@
 <!-- Maximum 100 lines. Agent updates AFTER each completed action. -->
 
 **Workspace:** nodus
-**Updated:** 2026-06-27 12:57
-**Phase:** 11 — Control-Flow Constructs
+**Updated:** 2026-06-27 17:34
+**Phase:** 11 — Control-Flow Constructs (in progress)
 **Status:** Active
 
 ## Current Position
 
-- **Task:** Phase 6 complete — nodus is a first-class assertion-evaluating test facility (NT-1…NT-10)
-- **Spec:** l1-nodus-testing.md v1.0.1, l2-nodus-testing.md v1.0.0 (all 8 specs Stable)
-- **Next Action:** Plan complete — author new scope via /magic.spec nodus (or /magic.status for a briefing)
+- **Task:** Phase 11 Slice 1 complete — `!HALT` / `!PAUSE` action flags implemented in crates/nodus
+- **Spec:** l2-nodus-control-flow.md v1.0.0 (Stable); all 13 specs Stable
+- **Next Action:** Run /magic.run nodus to implement Phase 11 Slice 2 (?SWITCH)
 
 ## Progress
 
@@ -21,6 +21,8 @@ Overall: [6/6] ██████████ 100%
 ```
 
 ## Recent Decisions
+
+- 2026-06-27 **Decision:** Phase 11 Slice 1 landed. `!HALT` / `!PAUSE` conditional action flags implemented in crates/nodus (lexer BangHalt/BangPause, Conditional.halt_flag/pause_flag, parser BranchFlags, executor Signal::Halt + branch_exit_signal, validator E016 halt-requires-escalate, transpiler human form); 245 tests pass (+8). Slices 2–4 (?SWITCH/~MAP/~RETRY) remain.
 
 - 2026-06-27 **Decision:** Phase 10 complete. HITL dialog implemented in crates/nodus (ASK/CONFIRM, Status::Paused+ResumeDescriptor, DialogProvider+DefaultDialogProvider, ExtensionRole::Dialog, run_with_dialog); 237 tests pass (+9).
 

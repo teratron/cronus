@@ -53,6 +53,10 @@ pub enum TokenType {
     BangSkip,
     /// `!OVERRIDE`
     BangOverride,
+    /// `!HALT`
+    BangHalt,
+    /// `!PAUSE`
+    BangPause,
 
     // `?` keywords
     /// `?IF`
@@ -709,6 +713,8 @@ impl Lexer {
             "BREAK" => Some(TokenType::BangBreak),
             "SKIP" => Some(TokenType::BangSkip),
             "OVERRIDE" => Some(TokenType::BangOverride),
+            "HALT" => Some(TokenType::BangHalt),
+            "PAUSE" => Some(TokenType::BangPause),
             _ => None,
         };
 
@@ -983,6 +989,15 @@ mod tests {
         assert!(got.contains(&TokenType::BangBreak));
         let wf = toks.iter().find(|t| t.ty == TokenType::WfRef).unwrap();
         assert_eq!(wf.value, "wf:crisis");
+    }
+
+    #[test]
+    fn halt_and_pause_lex_as_distinct_bang_keywords() {
+        let toks = Lexer::tokenize_str("?IF $r > 0.9 → ESCALATE(human) !HALT").unwrap();
+        assert!(types(&toks).contains(&TokenType::BangHalt));
+
+        let toks = Lexer::tokenize_str("?IF $r > 0.9 → ASK(human) !PAUSE").unwrap();
+        assert!(types(&toks).contains(&TokenType::BangPause));
     }
 
     #[test]
