@@ -10,7 +10,8 @@
 //! the transpiler stays in sync with the schema without duplicating data.
 
 use crate::ast::{
-    CommandCall, Conditional, ForLoop, RuleKind, Step, Stmt, SwitchBlock, UntilLoop, WorkflowFile,
+    CommandCall, Conditional, ForLoop, MapBlock, RuleKind, Step, Stmt, SwitchBlock, UntilLoop,
+    WorkflowFile,
 };
 use crate::vocab::TRANSPILER_VERB_MAP;
 
@@ -320,10 +321,26 @@ impl Transpiler {
             Some(Stmt::UntilLoop(ul)) => Self::humanize_until(ul),
             Some(Stmt::Parallel(_)) => "Run the following in parallel".to_string(),
             Some(Stmt::Switch(sw)) => Self::humanize_switch(sw),
+            Some(Stmt::Map(mb)) => Self::humanize_map(mb),
             Some(Stmt::Comment(c)) => c.text.trim_start_matches(';').trim().to_string(),
             Some(Stmt::VarRef(v)) => v.name.clone(),
             None => String::new(),
         }
+    }
+
+    fn humanize_map(mb: &MapBlock) -> String {
+        let mut s = format!(
+            "Map {} over {}",
+            Self::humanize_command(&mb.command),
+            Self::humanize_var(&mb.collection)
+        );
+        if let Some(target) = &mb.target {
+            s.push_str(&format!(
+                " \u{2192} store as {}",
+                Self::humanize_var(target)
+            ));
+        }
+        s
     }
 
     fn humanize_switch(sw: &SwitchBlock) -> String {
@@ -704,6 +721,24 @@ mod tests {
         assert_eq!(Transpiler::humanize_var("$out.data"), "out \u{2192} data");
         assert_eq!(Transpiler::humanize_var("$draft"), "draft");
         assert_eq!(Transpiler::humanize_var(""), "");
+    }
+
+    #[test]
+    fn humanize_map_renders_collection_and_target() {
+        use crate::ast::MapBlock;
+        let mb = MapBlock {
+            collection: "$items".to_string(),
+            command: CommandCall {
+                name: "GEN".to_string(),
+                args: vec!["$it".to_string()],
+                ..Default::default()
+            },
+            target: Some("$out".to_string()),
+        };
+        let human = Transpiler::humanize_map(&mb);
+        assert!(human.contains("Map"), "got: {human}");
+        assert!(human.contains("over items"), "got: {human}");
+        assert!(human.contains("store as out"), "got: {human}");
     }
 
     #[test]

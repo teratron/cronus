@@ -13,8 +13,9 @@
 
 use crate::ast::{
     AbsoluteRule, CommandCall, Comment, Conditional, ContextDecl, ErrorDecl, FileHeader, FileType,
-    ForLoop, InputDecl, InputField, MacroBlock, OutputDecl, ParallelBlock, Preference, RuleKind,
-    RuntimeBlock, Step, Stmt, SwitchBlock, TestBlock, Trigger, UntilLoop, Variable, WorkflowFile,
+    ForLoop, InputDecl, InputField, MacroBlock, MapBlock, OutputDecl, ParallelBlock, Preference,
+    RuleKind, RuntimeBlock, Step, Stmt, SwitchBlock, TestBlock, Trigger, UntilLoop, Variable,
+    WorkflowFile,
 };
 use crate::error::{Error, Result, Span};
 use crate::lexer::{Lexer, Token, TokenType};
@@ -548,6 +549,7 @@ impl Parser {
                 TokenType::TildeFor
                 | TokenType::TildeUntil
                 | TokenType::TildeParallel
+                | TokenType::TildeMap
                 | TokenType::TildeEnd
                 | TokenType::TildeJoin => {
                     if let Some(node) = self.parse_control_flow() {
@@ -632,7 +634,10 @@ impl Parser {
                     let sw = self.parse_switch();
                     step.sub_steps.push(Stmt::Switch(sw));
                 }
-                TokenType::TildeFor | TokenType::TildeUntil | TokenType::TildeParallel => {
+                TokenType::TildeFor
+                | TokenType::TildeUntil
+                | TokenType::TildeParallel
+                | TokenType::TildeMap => {
                     if let Some(node) = self.parse_control_flow() {
                         step.sub_steps.push(node);
                     }
@@ -657,9 +662,10 @@ impl Parser {
                 self.parse_conditional().map(Stmt::Conditional)
             }
             TokenType::QSwitch => Some(Stmt::Switch(self.parse_switch())),
-            TokenType::TildeFor | TokenType::TildeUntil | TokenType::TildeParallel => {
-                self.parse_control_flow()
-            }
+            TokenType::TildeFor
+            | TokenType::TildeUntil
+            | TokenType::TildeParallel
+            | TokenType::TildeMap => self.parse_control_flow(),
             TokenType::CommandName | TokenType::Run => {
                 Some(Stmt::Command(self.parse_command_call()))
             }
@@ -940,6 +946,7 @@ impl Parser {
             TokenType::TildeFor => Some(Stmt::ForLoop(self.parse_for_loop())),
             TokenType::TildeUntil => Some(Stmt::UntilLoop(self.parse_until_loop())),
             TokenType::TildeParallel => Some(Stmt::Parallel(self.parse_parallel())),
+            TokenType::TildeMap => Some(Stmt::Map(self.parse_map())),
             TokenType::TildeEnd | TokenType::TildeJoin => {
                 self.advance();
                 self.skip_to_newline();
@@ -1015,6 +1022,35 @@ impl Parser {
             condition: cond_parts.join(" ").trim().to_string(),
             max_iterations,
             body,
+        }
+    }
+
+    /// Parse `~MAP $coll: CMD($it) → $out` — a single-line collection transform.
+    /// The per-element command's `→ $out` becomes the map's output target; the
+    /// implicit `$it` binding is supplied at execution time.
+    fn parse_map(&mut self) -> MapBlock {
+        self.advance(); // skip ~MAP
+        self.skip_noise();
+        let mut collection = String::new();
+        if self.check(TokenType::Variable) {
+            collection = self.cur_val();
+            self.advance();
+        }
+        if self.check(TokenType::Colon) {
+            self.advance();
+        }
+        self.skip_noise();
+        let mut command = if matches!(self.cur_ty(), TokenType::CommandName | TokenType::Run) {
+            self.parse_command_call()
+        } else {
+            CommandCall::default()
+        };
+        // The command's pipeline target is the map's output collection target.
+        let target = command.pipeline_target.take();
+        MapBlock {
+            collection,
+            command,
+            target,
         }
     }
 
@@ -1637,6 +1673,25 @@ mod tests {
                 assert_eq!(action.args, vec!["wf:crisis"]);
             }
             other => panic!("expected conditional, got {other:?}"),
+        }
+    }
+
+    #[test]
+    fn parses_map_block() {
+        let src = "§wf:mapper v1.0\n§runtime: { core: schema.nodus }\n@steps:\n  1. ~MAP $items: GEN($it) → $out\n";
+        let wf = Parser::parse(src).unwrap();
+        match wf.steps[0].body.as_ref().unwrap() {
+            Stmt::Map(mb) => {
+                assert_eq!(mb.collection, "$items");
+                assert_eq!(mb.command.name, "GEN");
+                assert_eq!(mb.command.args, vec!["$it"]);
+                assert_eq!(mb.target.as_deref(), Some("$out"));
+                assert!(
+                    mb.command.pipeline_target.is_none(),
+                    "the → target moves to MapBlock, leaving the command targetless"
+                );
+            }
+            other => panic!("expected map, got {other:?}"),
         }
     }
 

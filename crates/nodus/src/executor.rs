@@ -641,6 +641,7 @@ impl Executor {
             Stmt::UntilLoop(ul) => self.execute_until(ctx, ul, step_num),
             Stmt::Parallel(pb) => self.execute_parallel(ctx, pb, step_num),
             Stmt::Switch(sw) => self.execute_switch(ctx, sw, step_num),
+            Stmt::Map(mb) => self.execute_map(ctx, mb, step_num),
             Stmt::VarRef(_) | Stmt::Comment(_) => None,
         }
     }
@@ -867,6 +868,37 @@ impl Executor {
         }
         ctx.flags
             .push(vocab::error_code::SWITCH_NO_MATCH.to_string());
+        None
+    }
+
+    /// Execute a `~MAP`: bind each element of the collection to `$it`, run the
+    /// command, and collect the results into a list bound to the target. An
+    /// empty or non-list collection yields an empty list and never errors.
+    fn execute_map(
+        &self,
+        ctx: &mut ExecutionContext,
+        mb: &crate::ast::MapBlock,
+        step_num: u32,
+    ) -> Option<Signal> {
+        let items = match ctx.get_var(&mb.collection) {
+            Value::List(items) => items,
+            _ => Vec::new(),
+        };
+        let mut results = Vec::with_capacity(items.len());
+        // Route each element's result through a scratch target so the full
+        // command pipeline (audit, rule checks) runs per element.
+        let mut cmd = mb.command.clone();
+        cmd.pipeline_target = Some("$__map_element".to_string());
+        for item in items {
+            ctx.set_var("it", item);
+            if let Some(sig) = self.execute_command(ctx, &cmd, step_num) {
+                return Some(sig);
+            }
+            results.push(ctx.get_var("$__map_element"));
+        }
+        if let Some(target) = &mb.target {
+            ctx.set_var(target, Value::List(results));
+        }
         None
     }
 
@@ -1686,6 +1718,56 @@ mod tests {
                 result.log.iter().all(|e| e.command == "GEN"),
                 "all log entries should be GEN"
             );
+        }
+
+        #[test]
+        fn map_transforms_each_element_into_a_list() {
+            use crate::ast::{CommandCall, MapBlock};
+            let mut ctx = ExecutionContext::new();
+            ctx.variables.insert(
+                "items".to_string(),
+                Value::List(vec![
+                    Value::Text("a".to_string()),
+                    Value::Text("b".to_string()),
+                    Value::Text("c".to_string()),
+                ]),
+            );
+            let mb = MapBlock {
+                collection: "$items".to_string(),
+                command: CommandCall {
+                    name: "GEN".to_string(),
+                    args: vec!["$it".to_string()],
+                    ..Default::default()
+                },
+                target: Some("$out".to_string()),
+            };
+            Executor::with_stub().execute_map(&mut ctx, &mb, 1);
+            match ctx.get_var("$out") {
+                Value::List(items) => assert_eq!(items.len(), 3, "one result per element"),
+                other => panic!("expected a list, got {other:?}"),
+            }
+        }
+
+        #[test]
+        fn map_over_non_list_yields_empty_list() {
+            use crate::ast::{CommandCall, MapBlock};
+            let mut ctx = ExecutionContext::new();
+            ctx.variables
+                .insert("items".to_string(), Value::Text("scalar".to_string()));
+            let mb = MapBlock {
+                collection: "$items".to_string(),
+                command: CommandCall {
+                    name: "GEN".to_string(),
+                    args: vec!["$it".to_string()],
+                    ..Default::default()
+                },
+                target: Some("$out".to_string()),
+            };
+            Executor::with_stub().execute_map(&mut ctx, &mb, 1);
+            match ctx.get_var("$out") {
+                Value::List(items) => assert!(items.is_empty(), "a non-list collection yields []"),
+                other => panic!("expected an empty list, got {other:?}"),
+            }
         }
 
         #[test]

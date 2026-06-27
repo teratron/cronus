@@ -4,15 +4,15 @@
 <!-- Maximum 100 lines. Agent updates AFTER each completed action. -->
 
 **Workspace:** nodus
-**Updated:** 2026-06-27 17:50
+**Updated:** 2026-06-27 18:08
 **Phase:** 11 — Control-Flow Constructs (in progress)
 **Status:** Active
 
 ## Current Position
 
-- **Task:** Phase 11 Slices 1–2 complete — `!HALT` / `!PAUSE` flags + `?SWITCH` dispatch implemented in crates/nodus
+- **Task:** Phase 11 Slices 1–3 complete — `!HALT`/`!PAUSE` + `?SWITCH` + `~MAP` implemented in crates/nodus
 - **Spec:** l2-nodus-control-flow.md v1.0.0 (Stable); all 13 specs Stable
-- **Next Action:** Run /magic.run nodus to implement Phase 11 Slice 3 (~MAP)
+- **Next Action:** Run /magic.run nodus to implement Phase 11 Slice 4 (~RETRY:n)
 
 ## Progress
 
@@ -21,6 +21,8 @@ Overall: [6/6] ██████████ 100%
 ```
 
 ## Recent Decisions
+
+- 2026-06-27 **Decision:** Phase 11 Slice 3 landed. `~MAP` collection transform implemented in crates/nodus (lexer TildeMap, MapBlock AST, parser parse_map + routing, executor execute_map binding $it + collecting into a list, transpiler human form); 258 tests pass (+5). Slice 4 (~RETRY) remains.
 
 - 2026-06-27 **Decision:** Phase 11 Slice 2 landed. `?SWITCH` multi-branch dispatch implemented in crates/nodus (lexer QSwitch + Star tokens, SwitchBlock AST, parser parse_switch + routing, executor execute_switch first-match-wins + SWITCH_NO_MATCH, validator W014 empty-arms, transpiler human form); 253 tests pass (+8). Slices 3–4 (~MAP/~RETRY) remain.
 

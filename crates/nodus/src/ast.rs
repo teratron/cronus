@@ -224,6 +224,18 @@ pub struct SwitchBlock {
     pub default: Option<CommandCall>,
 }
 
+/// Collection transform (`~MAP $coll: CMD($it) → $out`). The per-element value
+/// is bound to the implicit `$it`; results collect into `target`.
+#[derive(Debug, Clone, PartialEq, Eq, Default)]
+pub struct MapBlock {
+    /// The collection variable iterated over.
+    pub collection: String,
+    /// The per-element command, using the implicit `$it` binding.
+    pub command: CommandCall,
+    /// The `→ $out` destination that receives the collected list, if any.
+    pub target: Option<String>,
+}
+
 /// A variable reference (`$name.field`).
 #[derive(Debug, Clone, PartialEq, Eq, Default)]
 pub struct Variable {
@@ -278,6 +290,8 @@ pub enum Stmt {
     Parallel(ParallelBlock),
     /// A `?SWITCH` multi-branch dispatch.
     Switch(SwitchBlock),
+    /// A `~MAP` collection transform.
+    Map(MapBlock),
     /// A bare variable reference.
     VarRef(Variable),
     /// A raw/comment line the parser could not classify.

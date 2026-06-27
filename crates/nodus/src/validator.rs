@@ -723,6 +723,21 @@ fn collect_vars_stmt(
                 collect_vars_cmd(default, declared, used);
             }
         }
+        Stmt::Map(mb) => {
+            if mb.collection.starts_with('$') {
+                used.insert(
+                    mb.collection
+                        .split('.')
+                        .next()
+                        .unwrap_or(&mb.collection)
+                        .to_string(),
+                );
+            }
+            collect_vars_cmd(&mb.command, declared, used);
+            if let Some(target) = &mb.target {
+                declared.insert(target.split('.').next().unwrap_or(target).to_string());
+            }
+        }
         Stmt::VarRef(v) => {
             used.insert(v.name.split('.').next().unwrap_or(&v.name).to_string());
         }
@@ -886,6 +901,7 @@ fn extract_commands_stmt<'a>(node: &'a Stmt, out: &mut Vec<&'a CommandCall>) {
                 out.push(default);
             }
         }
+        Stmt::Map(mb) => out.push(&mb.command),
         Stmt::VarRef(_) | Stmt::Comment(_) => {}
     }
 }
@@ -942,9 +958,9 @@ fn find_halt_branches_stmt(node: &Stmt, diags: &mut Vec<Diagnostic>, filename: &
                 find_halt_branches_stmt(child, diags, filename);
             }
         }
-        // Switch arms carry command actions, not conditional branches, so no
-        // `!HALT` flag can appear inside a `?SWITCH`.
-        Stmt::Switch(_) | Stmt::Command(_) | Stmt::VarRef(_) | Stmt::Comment(_) => {}
+        // Switch arms and map bodies carry command actions, not conditional
+        // branches, so no `!HALT` flag can appear inside them.
+        Stmt::Switch(_) | Stmt::Map(_) | Stmt::Command(_) | Stmt::VarRef(_) | Stmt::Comment(_) => {}
     }
 }
 
@@ -992,7 +1008,7 @@ fn find_empty_switches_stmt(node: &Stmt, diags: &mut Vec<Diagnostic>, filename: 
                 find_empty_switches_stmt(child, diags, filename);
             }
         }
-        Stmt::Command(_) | Stmt::VarRef(_) | Stmt::Comment(_) => {}
+        Stmt::Map(_) | Stmt::Command(_) | Stmt::VarRef(_) | Stmt::Comment(_) => {}
     }
 }
 

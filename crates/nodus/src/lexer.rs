@@ -75,6 +75,8 @@ pub enum TokenType {
     TildeUntil,
     /// `~PARALLEL`
     TildeParallel,
+    /// `~MAP`
+    TildeMap,
     /// `~JOIN`
     TildeJoin,
     /// `~END`
@@ -214,6 +216,7 @@ fn tilde_keyword(word: &str) -> Option<TokenType> {
         "FOR" => Some(TokenType::TildeFor),
         "UNTIL" => Some(TokenType::TildeUntil),
         "PARALLEL" => Some(TokenType::TildeParallel),
+        "MAP" => Some(TokenType::TildeMap),
         "JOIN" => Some(TokenType::TildeJoin),
         "END" => Some(TokenType::TildeEnd),
         _ => None,
@@ -1008,6 +1011,20 @@ mod tests {
 
         let toks = Lexer::tokenize_str("?IF $r > 0.9 → ASK(human) !PAUSE").unwrap();
         assert!(types(&toks).contains(&TokenType::BangPause));
+    }
+
+    #[test]
+    fn map_keyword_lexes_before_generic_flag() {
+        let toks = Lexer::tokenize_str("~MAP $items: GEN($it) → $out").unwrap();
+        let got = types(&toks);
+        assert!(
+            got.contains(&TokenType::TildeMap),
+            "~MAP must lex as TildeMap, not a generic Flag"
+        );
+        assert!(
+            !got.contains(&TokenType::Flag),
+            "~MAP must not fall through to Flag"
+        );
     }
 
     #[test]

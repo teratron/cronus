@@ -259,6 +259,7 @@ fn collect_command_calls<'a>(stmt: &'a Stmt, out: &mut Vec<&'a CommandCall>) {
                 out.push(default);
             }
         }
+        Stmt::Map(mb) => out.push(&mb.command),
         Stmt::VarRef(_) | Stmt::Comment(_) => {}
     }
 }
