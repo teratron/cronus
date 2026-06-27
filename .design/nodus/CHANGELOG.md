@@ -90,3 +90,10 @@ Internal phase journal. Each entry corresponds to a completed phase.
 - T-8B02: Confirmed no live catch-all emission sites existed (EXECUTION_FAILED was defined-only); validation-category codes defined-ahead pending the validator↔runtime code bridge — no production reassignment needed
 - T-8T01: `error_registry_lockstep` test — every canonical code (24 language codes + CAPABILITY_UNMET; EXECUTION_FAILED excluded) carries metadata
 - T-8T02: `cargo test -p nodus` — 222 passed (was 217; +5), 0 failed; clippy `-D warnings` clean; fmt clean; doc only the pre-existing `test`-fn baseline warning; SDD §6 reference-containment clean (no spec refs leaked into product code)
+
+## Phase 9 — Closed Vocabulary Registries (l2-nodus-registries) (2026-06-27)
+
+- T-9A01: Added `KNOWN_FLAGS` (12 analysis extractors), `KNOWN_VALIDATORS` (12 validator names), and `PRIMITIVE_TYPES` (10 field types) closed registries to `vocab.rs`
+- T-9A02: Added `Schema::is_known_flag` / `is_known_validator` (matches the pre-colon name, so `len:32` resolves to `len`) / `is_known_type` query methods
+- T-9B01: Added advisory validator diagnostics `W011` (unknown `~flag`), `W012` (unknown `^validator`), `W013` (unknown `@in` field type); warnings never set `ValidationReport::has_errors`, so unknown host vocabulary degrades gracefully (NL-1/NL-7/NL-9 strengthening)
+- T-9T01: `cargo test -p nodus` — 228 passed (was 222; +6), 0 failed; clippy `-D warnings` clean; fmt clean; doc only the pre-existing `test`-fn baseline; SDD §6 clean; no fixture regressed to an error (registry checks are advisory)

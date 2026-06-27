@@ -1,8 +1,8 @@
 # Implementation Plan
 
-**Version:** 1.10.0
+**Version:** 1.11.0
 **Generated:** 2026-06-24
-**Based on:** .design/nodus/INDEX.md v1.0.15
+**Based on:** .design/nodus/INDEX.md v1.0.16
 **Status:** Active
 
 ## Overview
@@ -131,9 +131,21 @@ stub-level runner to an assertion-evaluating test facility (NT-1…NT-10).*
   - ✅ Lockstep test (`error_registry_lockstep`) guards constant↔metadata sync; NL-1/2/4/9 preserved
   - ✅ 222 tests pass (was 217; +5); clippy clean; fmt clean; docs zero new warnings; SDD §6 clean
 
+## Phase 9 — Closed Vocabulary Registries (l2-nodus-registries) ✓
+
+*Implement the closed vocabulary registries from `l1-nodus-language.md` §4.6 (contents per `l2-nodus-runtime.md` §4.7(f)) in `crates/nodus`, per `l2-nodus-registries.md`. Adds `KNOWN_FLAGS`, `KNOWN_VALIDATORS`, and `PRIMITIVE_TYPES` as `vocab` data, the `Schema` query surface, and advisory (warning-severity) validator diagnostics for `~flag`/`^validator`/`@in` type tokens outside the registries. Strengthens NL-1/NL-7/NL-9; advisory-first so no existing workflow hard-breaks. Atomic tasks in `tasks/phase-9.md`.*
+
+> **Status:** Complete — all tracks A/B/T delivered.
+
+- [x] **L2 Nodus Registries** ([l2-nodus-registries.md](specifications/l2-nodus-registries.md)) [L2]
+  - ✅ `vocab.rs`: `KNOWN_FLAGS` (12) + `KNOWN_VALIDATORS` (12, pre-colon name match) + `PRIMITIVE_TYPES` (10) constants
+  - ✅ `Schema::is_known_flag` / `is_known_validator` / `is_known_type` query surface
+  - ✅ `validator.rs`: advisory W011 (unknown `~flag`) / W012 (unknown `^validator`) / W013 (unknown `@in` type); warnings never set `has_errors`
+  - ✅ 228 tests pass (was 222; +6); clippy clean; fmt clean; docs zero new warnings; SDD §6 clean; no fixture regressions
+
 ## Backlog
 
 <!-- l1-nodus-dialog.md (Draft) — human-in-the-loop dialog contract (ASK/CONFIRM, Status::Paused lifecycle). Held in Backlog pending design review of 2 TBDs: paused-state representation, and whether the dialog backend is a distinct ExtensionRole::Dialog. Promote via /magic.spec once resolved, then plan. -->
-<!-- Upstream parity gap v0.4.6 → v0.7 (l1-nodus-language §4.6 / l2-nodus-runtime §4.7) — remaining clusters needing focused spec authoring before they can be planned: control constructs (?SWITCH/~MAP/~RETRY/!HALT/!PAUSE), operators/expressions (MATCHES/?./??/WHERE/FIRST/LAST/string-interpolation), @needs selective schema loading, @ON(priority=N), closed flag/validator/type registries. Addressed so far: error taxonomy 11 → 24 → Phase 8 (l2-nodus-errors, Stable); HITL dialog (ASK/CONFIRM) → l1-nodus-dialog Draft (above). -->
+<!-- Upstream parity gap v0.4.6 → v0.7 (l1-nodus-language §4.6 / l2-nodus-runtime §4.7) — remaining clusters needing focused spec authoring before they can be planned: control constructs (?SWITCH/~MAP/~RETRY/!HALT/!PAUSE — needs lexer/parser/AST work), operators/expressions (MATCHES/?./??/WHERE/FIRST/LAST/string-interpolation — note MATCHES/PCRE vs the zero-dependency LP-1 constraint is an open design fork), @needs selective schema loading, @ON(priority=N), macro execution (RUN(@x) body expansion). Addressed so far: error taxonomy 11 → 24 → Phase 8 (l2-nodus-errors, Stable); closed flag/validator/type registries → Phase 9 (l2-nodus-registries, Stable); HITL dialog (ASK/CONFIRM) → l1-nodus-dialog Draft (above). -->
 <!-- StorageProvider/PolicyProvider executor integration deferred pending LP-3 satisfied (interfaces present in portability.rs; hook points + run_with_storage/run_with_policy variants pending the second documented host context). -->
 <!-- Future: l2-nodus-transpiler.md — dedicated transpiler L2 spec (currently covered by l2-nodus-runtime.md §4). -->

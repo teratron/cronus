@@ -90,3 +90,5 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Added specification `nodus-dialog` (nodus)
 - Added specification `nodus-errors` (nodus)
 - Completed task `phase-8` (nodus)
+- Added specification `nodus-registries` (nodus)
+- Completed task `phase-9` (nodus)

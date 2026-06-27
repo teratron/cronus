@@ -3,8 +3,8 @@
 //! Runs 30 rules against a parsed [`WorkflowFile`] AST and returns a flat list
 //! of [`Diagnostic`]s. Rules are grouped by severity:
 //!
-//! - **Error** (E001–E014): block execution when found.
-//! - **Warning** (W001–W010): workflow runs but has unsafe or incomplete patterns.
+//! - **Error** (E001–E015): block execution when found.
+//! - **Warning** (W001–W013): workflow runs but has unsafe or incomplete patterns.
 //! - **Info** (I001–I006): style suggestions.
 //!
 //! AST nodes carry no source positions in this iteration; diagnostics therefore
@@ -93,6 +93,7 @@ impl Validator {
         d.extend(Self::w008_log_last(ast, filename));
         d.extend(Self::w009_test_no_expected(ast, filename));
         // W010: extends resolve filesystem check — deferred
+        d.extend(Self::w011_known_vocabulary(ast, filename));
 
         // Info
         d.extend(Self::i001_step_comments(ast, filename));
@@ -499,6 +500,62 @@ impl Validator {
                 )
             })
             .collect()
+    }
+
+    /// W011/W012/W013 — advisory checks against the closed vocabulary registries.
+    /// `~flag` extractors, `^validator` names, and `@in` field types outside the
+    /// builtin registries are warned (NL-1 strengthening); warnings never block a
+    /// run, so workflows using host-specific vocabulary degrade gracefully.
+    fn w011_known_vocabulary(wf: &WorkflowFile, filename: &str) -> Vec<Diagnostic> {
+        let schema = vocab::Schema::builtin();
+        let mut diags = Vec::new();
+
+        // W013 — @in field types against the primitive registry.
+        if let Some(input) = &wf.input_decl {
+            for f in &input.fields {
+                if !f.type_name.is_empty() && !schema.is_known_type(&f.type_name) {
+                    diags.push(Diagnostic::new(
+                        Severity::Warning,
+                        "W013",
+                        format!(
+                            "Unknown field type '{}' on @in field '{}'.",
+                            f.type_name, f.name
+                        ),
+                        filename,
+                    ));
+                }
+            }
+        }
+
+        // W011 — ~flag extractors; W012 — ^validator names.
+        for step in &wf.steps {
+            for cmd in extract_commands_step(step) {
+                for flag in &cmd.flags {
+                    let name = flag.trim_start_matches('~');
+                    if !schema.is_known_flag(name) {
+                        diags.push(Diagnostic::new(
+                            Severity::Warning,
+                            "W011",
+                            format!("Unknown analysis flag '~{name}'."),
+                            filename,
+                        ));
+                    }
+                }
+                for validator in &cmd.validators {
+                    let name = validator.trim_start_matches('^');
+                    if !schema.is_known_validator(name) {
+                        diags.push(Diagnostic::new(
+                            Severity::Warning,
+                            "W012",
+                            format!("Unknown validator '^{name}'."),
+                            filename,
+                        ));
+                    }
+                }
+            }
+        }
+
+        diags
     }
 
     // ─── Info ─────────────────────────────────────────────────────────────────
@@ -1337,5 +1394,97 @@ mod tests {
         assert!(!errors.is_empty(), "block-class errors should be present");
         assert!(errors.iter().any(|d| d.code == "E001")); // runtime absent
         assert!(errors.iter().any(|d| d.code == "E005")); // publish without validate
+    }
+
+    #[test]
+    fn registry_warnings_fire_for_unknown_vocabulary() {
+        use crate::ast::{
+            CommandCall, InputDecl, InputField, RuntimeBlock, Step, Stmt, WorkflowFile,
+        };
+
+        let wf = WorkflowFile {
+            runtime: Some(RuntimeBlock {
+                core: "schema.nodus".to_string(),
+                ..Default::default()
+            }),
+            input_decl: Some(InputDecl {
+                fields: vec![InputField {
+                    name: "x".to_string(),
+                    type_name: "widget".to_string(), // unknown type → W013
+                    ..Default::default()
+                }],
+            }),
+            steps: vec![Step {
+                number: 1,
+                body: Some(Stmt::Command(CommandCall {
+                    name: "ANALYZE".to_string(),
+                    args: vec!["$in.x".to_string()],
+                    flags: vec!["bogusflag".to_string()], // unknown flag → W011
+                    validators: vec!["nope".to_string()], // unknown validator → W012
+                    pipeline_target: Some("$out".to_string()),
+                    ..Default::default()
+                })),
+                ..Default::default()
+            }],
+            ..Default::default()
+        };
+        let diags = Validator::validate(&wf, "");
+        assert!(
+            diags.iter().any(|d| d.code == "W011"),
+            "expected W011 unknown flag"
+        );
+        assert!(
+            diags.iter().any(|d| d.code == "W012"),
+            "expected W012 unknown validator"
+        );
+        assert!(
+            diags.iter().any(|d| d.code == "W013"),
+            "expected W013 unknown type"
+        );
+        // Advisory: registry findings are warnings, never errors.
+        assert!(!diags.iter().any(|d| d.severity == Severity::Error
+            && ["W011", "W012", "W013"].contains(&d.code.as_str())));
+    }
+
+    #[test]
+    fn no_registry_warnings_for_known_vocabulary() {
+        use crate::ast::{
+            CommandCall, InputDecl, InputField, RuntimeBlock, Step, Stmt, WorkflowFile,
+        };
+
+        let wf = WorkflowFile {
+            runtime: Some(RuntimeBlock {
+                core: "schema.nodus".to_string(),
+                ..Default::default()
+            }),
+            input_decl: Some(InputDecl {
+                fields: vec![InputField {
+                    name: "x".to_string(),
+                    type_name: "str".to_string(),
+                    ..Default::default()
+                }],
+            }),
+            steps: vec![Step {
+                number: 1,
+                body: Some(Stmt::Command(CommandCall {
+                    name: "ANALYZE".to_string(),
+                    args: vec!["$in.x".to_string()],
+                    flags: vec!["sentiment".to_string()],
+                    validators: vec!["len:32".to_string()],
+                    pipeline_target: Some("$out".to_string()),
+                    ..Default::default()
+                })),
+                ..Default::default()
+            }],
+            ..Default::default()
+        };
+        let diags = Validator::validate(&wf, "");
+        assert!(
+            !diags
+                .iter()
+                .any(|d| ["W011", "W012", "W013"].contains(&d.code.as_str())),
+            "known vocabulary must not warn; got: {:?}",
+            diags.iter().map(|d| &d.code).collect::<Vec<_>>()
+        );
     }
 }

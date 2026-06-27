@@ -82,6 +82,47 @@ pub const VALID_TONES: &[&str] = &[
     "brand",
 ];
 
+/// Closed registry of analysis-flag extractors (`~flag`). The validator checks
+/// `~flag` tokens against this set (advisory). Host extensions are a future
+/// `SchemaProvider` follow-on; the builtin set is never mutated (LP-4).
+pub const KNOWN_FLAGS: &[&str] = &[
+    "sentiment",
+    "intent",
+    "entities",
+    "topics",
+    "lang",
+    "toxicity",
+    "urgency",
+    "formality",
+    "clarity",
+    "relevance",
+    "pii",
+    "keywords",
+];
+
+/// Closed registry of validator names (`^validator`). A validator token may
+/// carry a colon-delimited argument (`len:32`, `lang:en`); this set holds the
+/// name (the segment before the first `:`).
+pub const KNOWN_VALIDATORS: &[&str] = &[
+    "len",
+    "min_len",
+    "no_pii",
+    "no_toxic",
+    "lang",
+    "format",
+    "required",
+    "sentiment",
+    "confidence",
+    "no_links",
+    "brand_voice",
+    "approved",
+];
+
+/// Closed registry of primitive `@in` field types (NL-7 closed value space).
+pub const PRIMITIVE_TYPES: &[&str] = &[
+    "str", "int", "float", "bool", "list", "obj", "url", "ts", "null", "any",
+];
+
 /// Reserved variable names (with leading `$`) that carry runtime-defined meaning.
 pub const RESERVED_VARIABLES: &[&str] = &[
     "$in",
@@ -374,6 +415,23 @@ impl Schema {
         VALID_TONES.contains(&tone)
     }
 
+    /// Is `name` a known analysis-flag extractor (`~flag`)?
+    pub fn is_known_flag(&self, name: &str) -> bool {
+        KNOWN_FLAGS.contains(&name)
+    }
+
+    /// Is `name` a known validator (`^validator`)? Matches the validator name —
+    /// the segment before the first `:` — so `len:32` and `len` both resolve.
+    pub fn is_known_validator(&self, name: &str) -> bool {
+        let head = name.split(':').next().unwrap_or(name);
+        KNOWN_VALIDATORS.contains(&head)
+    }
+
+    /// Is `name` a known primitive `@in` field type?
+    pub fn is_known_type(&self, name: &str) -> bool {
+        PRIMITIVE_TYPES.contains(&name)
+    }
+
     /// Human-form verb for a command, if one is mapped.
     pub fn transpiler_verb(&self, command: &str) -> Option<&'static str> {
         TRANSPILER_VERB_MAP
@@ -627,5 +685,40 @@ mod tests {
                 "canonical code {code} is missing metadata"
             );
         }
+    }
+
+    // ── Closed vocabulary registries ────────────────────────────────────────
+
+    #[test]
+    fn registries_have_expected_size() {
+        assert_eq!(KNOWN_FLAGS.len(), 12);
+        assert_eq!(KNOWN_VALIDATORS.len(), 12);
+        assert_eq!(PRIMITIVE_TYPES.len(), 10);
+    }
+
+    #[test]
+    fn schema_knows_flags() {
+        let s = Schema::builtin();
+        assert!(s.is_known_flag("sentiment"));
+        assert!(s.is_known_flag("keywords"));
+        assert!(!s.is_known_flag("bogus"));
+    }
+
+    #[test]
+    fn schema_knows_validators_by_prefix() {
+        let s = Schema::builtin();
+        assert!(s.is_known_validator("len"));
+        assert!(s.is_known_validator("len:32"), "pre-colon name must match");
+        assert!(s.is_known_validator("lang:en"));
+        assert!(!s.is_known_validator("nope"));
+        assert!(!s.is_known_validator("nope:1"));
+    }
+
+    #[test]
+    fn schema_knows_types() {
+        let s = Schema::builtin();
+        assert!(s.is_known_type("str"));
+        assert!(s.is_known_type("any"));
+        assert!(!s.is_known_type("widget"));
     }
 }
