@@ -43,7 +43,7 @@ build/
 *.min.js
 *.min.css
 
-# Rust / Cargo (crates/*, apps/desktop/src-tauri)
+# Rust / Cargo (crates/*, apps/desktop/tauri)
 target/
 **/*.rs.bk
 *.pdb
@@ -60,9 +60,9 @@ node_modules/
 .vite/
 *.timestamp-*.mjs
 
-# Tauri (apps/desktop/src-tauri)
-**/src-tauri/gen/schemas/
-# src-tauri/target is covered by `target/` above.
+# Tauri (apps/desktop/tauri)
+**/tauri/gen/
+# tauri/target is covered by `target/` above.
 # Signing keys — never commit.
 *.keystore
 *.jks

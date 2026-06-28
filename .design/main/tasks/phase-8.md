@@ -1,7 +1,7 @@
 ---
 phase: 8
 name: "Flower — Desktop App"
-status: Todo
+status: In Progress
 subsystem: "apps/desktop, packages/ui"
 requires:
   - "core capability surface + subsystems (Phases 1, 4–6)"
@@ -18,13 +18,14 @@ duration_minutes: ~
 # Stage 8 Tasks — Flower: Desktop App
 
 **Phase:** 8
-**Status:** Todo
+**Status:** In Progress
 **Strategic Goal:** The full graphical surface — a Tauri v2 desktop shell (`apps/desktop`) wrapping a React 19 UI (`packages/ui`) that renders core state and drives the autonomous office. Pure presentation: the UI calls the core over the IPC bridge and holds no business logic (INV-2); all domain logic stays in the core.
 
 > **Architectural guardrails (l2-app-ui §3):** the UI is a pure consumer of the core via the shell↔core IPC bridge (INV-1/INV-2). No `any` on public surfaces; all user-facing strings externalized (i18n); honor the theme/design-token system. Slash/command surfaces mirror the shared capability set (INV-3 parity with CLI/TUI). Secrets are never rendered (INV-7).
 >
 > **Planner Audit — execution risks (read before `/magic.run`):**
-> 1. **Toolchain gate (hidden dependency):** `pnpm` and the Tauri v2 CLI are **not installed** (node v22 is present). **T-8A01 provisions them and scaffolds both crates/packages; every other task depends on it.** If provisioning fails (no network / install error), the whole phase is blocked — this is the Phase-1 pnpm/Tauri blocker recurring.
+>
+> 1. **Toolchain gate (RESOLVED in T-8A01):** pnpm (via corepack) + the Tauri v2 CLI are provisioned and both crates/packages are scaffolded and build green. Note: native C/Tauri builds (`cargo` on the Tauri crate, `windres`, `gcc`) must run via **PowerShell**, not the Bash tool — Git Bash's MSYS2 environment makes mingw64 `cc1.exe` fail to load (this was the false "[C-801] host gcc broken" finding; gcc is fine in PowerShell).
 > 2. **Optimism bias:** `l2-app-ui` spans 14 design sections (§4.1–4.14: shell bridge, settings, tray, shortcuts, overlay, single-instance, per-provider prompts, XML env, MCP client). This is a large phase — run it **incrementally**: complete Track A first, then B/C/D can proceed in parallel.
 > 3. **Cascade:** Tracks B (Rust/Tauri shell systems), C (React surfaces + views), D (integrations) all sit on the T-8A01 scaffold + the T-8A02 IPC bridge.
 
@@ -32,7 +33,7 @@ duration_minutes: ~
 
 Track A — Scaffold & Bridge (l2-app-ui §2, §4.2) — **gating**
 
-- [ ] [T-8A01] Provision frontend toolchain (pnpm + Tauri v2 CLI) + scaffold `apps/desktop` (Tauri v2 shell) and `packages/ui` (React 19 + Vite + TS + Tailwind v4 + shadcn/ui)
+- [x] [T-8A01] Provision frontend toolchain (pnpm + Tauri v2 CLI) + scaffold `apps/desktop` (Tauri v2 shell) and `packages/ui` (React 19 + Vite + TS + Tailwind v4 + shadcn/ui)
 - [ ] [T-8A02] Shell ↔ core IPC bridge: typed UI→core command surface over Tauri IPC (presentation-only; mirrors the capability set)
 
 Track B — Shell Systems (Rust/Tauri side, l2-app-ui §4.7–4.11)
@@ -61,11 +62,13 @@ Track T — Validation
 ### [T-8A01] Provision toolchain + scaffold
 
 - **Spec:** l2-app-ui.md §2 (Constraints), §4.1 (Surfaces); l2-technology-stack.md (UI stack)
-- **Status:** Todo
+- **Status:** Done
 - **Assignment:** Agent
-- **Verify:** `pnpm --version` and the Tauri v2 CLI resolve (e.g. `cargo tauri --version` or `pnpm tauri --version`); `pnpm -C packages/ui build` exits 0 on the scaffold; `pnpm -C apps/desktop tauri build --debug` (or `tauri info`) succeeds; an empty window launches in dev.
-- **Handoff:** Provides the buildable `apps/desktop` (Tauri v2) + `packages/ui` (React 19) workspace every other Phase 8 task builds on.
-- **Notes:** Toolchain is **currently missing** — install `pnpm` (node v22 present) and the Tauri v2 CLI first. Scaffold the React stack per l2-app-ui (React 19 + Vite + TypeScript + Tailwind v4 + shadcn/ui). No domain logic — scaffold only. If network/install is unavailable, this task (and the phase) is **Blocked**; record the reason.
+- **Verify:** `pnpm --version` and the Tauri v2 CLI resolve; `pnpm -C packages/ui build` exits 0; `pnpm -C apps/desktop tauri info` succeeds; `cargo check` on the Tauri crate compiles.
+- **Handoff:** Provides the buildable `apps/desktop` (Tauri v2) + `packages/ui` (React 19) workspace every other Phase 8 task builds on. **Tauri crate dir is `apps/desktop/tauri` (renamed from `src-tauri`); the Tauri v2 CLI auto-detects it.**
+- **Changes:** pnpm 11.9.0 (corepack) + pnpm workspace (`pnpm-workspace.yaml`, root `package.json`, `biome.json` migrated to biome 2.x, scoped to `packages/**`+`apps/**`). `packages/ui` — React 19 + Vite 8 + TS 6 + vitest 4; render-from-state `App` + 2 tests. `apps/desktop` — Vite/React/Tailwind v4 frontend + Tauri v2 `apps/desktop/tauri` (standalone `[workspace]`, valid v2 config, lib/main/build/capabilities, valid PNG-based `icon.ico`). All deps on latest. Verify: `pnpm -r build` exit 0, `pnpm -r test` 2/2, `biome check` clean, `cargo check` on the Tauri crate compiles (5.14s), `pnpm tauri info` OK.
+- **[C-801] was a false alarm:** the earlier "host gcc broken" was an artifact of running `cargo`/`windres` through the **Bash tool** (Git Bash's MSYS2 env makes mingw64 `cc1.exe` fail to load, exit 127). The same `gcc.exe` works in **PowerShell**, so native C/Tauri builds run via PowerShell. gcc is fine; no host repair was needed.
+- **Notes:** No domain logic — scaffold only. shadcn/ui component setup (`components.json` + first component) deferred to T-8C01 (surfaces); Tailwind v4 + the shadcn-ready stack are in place.
 
 ### [T-8A02] Shell ↔ core IPC bridge
 

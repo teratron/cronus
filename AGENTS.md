@@ -36,6 +36,11 @@ Cronus is a polyglot monorepo: a Rust workspace (`crates/`) for the engine and b
 - `tsc --noEmit` — type-checks.
 - `fallow audit --changed-since <base>` — no new dead code, duplication, circular dependencies, or architecture-boundary violations (structural gate; `--format json` in CI). The boundary rules enforce presentation-only UI with inward-pointing dependencies.
 
+## Build Environment (Windows host)
+
+- **Run native builds via PowerShell, not Git Bash.** `cargo` steps that invoke the C toolchain (e.g. `rusqlite` `bundled`, the Tauri crate's `windres` `.exe`-resource step) and Tauri CLI commands (`tauri info`/`dev`/`build`) must run in **PowerShell**. Git Bash's MSYS2 environment makes the mingw64 `cc1.exe` fail to load (exit 127), so `gcc`/`windres` fail silently there (`gcc -E` exits 1 with no output) even though the same `gcc.exe` works fine in PowerShell. Pure-`rustc` builds (no fresh C compilation) work in either shell — so a clean `cargo check` from Git Bash that suddenly fails at a C/resource step is an environment artifact, not a code defect.
+- When capturing a native exe's output in PowerShell, do **not** redirect `2>&1` — PowerShell 5.1 wraps each stderr line as a `NativeCommandError`; stderr is already captured, so read the output as-is.
+
 ## Conventions
 
 - **CLI grammar**: verb-first with flags, explicit verbs, command groups — `cronus <group> <verb> [--flags]`. The TUI mirrors each with a leading slash; the library method is the source of truth and the CLI/TUI are thin bindings.

@@ -4,23 +4,27 @@
 <!-- Maximum 100 lines. Agent updates AFTER each completed action. -->
 
 **Workspace:** main
-**Updated:** 2026-06-28 15:42
+**Updated:** 2026-06-28 20:02
 **Phase:** 8 — Flower: Desktop App
 **Status:** Active
 
 ## Current Position
 
-- **Task:** Phase 8 (Flower — Desktop App) DECOMPOSED & ready — `tasks/phase-8.md`: 11 tasks across 5 tracks (A scaffold+bridge / B Rust-Tauri shell systems / C React surfaces+views / D integrations / T validation) over 3 Stable specs (l2-app-ui, l2-office-view, l2-dashboard). Phase 7 (TUI) Done (Archived).
+- **Task:** T-8A01 (gating scaffold) **DONE & fully green.** pnpm 11.9.0 (corepack) + pnpm workspace; `packages/ui` (React 19.2 / Vite 8 / TS 6 / vitest 4) builds + 2 tests pass; `apps/desktop` (Vite/React/Tailwind v4 frontend + Tauri v2 in `apps/desktop/tauri`, renamed from `src-tauri`) builds; `cargo check` on the Tauri crate compiles; `biome check` (2.x, scoped) clean; `pnpm tauri info` OK. All deps on latest. **[C-801] was a false alarm** — gcc is fine; the earlier failure was the Bash tool's Git Bash env breaking MSYS2 `cc1` → native builds run via **PowerShell**.
 - **Spec:** l2-app-ui.md (Stable, large — §4.1–4.14), l2-office-view.md (Stable), l2-dashboard.md (Stable)
-- **Next Action:** Run /magic.run main to execute Phase 8, starting with **T-8A01** — the gating task: provision pnpm + Tauri v2 CLI (both MISSING) and scaffold apps/desktop + packages/ui. Every other Phase 8 task depends on it; if toolchain provisioning fails (no network), the phase is Blocked. (Phase 8 is decomposed and ready — NOT plan-complete; the finalize/update-state script mislabels phase planning as plan completion.)
+- **Next Action:** Continue Phase 8 → **T-8A02** (shell ↔ core IPC bridge: typed UI→core command over Tauri IPC; round-trip a core capability like `status`, presentation-only). Then Track B (Rust/Tauri shell) + Track C (React surfaces+views) unblock. Run native `cargo`/Tauri builds via **PowerShell**, not Bash. (Phase 8 In Progress — NOT plan-complete; the finalize/update-state script mislabels this.)
 
 ## Progress
 
 ```
-Build phases: Phase 8 (Desktop App) decomposed ▶ (gated on T-8A01 toolchain) | Done: 2–7 | In-progress: 1 (gap) | Pending: 9–11
+Build phases: Phase 8 ▶ T-8A01 scaffold ✓ (full toolchain green via PowerShell) | Done: 2–7 | In-progress: 1 (gap) | Pending: 9–11
 ```
 
 ## Recent Decisions
+
+- 2026-06-28 **T-8A01 DONE — toolchain green; [C-801] was a false alarm; deps on latest:** The "host gcc broken" blocker was an **artifact of the Bash tool** (Git Bash's MSYS2 env makes mingw64 `cc1.exe` fail to load → `gcc -c`/`-E` exit 1; the SAME gcc works in **PowerShell**, exit 0). Running `cargo check` on the Tauri crate via PowerShell compiles cleanly (with a valid PNG-based `icon.ico` replacing the malformed `.NET` one). Per user: renamed `apps/desktop/src-tauri` → `apps/desktop/tauri` (Tauri v2 CLI auto-detects it); bumped ALL deps to latest (pnpm 11.9.0, vite 8, vitest 4, TS 6, React 19.2, @tauri-apps 2.11, biome 2.5 — migrated config + scoped to `packages/**`/`apps/**`, reverted biome's stray repo-wide reformat); fixed `packages/ui/tsconfig` (vitest/globals + jest-dom via setup include) + added `vite/client` CSS decl for desktop; updated `.gitignore` for the rename. Verify: `pnpm -r build`+`test` green, `biome check` clean, `cargo check` Tauri green, `tauri info` OK. **Lesson saved to memory:** native C/Tauri builds need PowerShell, not the Bash tool. (Revert: git restore .design + delete apps/desktop, packages/ui, root package.json/pnpm-workspace.yaml/biome.json/pnpm-lock.yaml/node_modules.)
+
+- 2026-06-28 **T-8A01 partial + BLOCKED (host gcc) [SUPERSEDED — false alarm, see above]:** Provisioned pnpm 9.15.9 (corepack) and scaffolded the polyglot monorepo — root `pnpm-workspace.yaml`/`package.json`/`biome.json`, `packages/ui` (React 19 + Vite 6 + TS 5 + vitest; render-from-state `App` + 2 passing tests; build green), `apps/desktop` (Vite/React/Tailwind v4 frontend builds → `dist/`; Tauri v2 `src-tauri` standalone `[workspace]`, valid v2 config, lib/main/build/capabilities/icons). The Tauri pure-Rust dep tree compiles; `cargo check` fails ONLY at `windres` `.exe`-resource gen because the **host MSYS2 gcc 15.2.0 is broken** (`gcc -c`/`gcc -E` exit 1, no output, even sandbox-off). `tauri-build 2.6.3` has no API to skip the resource. Recorded as [C-801]; `build.rs` left canonical (no hacks). **Engineer call:** repairing MSYS2 gcc is a host-system change (pacman) outside task scope → surfaced for user decision rather than silently mutating the toolchain. (Revert scaffold: git restore + delete apps/desktop, packages/ui new files, root package.json/pnpm-workspace.yaml/biome.json/pnpm-lock.yaml/node_modules.)
 
 - 2026-06-28 **Phase 8 (Flower — Desktop App) decomposed (/magic.task):** 3 Stable specs → `tasks/phase-8.md`, 11 tasks / 5 tracks. Planner audit flagged: (1) **toolchain gate** — `pnpm` + Tauri v2 CLI MISSING (node v22 present); T-8A01 provisions + scaffolds, everything depends on it (Phase-1 pnpm/Tauri blocker recurring); (2) **optimism bias** — l2-app-ui spans 14 design sections (§4.1–4.14), so Phase 8 is large, run incrementally (A gates, then B/C/D parallel); (3) **cascade** — B (Rust-Tauri shell), C (React surfaces/views), D (integrations) all sit on the A scaffold + IPC bridge. TASKS.md → Phase 8 Todo (v1.9.0); CONTEXT.md + wiki regenerated. (Revert: git restore .design/main/tasks/phase-8.md .design/main/TASKS.md .design/main/STATE.md)
 
@@ -53,6 +57,8 @@ Build phases: Phase 8 (Desktop App) decomposed ▶ (gated on T-8A01 toolchain) |
 - **Phase 1 decomposition gap (non-blocking):** `l2-sandbox-policy` and `l2-multi-user-auth` are in Phase 1 (PLAN.md) but lack `T-1xxx` tasks. Fold them into `tasks/phase-1.md` when Phase 1 is revisited; they do not gate Phase 5.
 
 ## Blocking Constraints
+
+- **[C-801] RESOLVED (was a false alarm).** The "host gcc broken" finding was an artifact of running `cargo`/`windres` through the **Bash tool** (Git Bash's MSYS2 env makes mingw64 `cc1.exe` fail to load, exit 127). The same `gcc.exe` works in **PowerShell**; `cargo check` on the Tauri crate compiles there. Standing rule: run native C/Tauri builds via PowerShell, not Bash. No host repair was needed.
 
 ## Session Continuity
 
