@@ -34,13 +34,13 @@ Track A — Shell & Render Loop (l2-tui §4.2)
 
 Track B — View Panels (l2-tui §4.1)
 
-- [ ] [T-7B01] Panel layout + focus/tab navigation across the four views and the command bar
-- [ ] [T-7B02] Board + Office panels (live Kanban columns `triage→todo→ready→running→blocked→done→archive`; agent/task text schema)
-- [ ] [T-7B03] Status + Sessions/Log panels (status mirror; live agent-activity / log stream)
+- [x] [T-7B01] Panel layout + focus/tab navigation across the four views and the command bar
+- [x] [T-7B02] Board + Office panels (live Kanban columns `triage→todo→ready→running→blocked→done→archive`; agent/task text schema)
+- [x] [T-7B03] Status + Sessions/Log panels (status mirror; live agent-activity / log stream)
 
 Track C — Command Bar & Parity (l2-tui §4.3)
 
-- [ ] [T-7C01] Command bar input + `/help` discovery (slash parser + command catalog)
+- [x] [T-7C01] Command bar input + `/help` discovery (slash parser + command catalog)
 - [ ] [T-7C02] Slash → core dispatch with CLI parity and secret masking (INV-3 / INV-7)
 
 Track T — Validation
@@ -74,38 +74,46 @@ Track T — Validation
 ### [T-7B01] Panel layout + focus navigation
 
 - **Spec:** l2-tui.md §4.1 (Views)
-- **Status:** Todo
+- **Status:** Done
 - **Assignment:** Agent
 - **Verify:** `cargo test -p cronus-tui layout_focus` — the layout splits into the four view regions + command bar at representative terminal sizes (no panic on small sizes); tab/focus cycling visits each focusable region in order and wraps.
-- **Handoff:** Hosts the panels from T-7B02 / T-7B03 and the command bar from T-7C01.
+- **Handoff:** Hosts the panels from T-7B02 / T-7B03 and the command bar from T-7C01. Panel content builders render into the `view::layout` regions; the `Focus` enum + `ViewModel.focus` drive the highlight.
 - **Notes:** Render-only components fed by the view-model (INV-2). Unsupported-capability panels are hidden/disabled, never behaviorally divergent (INV-6).
+- **Framework decision:** adopted **ratatui 0.30** (feature `crossterm_0_29`, single crossterm version with the `Tui` guard). ratatui owns frame diffing; the `Tui` guard keeps the raw-mode lifecycle.
+- **Changes:** New `view` module — `layout(area)` splits a 2×2 panel grid above a one-row command bar (ratatui `Layout::areas`, clamps at tiny sizes), `Focus` enum + `next`/`prev` tab-cycling, `PanelAreas`. `RatatuiRenderer` (replaces the `PlainRenderer` stopgap) draws bordered/titled panels with a focus highlight + command-bar prompt. `ViewModel` gained view-only `focus`; `App::tick` handles `Tab`/`BackTab` → focus cycle + redraw; `terminal::Key` gained `BackTab`. Verify: 5 `layout_focus` tests; 14 crate tests pass; clippy/fmt clean.
 
 ### [T-7B02] Board + Office panels
 
 - **Spec:** l2-tui.md §4.1 (Board, Office)
-- **Status:** Todo
+- **Status:** Done
 - **Assignment:** Agent
 - **Verify:** `cargo test -p cronus-tui board_office_render` — given a view-model with cards across the seven columns, the Board renders each card under its column and a card moving column in the next snapshot re-renders in the new column; the Office panel renders the agent→current-task text schema from the snapshot.
 - **Handoff:** Reads the kanban / office projection from the T-7A02 view-model.
 - **Notes:** Columns `triage→todo→ready→running→blocked→done→archive`. Presentation only — no board mutation logic in the TUI.
+- **Column-model note:** the core models **6** live card states (`Triage→Todo→Ready→Running→Blocked→Done`) plus an archive *store* (archive is not a state). The board *view* defines its own 7-column `BoardColumn` projection (the spec's 7 columns incl. `archive`); the binding maps live cards by state and archived cards into the `Archive` column. Transition logic stays in the core (INV-2).
+- **Changes:** `view` module gained the board projection (`BoardColumn` ×7, `BoardCard`, `BoardView::cards_in`, `board_columns` splitter) and office projection (`AgentActivity`, `OfficeView`), plus pure `render_board`/`render_office` into a ratatui `Buffer`. `CoreSnapshot` extended with `board`/`office` (empty until the core exposes a cheap board snapshot; `CapabilitySource` leaves them default). `RatatuiRenderer` now renders Board + Office content; `focus_border_style` centralized in `view`. 3 `board_office_render` tests assert card-under-column, column-move re-render, and agent→task lines via off-screen Buffer. Verify: 17 crate tests pass; clippy/fmt clean.
 
 ### [T-7B03] Status + Sessions/Log panels
 
 - **Spec:** l2-tui.md §4.1 (Status, Sessions/Log)
-- **Status:** Todo
+- **Status:** Done
 - **Assignment:** Agent
 - **Verify:** `cargo test -p cronus-tui status_sessions_render` — the Status panel renders current position / progress / blockers mirroring the `status` capability snapshot; the Sessions/Log panel appends streamed activity entries in order and bounds its scrollback (no unbounded growth).
 - **Handoff:** Completes the read-only view surface ahead of command dispatch (Track C).
 - **Notes:** Status mirrors the same capability the CLI `status` verb reports (INV-3). Log stream is append-with-cap.
+- **Scrollback design:** the Sessions log is a **bounded last-N projection inside `CoreSnapshot`** (not accumulating `App` view-state), so the view stays a pure function of the snapshot (INV-5; the loop determinism test holds). `SessionsView::push` caps at `MAX_SESSION_LINES` (500), dropping the oldest. The core's durable activity log remains the source of truth; the panel shows a recent tail.
+- **Changes:** `view` module gained `render_status` (mirrors `version` + `status` line) and the `SessionsView` projection (`push` with cap, `entries`, `MAX_SESSION_LINES`) + `render_sessions` (recent tail that fits, oldest-of-window top, newest bottom). `CoreSnapshot` extended with `sessions` (empty until the core streams activity; `CapabilitySource` leaves it default). `RatatuiRenderer` now renders all four panels. 3 `status_sessions_render` tests (status mirror, append-in-order, bounded scrollback). Verify: 20 crate tests pass; clippy/fmt clean. Track B (read-only view surface) complete.
 
 ### [T-7C01] Command bar input + `/help` discovery
 
 - **Spec:** l2-tui.md §4.1 (Command bar), §4.3 (Parity with CLI)
-- **Status:** Todo
+- **Status:** Done
 - **Assignment:** Agent
 - **Verify:** `cargo test -p cronus-tui command_parse` — the bar parses `/verb arg…` into a structured command; `/help` lists the available slash commands (the discovery surface); unknown `/verb` yields an inline error, never a panic.
-- **Handoff:** Produces parsed commands for T-7C02 to dispatch.
+- **Handoff:** Produces parsed commands for T-7C02 to dispatch. `command::classify` returns `Run(SlashCommand)` for known verbs — T-7C02 swaps the acknowledgement for a real core call.
 - **Notes:** The slash catalog is derived from the shared capability set, not hand-maintained, so it cannot drift from the CLI.
+- **Parity-source note:** the crate cannot depend on `cronus-cli` (INV-2) and the core exposes no enumerable command registry (`Capabilities` = version/status; other ops are direct module calls), so `command::CATALOG` is curated in the TUI to mirror the CLI's 21 top-level verbs. Anti-drift is enforced structurally by the validation track (each slash verb ↔ a CLI verb), not by a runtime import.
+- **Changes:** New `command` module — `parse` (`/verb arg…` → `SlashCommand`, whitespace-tolerant), `CATALOG` (help + 21 CLI-mirrored verbs), `lookup`/`is_known`/`names`/`help_lines`, `classify` → `CommandOutcome::{Help, Run, Error}` (unknown verb → inline error, never panic). Command bar made interactive: `ViewModel.command_input`/`command_feedback`, focus-aware key routing in `tick` (`handle_key`/`submit_command`: type/Backspace/Enter; Esc cancels the line in the bar but quits elsewhere — resolves the earlier provisional Esc note); the bar renders the live input or the last feedback. 9 `command_parse` tests (parser, catalog/help, classify, bar typing+enter, unknown+esc-cancel). Verify: 29 crate tests pass; clippy/fmt clean.
 
 ### [T-7C02] Slash → core dispatch with parity + secret masking
 

@@ -41,8 +41,10 @@ pub enum Key {
     Backspace,
     /// Escape — cancel the current input / dismiss.
     Esc,
-    /// Tab — focus cycling.
+    /// Tab — forward focus cycling.
     Tab,
+    /// Shift+Tab — backward focus cycling.
+    BackTab,
     /// Arrow up.
     Up,
     /// Arrow down.
@@ -179,6 +181,7 @@ impl TerminalBackend for CrosstermBackend {
                     KeyCode::Backspace => Some(Key::Backspace),
                     KeyCode::Esc => Some(Key::Esc),
                     KeyCode::Tab => Some(Key::Tab),
+                    KeyCode::BackTab => Some(Key::BackTab),
                     KeyCode::Up => Some(Key::Up),
                     KeyCode::Down => Some(Key::Down),
                     KeyCode::Left => Some(Key::Left),

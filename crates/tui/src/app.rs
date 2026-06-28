@@ -9,10 +9,16 @@
 //! view-local quit flag. All durable state lives in the core and is read through
 //! the [`SnapshotSource`] seam — the loop never mutates domain state.
 
-use std::io::{self, Write};
+use std::io::{self, Stdout};
 use std::time::Duration;
 
+use ratatui::Terminal;
+use ratatui::backend::CrosstermBackend as RatatuiCrosstermBackend;
+use ratatui::widgets::{Paragraph, Widget};
+
+use crate::command::{self, CommandOutcome};
 use crate::terminal::{CrosstermBackend, Key, TermEvent, TerminalBackend, Tui};
+use crate::view::{self, BoardView, Focus, OfficeView, SessionsView};
 use cronus::{Capabilities, Engine};
 
 /// How long the loop blocks for input before ticking again. Bounds redraw
@@ -21,15 +27,22 @@ const TICK: Duration = Duration::from_millis(50);
 
 /// An immutable projection of durable core state at one instant.
 ///
-/// The TUI renders from this and never mutates it (INV-5). Today the core's
-/// capability surface is version + status; richer projections (board, sessions)
-/// extend this struct as those capabilities land.
+/// The TUI renders from this and never mutates it (INV-5). The version/status
+/// fields come from the core capability surface; the board/office projections are
+/// populated once the core exposes a cheap board snapshot — until then they stay
+/// empty and the panels render empty columns.
 #[derive(Debug, Clone, PartialEq, Eq, Default)]
 pub struct CoreSnapshot {
     /// Engine/product version string.
     pub version: String,
     /// Human-readable status line.
     pub status: String,
+    /// Kanban board projection (cards by column).
+    pub board: BoardView,
+    /// Office projection (agents and their current tasks).
+    pub office: OfficeView,
+    /// Sessions/log projection (bounded tail of recent activity).
+    pub sessions: SessionsView,
 }
 
 /// View-only state the panels render from.
@@ -43,6 +56,13 @@ pub struct ViewModel {
     pub snapshot: CoreSnapshot,
     /// Terminal size as `(cols, rows)`.
     pub size: (u16, u16),
+    /// Which panel currently has keyboard focus. View state, not domain state.
+    pub focus: Focus,
+    /// In-progress command-bar text (the part after the `/` prompt). View state.
+    pub command_input: String,
+    /// The result of the last submitted command (help summary / error / ack),
+    /// shown beside the prompt until the next keystroke.
+    pub command_feedback: Option<String>,
 }
 
 /// The seam the loop reads core state through.
@@ -120,12 +140,11 @@ impl App {
                     self.view.size = (*cols, *rows);
                     needs_redraw = true;
                 }
-                // Provisional quit key. Input routing (a focused command bar that
-                // reclaims Esc as cancel) is refined when the command bar lands.
-                TermEvent::Key(Key::Esc) => {
-                    self.should_quit = true;
+                TermEvent::Key(key) => {
+                    if self.handle_key(*key) {
+                        needs_redraw = true;
+                    }
                 }
-                TermEvent::Key(_) => {}
             }
         }
 
@@ -147,6 +166,73 @@ impl App {
             redrawn: needs_redraw,
             quit: self.should_quit,
         })
+    }
+
+    /// Route a key press by the focused region; returns whether a redraw is
+    /// needed. Tab / Shift+Tab cycle focus from anywhere. Outside the command
+    /// bar, Esc quits; inside it, keys edit the command line (Esc cancels).
+    fn handle_key(&mut self, key: Key) -> bool {
+        match key {
+            Key::Tab => {
+                self.view.focus = self.view.focus.next();
+                true
+            }
+            Key::BackTab => {
+                self.view.focus = self.view.focus.prev();
+                true
+            }
+            _ if self.view.focus == Focus::CommandBar => self.handle_command_key(key),
+            Key::Esc => {
+                self.should_quit = true;
+                false
+            }
+            _ => false,
+        }
+    }
+
+    /// Command-bar text entry. Esc cancels the in-progress line rather than
+    /// quitting the app.
+    fn handle_command_key(&mut self, key: Key) -> bool {
+        match key {
+            Key::Char(c) => {
+                self.view.command_input.push(c);
+                self.view.command_feedback = None;
+                true
+            }
+            Key::Backspace => {
+                self.view.command_input.pop();
+                self.view.command_feedback = None;
+                true
+            }
+            Key::Enter => {
+                self.submit_command();
+                true
+            }
+            Key::Esc => {
+                self.view.command_input.clear();
+                self.view.command_feedback = None;
+                true
+            }
+            _ => false,
+        }
+    }
+
+    /// Classify the current command line and record inline feedback. Recognized
+    /// commands are only acknowledged here — dispatch to the core is the next
+    /// step's job.
+    fn submit_command(&mut self) {
+        let line = format!("/{}", self.view.command_input);
+        self.view.command_feedback = Some(match command::classify(&line) {
+            CommandOutcome::Help => {
+                format!(
+                    "commands: {}",
+                    command::names().collect::<Vec<_>>().join(" ")
+                )
+            }
+            CommandOutcome::Run(cmd) => format!("ok: /{}", cmd.verb),
+            CommandOutcome::Error(message) => message,
+        });
+        self.view.command_input.clear();
     }
 }
 
@@ -172,41 +258,77 @@ impl<C: Capabilities> SnapshotSource for CapabilitySource<C> {
         Some(CoreSnapshot {
             version: self.core.version().to_string(),
             status: self.core.status(),
+            // Board/office stay empty until the core exposes a cheap snapshot;
+            // the panels render empty columns in the meantime.
+            ..CoreSnapshot::default()
         })
     }
 }
 
-/// Minimal production [`Renderer`]: clears the screen and prints the status line
-/// and size. The full panel layout replaces this in the view-panel tracks; this
-/// keeps the binary a working interactive surface in the meantime.
-pub struct PlainRenderer<W: Write> {
-    out: W,
+/// Production [`Renderer`] drawing the panel layout via ratatui.
+///
+/// Holds a ratatui terminal over the same crossterm version the [`Tui`] guard
+/// drives, so the two share one alternate screen: the guard owns the raw-mode
+/// lifecycle while ratatui owns frame diffing. Panels render purely from the
+/// view-model (INV-5); content for each panel arrives in the panel tracks — this
+/// renderer establishes the bordered skeleton and the focus highlight.
+pub struct RatatuiRenderer {
+    terminal: Terminal<RatatuiCrosstermBackend<Stdout>>,
 }
 
-impl<W: Write> PlainRenderer<W> {
-    /// Construct a renderer writing frames to `out`.
-    pub fn new(out: W) -> Self {
-        Self { out }
+impl RatatuiRenderer {
+    /// Construct a renderer drawing to the process stdout.
+    pub fn new() -> io::Result<Self> {
+        let backend = RatatuiCrosstermBackend::new(io::stdout());
+        Ok(Self {
+            terminal: Terminal::new(backend)?,
+        })
     }
 }
 
-impl<W: Write> Renderer for PlainRenderer<W> {
+impl Renderer for RatatuiRenderer {
     fn draw(&mut self, view: &ViewModel) -> io::Result<()> {
-        use crossterm::{cursor, queue, terminal};
+        self.terminal.draw(|frame| {
+            let areas = view::layout(frame.area());
+            let snapshot = &view.snapshot;
+            let buf = frame.buffer_mut();
 
-        queue!(
-            self.out,
-            terminal::Clear(terminal::ClearType::All),
-            cursor::MoveTo(0, 0)
-        )?;
-        write!(
-            self.out,
-            "Cronus TUI {} — {}",
-            view.snapshot.version, view.snapshot.status
-        )?;
-        queue!(self.out, cursor::MoveTo(0, 1))?;
-        write!(self.out, "[{}x{}]  Esc to quit", view.size.0, view.size.1)?;
-        self.out.flush()
+            view::render_board(
+                areas.board,
+                buf,
+                &snapshot.board,
+                view.focus == Focus::Board,
+            );
+            view::render_office(
+                areas.office,
+                buf,
+                &snapshot.office,
+                view.focus == Focus::Office,
+            );
+
+            view::render_status(
+                areas.status,
+                buf,
+                &snapshot.version,
+                &snapshot.status,
+                view.focus == Focus::Status,
+            );
+            view::render_sessions(
+                areas.sessions,
+                buf,
+                &snapshot.sessions,
+                view.focus == Focus::Sessions,
+            );
+
+            let bar_text = match &view.command_feedback {
+                Some(feedback) if view.command_input.is_empty() => format!("/  {feedback}"),
+                _ => format!("/{}", view.command_input),
+            };
+            Paragraph::new(bar_text)
+                .style(view::focus_border_style(view.focus == Focus::CommandBar))
+                .render(areas.command_bar, buf);
+        })?;
+        Ok(())
     }
 }
 
@@ -216,7 +338,7 @@ pub fn run() -> io::Result<()> {
     run_with(
         CrosstermBackend::new(),
         CapabilitySource::new(engine),
-        PlainRenderer::new(io::stdout()),
+        RatatuiRenderer::new()?,
     )
 }
 
@@ -296,6 +418,7 @@ mod tests {
         CoreSnapshot {
             version: "0.1.0".to_string(),
             status: status.to_string(),
+            ..CoreSnapshot::default()
         }
     }
 
@@ -360,6 +483,78 @@ mod tests {
         assert!(result.redrawn, "resize requests a redraw");
         assert_eq!(app.view().size, (120, 40), "view-model tracks new size");
         assert_eq!(renderer.frames.len(), 1);
+    }
+
+    #[test]
+    fn layout_focus_tab_key_advances_focus_and_redraws() {
+        let mut app = App::new(ViewModel::default());
+        let mut source = ScriptedSource::new(vec![None]);
+        let mut renderer = RecordingRenderer::default();
+
+        assert_eq!(app.view().focus, Focus::Board, "default focus is the board");
+
+        let forward = app
+            .tick(&[TermEvent::Key(Key::Tab)], &mut source, &mut renderer)
+            .unwrap();
+        assert!(forward.redrawn, "focus change requests a redraw");
+        assert_eq!(app.view().focus, Focus::Office, "Tab advances focus");
+
+        let mut source2 = ScriptedSource::new(vec![None]);
+        app.tick(&[TermEvent::Key(Key::BackTab)], &mut source2, &mut renderer)
+            .unwrap();
+        assert_eq!(app.view().focus, Focus::Board, "Shift+Tab steps focus back");
+    }
+
+    #[test]
+    fn command_parse_bar_typing_then_enter_acknowledges_known_command() {
+        let mut app = App::new(ViewModel {
+            focus: Focus::CommandBar,
+            ..Default::default()
+        });
+        let mut source = ScriptedSource::new(vec![]);
+        let mut renderer = RecordingRenderer::default();
+
+        for c in "status".chars() {
+            app.tick(&[TermEvent::Key(Key::Char(c))], &mut source, &mut renderer)
+                .unwrap();
+        }
+        assert_eq!(app.view().command_input, "status");
+
+        app.tick(&[TermEvent::Key(Key::Enter)], &mut source, &mut renderer)
+            .unwrap();
+        assert_eq!(app.view().command_input, "", "input clears on submit");
+        assert_eq!(app.view().command_feedback.as_deref(), Some("ok: /status"));
+    }
+
+    #[test]
+    fn command_parse_bar_unknown_errors_and_esc_cancels_without_quitting() {
+        let mut app = App::new(ViewModel {
+            focus: Focus::CommandBar,
+            ..Default::default()
+        });
+        let mut source = ScriptedSource::new(vec![]);
+        let mut renderer = RecordingRenderer::default();
+
+        for c in "xyz".chars() {
+            app.tick(&[TermEvent::Key(Key::Char(c))], &mut source, &mut renderer)
+                .unwrap();
+        }
+        app.tick(&[TermEvent::Key(Key::Enter)], &mut source, &mut renderer)
+            .unwrap();
+        assert!(
+            app.view()
+                .command_feedback
+                .as_deref()
+                .unwrap()
+                .contains("unknown command"),
+            "an unrecognized verb yields an inline error"
+        );
+
+        let result = app
+            .tick(&[TermEvent::Key(Key::Esc)], &mut source, &mut renderer)
+            .unwrap();
+        assert!(!result.quit, "Esc cancels in the command bar, never quits");
+        assert_eq!(app.view().command_feedback, None);
     }
 
     #[test]
