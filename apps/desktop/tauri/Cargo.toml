@@ -1,6 +1,6 @@
 [package]
 name = "cronus-desktop"
-version = "0.0.0"
+version = "0.1.0"
 description = "Cronus desktop application — Tauri v2 shell over the React UI"
 edition = "2021"
 
