@@ -61,7 +61,7 @@ Tactical registry of all phases. Atomic checklists live in `tasks/phase-{N}.md`.
 
 | Phase | Description | Status |
 | --- | --- | --- |
-| [Phase 11](tasks/phase-11.md) | Control-Flow Constructs (l2-nodus-control-flow): ?SWITCH / ~MAP / ~RETRY:n / !HALT / !PAUSE — lexer tokens + SwitchBlock/MapBlock AST + action flags + retry; parser/executor/transpiler/validator; implemented as per-construct vertical slices | `Todo` |
+| [Phase 11](archives/tasks/phase-11.md) | Control-Flow Constructs (l2-nodus-control-flow): ?SWITCH / ~MAP / ~RETRY:n / !HALT / !PAUSE — lexer tokens + SwitchBlock/MapBlock AST + action flags + retry; parser/executor/transpiler/validator; implemented as per-construct vertical slices | `Done (Archived)` |
 
 ## Meta Information
 
@@ -74,6 +74,6 @@ Tactical registry of all phases. Atomic checklists live in `tasks/phase-{N}.md`.
 - **Phase 8 Complete**: 2026-06-27 (7 tasks, tracks A/B/T; all archived; l2-nodus-errors — 24-code taxonomy; 222 tests pass)
 - **Phase 9 Complete**: 2026-06-27 (tracks A/B/T; all archived; l2-nodus-registries — closed flag/validator/type registries + advisory W011/W012/W013; 228 tests pass)
 - **Phase 10 Complete**: 2026-06-27 (tracks A–E/T; all archived; l2-nodus-dialog — ASK/CONFIRM + Status::Paused + DialogProvider + ExtensionRole::Dialog; 237 tests pass)
-- **Phase 11 Planned**: 2026-06-27 (per-construct slices; implements l2-nodus-control-flow — ?SWITCH/~MAP/~RETRY/!HALT/!PAUSE)
+- **Phase 11 Complete**: 2026-06-28 (tracks A/B/C/D/T; all archived; l2-nodus-control-flow — !HALT/!PAUSE + ?SWITCH + ~MAP + ~RETRY:n; lexer/AST/parser/executor/validator; 265 tests pass)
 - **Backlog**: operators [MATCHES/PCRE design fork], @needs (blocked), @ON priority, macro execution; Storage/Policy executor integration (LP-3)
 - **Maintainer**: Core Team

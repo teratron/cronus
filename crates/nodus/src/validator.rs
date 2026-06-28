@@ -1,9 +1,9 @@
 //! Validator — structural lint and schema-vocabulary checks.
 //!
-//! Runs 32 rules against a parsed [`WorkflowFile`] AST and returns a flat list
+//! Runs 33 rules against a parsed [`WorkflowFile`] AST and returns a flat list
 //! of [`Diagnostic`]s. Rules are grouped by severity:
 //!
-//! - **Error** (E001–E016): block execution when found.
+//! - **Error** (E001–E017): block execution when found.
 //! - **Warning** (W001–W014): workflow runs but has unsafe or incomplete patterns.
 //! - **Info** (I001–I006): style suggestions.
 //!
@@ -63,7 +63,7 @@ impl Diagnostic {
 pub struct Validator;
 
 impl Validator {
-    /// Run all 32 lint rules against `ast` and return accumulated diagnostics.
+    /// Run all 33 lint rules against `ast` and return accumulated diagnostics.
     pub fn validate(ast: &WorkflowFile, filename: &str) -> Vec<Diagnostic> {
         let mut d = Vec::new();
 
@@ -82,6 +82,7 @@ impl Validator {
         d.extend(Self::e014_no_forward_references(ast, filename));
         d.extend(Self::e015_no_duplicate_test_names(ast, filename));
         d.extend(Self::e016_halt_requires_escalate(ast, filename));
+        d.extend(Self::e017_retry_bounded(ast, filename));
 
         // Warnings
         d.extend(Self::w001_err_handler(ast, filename));
@@ -349,6 +350,21 @@ impl Validator {
             }
         }
         diags
+    }
+
+    fn e017_retry_bounded(wf: &WorkflowFile, filename: &str) -> Vec<Diagnostic> {
+        wf.steps
+            .iter()
+            .filter_map(|step| match step.retry {
+                Some(n) if n == 0 || n > 10 => Some(Diagnostic::new(
+                    Severity::Error,
+                    "E017",
+                    "~RETRY:n requires a bound n with 1 ≤ n ≤ 10.",
+                    filename,
+                )),
+                _ => None,
+            })
+            .collect()
     }
 
     // ─── Warnings ─────────────────────────────────────────────────────────────
@@ -1141,6 +1157,59 @@ mod tests {
         let ast = Parser::parse(src).expect("parse");
         let diags = Validator::validate(&ast, "vp_test.nodus");
         assert!(!diags.iter().any(|d| d.code == "E005"));
+    }
+
+    #[test]
+    fn e017_fires_on_unbounded_or_oversized_retry() {
+        let missing = "\
+§wf:retry_missing v1.0
+§runtime: { core: schema.nodus }
+@out: $out
+@err: ESCALATE(human)
+@steps:
+  1. ~RETRY GEN(x) → $out
+";
+        let ast = Parser::parse(missing).expect("parse");
+        let diags = Validator::validate(&ast, "retry_missing.nodus");
+        assert!(
+            diags
+                .iter()
+                .any(|d| d.code == "E017" && d.severity == Severity::Error),
+            "expected E017 for ~RETRY with no bound; got: {diags:?}"
+        );
+
+        let oversized = "\
+§wf:retry_big v1.0
+§runtime: { core: schema.nodus }
+@out: $out
+@err: ESCALATE(human)
+@steps:
+  1. ~RETRY:15 GEN(x) → $out
+";
+        let ast = Parser::parse(oversized).expect("parse");
+        let diags = Validator::validate(&ast, "retry_big.nodus");
+        assert!(
+            diags.iter().any(|d| d.code == "E017"),
+            "expected E017 for ~RETRY:15 (over the cap of 10); got: {diags:?}"
+        );
+    }
+
+    #[test]
+    fn no_e017_for_valid_retry_bound() {
+        let src = "\
+§wf:retry_ok v1.0
+§runtime: { core: schema.nodus }
+@out: $out
+@err: ESCALATE(human)
+@steps:
+  1. ~RETRY:3 GEN(x) → $out
+";
+        let ast = Parser::parse(src).expect("parse");
+        let diags = Validator::validate(&ast, "retry_ok.nodus");
+        assert!(
+            !diags.iter().any(|d| d.code == "E017"),
+            "a 1..=10 bound must not trip E017; got: {diags:?}"
+        );
     }
 
     #[test]

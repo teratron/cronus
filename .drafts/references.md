@@ -63,6 +63,10 @@
 - <https://gitverse.ru/gigachain/gigachain>
 - <https://github.com/harness/harness>
 - <https://github.com/china-qijizhifeng/agentic-harness-engineering>
+- <https://github.com/atanasovmi/Meta-Harness>
+- <https://github.com/bzantium/meta-harness>
+- <https://github.com/stanford-iris-lab/meta-harness>
+- <https://github.com/howdymary/hermes-agent-metaharness>
 
 ## UI/UX
 

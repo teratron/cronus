@@ -600,6 +600,12 @@ impl Parser {
             return step;
         }
 
+        // Optional `~RETRY:n` step modifier preceding the step's action.
+        if self.check(TokenType::TildeRetry) {
+            step.retry = Some(self.parse_retry_bound());
+            self.skip_noise();
+        }
+
         step.body = self.parse_step_body();
 
         // Collect indented sub-steps that are not new step numbers.
@@ -1022,6 +1028,22 @@ impl Parser {
             condition: cond_parts.join(" ").trim().to_string(),
             max_iterations,
             body,
+        }
+    }
+
+    /// Parse a `~RETRY:n` bound. Returns `n`, or `0` when the bound is missing
+    /// or unparseable — the validator rejects a `0` (and any `n > 10`) bound.
+    fn parse_retry_bound(&mut self) -> u32 {
+        self.advance(); // skip ~RETRY
+        if self.check(TokenType::Colon) {
+            self.advance();
+        }
+        if self.check(TokenType::Number) {
+            let n = self.cur_val().parse::<u32>().unwrap_or(0);
+            self.advance();
+            n
+        } else {
+            0
         }
     }
 
@@ -1674,6 +1696,28 @@ mod tests {
             }
             other => panic!("expected conditional, got {other:?}"),
         }
+    }
+
+    #[test]
+    fn parses_retry_bound_on_step() {
+        let src = "§wf:retrier v1.0\n§runtime: { core: schema.nodus }\n@steps:\n  1. ~RETRY:3 FETCH($url) → $data\n";
+        let wf = Parser::parse(src).unwrap();
+        assert_eq!(wf.steps[0].retry, Some(3), "the retry bound is captured");
+        match wf.steps[0].body.as_ref().unwrap() {
+            Stmt::Command(c) => assert_eq!(c.name, "FETCH", "the action parses after the modifier"),
+            other => panic!("expected command, got {other:?}"),
+        }
+    }
+
+    #[test]
+    fn retry_without_bound_marks_invalid() {
+        let src = "§wf:retrier v1.0\n§runtime: { core: schema.nodus }\n@steps:\n  1. ~RETRY GEN(x) → $out\n";
+        let wf = Parser::parse(src).unwrap();
+        assert_eq!(
+            wf.steps[0].retry,
+            Some(0),
+            "a missing bound is recorded as Some(0)"
+        );
     }
 
     #[test]

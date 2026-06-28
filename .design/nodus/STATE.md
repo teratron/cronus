@@ -4,15 +4,15 @@
 <!-- Maximum 100 lines. Agent updates AFTER each completed action. -->
 
 **Workspace:** nodus
-**Updated:** 2026-06-27 18:08
-**Phase:** 11 — Control-Flow Constructs (in progress)
+**Updated:** 2026-06-28 04:58
+**Phase:** 11 — Control-Flow Constructs (complete)
 **Status:** Active
 
 ## Current Position
 
-- **Task:** Phase 11 Slices 1–3 complete — `!HALT`/`!PAUSE` + `?SWITCH` + `~MAP` implemented in crates/nodus
+- **Task:** Phase 11 complete — all control-flow constructs (`!HALT`/`!PAUSE`, `?SWITCH`, `~MAP`, `~RETRY:n`) implemented in crates/nodus
 - **Spec:** l2-nodus-control-flow.md v1.0.0 (Stable); all 13 specs Stable
-- **Next Action:** Run /magic.run nodus to implement Phase 11 Slice 4 (~RETRY:n)
+- **Next Action:** Author next-cluster spec via /magic.spec nodus — backlog: operators (MATCHES/PCRE design fork), @needs (blocked), @ON priority, macro execution; Storage/Policy (LP-3)
 
 ## Progress
 
@@ -21,6 +21,8 @@ Overall: [6/6] ██████████ 100%
 ```
 
 ## Recent Decisions
+
+- 2026-06-27 **Decision:** Phase 11 complete. Slice 4 `~RETRY:n` bounded step retry implemented in crates/nodus (lexer TildeRetry, Step.retry field, parser parse_retry_bound, executor run_step_with_retry with rollback-on-success/accumulate-on-exhaustion, validator E017 enforcing 1≤n≤10 per NL-5); 265 tests pass (+7). All four control-flow constructs (!HALT/!PAUSE, ?SWITCH, ~MAP, ~RETRY) now implemented.
 
 - 2026-06-27 **Decision:** Phase 11 Slice 3 landed. `~MAP` collection transform implemented in crates/nodus (lexer TildeMap, MapBlock AST, parser parse_map + routing, executor execute_map binding $it + collecting into a list, transpiler human form); 258 tests pass (+5). Slice 4 (~RETRY) remains.
 

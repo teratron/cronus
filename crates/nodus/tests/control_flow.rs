@@ -5,7 +5,22 @@
 //! steps; a taken `!PAUSE` suspends with a resume descriptor and runs no later
 //! step. The not-taken case proves neither flag fires spuriously.
 
-use nodus::{executor::Status, workflows};
+use nodus::{
+    executor::{DialogOutcome, DialogProvider, Status},
+    workflows,
+};
+
+// A dialog backend that always times out — a deterministic, repeatable per-step
+// runtime error used to exercise `~RETRY:n` exhaustion.
+struct TimeoutProvider;
+impl DialogProvider for TimeoutProvider {
+    fn ask(&self, _p: &str, _m: &[(String, String)]) -> DialogOutcome {
+        DialogOutcome::Timeout
+    }
+    fn confirm(&self, _c: &str, _m: &[(String, String)]) -> DialogOutcome {
+        DialogOutcome::Timeout
+    }
+}
 
 // A taken branch carrying `!HALT` alongside the required escalation.
 const HALT_WF: &str = r#"§wf:guard_halt v1.0
@@ -151,6 +166,49 @@ fn switch_no_match_warns_and_continues() {
     assert!(
         result.log.iter().any(|e| e.command == "LOG"),
         "the step after the switch must still run; log: {:?}",
+        result.log
+    );
+}
+
+// ~RETRY:n — a flaky step retried up to n times.
+const RETRY_TIMEOUT_WF: &str = r#"§wf:retry_timeout v1.0
+§runtime: { core: schema.nodus }
+@out: $out
+@err: ESCALATE(human)
+@steps:
+  1. ~RETRY:3 ASK(question) → $answer
+  2. LOG(after) → $out
+"#;
+
+#[test]
+fn retry_reruns_failing_step_up_to_bound() {
+    let result = workflows::run_with_dialog(
+        RETRY_TIMEOUT_WF,
+        "retry_timeout.nodus",
+        None,
+        TimeoutProvider,
+    )
+    .expect("run");
+    let timeouts = result
+        .errors
+        .iter()
+        .filter(|e| e.code == "NODUS:DIALOG_TIMEOUT")
+        .count();
+    assert_eq!(
+        timeouts, 3,
+        "a ~RETRY:3 step that always fails is attempted 3 times; errors: {:?}",
+        result.errors
+    );
+    // Exhausted retries surface as errors but do not abort the run.
+    assert_eq!(
+        result.status,
+        Status::Partial,
+        "errors: {:?}",
+        result.errors
+    );
+    assert!(
+        result.log.iter().any(|e| e.command == "LOG"),
+        "the step after an exhausted retry still runs; log: {:?}",
         result.log
     );
 }

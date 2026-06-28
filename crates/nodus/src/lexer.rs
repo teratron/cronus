@@ -77,6 +77,8 @@ pub enum TokenType {
     TildeParallel,
     /// `~MAP`
     TildeMap,
+    /// `~RETRY` (followed by `:n`).
+    TildeRetry,
     /// `~JOIN`
     TildeJoin,
     /// `~END`
@@ -217,6 +219,7 @@ fn tilde_keyword(word: &str) -> Option<TokenType> {
         "UNTIL" => Some(TokenType::TildeUntil),
         "PARALLEL" => Some(TokenType::TildeParallel),
         "MAP" => Some(TokenType::TildeMap),
+        "RETRY" => Some(TokenType::TildeRetry),
         "JOIN" => Some(TokenType::TildeJoin),
         "END" => Some(TokenType::TildeEnd),
         _ => None,
@@ -1011,6 +1014,19 @@ mod tests {
 
         let toks = Lexer::tokenize_str("?IF $r > 0.9 → ASK(human) !PAUSE").unwrap();
         assert!(types(&toks).contains(&TokenType::BangPause));
+    }
+
+    #[test]
+    fn retry_keyword_lexes_with_bound() {
+        let toks = Lexer::tokenize_str("~RETRY:3 FETCH($u) → $d").unwrap();
+        let got = types(&toks);
+        assert!(
+            got.contains(&TokenType::TildeRetry),
+            "~RETRY must lex as TildeRetry"
+        );
+        // The `:3` bound follows as Colon + Number.
+        assert!(got.contains(&TokenType::Colon));
+        assert!(got.contains(&TokenType::Number));
     }
 
     #[test]

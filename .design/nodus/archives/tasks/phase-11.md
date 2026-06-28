@@ -1,7 +1,7 @@
 ---
 phase: 11
 name: "Control-Flow Constructs (l2-nodus-control-flow)"
-status: Todo
+status: Done
 subsystem: "crates/nodus"
 requires:
   - phase-10
@@ -50,21 +50,21 @@ The smallest slice — action flags mirroring `!BREAK`, reusing `Signal`/`Status
 
 ## Track D — `~RETRY:n` bounded step retry (Slice 4)
 
-- [ ] **T-11D01** — Lexer/AST/parser: `~RETRY:n` step modifier (`TildeRetry` carrying `:n`, parsed like `MAX:n`)
-  - **Verify**: parser unit test — retry bound captured on the step
-- [ ] **T-11D02** — Executor + validator: re-run the step up to `n` on runtime error; on exhaustion route to `@err`; validator rejects missing `:n` or `n > 10` (NL-5)
-  - **Verify**: integration test — a flaky step succeeds within `n` retries; validator unit test rejects `~RETRY` without a bound
+- [x] **T-11D01** — Lexer/AST/parser: `~RETRY:n` step modifier (`TildeRetry` + `:n`; `Step.retry` field, `Some(0)` marks an invalid bound)
+  - **Verify**: parser unit tests — retry bound captured on the step; a missing bound records `Some(0)`
+- [x] **T-11D02** — Executor + validator: re-run the step up to `n` on runtime error (rollback on success, accumulate on exhaustion); validator rejects missing `:n` or `n > 10` (NL-5, E017)
+  - **Verify**: executor test — a step that always fails is attempted `n` times and surfaces its errors (Partial), a succeeding step runs once; validator unit tests reject an unbounded / oversized retry
 
 ## Track T — Gates
 
-- [ ] **T-11T01** — Quality gates after each landed slice
-  - **Verify**: `cargo test -p nodus` full suite green; `cargo clippy --all-targets -- -D warnings` clean; `cargo fmt` clean; `cargo doc --no-deps` no new warnings; SDD §6 clean
+- [x] **T-11T01** — Quality gates after each landed slice
+  - **Verify**: `cargo test -p nodus` full suite green (265); `cargo clippy --all-targets -- -D warnings` clean; `cargo fmt` clean; `cargo doc --no-deps` no new warnings; SDD §6 clean
 
 ## Status
 
-**Status:** In Progress — Slices 1–3 landed with all gates green (258 tests,
+**Status:** Done — all four slices landed with all gates green (265 tests,
 clippy/fmt/doc clean): `!HALT` / `!PAUSE` action flags, `?SWITCH` multi-branch
-dispatch, and `~MAP` collection transform. Slice 4 (`~RETRY`) remains.
+dispatch, `~MAP` collection transform, and `~RETRY:n` bounded step retry.
 
 ## Notes
 

@@ -533,7 +533,7 @@ impl Executor {
         let mut paused = false;
         let mut halted = false;
         for step in &ast.steps {
-            match self.execute_step(&mut ctx, step) {
+            match self.run_step_with_retry(&mut ctx, step) {
                 Some(Signal::Halt) => {
                     halted = true;
                     break;
@@ -626,6 +626,31 @@ impl Executor {
             }
         }
         None
+    }
+
+    /// Run a step, honoring its `~RETRY:n` bound: re-run up to `n` times while
+    /// the attempt adds a runtime error. A control signal (`!HALT`/`!BREAK`/
+    /// `!PAUSE`/rule violation) stops immediately — those are intentional, not
+    /// transient. On eventual success the failed attempts' errors are rolled
+    /// back; on exhaustion the accumulated errors remain and surface (routing to
+    /// `@err`). With no bound the step runs exactly once.
+    fn run_step_with_retry(&self, ctx: &mut ExecutionContext, step: &Step) -> Option<Signal> {
+        let max_attempts = step.retry.map(|n| n.max(1)).unwrap_or(1);
+        let errors_before = ctx.errors.len();
+        let mut signal = None;
+        for _ in 0..max_attempts {
+            let errors_at_attempt = ctx.errors.len();
+            signal = self.execute_step(ctx, step);
+            if signal.is_some() {
+                return signal;
+            }
+            if ctx.errors.len() == errors_at_attempt {
+                // Success: discard any errors left by earlier failed attempts.
+                ctx.errors.truncate(errors_before);
+                return None;
+            }
+        }
+        signal
     }
 
     fn execute_node(
@@ -1768,6 +1793,32 @@ mod tests {
                 Value::List(items) => assert!(items.is_empty(), "a non-list collection yields []"),
                 other => panic!("expected an empty list, got {other:?}"),
             }
+        }
+
+        #[test]
+        fn retry_does_not_rerun_a_successful_step() {
+            use crate::ast::{CommandCall, Step, Stmt, WorkflowFile};
+            let wf = WorkflowFile {
+                steps: vec![Step {
+                    number: 1,
+                    body: Some(Stmt::Command(CommandCall {
+                        name: "GEN".to_string(),
+                        args: vec!["x".to_string()],
+                        pipeline_target: Some("$out".to_string()),
+                        ..Default::default()
+                    })),
+                    retry: Some(3),
+                    ..Default::default()
+                }],
+                ..Default::default()
+            };
+            let result = Executor::with_stub().execute(&wf, None);
+            assert_eq!(result.status, Status::Ok);
+            assert_eq!(
+                result.log.len(),
+                1,
+                "a succeeding step runs exactly once despite ~RETRY:3"
+            );
         }
 
         #[test]

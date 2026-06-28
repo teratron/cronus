@@ -309,6 +309,10 @@ pub struct Step {
     pub comment: String,
     /// Nested indented sub-steps.
     pub sub_steps: Vec<Stmt>,
+    /// `~RETRY:n` bound: re-run the step up to `n` times on a runtime error.
+    /// `None` means no retry; `Some(0)` marks a present-but-invalid bound that
+    /// the validator rejects.
+    pub retry: Option<u32>,
 }
 
 /// The top-level node for a parsed workflow file.
