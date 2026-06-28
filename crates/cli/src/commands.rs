@@ -349,6 +349,10 @@ mod workflow {
                 let exit_code = match result.status {
                     Status::Ok | Status::Partial => 0,
                     Status::Failed | Status::Aborted => 1,
+                    // Suspended awaiting input (a workflow ASK/CONFIRM): the run is
+                    // neither complete nor failed, so signal a distinct code so
+                    // callers can tell a pause apart from an error.
+                    Status::Paused => 2,
                 };
                 if ctx.is_json() {
                     println!("{}", render_run_result_json(&result));

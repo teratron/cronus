@@ -4,23 +4,25 @@
 <!-- Maximum 100 lines. Agent updates AFTER each completed action. -->
 
 **Workspace:** main
-**Updated:** 2026-06-28 15:05
-**Phase:** 7 — Leaf: TUI — DONE
+**Updated:** 2026-06-28 15:42
+**Phase:** 8 — Flower: Desktop App
 **Status:** Active
 
 ## Current Position
 
-- **Task:** Phase 7 (TUI) COMPLETE — all 9 tasks Done (A01,A02,B01,B02,B03,C01,C02,T01,T02). Interactive terminal frontend `crates/tui` delivered: terminal lifecycle, render loop, four read-only panels, slash command bar with core dispatch + secret masking, and structural validation (parity, dep-direction, render-from-state, masking). 38 crate tests pass; clippy/fmt clean.
-- **Spec:** l2-tui.md (Done; PLAN.md TUI checkbox marked [x])
-- **Next Action:** Per Post-Task Replan, a completed phase routes to `/magic.task main` to decompose/activate the **next** phase — Phase 8 (Flower — Desktop App, currently Pending). Phases 8–11 remain Pending; Phase 1 still carries its non-blocking decomposition gap. (Plan is NOT complete — Phases 8–11 remain; the finalize/update-state script mislabels phase completion as plan completion.)
+- **Task:** Phase 8 (Flower — Desktop App) DECOMPOSED & ready — `tasks/phase-8.md`: 11 tasks across 5 tracks (A scaffold+bridge / B Rust-Tauri shell systems / C React surfaces+views / D integrations / T validation) over 3 Stable specs (l2-app-ui, l2-office-view, l2-dashboard). Phase 7 (TUI) Done (Archived).
+- **Spec:** l2-app-ui.md (Stable, large — §4.1–4.14), l2-office-view.md (Stable), l2-dashboard.md (Stable)
+- **Next Action:** Run /magic.run main to execute Phase 8, starting with **T-8A01** — the gating task: provision pnpm + Tauri v2 CLI (both MISSING) and scaffold apps/desktop + packages/ui. Every other Phase 8 task depends on it; if toolchain provisioning fails (no network), the phase is Blocked. (Phase 8 is decomposed and ready — NOT plan-complete; the finalize/update-state script mislabels phase planning as plan completion.)
 
 ## Progress
 
 ```
-Build phases: Phase 7 (TUI) ✓ DONE | Done: 2–7 | In-progress: 1 (gap) | Pending: 8–11 (next: 8 Flower — needs /magic.task)
+Build phases: Phase 8 (Desktop App) decomposed ▶ (gated on T-8A01 toolchain) | Done: 2–7 | In-progress: 1 (gap) | Pending: 9–11
 ```
 
 ## Recent Decisions
+
+- 2026-06-28 **Phase 8 (Flower — Desktop App) decomposed (/magic.task):** 3 Stable specs → `tasks/phase-8.md`, 11 tasks / 5 tracks. Planner audit flagged: (1) **toolchain gate** — `pnpm` + Tauri v2 CLI MISSING (node v22 present); T-8A01 provisions + scaffolds, everything depends on it (Phase-1 pnpm/Tauri blocker recurring); (2) **optimism bias** — l2-app-ui spans 14 design sections (§4.1–4.14), so Phase 8 is large, run incrementally (A gates, then B/C/D parallel); (3) **cascade** — B (Rust-Tauri shell), C (React surfaces/views), D (integrations) all sit on the A scaffold + IPC bridge. TASKS.md → Phase 8 Todo (v1.9.0); CONTEXT.md + wiki regenerated. (Revert: git restore .design/main/tasks/phase-8.md .design/main/TASKS.md .design/main/STATE.md)
 
 - 2026-06-28 **Phase 7 (TUI) COMPLETE — Retro L1:** all 9 tasks Done across 4 tracks. `crates/tui` is a working interactive frontend over the core: terminal RAII lifecycle (DI-mockable, panic-safe), poll-snapshot render loop (view-only, INV-5), four read-only panels (Board/Office/Status/Sessions via ratatui 0.30), slash command bar (CLI-mirrored catalog, /help, core dispatch with `cronus::redact` secret masking), and structural validation (parity matrix, inward dep-direction, render-from-state purity, secret masking). 38 crate tests; clippy/fmt clean. **What went well:** DI trait seams made every layer TTY-free testable; off-screen ratatui `Buffer` gave deterministic render assertions. **Carried forward (follow-up, not blocking):** core exposes only a thin version/status capability, so board/office/sessions projections render empty and only `/status` dispatches live — full per-verb core bindings + a cheap board snapshot + activity stream await core surface work; production secret-list population for masking pending. Phase 7 archived; PLAN.md TUI [x]; CHANGELOG L1 written. **Next:** /magic.task main to decompose Phase 8 (Flower — Desktop App). (Revert: git restore crates/tui Cargo.toml Cargo.lock .design/main)
 
