@@ -67,6 +67,7 @@
 - <https://github.com/bzantium/meta-harness>
 - <https://github.com/stanford-iris-lab/meta-harness>
 - <https://github.com/howdymary/hermes-agent-metaharness>
+- <https://github.com/ruvnet/agent-harness-generator>
 
 ## UI/UX
 
