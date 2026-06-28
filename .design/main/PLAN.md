@@ -179,7 +179,7 @@ Execution mode: **Parallel** (C3); tracks grouped by file independence. Critical
 
 *Interactive terminal surface over the now-mature core (command parity with the CLI).*
 
-- [ ] **TUI** ([l2-tui.md](specifications/l2-tui.md)) [L2]
+- [x] **TUI** ([l2-tui.md](specifications/l2-tui.md)) [L2]
 
 ## Phase 8 — Flower: Desktop Application
 

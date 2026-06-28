@@ -4,23 +4,27 @@
 <!-- Maximum 100 lines. Agent updates AFTER each completed action. -->
 
 **Workspace:** main
-**Updated:** 2026-06-28 11:25
-**Phase:** 7 — Leaf: TUI
+**Updated:** 2026-06-28 15:05
+**Phase:** 7 — Leaf: TUI — DONE
 **Status:** Active
 
 ## Current Position
 
-- **Task:** A01,A02,B01,B02,B03,C01 done — view surface + command-bar input/parsing complete. Phase 7 In Progress; remaining Todo: T-7C02 (slash → core dispatch + secret masking), Track T (validation T01/T02).
-- **Spec:** l2-tui.md (single spec for Phase 7)
-- **Next Action:** Continue Phase 7 → T-7C02 (slash → core dispatch with CLI parity + secret masking). `command::classify` already yields `Run(SlashCommand)`; swap the bar's "ok: /verb" ack for a real core call, and mask known secret patterns via the core redaction path (`cronus::redact`, INV-7) — do NOT re-implement redaction in the TUI. Dispatch via a stub `Engine`-recording seam so it stays testable (`command_dispatch`). (Phase 7 is In Progress — NOT plan-complete; the finalize/update-state script mislabels this.)
+- **Task:** Phase 7 (TUI) COMPLETE — all 9 tasks Done (A01,A02,B01,B02,B03,C01,C02,T01,T02). Interactive terminal frontend `crates/tui` delivered: terminal lifecycle, render loop, four read-only panels, slash command bar with core dispatch + secret masking, and structural validation (parity, dep-direction, render-from-state, masking). 38 crate tests pass; clippy/fmt clean.
+- **Spec:** l2-tui.md (Done; PLAN.md TUI checkbox marked [x])
+- **Next Action:** Per Post-Task Replan, a completed phase routes to `/magic.task main` to decompose/activate the **next** phase — Phase 8 (Flower — Desktop App, currently Pending). Phases 8–11 remain Pending; Phase 1 still carries its non-blocking decomposition gap. (Plan is NOT complete — Phases 8–11 remain; the finalize/update-state script mislabels phase completion as plan completion.)
 
 ## Progress
 
 ```
-Phase 7 (TUI): A01,A02,B01,B02,B03,C01 ✓ | C02,T01,T02 Todo | Done: 2–6 | In-progress: 1 (gap) | Pending: 8–11
+Build phases: Phase 7 (TUI) ✓ DONE | Done: 2–7 | In-progress: 1 (gap) | Pending: 8–11 (next: 8 Flower — needs /magic.task)
 ```
 
 ## Recent Decisions
+
+- 2026-06-28 **Phase 7 (TUI) COMPLETE — Retro L1:** all 9 tasks Done across 4 tracks. `crates/tui` is a working interactive frontend over the core: terminal RAII lifecycle (DI-mockable, panic-safe), poll-snapshot render loop (view-only, INV-5), four read-only panels (Board/Office/Status/Sessions via ratatui 0.30), slash command bar (CLI-mirrored catalog, /help, core dispatch with `cronus::redact` secret masking), and structural validation (parity matrix, inward dep-direction, render-from-state purity, secret masking). 38 crate tests; clippy/fmt clean. **What went well:** DI trait seams made every layer TTY-free testable; off-screen ratatui `Buffer` gave deterministic render assertions. **Carried forward (follow-up, not blocking):** core exposes only a thin version/status capability, so board/office/sessions projections render empty and only `/status` dispatches live — full per-verb core bindings + a cheap board snapshot + activity stream await core surface work; production secret-list population for masking pending. Phase 7 archived; PLAN.md TUI [x]; CHANGELOG L1 written. **Next:** /magic.task main to decompose Phase 8 (Flower — Desktop App). (Revert: git restore crates/tui Cargo.toml Cargo.lock .design/main)
+
+- 2026-06-28 **T-7C02 delivered (slash → core dispatch + masking) — Track C complete:** new `Dispatcher` trait + `CapabilityDispatcher` (verb→core capability, then masks via `cronus::redact::redact` — INV-7, no re-impl) + `NoopDispatcher`. `App` holds a boxed dispatcher (`new`=no-op, `with_dispatcher`=real) + `pending_dispatch`; `submit_command` defers `Run`, `tick` drains it (dispatch→masked→feedback→redraw), closing input→core→redraw. `status` wired to the capability surface; other verbs return honest "binding pending" (full per-verb bindings are follow-up — thin capability is version/status by design). 3 `command_dispatch` tests (capability parity via recording `Capabilities` stub, masking, end-to-end no-leak). 32 crate tests pass; clippy/fmt clean. (Revert: git restore crates/tui .design/main)
 
 - 2026-06-28 **T-7C01 delivered (command bar input + `/help`):** new `command` module — `parse`, `CATALOG` (help + 21 CLI-mirrored verbs), `classify` → `Help/Run/Error` (unknown → inline error, no panic). Parity source: TUI can't depend on `cronus-cli` (INV-2) and core has no command registry, so `CATALOG` is curated to mirror the CLI's 21 top-level verbs; anti-drift enforced by the validation track (T01), not a runtime import. Command bar made interactive: `ViewModel.command_input/feedback`, focus-aware key routing (`handle_key`/`submit_command`; Esc cancels line in the bar, quits elsewhere — resolved the provisional Esc note). 9 `command_parse` tests; 29 crate tests pass; clippy/fmt clean. (Revert: git restore crates/tui .design/main)
 

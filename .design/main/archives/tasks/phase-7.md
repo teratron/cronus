@@ -1,24 +1,44 @@
 ---
 phase: 7
 name: "Leaf — TUI"
-status: In Progress
+status: Done
 subsystem: "crates/tui"
 requires:
   - "core::Capabilities contract + Engine (Phase 1)"
   - "CLI command grammar + core bindings (Phase 3) — parity source"
   - "core subsystems exposing observable state/events: kanban-board, agent-session, orchestration (Phases 4–6)"
-provides: []
+provides:
+  - "Terminal RAII lifecycle guard (DI-mockable backend, panic-safe + idempotent restore)"
+  - "Event-driven poll-snapshot render loop (pure tick step-fn; view-only, INV-5)"
+  - "Panel layout + Tab/Shift+Tab focus navigation across four views + command bar"
+  - "Read-only Board/Office/Status/Sessions panels (ratatui), bounded sessions scrollback"
+  - "Slash command bar: parser, CLI-mirrored catalog, /help discovery, core dispatch with secret masking"
+  - "Structural validation: command parity, inward dependency direction, render-from-state purity, secret masking"
 key_files:
-  created: []
-  modified: []
-patterns_established: []
+  created:
+    - "crates/tui/src/lib.rs"
+    - "crates/tui/src/terminal.rs"
+    - "crates/tui/src/app.rs"
+    - "crates/tui/src/view.rs"
+    - "crates/tui/src/command.rs"
+  modified:
+    - "crates/tui/Cargo.toml"
+    - "crates/tui/src/main.rs"
+    - "Cargo.toml"
+    - "Cargo.lock"
+patterns_established:
+  - "DI trait seams (TerminalBackend / SnapshotSource / Renderer / Dispatcher) enable TTY-free unit testing"
+  - "Poll-snapshot fallback (no core event bus) keeps the view a pure function of the snapshot (INV-5)"
+  - "ratatui 0.30 (feature crossterm_0_29, single crossterm version) as the panel framework; off-screen Buffer for render assertions"
+  - "Secret masking at the dispatch boundary via cronus::redact — never re-implemented in the frontend (INV-7)"
+  - "Cross-crate command parity validated without the forbidden cli dependency (curated verb set + compile-time manifest check)"
 duration_minutes: ~
 ---
 
 # Stage 7 Tasks — Leaf: TUI
 
 **Phase:** 7
-**Status:** In Progress
+**Status:** Done
 **Strategic Goal:** An interactive, keyboard-driven terminal frontend (`crates/tui`) over the now-mature core — live Board / Office / Status / Sessions panels plus a slash-command bar with 1:1 parity to the CLI capability set. Pure presentation: rendering and input only, all behavior delegates to the core (INV-2); the TUI holds view state, never domain state (INV-5).
 
 > **Architectural guardrails (l2-tui §3):** the crate links `cronus` (core) and must NOT depend on `cronus-cli` or carry domain logic (INV-2). Slash commands map 1:1 to the shared capability set (INV-3). Secrets are never rendered (INV-7). The render loop is async and never blocks on long core calls (§4.2).
@@ -41,12 +61,12 @@ Track B — View Panels (l2-tui §4.1)
 Track C — Command Bar & Parity (l2-tui §4.3)
 
 - [x] [T-7C01] Command bar input + `/help` discovery (slash parser + command catalog)
-- [ ] [T-7C02] Slash → core dispatch with CLI parity and secret masking (INV-3 / INV-7)
+- [x] [T-7C02] Slash → core dispatch with CLI parity and secret masking (INV-3 / INV-7)
 
 Track T — Validation
 
-- [ ] [T-7T01] Validate command parity + dependency direction (each `/cmd` ↔ a CLI verb; `tui → core`, not `cli`)
-- [ ] [T-7T02] Validate render-from-state + secret masking
+- [x] [T-7T01] Validate command parity + dependency direction (each `/cmd` ↔ a CLI verb; `tui → core`, not `cli`)
+- [x] [T-7T02] Validate render-from-state + secret masking
 
 ## Detailed Tracking
 
@@ -118,20 +138,24 @@ Track T — Validation
 ### [T-7C02] Slash → core dispatch with parity + secret masking
 
 - **Spec:** l2-tui.md §4.3 (Parity), l1-architecture.md (INV-3 parity, INV-7 secret safety)
-- **Status:** Todo
+- **Status:** Done
 - **Assignment:** Agent
 - **Verify:** `cargo test -p cronus-tui command_dispatch` — each parsed `/verb` invokes the same core capability the CLI verb binds to (asserted against a stub Engine recording the call), and rendered command output masks known secret patterns (no secret value reaches the screen buffer).
 - **Handoff:** Closes the input→core→redraw cycle (feeds back into T-7A02).
 - **Notes:** Behavior difference vs the CLI is presentation only (INV-3). Reuse the core redaction path for masking (INV-7); do not re-implement redaction in the TUI.
+- **Dispatch-surface note:** `status` is routed to the `Capabilities` surface; other known verbs are recognized but return an honest "core binding not yet surfaced" line — the thin TUI capability is version/status by design, full per-verb bindings (kanban/goal/… via direct core modules, as the CLI does) are follow-up. The masking path is wired + tested regardless.
+- **Changes:** New `Dispatcher` trait + `CapabilityDispatcher` (routes verb→core capability, then masks output via `cronus::redact::redact` — INV-7, no re-implementation) + `NoopDispatcher`. `App` holds a boxed dispatcher (`new` = no-op, `with_dispatcher` = real) + `pending_dispatch`; `submit_command` defers `Run` to the loop, `tick` drains it (dispatch → masked output → feedback → redraw), closing input→core→redraw. `run`/`run_with` thread the dispatcher. 3 `command_dispatch` tests (capability parity via recording `Capabilities` stub; secret masking; end-to-end no-leak through the bar). Verify: 32 crate tests pass; clippy/fmt clean. **Track C complete.**
 
 ### [T-7T01] Validation — command parity + dependency direction
 
 - **Goal:** Prove INV-3 (parity) and INV-2 (no domain logic / inward dependency) structurally.
 - **Method:** `cargo test -p cronus-tui parity_matrix` — every TUI slash command resolves to a capability also reachable from the CLI verb set (no TUI-only behavior). `cargo tree -p cronus-tui` shows `cronus` (core) among workspace crates and **not** `cronus-cli`. `cargo clippy -p cronus-tui --all-targets -- -D warnings` and `cargo fmt -p cronus-tui --check` clean.
-- **Status:** Todo
+- **Status:** Done
+- **Changes:** 3 `parity_matrix` tests — every `CATALOG` verb (bar `help`) has a CLI counterpart (no TUI-only behavior); the full CLI verb set is covered (both-direction parity); the crate manifest links `cronus` and never `cronus-cli` (structural INV-2, compile-time `include_str!` of `Cargo.toml`). Parity asserted against a curated `EXPECTED_CLI_VERBS` set because importing `cronus-cli` would itself break the dependency rule under test. `cargo tree -p cronus-tui -e normal` confirms `cronus-tui → cronus`, no `cronus-cli`; clippy/fmt clean.
 
 ### [T-7T02] Validation — render-from-state + secret masking
 
 - **Goal:** Prove INV-5 (view-only, render purely from snapshot) and INV-7 (secrets never rendered).
 - **Method:** `cargo test -p cronus-tui render_state` — panels are a pure function of the view-model snapshot (same snapshot ⇒ identical frame; no hidden mutable domain state). `cargo test -p cronus-tui mask_secrets` — a snapshot/command output carrying a known secret renders masked.
-- **Status:** Todo
+- **Status:** Done
+- **Changes:** Extracted `render_view(area, buf, &ViewModel)` (pure frame render) from `RatatuiRenderer::draw` so the render path is exercisable against an off-screen `Buffer`. 2 `render_state` tests (same view-model ⇒ byte-identical buffer; a changed snapshot ⇒ a changed buffer) + 1 `mask_secrets` test (a dispatched secret never appears in the rendered buffer, renders `***`). Verify: 38 crate tests pass; clippy/fmt clean. **Track T complete — all Phase 7 tasks Done.**

@@ -14,9 +14,11 @@ use std::time::Duration;
 
 use ratatui::Terminal;
 use ratatui::backend::CrosstermBackend as RatatuiCrosstermBackend;
+use ratatui::buffer::Buffer;
+use ratatui::layout::Rect;
 use ratatui::widgets::{Paragraph, Widget};
 
-use crate::command::{self, CommandOutcome};
+use crate::command::{self, CommandOutcome, SlashCommand};
 use crate::terminal::{CrosstermBackend, Key, TermEvent, TerminalBackend, Tui};
 use crate::view::{self, BoardView, Focus, OfficeView, SessionsView};
 use cronus::{Capabilities, Engine};
@@ -97,20 +99,32 @@ pub struct TickResult {
     pub quit: bool,
 }
 
-/// The render loop's state: a view-model snapshot plus a quit flag. Nothing else.
-#[derive(Debug, Clone, Default)]
+/// The render loop's state: the view-model, a quit flag, and the command-dispatch
+/// machinery. Still no domain state — the dispatcher reaches the core only through
+/// its capability surface, and its output is masked before display.
 pub struct App {
     view: ViewModel,
     should_quit: bool,
+    /// A command submitted this tick, awaiting dispatch by the loop.
+    pending_dispatch: Option<SlashCommand>,
+    /// Runs recognized commands against the core (masking secrets in output).
+    dispatcher: Box<dyn Dispatcher>,
 }
 
 impl App {
-    /// Construct an app seeded with an initial view-model (typically just the
-    /// terminal size; the first snapshot arrives on the first tick).
+    /// Construct an app with a no-op dispatcher: commands parse and resolve but
+    /// invoke nothing. Used where dispatch behavior is irrelevant.
     pub fn new(initial: ViewModel) -> Self {
+        Self::with_dispatcher(initial, NoopDispatcher)
+    }
+
+    /// Construct an app with an explicit command dispatcher.
+    pub fn with_dispatcher(initial: ViewModel, dispatcher: impl Dispatcher + 'static) -> Self {
         Self {
             view: initial,
             should_quit: false,
+            pending_dispatch: None,
+            dispatcher: Box::new(dispatcher),
         }
     }
 
@@ -146,6 +160,14 @@ impl App {
                     }
                 }
             }
+        }
+
+        // 1b) Dispatch a submitted command against the core. The dispatcher returns
+        //     render-ready output with secrets already masked (INV-7), so no raw
+        //     secret value reaches the view-model or the screen buffer.
+        if let Some(command) = self.pending_dispatch.take() {
+            self.view.command_feedback = Some(self.dispatcher.dispatch(&command));
+            needs_redraw = true;
         }
 
         // 2) Snapshot poll — may be `None` (slow call in flight); the loop has
@@ -217,22 +239,73 @@ impl App {
         }
     }
 
-    /// Classify the current command line and record inline feedback. Recognized
-    /// commands are only acknowledged here — dispatch to the core is the next
-    /// step's job.
+    /// Classify the current command line. Help and errors resolve inline; a
+    /// recognized command is queued for the loop to dispatch (the loop holds the
+    /// dispatcher and performs the core call + masking).
     fn submit_command(&mut self) {
         let line = format!("/{}", self.view.command_input);
-        self.view.command_feedback = Some(match command::classify(&line) {
+        match command::classify(&line) {
             CommandOutcome::Help => {
-                format!(
+                self.view.command_feedback = Some(format!(
                     "commands: {}",
                     command::names().collect::<Vec<_>>().join(" ")
-                )
+                ));
             }
-            CommandOutcome::Run(cmd) => format!("ok: /{}", cmd.verb),
-            CommandOutcome::Error(message) => message,
-        });
+            CommandOutcome::Run(command) => self.pending_dispatch = Some(command),
+            CommandOutcome::Error(message) => self.view.command_feedback = Some(message),
+        }
         self.view.command_input.clear();
+    }
+}
+
+/// Runs a recognized slash command against the core, returning render-ready
+/// output. Implementations MUST mask secret values before returning (INV-7).
+pub trait Dispatcher {
+    /// Execute `command` and return its already-masked output.
+    fn dispatch(&mut self, command: &SlashCommand) -> String;
+}
+
+/// A dispatcher that runs nothing and returns no output — used where command
+/// dispatch is irrelevant (e.g. view-only test scenarios).
+pub struct NoopDispatcher;
+
+impl Dispatcher for NoopDispatcher {
+    fn dispatch(&mut self, _command: &SlashCommand) -> String {
+        String::new()
+    }
+}
+
+/// Production [`Dispatcher`] over the core capability surface.
+///
+/// Routes a verb to the matching core capability (today: `status`; other verbs
+/// are recognized but their core binding is not yet surfaced through the thin TUI
+/// capability), then masks known secret values in the output via the shared core
+/// redaction path — the TUI never re-implements redaction (INV-7).
+pub struct CapabilityDispatcher<C: Capabilities> {
+    core: C,
+    secrets: Vec<String>,
+}
+
+impl<C: Capabilities> CapabilityDispatcher<C> {
+    /// Wrap a core handle and the secret values to mask in dispatched output.
+    pub fn new(core: C, secrets: Vec<String>) -> Self {
+        Self { core, secrets }
+    }
+
+    /// Route a verb to its core capability, producing raw (unmasked) output.
+    fn route(&self, command: &SlashCommand) -> String {
+        match command.verb.as_str() {
+            "status" => self.core.status(),
+            other => format!("/{other}: recognized; core binding not yet surfaced in the TUI"),
+        }
+    }
+}
+
+impl<C: Capabilities> Dispatcher for CapabilityDispatcher<C> {
+    fn dispatch(&mut self, command: &SlashCommand) -> String {
+        let raw = self.route(command);
+        let secret_refs: Vec<&str> = self.secrets.iter().map(String::as_str).collect();
+        cronus::redact::redact(&raw, &secret_refs)
     }
 }
 
@@ -288,76 +361,93 @@ impl RatatuiRenderer {
 
 impl Renderer for RatatuiRenderer {
     fn draw(&mut self, view: &ViewModel) -> io::Result<()> {
-        self.terminal.draw(|frame| {
-            let areas = view::layout(frame.area());
-            let snapshot = &view.snapshot;
-            let buf = frame.buffer_mut();
-
-            view::render_board(
-                areas.board,
-                buf,
-                &snapshot.board,
-                view.focus == Focus::Board,
-            );
-            view::render_office(
-                areas.office,
-                buf,
-                &snapshot.office,
-                view.focus == Focus::Office,
-            );
-
-            view::render_status(
-                areas.status,
-                buf,
-                &snapshot.version,
-                &snapshot.status,
-                view.focus == Focus::Status,
-            );
-            view::render_sessions(
-                areas.sessions,
-                buf,
-                &snapshot.sessions,
-                view.focus == Focus::Sessions,
-            );
-
-            let bar_text = match &view.command_feedback {
-                Some(feedback) if view.command_input.is_empty() => format!("/  {feedback}"),
-                _ => format!("/{}", view.command_input),
-            };
-            Paragraph::new(bar_text)
-                .style(view::focus_border_style(view.focus == Focus::CommandBar))
-                .render(areas.command_bar, buf);
-        })?;
+        self.terminal
+            .draw(|frame| render_view(frame.area(), frame.buffer_mut(), view))?;
         Ok(())
     }
 }
 
+/// Render the whole TUI frame into `buf` for `area`, purely from the view-model.
+///
+/// A pure function of `view`: the same view-model always produces the same buffer
+/// (INV-5 render-from-state). Extracted from the renderer so the render path can
+/// be exercised against an off-screen [`Buffer`] without a terminal.
+pub fn render_view(area: Rect, buf: &mut Buffer, view: &ViewModel) {
+    let areas = view::layout(area);
+    let snapshot = &view.snapshot;
+
+    view::render_board(
+        areas.board,
+        buf,
+        &snapshot.board,
+        view.focus == Focus::Board,
+    );
+    view::render_office(
+        areas.office,
+        buf,
+        &snapshot.office,
+        view.focus == Focus::Office,
+    );
+    view::render_status(
+        areas.status,
+        buf,
+        &snapshot.version,
+        &snapshot.status,
+        view.focus == Focus::Status,
+    );
+    view::render_sessions(
+        areas.sessions,
+        buf,
+        &snapshot.sessions,
+        view.focus == Focus::Sessions,
+    );
+
+    let bar_text = match &view.command_feedback {
+        Some(feedback) if view.command_input.is_empty() => format!("/  {feedback}"),
+        _ => format!("/{}", view.command_input),
+    };
+    Paragraph::new(bar_text)
+        .style(view::focus_border_style(view.focus == Focus::CommandBar))
+        .render(areas.command_bar, buf);
+}
+
 /// Run the TUI against the real terminal and the live engine.
 pub fn run() -> io::Result<()> {
-    let engine = Engine::new();
     run_with(
         CrosstermBackend::new(),
-        CapabilitySource::new(engine),
+        CapabilitySource::new(Engine::new()),
         RatatuiRenderer::new()?,
+        // Secret values to mask are loaded from the core secrets store once that
+        // binding lands; the redaction path is already wired (INV-7).
+        CapabilityDispatcher::new(Engine::new(), Vec::new()),
     )
 }
 
-/// Run the loop against injected backend / source / renderer.
+/// Run the loop against injected backend / source / renderer / dispatcher.
 ///
 /// The terminal lifecycle is RAII-guarded by [`Tui`], so any exit path — normal,
 /// `?` error, or panic — restores the terminal.
-pub fn run_with<B, S, R>(backend: B, mut source: S, mut renderer: R) -> io::Result<()>
+pub fn run_with<B, S, R, D>(
+    backend: B,
+    mut source: S,
+    mut renderer: R,
+    dispatcher: D,
+) -> io::Result<()>
 where
     B: TerminalBackend,
     S: SnapshotSource,
     R: Renderer,
+    D: Dispatcher + 'static,
 {
     let mut tui = Tui::new(backend)?;
     let (cols, rows) = tui.size()?;
-    let mut app = App::new(ViewModel {
-        size: (cols, rows),
-        ..Default::default()
-    });
+    let mut app = App::with_dispatcher(
+        ViewModel {
+            size: (cols, rows),
+            ..Default::default()
+        },
+        dispatcher,
+    );
 
     // Initial frame so the screen is populated before the first event.
     renderer.draw(app.view())?;
@@ -379,7 +469,45 @@ where
 #[cfg(test)]
 mod tests {
     use super::*;
+    use std::cell::RefCell;
     use std::collections::VecDeque;
+    use std::rc::Rc;
+
+    /// A [`Capabilities`] core that records which capability methods were called,
+    /// so dispatch parity can be asserted. `calls` is shared via `Rc` so the test
+    /// can inspect it after the core is moved into a dispatcher.
+    struct RecordingCore {
+        calls: Rc<RefCell<Vec<&'static str>>>,
+        status_out: String,
+    }
+
+    impl RecordingCore {
+        fn new(status_out: &str) -> Self {
+            Self {
+                calls: Rc::new(RefCell::new(Vec::new())),
+                status_out: status_out.to_string(),
+            }
+        }
+    }
+
+    impl Capabilities for RecordingCore {
+        fn version(&self) -> &str {
+            self.calls.borrow_mut().push("version");
+            "0.0.0"
+        }
+
+        fn status(&self) -> String {
+            self.calls.borrow_mut().push("status");
+            self.status_out.clone()
+        }
+    }
+
+    fn status_command() -> SlashCommand {
+        SlashCommand {
+            verb: "status".to_string(),
+            args: Vec::new(),
+        }
+    }
 
     /// A scripted [`SnapshotSource`]: returns each queued value in turn, so tests
     /// can model "new snapshot ready" (`Some`) and "slow call in flight" (`None`).
@@ -506,11 +634,14 @@ mod tests {
     }
 
     #[test]
-    fn command_parse_bar_typing_then_enter_acknowledges_known_command() {
-        let mut app = App::new(ViewModel {
-            focus: Focus::CommandBar,
-            ..Default::default()
-        });
+    fn command_parse_bar_typing_then_enter_dispatches_known_command() {
+        let mut app = App::with_dispatcher(
+            ViewModel {
+                focus: Focus::CommandBar,
+                ..Default::default()
+            },
+            CapabilityDispatcher::new(Engine::new(), Vec::new()),
+        );
         let mut source = ScriptedSource::new(vec![]);
         let mut renderer = RecordingRenderer::default();
 
@@ -523,7 +654,15 @@ mod tests {
         app.tick(&[TermEvent::Key(Key::Enter)], &mut source, &mut renderer)
             .unwrap();
         assert_eq!(app.view().command_input, "", "input clears on submit");
-        assert_eq!(app.view().command_feedback.as_deref(), Some("ok: /status"));
+        // Feedback is the dispatched core output (the engine status line).
+        assert!(
+            app.view()
+                .command_feedback
+                .as_deref()
+                .unwrap()
+                .contains("Cronus core"),
+            "the recognized command dispatched to the core"
+        );
     }
 
     #[test]
@@ -582,5 +721,170 @@ mod tests {
         );
         // The view-model is exactly the last snapshot — nothing accumulated.
         assert_eq!(app1.view().snapshot, snap("b"));
+    }
+
+    #[test]
+    fn command_dispatch_invokes_the_matching_core_capability() {
+        let core = RecordingCore::new("all green");
+        let calls = core.calls.clone();
+        let mut dispatcher = CapabilityDispatcher::new(core, Vec::new());
+
+        let out = dispatcher.dispatch(&status_command());
+
+        assert_eq!(out, "all green", "output is the core status capability");
+        assert!(
+            calls.borrow().contains(&"status"),
+            "/status invoked the status capability the CLI verb also binds"
+        );
+    }
+
+    #[test]
+    fn command_dispatch_masks_secret_values_in_output() {
+        // The core output carries a secret; the dispatcher must mask it (INV-7).
+        let core = RecordingCore::new("token=sk-LIVE-9 ok");
+        let mut dispatcher = CapabilityDispatcher::new(core, vec!["sk-LIVE-9".to_string()]);
+
+        let out = dispatcher.dispatch(&status_command());
+
+        assert!(
+            !out.contains("sk-LIVE-9"),
+            "no secret value reaches the output"
+        );
+        assert!(out.contains("***"), "the secret is masked");
+        assert!(out.contains("ok"), "non-secret content is preserved");
+    }
+
+    #[test]
+    fn command_dispatch_through_the_bar_never_leaks_a_secret_to_the_view() {
+        let core = RecordingCore::new("key=sk-LIVE-7");
+        let mut app = App::with_dispatcher(
+            ViewModel {
+                focus: Focus::CommandBar,
+                ..Default::default()
+            },
+            CapabilityDispatcher::new(core, vec!["sk-LIVE-7".to_string()]),
+        );
+        let mut source = ScriptedSource::new(vec![]);
+        let mut renderer = RecordingRenderer::default();
+
+        for c in "status".chars() {
+            app.tick(&[TermEvent::Key(Key::Char(c))], &mut source, &mut renderer)
+                .unwrap();
+        }
+        app.tick(&[TermEvent::Key(Key::Enter)], &mut source, &mut renderer)
+            .unwrap();
+
+        let feedback = app.view().command_feedback.as_deref().unwrap();
+        assert!(
+            !feedback.contains("sk-LIVE-7"),
+            "the secret never reaches the view-model or the screen buffer"
+        );
+        assert!(feedback.contains("***"), "the leaked value renders masked");
+    }
+
+    /// A representative populated view-model for render-from-state tests.
+    fn populated_view() -> ViewModel {
+        let mut sessions = SessionsView::default();
+        sessions.push("agent started");
+        ViewModel {
+            snapshot: CoreSnapshot {
+                version: "1.2.3".to_string(),
+                status: "phase 7 | 80%".to_string(),
+                board: BoardView {
+                    cards: vec![view::BoardCard {
+                        id: "k1".to_string(),
+                        title: String::new(),
+                        column: view::BoardColumn::Running,
+                    }],
+                },
+                office: OfficeView {
+                    agents: vec![view::AgentActivity {
+                        agent: "orchestrator".to_string(),
+                        task: "planning".to_string(),
+                    }],
+                },
+                sessions,
+            },
+            size: (80, 24),
+            focus: Focus::Board,
+            command_input: String::new(),
+            command_feedback: None,
+        }
+    }
+
+    fn render_to_buffer(view: &ViewModel, area: Rect) -> Buffer {
+        let mut buf = Buffer::empty(area);
+        render_view(area, &mut buf, view);
+        buf
+    }
+
+    fn buffer_text(buf: &Buffer, area: Rect) -> String {
+        let mut text = String::new();
+        for y in area.y..area.bottom() {
+            for x in area.x..area.right() {
+                if let Some(cell) = buf.cell((x, y)) {
+                    text.push_str(cell.symbol());
+                }
+            }
+        }
+        text
+    }
+
+    #[test]
+    fn render_state_is_a_pure_function_of_the_view_model() {
+        let view = populated_view();
+        let area = Rect::new(0, 0, 80, 24);
+
+        let first = render_to_buffer(&view, area);
+        let second = render_to_buffer(&view, area);
+
+        assert_eq!(
+            first, second,
+            "the same view-model must render an identical frame (INV-5)"
+        );
+    }
+
+    #[test]
+    fn render_state_differs_when_the_snapshot_changes() {
+        let area = Rect::new(0, 0, 80, 24);
+        let base = render_to_buffer(&populated_view(), area);
+
+        let mut changed = populated_view();
+        changed.snapshot.status = "phase 7 | 100%".to_string();
+        let after = render_to_buffer(&changed, area);
+
+        assert_ne!(base, after, "a changed snapshot must change the frame");
+    }
+
+    #[test]
+    fn mask_secrets_dispatched_value_never_reaches_the_buffer() {
+        let core = RecordingCore::new("token=sk-LIVE-42");
+        let mut app = App::with_dispatcher(
+            ViewModel {
+                focus: Focus::CommandBar,
+                size: (80, 24),
+                ..Default::default()
+            },
+            CapabilityDispatcher::new(core, vec!["sk-LIVE-42".to_string()]),
+        );
+        let mut source = ScriptedSource::new(vec![]);
+        let mut renderer = RecordingRenderer::default();
+
+        for c in "status".chars() {
+            app.tick(&[TermEvent::Key(Key::Char(c))], &mut source, &mut renderer)
+                .unwrap();
+        }
+        app.tick(&[TermEvent::Key(Key::Enter)], &mut source, &mut renderer)
+            .unwrap();
+
+        let area = Rect::new(0, 0, 80, 24);
+        let buf = render_to_buffer(app.view(), area);
+        let rendered = buffer_text(&buf, area);
+
+        assert!(
+            !rendered.contains("sk-LIVE-42"),
+            "no secret value reaches the rendered screen buffer (INV-7)"
+        );
+        assert!(rendered.contains("***"), "the secret renders masked");
     }
 }

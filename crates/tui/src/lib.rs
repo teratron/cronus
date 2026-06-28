@@ -14,8 +14,8 @@ pub mod terminal;
 pub mod view;
 
 pub use app::{
-    App, CapabilitySource, CoreSnapshot, RatatuiRenderer, Renderer, SnapshotSource, TickResult,
-    ViewModel, run, run_with,
+    App, CapabilityDispatcher, CapabilitySource, CoreSnapshot, Dispatcher, NoopDispatcher,
+    RatatuiRenderer, Renderer, SnapshotSource, TickResult, ViewModel, render_view, run, run_with,
 };
 pub use command::{CommandOutcome, CommandSpec, ParseError, SlashCommand, classify, parse};
 pub use terminal::{CrosstermBackend, Key, TermEvent, TerminalBackend, Tui};

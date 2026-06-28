@@ -26,6 +26,12 @@
 - <https://github.com/msitarzewski/agency-agents>
 - <https://github.com/obra/superpowers>
 - <https://github.com/alookai/alook>
+- <https://github.com/vellum-ai/vellum-assistant>
+- <https://github.com/FoundationAgents/MetaGPT>
+- <https://github.com/ComposioHQ/trustclaw>
+- <https://github.com/sipeed/picoclaw>
+- <https://github.com/zeroclaw-labs/zeroclaw>
+- <https://github.com/HKUDS/nanobot>
 
 ## Spec-Driven Development
 
@@ -44,6 +50,8 @@
 - <https://github.com/codegraph-ai/codegraph>
 - <https://github.com/anvanster/tempera>
 - <https://github.com/adminlove520/holographic-memory>
+- <https://github.com/plastic-labs/honcho>
+- <https://github.com/NevaMind-AI/memU>
 
 ## Tools
 
@@ -57,6 +65,9 @@
 - <https://github.com/huginn/huginn>
 - <https://github.com/lmstudio-ai/lms>
 - <https://github.com/ollama/ollama>
+- <https://github.com/superagent-ai/superagent>
+- <https://github.com/microsoft/semantic-kernel>
+- <https://github.com/microsoft/autogen>
 
 ### Harness
 

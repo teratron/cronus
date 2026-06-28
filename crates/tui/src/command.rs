@@ -249,4 +249,72 @@ mod tests {
             assert!(seen.insert(name), "duplicate catalog verb: {name}");
         }
     }
+
+    /// The CLI's top-level command verbs (crates/cli/src/cli.rs `Command` enum),
+    /// kebab-cased. Mirrored here so parity can be asserted WITHOUT the TUI taking
+    /// a dependency on `cronus-cli` — that dependency is itself forbidden (INV-2),
+    /// and the parity check below would otherwise have to violate the very rule it
+    /// guards. `help` is the TUI's own discovery affordance (the CLI uses `--help`).
+    const EXPECTED_CLI_VERBS: &[&str] = &[
+        "init",
+        "status",
+        "workflow",
+        "workspace",
+        "memory",
+        "codegraph",
+        "agent",
+        "role",
+        "board",
+        "schedule",
+        "budget",
+        "exec",
+        "check",
+        "ext",
+        "learn",
+        "registry",
+        "goal",
+        "trigger",
+        "mission",
+        "research",
+        "change",
+    ];
+
+    #[test]
+    fn parity_matrix_every_slash_command_maps_to_a_cli_verb() {
+        for spec in CATALOG {
+            if spec.name == "help" {
+                continue; // TUI-only discovery affordance, no CLI verb.
+            }
+            assert!(
+                EXPECTED_CLI_VERBS.contains(&spec.name),
+                "/{} has no CLI counterpart — a TUI-only command violates INV-3 parity",
+                spec.name
+            );
+        }
+    }
+
+    #[test]
+    fn parity_matrix_covers_the_full_cli_verb_set() {
+        // Parity in the other direction: no CLI verb is missing from the catalog.
+        for verb in EXPECTED_CLI_VERBS {
+            assert!(
+                is_known(verb),
+                "CLI verb /{verb} is missing from the TUI catalog"
+            );
+        }
+    }
+
+    #[test]
+    fn parity_matrix_crate_depends_on_core_not_the_cli() {
+        // Structural INV-2 guard: the manifest links the core, never the CLI.
+        let manifest = include_str!(concat!(env!("CARGO_MANIFEST_DIR"), "/Cargo.toml"));
+        assert!(
+            manifest.contains("cronus = { workspace = true }"),
+            "the TUI must link the core crate (cronus)"
+        );
+        assert!(
+            !manifest.contains("cronus-cli"),
+            "the TUI must not depend on cronus-cli (INV-2 inward dependency)"
+        );
+    }
 }
