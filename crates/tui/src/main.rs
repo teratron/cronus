@@ -1,9 +1,10 @@
-//! Cronus TUI — a thin terminal frontend over the core. No domain logic here;
-//! the interactive terminal surface is built in Phase 7 (Leaf).
-
-use cronus::{Capabilities, Engine};
+//! Cronus TUI binary — thin entry point. All behavior lives in the library and,
+//! ultimately, the core; this binary only launches the render loop and reports a
+//! fatal error if the terminal could not be driven.
 
 fn main() {
-    let engine = Engine::new();
-    println!("[cronus-tui] {}", engine.status());
+    if let Err(error) = cronus_tui::run() {
+        eprintln!("[cronus-tui] fatal: {error}");
+        std::process::exit(1);
+    }
 }

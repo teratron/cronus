@@ -4,15 +4,15 @@
 <!-- Maximum 100 lines. Agent updates AFTER each completed action. -->
 
 **Workspace:** main
-**Updated:** 2026-06-28 09:44
+**Updated:** 2026-06-28 10:21
 **Phase:** 7 — Leaf: TUI
-**Status:** Active
+**Status:** Done
 
 ## Current Position
 
-- **Task:** Plan re-synced to INDEX v1.0.36 (48 orphans resolved: 39 L1 Stable → Phase 0, 4 L2 Stable → new Phase 11, 5 non-Stable → Backlog). Phase 7 (TUI) decomposed into 9 atomic tasks across 4 tracks (T-7A01…T-7T02). Phases 2–6 Done; Phase 1 has a non-blocking decomposition gap.
+- **Task:** T-7A02 Event-driven render loop (poll-snapshot fallback)
 - **Spec:** l2-tui.md (single spec for Phase 7)
-- **Next Action:** Run /magic.run main to execute Phase 7 (TUI)
+- **Next Action:** Plan complete — author new scope via /magic.spec main (or /magic.status for a briefing)
 
 ## Progress
 
@@ -21,6 +21,8 @@ Build phases: Phase 7 (TUI) decomposed & ready ▶  | Done: 2–6  | In-progress
 ```
 
 ## Recent Decisions
+
+- 2026-06-28 **Run prep (Phase 7 de-risk, no code yet):** Pre-flight green (ok:true, header parity clean). Resolved the planner-flagged hidden dependency for the TUI render loop: (1) **Binding pattern** — frontends bind to subsystems by calling the public core modules **directly** (`cronus::kanban::{Board,CardState}`, `cronus::session`, `cronus::workspace::WorkspaceManager`, `cronus::roles::RoleManager`, …), exactly as `crates/cli/src/commands.rs` does; the thin `Capabilities` trait is version/status only, NOT the subsystem surface. TUI parity (INV-3) = invoke the same core fns the CLI verbs do. (2) **No core event bus** → render loop uses the poll-snapshot fallback (re-read core state per tick), INV-5 view-only preserved. (3) **Toolchain OK + network available** → add `crossterm` (± `ratatui`) as the terminal backend; NOT blocked (unlike Phase 1's pnpm/Tauri). T-7A01 needs a DI-mockable terminal abstraction (raw mode is untestable in the non-TTY runner). Paused here for context budget — tree left green (`cargo build -p cronus-tui` passes). Resume execution in a fresh session.
 
 - 2026-06-28 **Decision:** Plan v2.5.0 → v2.6.0 registry re-sync (INDEX raced to v1.0.36). 48 orphaned specs absorbed: 39 newly-authored Stable L1 concepts folded into Phase 0; 4 ready Stable L2 subsystems (resource-sharing, notes, file-store, development-workflow) became Phase 11; 5 non-Stable (l1-spec-driven-governance/dynamic-harness/loop-governance RFC, l2-knowledge-store RFC, l2-loop-runner Draft) parked in Backlog. Phase 7 (TUI) decomposed: 9 tasks, render-loop carries a poll-snapshot fallback if the core lacks an event seam. (Revert: git restore .design/main/PLAN.md .design/main/TASKS.md .design/main/tasks/phase-7.md)
 

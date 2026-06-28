@@ -1,7 +1,7 @@
 ---
 phase: 7
 name: "Leaf — TUI"
-status: Todo
+status: In Progress
 subsystem: "crates/tui"
 requires:
   - "core::Capabilities contract + Engine (Phase 1)"
@@ -18,7 +18,7 @@ duration_minutes: ~
 # Stage 7 Tasks — Leaf: TUI
 
 **Phase:** 7
-**Status:** Todo
+**Status:** In Progress
 **Strategic Goal:** An interactive, keyboard-driven terminal frontend (`crates/tui`) over the now-mature core — live Board / Office / Status / Sessions panels plus a slash-command bar with 1:1 parity to the CLI capability set. Pure presentation: rendering and input only, all behavior delegates to the core (INV-2); the TUI holds view state, never domain state (INV-5).
 
 > **Architectural guardrails (l2-tui §3):** the crate links `cronus` (core) and must NOT depend on `cronus-cli` or carry domain logic (INV-2). Slash commands map 1:1 to the shared capability set (INV-3). Secrets are never rendered (INV-7). The render loop is async and never blocks on long core calls (§4.2).
@@ -29,8 +29,8 @@ duration_minutes: ~
 
 Track A — Shell & Render Loop (l2-tui §4.2)
 
-- [ ] [T-7A01] Terminal backend + raw-mode lifecycle (enter/restore, panic-safe teardown, resize)
-- [ ] [T-7A02] Event-driven async render loop: core event subscription (poll-snapshot fallback) → view-model update → redraw
+- [x] [T-7A01] Terminal backend + raw-mode lifecycle (enter/restore, panic-safe teardown, resize)
+- [x] [T-7A02] Event-driven async render loop: core event subscription (poll-snapshot fallback) → view-model update → redraw
 
 Track B — View Panels (l2-tui §4.1)
 
@@ -53,20 +53,23 @@ Track T — Validation
 ### [T-7A01] Terminal backend + raw-mode lifecycle
 
 - **Spec:** l2-tui.md §2 (Constraints), §4.2 (Render loop)
-- **Status:** Todo
+- **Status:** Done
 - **Assignment:** Agent
 - **Verify:** `cargo test -p cronus-tui terminal_lifecycle` — entering raw mode then dropping the guard restores cooked mode and the alternate screen (no leaked terminal state); a simulated panic still runs the restore path. `cargo build -p cronus-tui` exit 0.
 - **Handoff:** Provides the `Terminal`/`Tui` RAII guard that T-7A02 drives.
 - **Notes:** Any ANSI terminal; use a single backend (crossterm) behind a `cronus-tui`-local wrapper. Resize events propagate to a redraw request. No core calls here — pure terminal plumbing.
+- **Changes:** Converted `cronus-tui` to lib+bin; added `crossterm` (workspace dep). New `terminal` module: `TerminalBackend` DI trait (enter/leave/size/poll_event), `CrosstermBackend` production impl (Windows Press-only key filter), `Tui<B>` RAII guard with panic-safe + idempotent restore, folded `Key`/`TermEvent` vocab. 4 `terminal_lifecycle` unit tests via recording fake (no TTY). Verify: build exit 0, 4 tests pass, clippy/fmt clean.
 
 ### [T-7A02] Event-driven async render loop
 
 - **Spec:** l2-tui.md §4.2, l1-architecture.md (INV-2 logic-in-core, INV-5 view-only state)
-- **Status:** Todo
+- **Status:** Done
 - **Assignment:** Agent
 - **Verify:** `cargo test -p cronus-tui render_loop` — a stub core event/snapshot source drives the loop; asserting (a) a core state change updates the view-model and schedules exactly one redraw, (b) a slow core call does not block input handling (loop stays responsive), (c) the loop holds no domain state beyond the view-model snapshot.
 - **Handoff:** Establishes the `App` view-model + the subscribe/poll seam every panel reads from.
 - **Notes:** Prefer a core event/observe subscription; if absent, poll `Engine` state snapshots on a tick. Either way the TUI never mutates domain state (INV-5). This task resolves the open event-seam dependency noted above — record which path was taken in `provides`.
+- **Event-seam resolved:** the core exposes **no** observer/pub-sub (its `Capabilities` surface is version/status only), so the loop took the **poll-snapshot fallback** — a `SnapshotSource` polled per tick, `App` dedupes by snapshot equality (still INV-5 view-only). An event-driven source can later implement the same trait without changing the loop.
+- **Changes:** New `app` module: `App::tick` pure step-function (input-first ordering keeps the loop responsive while a snapshot is in flight; coalesces to exactly one redraw per change), `ViewModel`/`CoreSnapshot` view-only projection, `SnapshotSource` poll seam + `CapabilitySource` production impl over the core, `Renderer` seam (`&ViewModel` enforces render-from-state) + minimal `PlainRenderer`, `run`/`run_with` drivers (RAII-guarded terminal). Binary now launches the loop. 5 `render_loop` unit tests via scripted source + recording renderer. Verify: 9 crate tests pass, clippy/fmt clean.
 
 ### [T-7B01] Panel layout + focus navigation
 

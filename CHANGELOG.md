@@ -96,3 +96,4 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Added specification `nodus-control-flow` (nodus)
 - Completed task `phase-11` (nodus)
 - Updated specification `architecture` (main)
+- Completed task `phase-7` (main)
