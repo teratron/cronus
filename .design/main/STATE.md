@@ -4,23 +4,25 @@
 <!-- Maximum 100 lines. Agent updates AFTER each completed action. -->
 
 **Workspace:** main
-**Updated:** 2026-06-28 05:17
-**Phase:** 1 — Seed I: Foundation
+**Updated:** 2026-06-28 09:44
+**Phase:** 7 — Leaf: TUI
 **Status:** Active
 
 ## Current Position
 
-- **Task:** Phase 6 complete (5/5 tasks done: T-6A01 orchestration, T-6B01 trigger triage, T-6C01 mission mode, T-6C02 deep research, T-6T01 validation). Phase 7 (TUI) not yet decomposed into atomic tasks.
+- **Task:** Plan re-synced to INDEX v1.0.36 (48 orphans resolved: 39 L1 Stable → Phase 0, 4 L2 Stable → new Phase 11, 5 non-Stable → Backlog). Phase 7 (TUI) decomposed into 9 atomic tasks across 4 tracks (T-7A01…T-7T02). Phases 2–6 Done; Phase 1 has a non-blocking decomposition gap.
 - **Spec:** l2-tui.md (single spec for Phase 7)
-- **Next Action:** Run /magic.task main to update the plan
+- **Next Action:** Run /magic.run main to execute Phase 7 (TUI)
 
 ## Progress
 
 ```
-Overall: [5/6] ███████░ 83%
+Build phases: Phase 7 (TUI) decomposed & ready ▶  | Done: 2–6  | In-progress: 1 (gap)  | Pending: 8–11
 ```
 
 ## Recent Decisions
+
+- 2026-06-28 **Decision:** Plan v2.5.0 → v2.6.0 registry re-sync (INDEX raced to v1.0.36). 48 orphaned specs absorbed: 39 newly-authored Stable L1 concepts folded into Phase 0; 4 ready Stable L2 subsystems (resource-sharing, notes, file-store, development-workflow) became Phase 11; 5 non-Stable (l1-spec-driven-governance/dynamic-harness/loop-governance RFC, l2-knowledge-store RFC, l2-loop-runner Draft) parked in Backlog. Phase 7 (TUI) decomposed: 9 tasks, render-loop carries a poll-snapshot fallback if the core lacks an event seam. (Revert: git restore .design/main/PLAN.md .design/main/TASKS.md .design/main/tasks/phase-7.md)
 
 - 2026-06-23 **Decision:** nodus workspace created under `.design/nodus/` — PLAN.md (3 phases), TASKS.md, tasks/phase-1.md (7 tasks: T-1A01..T-1T01). Phase 1 covers spec completeness (TBDs in §4.4 parallel error propagation + §4.3 macro invocation), vocabulary alignment, and NL invariant test coverage.
 

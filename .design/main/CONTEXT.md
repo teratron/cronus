@@ -1,6 +1,6 @@
 # Project Context
 
-**Generated:** 2026-06-24
+**Generated:** 2026-06-28
 
 ## Active Technologies
 
@@ -17,7 +17,6 @@
 ├── .claude/
 │   ├── commands/
 │   ├── rules/
-│   ├── settings.local.json
 │   └── skills/
 ├── .codex/
 │   ├── prompts/
@@ -36,6 +35,7 @@
 ├── .drafts/
 │   ├── TODO.md
 │   ├── desktop.drawio.svg
+│   ├── heartbeat.md
 │   ├── project-names.md
 │   ├── references.md
 │   ├── release.drawio.svg
@@ -63,6 +63,7 @@
 │   ├── nodus/
 │   └── tui/
 ├── docs/
+├── installer/
 ├── packages/
 │   └── ui/
 └── rust-toolchain.toml

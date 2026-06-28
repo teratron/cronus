@@ -74,8 +74,24 @@
 
 ---
 
-- [x] команды:
+- [ ] Process monitor для cli, tui, gui
+10 process
+| # | Process | PID | CPU | Memory |
+| --- | --- | --- | --- | --- |
+| 1 | cronus-main | 16948 | 0.3% | 247 MB |
+| 2 |   cronus-gpu | 19416 | 0.1% | 158 MB |
+| 3 |   cronus-renderer-process-monitor | 19604 | 0.1% | 163 MB |
+| 4 |   cronus-renderer-main | 1620 | 0.0% | 217 MB |
+| 5 |   cronus-host-local-1 | 8780 | 0.0% | 203 MB |
+| 6 |   cronus-utility-network-service | 18308 | 0.0% | 56.0 MB |
+| 7 |   cronus-process-tab | 4060 | 0.0% | 92.9 MB |
+| 8 |   cronus-process-tab | 8608 | 0.0% | 101 MB |
+| 9 |   cronus-utility-audio-service | 18024 | 0.0% | 92.9 MB |
+| 10 |   cronus-utility-video-capture | 13520 | 0.0% | 107 MB |
 
+---
+
+- [x] команды:
 | cli | tui/gui |
 | --- | --- |
 | `cronus help` | `/help` |

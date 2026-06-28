@@ -1,13 +1,13 @@
 # Implementation Plan
 
-**Version:** 2.5.0
-**Generated:** 2026-06-24
-**Based on:** .design/main/INDEX.md v1.0.4
+**Version:** 2.6.0
+**Generated:** 2026-06-28
+**Based on:** .design/main/INDEX.md v1.0.36
 **Status:** Active
 
 ## Overview
 
-Implementation plan for Cronus from 77 Stable specifications (30 L1 concepts + 47 L2 implementations). Phases follow a **growth order**: the agent grows like a sprout from a seed.
+Implementation plan for Cronus from the project registry (126 specs: 121 Stable, 4 RFC, 1 Draft). Phases follow a **growth order**: the agent grows like a sprout from a seed. The registry expanded substantially since plan v2.5.0 (INDEX v1.0.4 → v1.0.36); this revision re-syncs the plan — newly authored Stable L1 concepts are folded into Phase 0, four ready Stable L2 subsystems form the new Phase 11, and non-Stable specs are parked in the Backlog (no spec is left orphaned).
 
 - **Seed = the library** (`crates/core` + `crates/nodus` runtime) — Phases 1–2.
 - **Stem = the CLI** — Phase 3, the first usable surface, emerging straight from the seed.
@@ -53,6 +53,48 @@ Execution mode: **Parallel** (C3); tracks grouped by file independence. Critical
 - [x] **Lookahead Planning** ([l1-lookahead-planning.md](specifications/l1-lookahead-planning.md)) [L1] — pre-execution consequence simulation N steps ahead; LP-1…LP-6; 7-category trigger catalog (branch merge/schema migration/file deletion/dep upgrade/security policy/mass refactor/arch change); CONFIRM/MODIFY/ESCALATE/BUDGET_EXHAUSTED conclusions
 - [x] **Agent Client Protocol** ([l1-acp.md](specifications/l1-acp.md)) [L1] — transport-agnostic protocol for external callers; ACP-1…ACP-7; session lifecycle, streaming event taxonomy, capability declaration, trust levels (trusted/restricted/anonymous), cross-office ACP relay
 - [x] **Global Orchestration** ([l1-global-orchestration.md](specifications/l1-global-orchestration.md)) [L1] — building-level coordination above individual offices; GO-1…GO-6; phase-awareness enforcement (cross-cutting concern catalog), cross-office delegation via ACP relay, building-level escalation with HITL gate
+
+*Concepts authored since plan v2.5.0 (registry sync INDEX v1.0.4 → v1.0.36). All Stable — they gate later implementation phases.*
+
+- [x] **Execution Graph** ([l1-execution-graph.md](specifications/l1-execution-graph.md)) [L1] — directed graph with typed state channels, superstep atomicity, conditional routing, dynamic spawn, interrupt/resume, checkpoint durability
+- [x] **Task Graph Model** ([l1-task-graph-model.md](specifications/l1-task-graph-model.md)) [L1] — decomposition algebra: requirement-to-graph, dependency-DAG integrity, deterministic next-selection, journal, drift-driven re-planning, coordinator/executor split
+- [x] **Agent Framework Skeleton** ([l1-agent-framework-skeleton.md](specifications/l1-agent-framework-skeleton.md)) [L1] — paradigm-neutral primitive triad (Agent/Work-Unit/Coordinator), 5-pattern coordination catalog, 3 concrete engines, autonomous self-improvement loop
+- [x] **Tool Composition** ([l1-tool-composition.md](specifications/l1-tool-composition.md)) [L1] — toolkit as named group with dependency DAG, single authorization surface, deferred tool resolution at catalog scale (TC-7)
+- [x] **Code Execution** ([l1-code-execution.md](specifications/l1-code-execution.md)) [L1] — code-execution-as-tool-use: typed sandboxed program with in-language capability calls, confinement parity, stateful cells, observable replay (CE-1…CE-8)
+- [x] **Output Contracts** ([l1-output-contracts.md](specifications/l1-output-contracts.md)) [L1] — inline output validation (schema + callable + LLM criteria), retry budget with verdict injection, escalation to ORC-11
+- [x] **Work Liveness** ([l1-work-liveness.md](specifications/l1-work-liveness.md)) [L1] — autonomous-work liveness & ownership: atomic claim, affirmative liveness contract, wake coalescing, stranded-work reconciliation, recovery ladder (WL-1…WL-9)
+- [x] **Intent Resolution** ([l1-intent-resolution.md](specifications/l1-intent-resolution.md)) [L1] — ground-before-ask, assume-and-record never silently guess, risk-proportional ask-or-assume, correction re-plans dependents (IR-1…IR-7)
+- [x] **Code Intelligence** ([l1-code-intelligence.md](specifications/l1-code-intelligence.md)) [L1] — source tree as queryable semantic graph; typed node/edge taxonomy, structural analysis family, intent-aware context assembly, hybrid retrieval (CI-1…CI-17)
+- [x] **Knowledge Base** ([l1-knowledge-base.md](specifications/l1-knowledge-base.md)) [L1] — access-controlled document collections, incremental indexing, hybrid RAG retrieval, authorship zones, curation lifecycle (KB-1…KB-10)
+- [x] **File Management** ([l1-file-management.md](specifications/l1-file-management.md)) [L1] — content-addressed dedup (SHA-256), metadata decoupled from blobs, access-controlled download, reference-tracking GC, immutable blobs
+- [x] **Notes** ([l1-notes.md](specifications/l1-notes.md)) [L1] — persistent structured artifacts, access control, per-user pinning, append-only history, CRDT concurrent merge, soft deletion
+- [x] **Folders** ([l1-folders.md](specifications/l1-folders.md)) [L1] — personal hierarchical session containers, non-destructive delete, sortable, unique sibling names
+- [x] **Groups** ([l1-groups.md](specifications/l1-groups.md)) [L1] — flat named user sets as a principal type in the resource-sharing model, admin-managed membership, additive access
+- [x] **Resource Sharing** ([l1-resource-sharing.md](specifications/l1-resource-sharing.md)) [L1] — uniform fine-grained access model: single grant primitive, three principal types, default-private, owner-invariant, additive grants, audit trail
+- [x] **Operational Ledger** ([l1-operational-ledger.md](specifications/l1-operational-ledger.md)) [L1] — id-addressable operational ground truth: atomic predicates, supersede-don't-mutate, canonical-source precedence, verbatim grounding, required-reading (OL-1…OL-10)
+- [x] **User Model** ([l1-user-model.md](specifications/l1-user-model.md)) [L1] — persistent evolving model of the person, inferred/evidence-backed/non-authoritative, anti-drift accretion, privacy-first inspect/erase (UM-1…UM-8)
+- [x] **Multi-Device Sync** ([l1-multi-device-sync.md](specifications/l1-multi-device-sync.md)) [L1] — personal multi-device convergence, no central coordinator, data-class reconciliation routing (CRDT / 3-way / supersede), causal metadata (SY-1…SY-9)
+- [x] **Change Merge** ([l1-change-merge.md](specifications/l1-change-merge.md)) [L1] — concurrent change as typed delta, sub-unit granularity, base fingerprinting, deterministic three-way merge, no-silent-loss (CM-1…CM-9)
+- [x] **Project Wiki** ([l1-project-wiki.md](specifications/l1-project-wiki.md)) [L1] — client-facing office-maintained living docs as a projection, grounded/attributed anti-hallucination, freshness-honest, Wiki nav tab (PW-1…PW-8)
+- [x] **Model Runtime** ([l1-model-runtime.md](specifications/l1-model-runtime.md)) [L1] — local-first on-device serving, provider-abstracted backend, content-addressed model store, fit-gated hardware scheduling, multi-device placement (MR-1…MR-14)
+- [x] **Generation Budget** ([l1-generation-budget.md](specifications/l1-generation-budget.md)) [L1] — output-side token economy: minimal default reservation, truncation-detect-and-escalate, continue-from-partial, truncation-safe artifacts (GB-1…GB-8)
+- [x] **Context Compression** ([l1-context-compression.md](specifications/l1-context-compression.md)) [L1] — third token-economy stage: reversible/bounded re-encoding of bulky structured content, recoverable, content-aware eligibility, runs before eviction (CC-1…CC-8)
+- [x] **Retrieval Evaluation** ([l1-retrieval-evaluation.md](specifications/l1-retrieval-evaluation.md)) [L1] — IR-metric measurement of ranked-recall quality (P@K/R@K/MRR/nDCG@K) against labeled fixtures, baseline + regression gate, surface-agnostic (RE-1…RE-11)
+- [x] **Application Shell** ([l1-application-shell.md](specifications/l1-application-shell.md)) [L1] — reactive desktop frontend substrate: single-authority state, push reactivity, declarative render, keymap dispatch, workbench composition (AS-1…AS-13)
+- [x] **Generative Surface** ([l1-generative-surface.md](specifications/l1-generative-surface.md)) [L1] — agent-rendered interactive visual artifacts as a turn output, sandboxed, closed perception loop, user-controlled, projection-not-source (GS-1…GS-8)
+- [x] **Development Workflow** ([l1-development-workflow.md](specifications/l1-development-workflow.md)) [L1] — five-stage agent-assisted pipeline (Design→Plan→Execute→Review→Deliver), task isolation, two-stage quality gate, durable ledger, human checkpoints (DW-1…DW-10)
+- [x] **Practice Analytics** ([l1-practice-analytics.md](specifications/l1-practice-analytics.md)) [L1] — diagnostic/coaching engine over session traces: detector/rule separation, portable rule documents, honest data-gap accounting, severity-weighted scoring (PA-1…PA-14)
+- [x] **Evaluation Suites** ([l1-evaluation-suites.md](specifications/l1-evaluation-suites.md)) [L1] — declarative version-controlled test suites for customizations, typed grader taxonomy, weighted thresholds, baseline+regression gate (ES-1…ES-16)
+- [x] **Evaluations** ([l1-evaluations.md](specifications/l1-evaluations.md)) [L1] — per-message feedback: discrete sentiment + tags + free text, immutable audit, privacy-first, feeds router scoring and analytics
+- [x] **Requirement Checklists** ([l1-requirement-checklists.md](specifications/l1-requirement-checklists.md)) [L1] — generated, domain-tailored, falsifiable questions validating requirements quality before code; pre-planning quality gate (RQ-1…RQ-8)
+- [x] **Operational Health** ([l1-operational-health.md](specifications/l1-operational-health.md)) [L1] — on-device observability over runtime traces: explainable health score, threshold alerts, trend/anomaly detection, cost accounting, measure-don't-act (OH-1…OH-8)
+- [x] **Facilitation** ([l1-facilitation.md](specifications/l1-facilitation.md)) [L1] — advisory thinking-facilitation: method catalog, elicitation loop, three ideation stances, divergence-before-convergence, advisory boundary (FC-1…FC-12)
+- [x] **Agent Tool Ergonomics** ([l1-agent-tool-ergonomics.md](specifications/l1-agent-tool-ergonomics.md)) [L1] — design discipline for agent-facing tool surfaces: sufficiency-to-stop, recoverable-as-success, absence-as-signal, adapt-tool-to-agent (ATE-1…ATE-9)
+- [x] **Policy Governance** ([l1-policy-governance.md](specifications/l1-policy-governance.md)) [L1] — administrative control over configuration: layered tier precedence, un-overridable managed tier, surface lockdown, integrity-verified source (PG-1…PG-8)
+- [x] **Process Integrity** ([l1-process-integrity.md](specifications/l1-process-integrity.md)) [L1] — in-memory hardening of the agent's own process: no crash-dump leak, refuse tracer attach, scrub injection-vector env, early enforcement (PI-1…PI-7)
+- [x] **Execution Sandbox** ([l1-execution-sandbox.md](specifications/l1-execution-sandbox.md)) [L1] — OS-level confinement across four deny-by-default axes (operations/privileges/resources/filesystem), capability drop, image pinning, fail-closed (ES-1…ES-9)
+- [x] **Messaging Gateway** ([l1-messaging-gateway.md](specifications/l1-messaging-gateway.md)) [L1] — one gateway, many per-platform adapters; normalized contract, identity pairing, principal-keyed continuity, exposure safety, per-platform fault isolation (MG-1…MG-9)
+- [x] **Browser Control** ([l1-browser-control.md](specifications/l1-browser-control.md)) [L1] — agent-driven web browser: persistent control daemon, accessibility-tree addressing, side-effect-classified commands, layered injection defense (BC-1…BC-12)
 
 ## Phase 1 — Seed I: Foundation
 
@@ -177,9 +219,24 @@ Execution mode: **Parallel** (C3); tracks grouped by file independence. Critical
 - [ ] **L2 Agent Client Protocol** (`l2-acp.md` — to author) [L2] — ACP server implementation; boundary with l2-agent-session's /acp endpoint must be clarified (l2-agent-session owns the Streamable HTTP transport; l2-acp owns session lifecycle + capability registry + trust enforcement + relay); `Implements: l1-acp.md`; depends on agent-session + security + orchestration
 - [ ] **L2 Global Orchestration** (`l2-global-orchestration.md` — to author) [L2] — building manager implementation: office event bus aggregation (GO-4), ACP relay router (GO-5), phase-awareness concern catalog enforcement (GO-3), cross-office deliberation dispatch (GO-6); `Implements: l1-global-orchestration.md`; depends on l2-acp + orchestration + deliberation + office-control
 
+## Phase 11 — Content, Sharing & Dev-Workflow Subsystems
+
+*Ready Stable L2 subsystems authored after the Phase 1–10 narrative was drafted. Access-controlled content stores plus the bundled dev-workflow skill catalog. Decomposed into atomic tasks on entry (like Phases 8–10). Natural build order: resource-sharing (the access layer) before notes/file-store; development-workflow is independent.*
+
+- [ ] **Resource Sharing** ([l2-resource-sharing.md](specifications/l2-resource-sharing.md)) [L2] — single SQLite `access_grant` table, `has_access` resolution (owner→user→group→public), batch grant loader, group membership cache; `Implements: l1-resource-sharing.md` — the access foundation for notes/files/knowledge
+- [ ] **Notes** ([l2-notes.md](specifications/l2-notes.md)) [L2] — SQLite schema (note/pinned/version/crdt), ProseMirror JSON content tree, Yjs CRDT update log, version history, soft-delete GC; `Implements: l1-notes.md`; depends on resource-sharing
+- [ ] **File Store** ([l2-file-store.md](specifications/l2-file-store.md)) [L2] — SQLite schema, StorageBackend trait (local FS + S3 plug-in), SHA-256 content-addressed dedup, magic-byte MIME allowlist, GC scheduler; `Implements: l1-file-management.md`; depends on resource-sharing
+- [ ] **Development Workflow** ([l2-development-workflow.md](specifications/l2-development-workflow.md)) [L2] — bundled 12-skill catalog, session-bootstrap hook, implementer/reviewer dispatch templates, model-tier table, progress ledger; `Implements: l1-development-workflow.md`; depends on extension-registry + agent-session
+
 ## Backlog
 
-<!-- All registered specs are scheduled across Phases 0–10. 77 Stable specs total (30 L1 + 47 L2). -->
+*Non-Stable specs parked until they reach `Stable` (C6). Promoted into an active phase by a later `/magic.task` run once their status and any parent dependency clear.*
+
+- [ ] **Spec-Driven Governance** ([l1-spec-driven-governance.md](specifications/l1-spec-driven-governance.md)) [L1] — `RFC` — SDD governance meta-spec (SDG-1…SDG-15); backlog until reviewed to Stable
+- [ ] **Dynamic Harness** ([l1-dynamic-harness.md](specifications/l1-dynamic-harness.md)) [L1] — `RFC` — run-time complement to harness engineering (DH-1…DH-12); backlog until reviewed to Stable
+- [ ] **Loop Governance** ([l1-loop-governance.md](specifications/l1-loop-governance.md)) [L1] — `RFC` — loop-governance keystone (LG-1…LG-9); backlog until reviewed to Stable
+- [ ] **Knowledge Store** ([l2-knowledge-store.md](specifications/l2-knowledge-store.md)) [L2] — `RFC` — `Implements: l1-knowledge-base.md`; pending KB-9/KB-10 compliance before promotion
+- [ ] **Loop Runner** ([l2-loop-runner.md](specifications/l2-loop-runner.md)) [L2] — `Draft` — `Implements: l1-loop-governance.md`; blocked: L1 parent is `RFC` (cannot plan until parent reaches Stable)
 
 ## Risks (Planning Audit)
 
@@ -187,3 +244,5 @@ Execution mode: **Parallel** (C3); tracks grouped by file independence. Critical
 - **CLI-first surface (stem) is intentionally thin at Phase 3**: it ships the command framework + grammar + the commands available then; subsystem phases (4–6) attach their commands to it, and the TUI (Phase 7) mirrors the matured command set. This staging is the growth model, not scope creep.
 - **nodus port size**: ~5k lines across six modules; Phase 2 builds it as a vertical slice (parse → transpile → minimal execute) before completing validator/lint and the full command set. Track parity against the reference test corpus.
 - **Mobile/Tauri scaffold**: iOS/Android Tauri setup is toolchain-fragile (stack §5) — smoke-test the build/sign pipeline in Phase 1, not at Phase 8.
+- **Registry sync debt (resolved this revision)**: 48 specs had accumulated outside the plan (INDEX raced ahead to v1.0.36). This revision absorbs them — but the new Phase 0 concept additions (e.g. execution-graph, code-intelligence, model-runtime, knowledge-base) imply future L2 implementation work not yet phased. Most have no authored L2 yet; they will surface as new phases via `/magic.spec` → `/magic.task` when promoted.
+- **TUI event-seam dependency (Phase 7)**: the render loop assumes a core event/subscribe seam. If the core exposes no pub/sub observer, the TUI must fall back to polling durable-state snapshots (INV-5 view-only). The Phase 7 tasks carry this fallback so the view panels are not hard-blocked on the subscription mechanism. Verify the seam first (T-7A02).
