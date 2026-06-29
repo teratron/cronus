@@ -98,3 +98,4 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Updated specification `architecture` (main)
 - Completed task `phase-7` (main)
 - Completed task `phase-8` (main)
+- Added specification `perspective-model` (main)
