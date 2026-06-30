@@ -1,3 +1,5 @@
 packages:
   - "packages/*"
   - "apps/*"
+minimumReleaseAgeExclude:
+  - vite@8.1.2
