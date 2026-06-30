@@ -1,13 +1,13 @@
 # Implementation Plan
 
-**Version:** 2.6.0
-**Generated:** 2026-06-28
-**Based on:** .design/main/INDEX.md v1.0.36
+**Version:** 2.7.0
+**Generated:** 2026-06-30
+**Based on:** .design/main/INDEX.md v1.0.39
 **Status:** Active
 
 ## Overview
 
-Implementation plan for Cronus from the project registry (126 specs: 121 Stable, 4 RFC, 1 Draft). Phases follow a **growth order**: the agent grows like a sprout from a seed. The registry expanded substantially since plan v2.5.0 (INDEX v1.0.4 → v1.0.36); this revision re-syncs the plan — newly authored Stable L1 concepts are folded into Phase 0, four ready Stable L2 subsystems form the new Phase 11, and non-Stable specs are parked in the Backlog (no spec is left orphaned).
+Implementation plan for Cronus from the project registry (129 specs: 124 Stable, 4 RFC, 1 Draft). Phases follow a **growth order**: the agent grows like a sprout from a seed. The registry expanded substantially since plan v2.5.0 (INDEX v1.0.4 → v1.0.36); this revision re-syncs the plan — newly authored Stable L1 concepts are folded into Phase 0, four ready Stable L2 subsystems form the new Phase 11, and non-Stable specs are parked in the Backlog (no spec is left orphaned).
 
 - **Seed = the library** (`crates/core` + `crates/nodus` runtime) — Phases 1–2.
 - **Stem = the CLI** — Phase 3, the first usable surface, emerging straight from the seed.
@@ -95,6 +95,12 @@ Execution mode: **Parallel** (C3); tracks grouped by file independence. Critical
 - [x] **Execution Sandbox** ([l1-execution-sandbox.md](specifications/l1-execution-sandbox.md)) [L1] — OS-level confinement across four deny-by-default axes (operations/privileges/resources/filesystem), capability drop, image pinning, fail-closed (ES-1…ES-9)
 - [x] **Messaging Gateway** ([l1-messaging-gateway.md](specifications/l1-messaging-gateway.md)) [L1] — one gateway, many per-platform adapters; normalized contract, identity pairing, principal-keyed continuity, exposure safety, per-platform fault isolation (MG-1…MG-9)
 - [x] **Browser Control** ([l1-browser-control.md](specifications/l1-browser-control.md)) [L1] — agent-driven web browser: persistent control daemon, accessibility-tree addressing, side-effect-classified commands, layered injection defense (BC-1…BC-12)
+
+*Concepts authored since plan v2.6.0 (registry sync INDEX v1.0.36 → v1.0.39). All Stable — they gate later implementation phases.*
+
+- [x] **Event Mesh** ([l1-event-mesh.md](specifications/l1-event-mesh.md)) [L1] — single in-process routing substrate: uniform event envelope, topic-based addressing, producer/consumer decoupling (producers name what happened, never a consumer) (EM-1…EM-10)
+- [x] **Claim Verification** ([l1-claim-verification.md](specifications/l1-claim-verification.md)) [L1] — runtime hallucination detector over `(claims, sources)`: per-claim verdict (supported/contradicted/unverifiable) with evidence span; grounding-only, never world-truth (CV-1…CV-9)
+- [x] **Perspective Model** ([l1-perspective-model.md](specifications/l1-perspective-model.md)) [L1] — theory-of-mind representation: every belief keyed by `(observer → subject)`, generalizing the single-vantage user model to perspectival self/other knowledge (PM-1…PM-8)
 
 ## Phase 1 — Seed I: Foundation
 

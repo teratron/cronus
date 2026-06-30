@@ -32,6 +32,8 @@
 - <https://github.com/sipeed/picoclaw>
 - <https://github.com/zeroclaw-labs/zeroclaw>
 - <https://github.com/HKUDS/nanobot>
+- <https://github.com/agentscope-ai/agentscope>
+- <https://github.com/agentscope-ai/AgentTeams>
 
 ## Spec-Driven Development
 
@@ -52,6 +54,7 @@
 - <https://github.com/adminlove520/holographic-memory>
 - <https://github.com/plastic-labs/honcho>
 - <https://github.com/NevaMind-AI/memU>
+- <https://github.com/agentscope-ai/ReMe>
 
 ## Tools
 
@@ -68,6 +71,8 @@
 - <https://github.com/superagent-ai/superagent>
 - <https://github.com/microsoft/semantic-kernel>
 - <https://github.com/microsoft/autogen>
+- <https://github.com/agentscope-ai/agentscope-runtime>
+- <https://github.com/agentscope-ai/PawBench>
 
 ### Harness
 

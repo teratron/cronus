@@ -1,8 +1,8 @@
 # Master Task Index (Registry)
 
-**Version:** 1.9.0
-**Generated:** 2026-06-28
-**Based on:** .design/main/PLAN.md v2.6.0
+**Version:** 1.10.0
+**Generated:** 2026-06-30
+**Based on:** .design/main/PLAN.md v2.7.0
 **Based on RULES:** .design/RULES.md v1.4.0
 **Execution Mode:** Parallel
 **Status:** Active
@@ -29,5 +29,5 @@ Tactical registry of all phases and their statuses, ordered by the growth metaph
 
 ## Meta Information
 
-- **Last Updated**: 2026-06-28
+- **Last Updated**: 2026-06-30
 - **Maintainer**: Core Team

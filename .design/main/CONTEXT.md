@@ -1,9 +1,10 @@
 # Project Context
 
-**Generated:** 2026-06-28
+**Generated:** 2026-06-30
 
 ## Active Technologies
 
+- Node.js
 - Rust
 
 ## Core Project Structure
@@ -17,6 +18,7 @@
 ├── .claude/
 │   ├── commands/
 │   ├── rules/
+│   ├── settings.local.json
 │   └── skills/
 ├── .codex/
 │   ├── prompts/
@@ -56,6 +58,7 @@
 ├── README.md
 ├── apps/
 │   └── desktop/
+├── biome.json
 ├── crates/
 │   ├── cli/
 │   ├── codegraph/
@@ -64,8 +67,11 @@
 │   └── tui/
 ├── docs/
 ├── installer/
+├── package.json
 ├── packages/
 │   └── ui/
+├── pnpm-lock.yaml
+├── pnpm-workspace.yaml
 └── rust-toolchain.toml
 ```
 
