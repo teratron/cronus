@@ -45,6 +45,7 @@ build/
 
 # Rust / Cargo (crates/*, apps/desktop/tauri)
 target/
+debug/
 **/*.rs.bk
 *.pdb
 # Note: Cargo.lock IS committed (workspace ships binaries — reproducible builds).
