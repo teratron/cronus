@@ -1,6 +1,6 @@
 # Client Security
 
-**Version:** 1.0.0
+**Version:** 1.1.0
 **Status:** Stable
 **Layer:** concept
 
@@ -35,6 +35,8 @@ The product runs on the user's machine with access to their projects, credential
 - **SEC-6 (Sandboxed execution):** agent-run code and commands execute in a sandbox with least privilege; escalation is explicit.
 - **SEC-7 (Auditable):** security-relevant actions (auth use, external sends, sandbox escalations) are logged.
 
+- **SEC-8 (Confinement-mode duality with non-mixing mount scope):** [ADDED v1.1.0] sandboxed execution (SEC-6) is offered in two confinement modes behind **one** interface: **embedded** — an in-process/local manager on the user's machine — and **remote** — execution delegated across an authenticated boundary to a separate manager. Host-path exposure is **mode-scoped and never mixed**: a client-local working directory may be mounted only into an *embedded* sandbox; a *remote* sandbox exposes only paths on its own side and MUST NOT mount a client-local path. Reaching a remote sandbox requires an explicit bearer credential; the selected mode and any mount are audited (SEC-7). This keeps the choice "run it here vs. run it elsewhere" from silently leaking a local path across a trust boundary.
+
 > L2 specs cannot reach RFC status until all invariants here are addressed in their "Invariant Compliance" section.
 
 ## 4. Detailed Design
@@ -54,6 +56,29 @@ graph TD
 
 Secrets: `.env`/keychain in state, gitignored, redacted in logs. Data egress: gated by explicit authorization (telemetry opt-in, model routing local-first). Execution: sandboxed with an approval axis for escalation (consistent with the orchestration approval gate).
 
+### 4.3 Confinement modes and mount scope [ADDED v1.1.0]
+
+One sandbox interface, two confinement modes, one hard rule about what each may see:
+
+| Mode | Where code runs | Host-path mounts | Reach requirement |
+| --- | --- | --- | --- |
+| **Embedded** | Local in-process/child manager on the user's device | A declared client-local workspace directory MAY be mounted | Local process trust |
+| **Remote** | Delegated to a separate manager across a boundary | Only the remote side's own paths; **never** a client-local path | Explicit bearer credential |
+
+```text
+[REFERENCE]
+open_sandbox(mode, workspace_dir?, credential?):
+    if mode == remote and workspace_dir is set:
+        reject("local mount not permitted for remote confinement")   // SEC-8 non-mixing
+    if mode == remote and credential is absent:
+        reject("remote sandbox requires bearer credential")          // SEC-8
+    audit("sandbox_open", mode, mounts)                              // SEC-7
+```
+
+The value is that "run it elsewhere" can never quietly become "expose a local path
+elsewhere." Mode selection is explicit and audited; a remote confinement failure is
+fail-closed (rejected), never a silent fallback to mounting local state.
+
 ## 5. Drawbacks & Alternatives
 
 - **Sandbox friction:** least-privilege can block legitimate actions; mitigated by explicit, audited escalation.
@@ -65,3 +90,10 @@ Secrets: `.env`/keychain in state, gitignored, redacted in logs. Data egress: ga
 | --- | --- | --- |
 | `[ARCH]` | `.design/main/specifications/l1-architecture.md` | Security invariant elevated here |
 | `[SECURITY]` | `.design/main/specifications/l2-security.md` | Concrete realization |
+
+## Document History
+
+| Version | Date | Author | Notes |
+| --- | --- | --- | --- |
+| 1.1.0 | 2026-07-01 | Core Team | Added SEC-8 (confinement-mode duality — embedded vs remote sandbox behind one interface — with non-mixing mount scope: client-local paths mount only in embedded mode, remote sandboxes never mount a local path and require a bearer credential; mode + mounts audited) and §4.3 confinement-mode table + fail-closed open_sandbox guard. Sharpens SEC-6. |
+| 1.0.0 | 2026-06-24 | Core Team | Initial spec — SEC-1…SEC-7, layers of protection, boundaries. |

@@ -1,6 +1,6 @@
 # Storage & State Model
 
-**Version:** 1.0.0
+**Version:** 1.1.0
 **Status:** Stable
 **Layer:** concept
 
@@ -38,6 +38,8 @@ Rules every Layer 2 implementation MUST NOT violate:
 - **STO-6 (Secret isolation):** secrets are confined to the state tier and MUST be excluded from backups, exports, and version control (consistent with architecture INV-7).
 - **STO-7 (Restore-by-copy):** the mutable state tier (excluding secrets and regenerable caches) is self-contained and restorable by copying it; no hidden external dependency is required to resume.
 - **STO-8 (Human-inspectable state):** durable state SHOULD be human-readable and editable where practical (text/Markdown), with machine indices (databases) derived from it rather than being the sole source of truth.
+
+- **STO-9 (Versioned state with forward migration):** [ADDED v1.1.0] every durable state artifact whose shape can evolve carries an explicit **schema version**. On load the runtime validates the structure and, if the on-disk version is older than the program's, applies a **forward, one-way migration** to the current version before use — it never silently loads a shape it does not understand, and never writes a newer shape a prior program version could then misread without a version marker. A destructive rewrite is preceded by a **timestamped backup**, backups are rotated by age, and cross-installation transfer uses an explicit **non-destructive merge** import keyed by record identity (never a blind overwrite). This makes STO-2 durability and STO-7 restore-by-copy survive program upgrades that change the state shape.
 
 > L2 specs cannot reach RFC status until all invariants here are addressed in their "Invariant Compliance" section.
 
@@ -83,9 +85,37 @@ graph LR
 
 ### 4.3 Backup and update flows
 
-- **Update:** replace the program tier; the state tier is untouched (STO-1).
-- **Backup:** copy the state tier minus secrets and caches (STO-6, STO-7).
-- **Restore:** drop the copied state tier back in place; the runtime resumes from it (STO-2).
+- **Update:** replace the program tier; the state tier is untouched (STO-1). If the new program's state schema is newer, a forward migration runs on first load (STO-9), preceded by a timestamped backup.
+- **Backup:** copy the state tier minus secrets and caches (STO-6, STO-7). Destructive rewrites auto-snapshot first; snapshots rotate by age.
+- **Restore:** drop the copied state tier back in place; the runtime resumes from it (STO-2). A restored artifact with an older schema version is migrated forward before use (STO-9).
+- **Transfer/merge:** cross-installation import merges non-destructively by record identity (STO-9) — an incoming record never blindly clobbers a local one; conflicts are resolved by explicit key, not by load order.
+
+### 4.4 State versioning and migration [ADDED v1.1.0]
+
+```text
+[REFERENCE]
+load(artifact):
+    data := read(artifact)
+    if data.schema_version is missing or > program.schema_version:
+        reject("unknown/newer state shape")        // STO-9: never guess an unknown shape
+    if data.schema_version < program.schema_version:
+        backup(artifact, timestamp)                 // STO-9: snapshot before rewrite
+        data := migrate_forward(data,               // one-way, recorded
+                   from=data.schema_version, to=program.schema_version)
+        write(artifact, data)
+    validate_structure(data)                        // STO-9: fail loud, not silent-partial
+    return data
+
+import(incoming, mode=merge):                       // STO-9 non-destructive transfer
+    for record in incoming:
+        if local.has(record.id):  reconcile_by_key(local[record.id], record)
+        else:                      local.add(record)
+```
+
+The version marker is what makes STO-2 durability robust across upgrades: without
+it, a program that changed its state shape either crashes on old data or silently
+loads a half-understood structure. The pre-write snapshot makes every migration
+reversible (STO-7), and merge-by-identity makes import safe to repeat.
 
 ## 5. Drawbacks & Alternatives
 
@@ -100,3 +130,10 @@ graph LR
 | `[ARCH]` | `.design/main/specifications/l1-architecture.md` | State/security invariants this model refines |
 | `[OFFICE]` | `.design/main/specifications/l1-office-model.md` | Office isolation and learning realized as scopes |
 | `[LAYOUT]` | `.design/main/specifications/l2-filesystem-layout.md` | Concrete realization of this model |
+
+## Document History
+
+| Version | Date | Author | Notes |
+| --- | --- | --- | --- |
+| 1.1.0 | 2026-07-01 | Core Team | Added STO-9 (versioned state with forward one-way migration, timestamped pre-write backups with age rotation, non-destructive merge-by-identity import) and §4.4 migration flow; §4.3 backup/update/restore/transfer flows extended to reference it. Makes STO-2 durability and STO-7 restore-by-copy survive program upgrades that change the state shape. |
+| 1.0.0 | 2026-06-24 | Core Team | Initial spec — STO-1…STO-8, two-tier separation, multi-level memory, backup/update flows. |

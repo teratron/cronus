@@ -1,6 +1,6 @@
 # Nodus Execution Observability
 
-**Version:** 1.0.0
+**Version:** 1.1.0
 **Status:** Stable
 **Layer:** concept
 
@@ -49,6 +49,8 @@ Rules that Layer 2 implementations MUST NOT violate:
 - **HO-5 Observer neutrality**: attaching an AuditProvider to a workflow run must not change the run's output values, timing-dependent branch outcomes, or error codes. The same workflow with no AuditProvider and with a fully-instrumented AuditProvider must produce semantically identical `@out` and `@err` results on deterministic inputs.
 
 - **HO-6 Structured event taxonomy**: the set of observable event types is closed and versioned. An implementation must not emit ad-hoc string events; it must use the canonical taxonomy defined in §4.2. New event types require a spec amendment (minor version bump).
+
+- **HO-7 Monotonic sequence & correlation** [ADDED v1.1.0]: every emitted event carries (a) a run-monotonic **sequence number** assigned in strict emission order and (b) a **correlation id** shared by all events of the same logical run. Consumers order and deduplicate a multiplexed or reordered event stream by `(correlation_id, sequence)` alone — never by arrival order or wall-clock time (reinforces HO-3 append-only ordering without imposing a transport). Sequence is dense and gap-free within a run; a gap signals dropped events. This makes ordering an explicit contract rather than an emergent property of synchronous emission, so an async or buffered audit sink remains correct.
 
 ## 4. Detailed Design
 
@@ -130,6 +132,42 @@ The observability contract identifies which workflow components are frozen (cann
 
 > The frozen layer is the scoring signal. The evolvable layer is the harness. Evolving the frozen layer is a spec amendment, not a harness improvement.
 
+### 4.6 Sequence, Correlation, and Streaming Merge [ADDED v1.1.0]
+
+Every event and manifest gains two ordering fields, and streamed model output is
+collapsed into one logical record:
+
+```text
+[REFERENCE]
+ExecutionEvent gains:
+  seq            : Int      — run-monotonic, dense, gap-free emission counter (HO-7)
+  correlation_id : Text     — shared by all events of one run (= RunManifest.run_id)
+
+RunManifest gains:
+  event_count    : Int      — already present; now also the highest seq + 1 (gap check)
+```
+
+**Correlation binding.** The `correlation_id` is set once, at run construction,
+from the same identifier as `RunManifest.run_id`. It flows to every event without
+the executor threading it through each call site — the audit context holds it for
+the run's duration. If a run is entered without an explicit id, the executor
+generates one at the root and binds it before the first event, so no event is ever
+emitted uncorrelated.
+
+**Streaming merge.** A `model_call`/`model_response` pair may, for a streaming
+model, arrive as many incremental chunks. The observability layer merges them into
+a **single** logical `model_response` record at completion: chunks are accumulated,
+a *finish-reason* predicate detects the terminal chunk, and the merged record
+carries the final `output_summary` and total `elapsed_ms`. Individual chunks are
+not separate taxonomy events (they would violate HO-6's closed set and inflate the
+trace); the merge preserves one attributable record per model turn (HO-2). The
+merge is a witness-side fold — it never changes what the model returned to the
+workflow (HO-5).
+
+This section is the projection substrate the environment/trajectory contract
+(`l1-nodus-environment.md`) relies on: a `TrajectoryEntry.seq` is exactly this
+`seq`, so a trajectory is an ordered slice of the correlated event stream.
+
 ## 5. Implementation Notes
 
 1. `record_event` is called in the executor's hot path — the built-in no-op implementation costs a single indirect call.
@@ -157,4 +195,5 @@ The observability contract identifies which workflow components are frozen (cann
 
 | Version | Date | Author | Notes |
 | --- | --- | --- | --- |
+| 1.1.0 | 2026-07-01 | Core Team | Added HO-7 (monotonic sequence + correlation id ordering contract) and §4.6 (sequence/correlation fields, run-scoped correlation binding, streaming chunk-merge into one logical model_response). Ordering is now an explicit `(correlation_id, seq)` contract, enabling async/buffered audit sinks; underpins the trajectory projection in l1-nodus-environment.md. |
 | 1.0.0 | 2026-06-24 | Core Team | Initial spec — HO-1…HO-6, AuditProvider role, event taxonomy, run manifest, data safety boundary, frozen-vs-evolvable boundary |

@@ -1,6 +1,6 @@
 # Agent Client Protocol (ACP)
 
-**Version:** 1.0.0
+**Version:** 1.1.0
 **Status:** Stable
 **Layer:** concept
 
@@ -45,6 +45,10 @@ ACP defines these boundaries explicitly, enabling any conformant client to conne
 - **ACP-5 Idempotent session creation**: creating a session with an existing session ID is idempotent — the server returns the existing session's state rather than creating a duplicate. Clients MAY safely retry session creation after network errors.
 - **ACP-6 Graceful interrupt**: a client MAY send an `interrupt` signal at any time during a streaming response. The server MUST honour the interrupt, complete any currently-running atomic step (ORC-5 context isolation), then return a partial terminal event. The interrupted session remains valid and resumable.
 - **ACP-7 Budget transparency**: the office MUST report the remaining token/cost budget for the current session in every terminal event. A client that receives a `budget_exhausted` terminal event MUST NOT retry immediately — the office is in hibernation (see `l1-office-control.md` OC-4).
+
+- **ACP-8 Monotonic event ordering** [ADDED v1.1.0]: every streamed event carries a **per-session monotonic sequence number** assigned in emission order. A client orders and deduplicates the event stream by sequence number, not by arrival order, and MUST tolerate a transport that reorders or redelivers. The terminal event carries the highest sequence number of its turn; a gap in the sequence signals dropped events and MUST be surfaced, not silently ignored. This makes stream ordering an explicit protocol contract rather than a property of a particular transport's delivery guarantees.
+
+- **ACP-9 Protocol projections are pure adapters** [ADDED v1.1.0]: one running session MAY be exposed simultaneously through several external protocol surfaces (e.g. a peer-agent protocol, a client-completion protocol, a UI-event protocol). Each surface is a **pure, logic-free adapter** over the single ACP event stream: it re-frames the same ordered events (ACP-8) into its own wire shape and MUST NOT add, drop, reorder, or reinterpret semantics, hold business logic, or fork session state. All surfaces bound to a session observe the identical event sequence. Adding a protocol is adding an adapter, never changing the office.
 
 ## 4. Detailed Design
 
@@ -113,6 +117,34 @@ Anonymous callers receive only `capabilities` responses. All other operations re
 
 When a caller address targets a different office within the same building, the receiving office's ACP server acts as a **transparent relay**: it forwards the message to the target office and streams the response back. The relay does not inspect or modify the message content. This is the ACP-level mechanism behind the global orchestration routing (see `l1-global-orchestration.md`).
 
+### 4.6 Protocol Projections [ADDED v1.1.0]
+
+ACP is the office's *canonical* external contract (ACP-8 ordered event stream). A
+**protocol projection** publishes that one running session under a foreign
+protocol without duplicating any office logic:
+
+```text
+[REFERENCE]
+                         ┌─ projection: peer-agent protocol ──►  peer offices / agents
+one ACP session ──stream─┼─ projection: client-completion API ─►  generic LLM-style clients
+ (ordered events, ACP-8) ├─ projection: UI-event protocol ─────►  interactive front-ends
+                         └─ projection: (future) …
+
+adapter contract (ACP-9):
+  bind(session) -> foreign_endpoint
+  on each ACP event e:  emit  translate_shape(e)      // pure re-framing, no logic
+  invariants: same order, same set, no added meaning, no forked state
+```
+
+Each projection is a thin binding: it maps ACP event shapes to the foreign wire
+format and back, nothing more. Because every projection consumes the *same*
+ordered stream, two clients on two different protocols observing one session see
+the same turns in the same order. Capability declaration (ACP-2) and trust levels
+(§4.4) are enforced once at the session, beneath all projections — an adapter can
+never widen a caller's capabilities. This lets a single office answer peer agents,
+generic completion clients, and UI front-ends concurrently, each in its native
+protocol, with zero logic duplication and one source of truth for session state.
+
 ## 5. Implementation Notes
 
 1. The concrete ACP transport for the daemon server is Streamable HTTP (`POST /acp`, Server-Sent Events for streaming) per `l2-agent-session.md`.
@@ -140,4 +172,5 @@ When a caller address targets a different office within the same building, the r
 
 | Version | Date | Author | Notes |
 | --- | --- | --- | --- |
+| 1.1.0 | 2026-07-01 | Core Team | Added ACP-8 (per-session monotonic event ordering — order/dedup by sequence, transport-reorder-tolerant, gap = dropped events) and ACP-9 (protocol projections are pure logic-free adapters; N surfaces over one session observe the identical event sequence); new §4.6 Protocol Projections (one session projected under peer-agent / client-completion / UI-event protocols concurrently, capabilities+trust enforced once beneath all projections). |
 | 1.0.0 | 2026-06-24 | Core Team | Initial spec — ACP-1…ACP-7, session lifecycle, streaming event taxonomy, capability declaration, trust levels, cross-office routing |

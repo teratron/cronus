@@ -1,6 +1,6 @@
 # Work Liveness & Ownership
 
-**Version:** 1.0.0
+**Version:** 1.1.0
 **Status:** Stable
 **Layer:** concept
 
@@ -110,6 +110,8 @@ handoff(old_run -> retry_run):
 
 A `CONFLICT` from `claim` means a *real live owner* (or an unresolved blocker/gate) — the caller treats it as terminal-for-this-attempt and stops, rather than retry-spinning. Stale-lock self-healing is crash recovery, not a retry loop: claims held by *non-terminal* runs are never cleared or adopted.
 
+**Concrete realization — negated compare-and-set + cooperative cancel** [ADDED v1.1.0]. The atomic claim (WL-1) is realized as a single **compare-and-set that succeeds only if the current state is *not* already the active state** — the transition to `RUNNING` is admitted iff the unit is currently not `RUNNING`. This one atomic operation subsumes both "is anyone running this?" and "take it" without a separate read, closing the check-then-act race two wake paths would otherwise hit (WL-1/WL-4). External **preemption of a healthy run** — distinct from the crash/silence cases WL-5/WL-8 cover — is a first-class next step: a control signal (`STOP`/`PAUSE`/`RESUME`) delivered on a per-unit channel is observed by a listener paired to the run and **cooperatively cancels** it; the producing execution and the consuming stream are decoupled (the run drains through a buffer, so cancellation never corrupts a half-emitted result). On exit the claim writes a terminal state (`STOPPED` on preemption, `FINISHED` on completion, `ERROR` on fault) carried with a **short time-to-live**, so a crashed executor's claim self-expires into the reap path (§4.4 step 1) rather than pinning the unit forever. Preemption is the OC pause/resume special case (`l1-office-control`) at the work-item grain; the resulting `STOPPED` unit re-enters the liveness contract with a queued continuation, not a silent drop.
+
 ### 4.4 Reconciliation sweep
 
 On startup and on a periodic loop, in order:
@@ -199,4 +201,5 @@ The portable workflow runtime executes steps that can crash, contend, and wedge 
 
 | Version | Date | Author | Notes |
 | --- | --- | --- | --- |
+| 1.1.0 | 2026-07-01 | Core Team | §4.3: added concrete WL-1 realization — negated compare-and-set (transition to active state iff not already active, race-free single op) — and cooperative external preemption of a healthy run (STOP/PAUSE/RESUME on a per-unit channel, producer/consumer decoupled via buffer) with terminal-state-plus-short-TTL so a crashed executor's claim self-expires into the reap path; preemption framed as the OC pause/resume special case at the work-item grain. |
 | 1.0.0 | 2026-06-26 | Core Team | Initial spec — autonomous work liveness & ownership: exclusive atomic claim with conflict-not-clobber release (WL-1/WL-2), affirmative liveness contract over a closed next-move set (WL-3), single active run + wake coalescing (WL-4), owner-preserving stranded-work reconciliation distinct from run-resume (WL-5), bounded auto→explicit→human recovery ladder (WL-6) with typed recovery action (WL-7), silence-is-suspect watchdog (WL-8), idempotent exact-once fan-out (WL-9); separates structure/dependency/ownership/liveness; composes with kanban, orchestration, execution-graph, doctor, operational-health; nodus-relevance mapping. |

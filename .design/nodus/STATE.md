@@ -4,7 +4,7 @@
 <!-- Maximum 100 lines. Agent updates AFTER each completed action. -->
 
 **Workspace:** nodus
-**Updated:** 2026-06-28 04:58
+**Updated:** 2026-07-01 20:39
 **Phase:** 11 — Control-Flow Constructs (complete)
 **Status:** Active
 
@@ -12,7 +12,7 @@
 
 - **Task:** Phase 11 complete — all control-flow constructs (`!HALT`/`!PAUSE`, `?SWITCH`, `~MAP`, `~RETRY:n`) implemented in crates/nodus
 - **Spec:** l2-nodus-control-flow.md v1.0.0 (Stable); all 13 specs Stable
-- **Next Action:** Author next-cluster spec via /magic.spec nodus — backlog: operators (MATCHES/PCRE design fork), @needs (blocked), @ON priority, macro execution; Storage/Policy (LP-3)
+- **Next Action:** Run /magic.task nodus to update the plan
 
 ## Progress
 

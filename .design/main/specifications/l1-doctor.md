@@ -1,6 +1,6 @@
 # Doctor & Self-Healing
 
-**Version:** 1.0.0
+**Version:** 1.1.0
 **Status:** Stable
 **Layer:** concept
 
@@ -52,6 +52,38 @@ graph TD
 
 State integrity, orphaned/stuck work (cards stuck in `running`, dangling sessions), config validity, store consistency, resource pressure (disk), and crash-recovery consistency.
 
+### 4.3 Restore-on-access (lazy self-recovery) [ADDED v1.1.0]
+
+Self-recovery (HEAL-6) is realized by two complementary triggers, not the periodic
+sweep alone:
+
+- **Scheduled** — the continuous check loop (HEAL-1) reconciles at a cadence.
+- **On-access** — a heartbeat-touch guards each interaction with a recoverable
+  resource (a session, an office, a sandbox). Before the real operation runs, a
+  lightweight guard resolves the resource's liveness context, refreshes its
+  **heartbeat**, and — if the resource "needs restore" (idle-evicted, cold, or
+  gone since last touch) — transparently restores it *before* proceeding.
+
+```text
+[REFERENCE]
+touch(resource):                          // wraps every access; HEAL-4 non-destructive
+    try:
+        ctx := resolve_liveness(resource)
+        refresh_heartbeat(ctx)
+        if needs_restore(ctx):  restore(ctx)   // HEAL-6 lazy recovery
+    except any e:
+        log_debug(e)                      // touch failures are SWALLOWED — never fail the call
+    return proceed(resource)
+```
+
+Two properties are load-bearing. First, restore happens **just-in-time on the
+first access after loss**, so a resource idle-evicted to save memory is silently
+rehydrated when next needed rather than waiting for the next sweep. Second, the
+guard is **best-effort and non-blocking**: any failure in the touch path is logged
+and ignored, never propagated — a health mechanism must not itself become a failure
+mode for the operation it protects (HEAL-4). Heartbeat freshness feeds the liveness
+watchdog that classifies silent-but-alive work (see `l1-work-liveness.md` WL-8).
+
 ## 5. Drawbacks & Alternatives
 
 - **Over-eager repair risk:** mitigated by HEAL-3 (escalate the risky) and HEAL-4 (reversible).
@@ -63,3 +95,11 @@ State integrity, orphaned/stuck work (cards stuck in `running`, dangling session
 | --- | --- | --- |
 | `[STORAGE]` | `.design/main/specifications/l1-storage-model.md` | Recovery target |
 | `[DOCTOR]` | `.design/main/specifications/l2-doctor.md` | Concrete checks and repairs |
+| `[LIVENESS]` | `.design/main/specifications/l1-work-liveness.md` | Heartbeat/watchdog contract the restore-on-access guard feeds (WL-8) |
+
+## Document History
+
+| Version | Date | Author | Notes |
+| --- | --- | --- | --- |
+| 1.1.0 | 2026-07-01 | Core Team | Added §4.3 Restore-on-access — heartbeat-touch guard that refreshes liveness and lazily restores an idle-evicted/cold resource just-in-time on first access after loss, complementing the scheduled sweep; touch failures are swallowed (best-effort, never a failure mode for the guarded call); feeds the WL-8 liveness watchdog. Concrete realization of HEAL-6. |
+| 1.0.0 | 2026-06-24 | Core Team | Initial spec — HEAL-1…HEAL-6, check→repair→escalate, check categories. |
