@@ -1,7 +1,7 @@
 ---
 phase: 1
 name: "Seed I — Foundation"
-status: In Progress
+status: Done
 subsystem: "monorepo (crates/, apps/, packages/) + crates/core"
 requires: []
 provides:
@@ -38,18 +38,18 @@ duration_minutes: ~
 # Stage 1 Tasks — Seed I: Foundation
 
 **Phase:** 1
-**Status:** In Progress
-**Strategic Goal:** The soil and seed coat — a buildable polyglot monorepo with the engine-skeleton (`crates/core`) exposing its public contract, an OS-native path model, durable state, and the security baseline. The full Rust foundation is built and verified; only the JS/Tauri scaffolding remains, blocked on missing toolchain in this environment.
+**Status:** Done
+**Strategic Goal:** The soil and seed coat — a buildable polyglot monorepo with the engine-skeleton (`crates/core`) exposing its public contract, an OS-native path model, durable state, and the security baseline. The full Rust foundation is built and verified; the JS/Tauri scaffolding it originally waited on has since been provisioned by Phase 8.
 
-> **Toolchain note:** this environment has `rustc`/`cargo` 1.96 and `node` 24, but **no `pnpm`, Tauri CLI, or polyglot runner** — so the JS/Tauri tasks (T-1A02, T-1A03) are `Blocked [!]` until those are installed (needed by Phase 8, not on Phase 2's path). Every Rust track is built, tested, clippy-clean, and fmt-clean.
+> **Closure note (2026-06-30):** Phase 1 is closed on its actual scope — the Rust seed (Tracks A-Rust, B, C, E, T all Done). The JS/Tauri scaffold tasks (T-1A02, T-1A03) were originally `Blocked [!]` on a missing toolchain; they have since been **superseded by Phase 8 `T-8A01`**, which provisioned pnpm + Tauri v2 and scaffolded `apps/desktop` + `packages/ui` (full toolchain green via PowerShell). The two security-hardening specs listed against this phase in earlier PLAN revisions (`l2-sandbox-policy`, `l2-multi-user-auth`) never gated a downstream phase and have been **relocated to Phase 9 (Operational Hardening)**; they are not part of Phase 1's closed scope.
 
 ## Atomic Checklist
 
 Track A — Scaffold (l2-source-layout, l2-technology-stack)
 
 - [x] [T-1A01] Cargo workspace with members `core`, `nodus` (skeleton), `cli`, `tui`
-- [!] [T-1A02] pnpm workspace (`packages/ui`) and `apps/desktop` Tauri v2 scaffold
-- [!] [T-1A03] Polyglot runner (moon/Nx) sequencing JS + Tauri builds
+- [x] [T-1A02] pnpm workspace (`packages/ui`) and `apps/desktop` Tauri v2 scaffold — superseded by Phase 8 T-8A01
+- [x] [T-1A03] Polyglot runner sequencing JS + Tauri builds — superseded by Phase 8 T-8A01
 
 Track B — Filesystem (l2-filesystem-layout)
 
@@ -85,14 +85,14 @@ Track T — Validation
 ### [T-1A02] JS workspace + Tauri scaffold
 
 - **Spec:** l2-source-layout.md §4.1, l2-technology-stack.md
-- **Status:** Blocked [!]
-- **Notes:** `pnpm` and the Tauri CLI are not installed here. Unblock: install pnpm + `cargo install tauri-cli` (+ mobile SDKs for the iOS/Android smoke). Needed by Phase 8 (Flower), not by Phase 2.
+- **Status:** Done (superseded by Phase 8 T-8A01)
+- **Notes:** originally blocked on a missing toolchain here. Phase 8 T-8A01 provisioned pnpm + Tauri v2 and scaffolded `packages/ui` + `apps/desktop` (full toolchain green via PowerShell) — the JS/Tauri workspace this task called for now exists.
 
 ### [T-1A03] Polyglot runner
 
 - **Spec:** l2-source-layout.md §4.3
-- **Status:** Blocked [!]
-- **Notes:** depends on T-1A02 toolchain (pnpm) + a runner (moon/Nx) not installed.
+- **Status:** Done (superseded by Phase 8 T-8A01)
+- **Notes:** JS + Tauri build sequencing is carried by the Phase 8 scaffold's pnpm/Vite/Tauri pipeline established in T-8A01.
 
 ### [T-1B01] Path resolver
 

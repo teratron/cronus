@@ -1,6 +1,6 @@
 # Project Specification Rules
 
-**Version:** 1.4.0
+**Version:** 1.5.0
 **Status:** Active
 
 ## Overview
@@ -293,3 +293,13 @@ Governed in full by the engine's Autonomous Decision Protocol. Operational summa
 7. **Integrity HALTs exempt (DA-8)**: objective guards (checksums, drift, parity) remain hard HALTs; each HALT report states exactly one recommended resolution path — no option menus.
 
 Relationship to neighbors: C9 grants the authorization scope, C25 governs output phrasing, C26 supplies whitelist entry E5 — C27 adds the decision procedure itself.
+
+### C28 — Concept-Only Specification Marker
+
+This project deliberately authors L1 concept specifications ahead of implementation — a knowledge caul that is built out before code catches up. That is a strength, not a defect, but the gap between concept and code must be **named, not hidden**. Rather than a hard authoring budget (blocking new L1 specs while N implementations remain open), the gap is made explicit via a `concept-only` marker.
+
+1. **Scope**: applies to `Stable` L1 (Concept) specs only. L2/L3 implementation specs without code are genuine coverage gaps, never `concept-only`.
+2. **Meaning**: an L1 spec with **no currently planned L2 implementation** may be tagged `concept-only` in `PLAN.md` (Concept Library) and, optionally, its `INDEX.md` row. The tag declares the spec a durable design artifact, not pending work. A `[x]` checkbox on such a spec means "concept authored & Stable (a gating contract)", **not** "implemented".
+3. **Advisory exemption**: `concept-only` specs are excluded from the "Stable L1 without L2 child" coverage-gap advisory in `/magic.analyze` and are never treated as orphaned-implementation blockers by `/magic.task` (they remain listed in `PLAN.md` to satisfy the no-orphan invariant).
+4. **Auto-revert**: the moment an L2 spec declaring `Implements: {this L1}` is authored, the `concept-only` tag is dropped and the L1 re-enters normal coverage tracking. The marker is a statement about *plan intent*, not a permanent property.
+5. **Honesty over suppression**: the marker exists to surface the concept-vs-code delta on every audit, not to silence it. A rising count of `concept-only` specs is itself a health signal worth narrating in the Advisory Report.

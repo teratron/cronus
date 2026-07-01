@@ -2,7 +2,7 @@
 
 use aes_gcm::{
     Aes256Gcm, Key, Nonce,
-    aead::{Aead, AeadCore, KeyInit, OsRng},
+    aead::{Aead, Generate, KeyInit},
 };
 use argon2::{Argon2, PasswordHasher, password_hash::SaltString};
 
@@ -95,9 +95,9 @@ pub fn derive_key(passphrase: &str, salt: &[u8; 16]) -> EncryptResult<MemoryKey>
 ///
 /// Output layout: `[12-byte nonce] ++ [ciphertext + 16-byte auth tag]`
 pub fn encrypt(plaintext: &str, mem_key: &MemoryKey) -> EncryptResult<Vec<u8>> {
-    let key = Key::<Aes256Gcm>::from_slice(mem_key.as_bytes());
-    let cipher = Aes256Gcm::new(key);
-    let nonce = Aes256Gcm::generate_nonce(&mut OsRng);
+    let key = Key::<Aes256Gcm>::from(*mem_key.as_bytes());
+    let cipher = Aes256Gcm::new(&key);
+    let nonce = Nonce::try_generate().map_err(|e| EncryptError::Aead(e.to_string()))?;
 
     let ciphertext = cipher
         .encrypt(&nonce, plaintext.as_bytes())
@@ -116,12 +116,12 @@ pub fn decrypt(blob: &[u8], mem_key: &MemoryKey) -> EncryptResult<String> {
     }
 
     let (nonce_bytes, ciphertext) = blob.split_at(NONCE_LEN);
-    let key = Key::<Aes256Gcm>::from_slice(mem_key.as_bytes());
-    let cipher = Aes256Gcm::new(key);
-    let nonce = Nonce::from_slice(nonce_bytes);
+    let key = Key::<Aes256Gcm>::from(*mem_key.as_bytes());
+    let cipher = Aes256Gcm::new(&key);
+    let nonce = Nonce::try_from(nonce_bytes).map_err(|_| EncryptError::InvalidCiphertext)?;
 
     let plaintext = cipher
-        .decrypt(nonce, ciphertext)
+        .decrypt(&nonce, ciphertext)
         .map_err(|e| EncryptError::Aead(e.to_string()))?;
 
     String::from_utf8(plaintext).map_err(|_| EncryptError::Utf8)

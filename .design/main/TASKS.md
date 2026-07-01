@@ -1,9 +1,9 @@
 # Master Task Index (Registry)
 
-**Version:** 1.10.0
+**Version:** 1.11.0
 **Generated:** 2026-06-30
-**Based on:** .design/main/PLAN.md v2.7.0
-**Based on RULES:** .design/RULES.md v1.4.0
+**Based on:** .design/main/PLAN.md v2.8.0
+**Based on RULES:** .design/RULES.md v1.5.0
 **Execution Mode:** Parallel
 **Status:** Active
 
@@ -15,7 +15,7 @@ Tactical registry of all phases and their statuses, ordered by the growth metaph
 
 | Phase | Description | Status |
 | --- | --- | --- |
-| [Phase 1](tasks/phase-1.md) | Seed I — Foundation: workspaces, filesystem, core skeleton, security | `In Progress` |
+| [Phase 1](tasks/phase-1.md) | Seed I — Foundation: workspaces, filesystem, core skeleton, security | `Done` |
 | [Phase 2](archives/tasks/phase-2.md) | Seed II — Workflow runtime (`crates/nodus`) port | `Done (Archived)` |
 | [Phase 3](archives/tasks/phase-3.md) | Stem — CLI (command framework + grammar + core bindings) | `Done (Archived)` |
 | [Phase 4](archives/tasks/phase-4.md) | Core Subsystems: memory store, model/context routers, workspace management | `Done (Archived)` |

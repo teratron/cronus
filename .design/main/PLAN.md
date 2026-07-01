@@ -1,6 +1,6 @@
 # Implementation Plan
 
-**Version:** 2.7.0
+**Version:** 2.8.0
 **Generated:** 2026-06-30
 **Based on:** .design/main/INDEX.md v1.0.39
 **Status:** Active
@@ -21,6 +21,8 @@ Execution mode: **Parallel** (C3); tracks grouped by file independence. Critical
 ## Phase 0 — Requirements (Layer 1: Concept)
 
 *Technology-agnostic contracts. All Stable — they gate the implementation phases.*
+
+> **Concept-only semantics (RULES §7 C28):** a `[x]` on a Phase 0 L1 means "concept authored & Stable (a gating contract)", **not** "implemented". Many of these concepts have no authored L2 implementation yet — by design, this project builds the conceptual caul ahead of code. Such L1s carry the `concept-only` status: the concept-vs-code gap is named here rather than hidden, and they are exempt from the "Stable L1 without L2 child" coverage-gap advisory until an `Implements:` L2 is authored (at which point the marker auto-reverts). This replaces a hard authoring budget — L1 authoring stays cheap; the delta stays visible.
 
 - [x] **Architecture** ([l1-architecture.md](specifications/l1-architecture.md)) [L1]
 - [x] **Office Model** ([l1-office-model.md](specifications/l1-office-model.md)) [L1]
@@ -44,7 +46,7 @@ Execution mode: **Parallel** (C3); tracks grouped by file independence. Critical
 - [x] **Automation Pipeline** ([l1-automation-pipeline.md](specifications/l1-automation-pipeline.md)) [L1] — dual-mode event-driven automation; AP-1…AP-7; 8-node taxonomy; implicit (`@ON:` blocks) + explicit (canvas) surfaces; AP-6 AuditProvider observability
 - [x] **Automation Canvas** ([l1-automation-canvas.md](specifications/l1-automation-canvas.md)) [L1] — visual pipeline editor; AC-1…AC-6; three-panel layout; implicit read-only + explicit authoring; inspection via AuditProvider stream
 - [x] **Harness Engineering** ([l1-harness-engineering.md](specifications/l1-harness-engineering.md)) [L1] — EVALUATE→ANALYZE→IMPROVE loop; HE-1…HE-9; six-component harness taxonomy; artifact extraction mandatory (HE-8); context freshness per iteration (HE-9)
-- [x] **Navigation Model** ([l1-navigation-model.md](specifications/l1-navigation-model.md)) [L1] — canonical 11-tab sidebar; NV-1…NV-5; office tab bar with lazy loading + OfficeState icons; two-tier settings (Global/Local); IDE integration via shell-spawn
+- [x] **Navigation Model** ([l1-navigation-model.md](specifications/l1-navigation-model.md)) [L1] — canonical 12-tab sidebar (Wiki added as #11, Settings → #12); NV-1…NV-5; office tab bar with lazy loading + OfficeState icons; two-tier settings (Global/Local); IDE integration via shell-spawn
 - [x] **Voice Input** ([l1-voice-input.md](specifications/l1-voice-input.md)) [L1] — on-device only speech pipeline; VI-1…VI-5; ACTIVATE→CAPTURE→VAD→TRANSCRIBE→REVIEW→INJECT; push-to-talk + toggle modes
 - [x] **Deliberation** ([l1-deliberation.md](specifications/l1-deliberation.md)) [L1] — multi-worker structured debate; DL-1…DL-5; parallel independent arguments; orchestrator finality; append-only log in Channels tab
 - [x] **Office Control** ([l1-office-control.md](specifications/l1-office-control.md)) [L1] — OfficeState taxonomy (Active/Idle/Paused/Hibernating/Error/Offline); OC-1…OC-5; master switch; token exhaustion hibernation with model substitution; per-subsystem granularity
@@ -106,15 +108,13 @@ Execution mode: **Parallel** (C3); tracks grouped by file independence. Critical
 
 *Buildable monorepo + engine skeleton + state + security. The soil and the seed coat.*
 
-> **Progress (2026-06-21):** Rust foundation complete and verified — filesystem path model, core skeleton + contract, durable state seam, and the security baseline (secret store / redaction / default-deny egress). The JS/Tauri scaffold under source-layout + technology-stack is **deferred to Phase 8** (toolchain `pnpm`/Tauri CLI absent here; off Phase 2's path). `l2-sandbox-policy` and `l2-multi-user-auth` are listed here but **not yet decomposed** — fold them in when Phase 1 is revisited (they do not gate Phase 2). See `tasks/phase-1.md`.
+> **Done (2026-06-30):** Rust foundation complete and verified — filesystem path model, core skeleton + contract, durable state seam, and the security baseline (secret store / redaction / default-deny egress). The JS/Tauri scaffold under source-layout + technology-stack was originally deferred here on a missing toolchain; it has since **landed via Phase 8 `T-8A01`** (pnpm + Tauri v2 provisioned, `apps/desktop` + `packages/ui` scaffolded, full toolchain green) — so the Seed's polyglot workspace is realized. The two remaining security-hardening specs (`l2-sandbox-policy`, `l2-multi-user-auth`) never gated any downstream phase and are **relocated to Phase 9 (Operational Hardening)** where they belong. Phase 1 is closed on its actual scope: the Rust seed. See `tasks/phase-1.md`.
 
-- [ ] **Source Layout** ([l2-source-layout.md](specifications/l2-source-layout.md)) [L2] — Cargo + pnpm workspaces (`crates/{core,nodus,cli,tui}`), polyglot runner
-- [ ] **Technology Stack** ([l2-technology-stack.md](specifications/l2-technology-stack.md)) [L2] — toolchain (Rust, Vite/React 19, Tauri v2)
-- [ ] **Filesystem Layout** ([l2-filesystem-layout.md](specifications/l2-filesystem-layout.md)) [L2] — OS-native path resolver, state bootstrap
-- [ ] **Core Library** ([l2-core-library.md](specifications/l2-core-library.md)) [L2] — engine crate, public contract, durable state
-- [ ] **Security** ([l2-security.md](specifications/l2-security.md)) [L2] — secret store, gitignore, redaction, egress gate, sandbox, SSRF guard, internal tool loopback; config integrity shields (three-state lock, SHA-256 seal, drift detection)
-- [ ] **Sandbox Policy** ([l2-sandbox-policy.md](specifications/l2-sandbox-policy.md)) [L2] — deny-by-default network egress (named entries + binary allowlists), isolation tiers (restricted/balanced/open), preset catalog, PolicyContext, access failure classification (depends on security)
-- [ ] **Multi-User Auth** ([l2-multi-user-auth.md](specifications/l2-multi-user-auth.md)) [L2] — bcrypt passwords, session tokens, TOTP 2FA, privilege map, admin promote/demote, reserved sentinel usernames (depends on security)
+- [x] **Source Layout** ([l2-source-layout.md](specifications/l2-source-layout.md)) [L2] — Cargo + pnpm workspaces (`crates/{core,nodus,cli,tui}`), polyglot runner (JS workspaces scaffolded via Phase 8 T-8A01)
+- [x] **Technology Stack** ([l2-technology-stack.md](specifications/l2-technology-stack.md)) [L2] — toolchain (Rust; Vite/React 19 + Tauri v2 provisioned via Phase 8 T-8A01)
+- [x] **Filesystem Layout** ([l2-filesystem-layout.md](specifications/l2-filesystem-layout.md)) [L2] — OS-native path resolver, state bootstrap
+- [x] **Core Library** ([l2-core-library.md](specifications/l2-core-library.md)) [L2] — engine crate, public contract, durable state
+- [x] **Security** ([l2-security.md](specifications/l2-security.md)) [L2] — secret store, gitignore, redaction, egress gate, sandbox, SSRF guard, internal tool loopback; config integrity shields (three-state lock, SHA-256 seal, drift detection)
 
 ## Phase 2 — Seed II: Workflow Runtime (`crates/nodus`)
 
@@ -197,8 +197,12 @@ Execution mode: **Parallel** (C3); tracks grouped by file independence. Critical
 
 ## Phase 9 — Operational Hardening
 
-*Self-healing, backup, error reporting, telemetry.*
+*Self-healing, backup, error reporting, telemetry, and the deferred security-hardening layer.*
 
+> **Relocated from Phase 1 (2026-06-30):** `l2-sandbox-policy` and `l2-multi-user-auth` are security-hardening specs that never gated any earlier phase; they sit here with the rest of the productionization work rather than blocking the foundation. Decomposed into tasks on entry.
+
+- [ ] **Sandbox Policy** ([l2-sandbox-policy.md](specifications/l2-sandbox-policy.md)) [L2] — deny-by-default network egress (named entries + binary allowlists), isolation tiers (restricted/balanced/open), preset catalog, PolicyContext, access failure classification (depends on security)
+- [ ] **Multi-User Auth** ([l2-multi-user-auth.md](specifications/l2-multi-user-auth.md)) [L2] — bcrypt passwords, session tokens, TOTP 2FA, privilege map, admin promote/demote, reserved sentinel usernames (depends on security)
 - [ ] **Doctor** ([l2-doctor.md](specifications/l2-doctor.md)) [L2]
 - [ ] **Config Hot-Reload** ([l2-config-hotreload.md](specifications/l2-config-hotreload.md)) [L2] — file-watcher with bounded backoff+polling fallback, prefix-keyed reload plan, subsystem action dispatch, skills snapshot invalidation (depends on doctor + scheduler + extension-registry)
 - [ ] **Backup** ([l2-backup.md](specifications/l2-backup.md)) [L2]

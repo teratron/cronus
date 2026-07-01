@@ -12,3 +12,14 @@ chrono = { workspace = true }
 cron = { workspace = true }
 keyring = { workspace = true }
 rusqlite = { workspace = true }
+
+# Benchmarks use a std-only timing harness (no external bench crate — see the
+# dependency policy). Each bench target is a plain `fn main()` gated behind
+# `harness = false`, timed with `std::time::Instant` + `std::hint::black_box`.
+[[bench]]
+name = "memory_store"
+harness = false
+
+[[bench]]
+name = "model_router"
+harness = false
