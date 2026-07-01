@@ -5,7 +5,7 @@ it as a standalone crate on crates.io.
 
 ## Prerequisites
 
-Verify Phase 3 validation tasks are green before starting:
+Verify the nodus validation gates are green before starting:
 
 ```
 cargo test -p nodus           # all tests pass
@@ -81,9 +81,8 @@ Run the monorepo test suite to confirm nothing regressed:
 cargo test
 ```
 
-## 7. Archive this phase
+## 7. Close out the migration
 
-Once the standalone repo is live and Cronus tests pass:
-
-- Mark Phase 3 Done in `.design/nodus/TASKS.md`.
-- Run `/magic.run nodus` for final phase closure and archival.
+Once the standalone repo is live and Cronus tests pass, record the migration as
+complete in your internal task tracker and run your usual workspace closure and
+archival process.

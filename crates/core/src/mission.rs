@@ -198,7 +198,7 @@ impl Mission {
         }
     }
 
-    /// Transition to Phase 2 after the user confirms the PRD.
+    /// Transition to the Execution phase after the user confirms the PRD.
     pub fn confirm(&mut self) {
         self.phase = MissionPhase::Execution;
         self.status = MissionStatus::Running;

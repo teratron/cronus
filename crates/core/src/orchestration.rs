@@ -389,7 +389,7 @@ pub enum JudgeVerdict {
     NotMet { reason: String },
 }
 
-/// Judge seam — at Phase 6 returns `NotMet` with the summary as the reason.
+/// Judge seam — currently returns `NotMet` with the summary as the reason.
 /// A real LLM call wires in when the model router has provider credentials.
 pub fn evaluate_goal(_run: &GoalRun, summary: &str) -> JudgeVerdict {
     if summary.is_empty() {
@@ -398,7 +398,7 @@ pub fn evaluate_goal(_run: &GoalRun, summary: &str) -> JudgeVerdict {
         }
     } else {
         JudgeVerdict::NotMet {
-            reason: format!("judge seam (phase-6): criteria not yet verifiable — {summary}"),
+            reason: format!("judge seam: goal criteria not yet machine-verifiable — {summary}"),
         }
     }
 }
@@ -412,7 +412,7 @@ pub enum ToolExecutionMode {
     Parallel,
 }
 
-/// Agent loop configuration hooks (declared at Phase 6 as a plain struct;
+/// Agent loop configuration hooks (declared as a plain struct;
 /// hook invocations wire in from the TUI/app layer in later phases).
 #[derive(Debug, Default)]
 pub struct AgentLoopConfig {

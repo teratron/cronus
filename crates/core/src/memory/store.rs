@@ -202,7 +202,7 @@ impl MemoryStore {
         Ok(affected > 0)
     }
 
-    /// HRR encoding seam — returns a zeroed vector at Phase 4.
+    /// HRR encoding seam — returns a zeroed vector (stub).
     /// Real implementation ships with sqlite-vec integration.
     pub fn encode_hrr(&self, _entry: &MemoryEntry) -> Vec<f32> {
         vec![0.0f32; 256]

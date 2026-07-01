@@ -47,7 +47,7 @@ impl CheckpointPaths {
 
 // ── CheckpointWriter ──────────────────────────────────────────────────────────
 
-/// Seam trait for writing checkpoints (wired by agent-registry in Phase 5).
+/// Seam trait for writing checkpoints (wired by agent-registry later).
 pub trait CheckpointWriter: Send + Sync {
     fn write(&self, paths: &CheckpointPaths, body: &str) -> Result<(), CheckpointError>;
 }
@@ -61,7 +61,7 @@ impl CheckpointWriter for FileCheckpointWriter {
     }
 }
 
-/// No-op checkpoint writer (Phase 4 default).
+/// No-op checkpoint writer (default stub).
 pub struct NoOpCheckpointWriter;
 
 impl CheckpointWriter for NoOpCheckpointWriter {

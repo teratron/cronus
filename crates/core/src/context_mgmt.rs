@@ -121,12 +121,12 @@ pub fn total_tokens(entries: &[ContextEntry]) -> u64 {
 
 // ── Compactor seam ────────────────────────────────────────────────────────────
 
-/// Seam trait for LLM-driven compaction (wires in Phase 6).
+/// Seam trait for LLM-driven compaction (wiring deferred).
 pub trait Compactor: Send + Sync {
     fn compact(&self, context: &[ContextEntry], keep_recent_tokens: u64) -> Result<String, String>;
 }
 
-/// No-op compactor — returns a fixed placeholder string at Phase 4.
+/// No-op compactor — returns a fixed placeholder string (stub).
 pub struct NoOpCompactor;
 
 impl Compactor for NoOpCompactor {

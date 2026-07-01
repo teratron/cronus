@@ -1817,7 +1817,7 @@ mod check {
         } else {
             println!("card:     {card_id}");
             println!("language: {}", lang.as_str());
-            println!("(gate runner seam — no tools invoked at Phase 5)");
+            println!("(gate runner seam — no tools invoked yet)");
         }
         0
     }

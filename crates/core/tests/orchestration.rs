@@ -356,11 +356,11 @@ fn triage_error_event_leads_to_exhausted_goal_run() {
         "single-iteration goal must pause"
     );
 
-    // Judge seam: still returns NotMet at Phase 6
+    // Judge seam: still returns NotMet (stub judge)
     let verdict = evaluate_goal(&run, "recovery attempted");
     assert!(
         matches!(verdict, JudgeVerdict::NotMet { .. }),
-        "judge seam must return NotMet at Phase 6"
+        "judge seam must return NotMet"
     );
     assert!(run.is_exhausted());
 }

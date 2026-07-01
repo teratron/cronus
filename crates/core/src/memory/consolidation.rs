@@ -43,13 +43,13 @@ pub struct ConsolidationResult {
 
 /// Consolidation runner seam.
 ///
-/// The real implementation requires an LLM scoring pipeline; at Phase 4
+/// The real implementation requires an LLM scoring pipeline; for now
 /// this is a no-op that always reports `skipped = true`.
 pub trait Consolidator: Send + Sync {
     fn run(&self, config: &ConsolidationConfig) -> ConsolidationResult;
 }
 
-/// No-op consolidator used at Phase 4.
+/// No-op consolidator (stub).
 pub struct NoOpConsolidator;
 
 impl Consolidator for NoOpConsolidator {

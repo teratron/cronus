@@ -272,7 +272,7 @@ pub struct SkillScanner;
 
 impl SkillScanner {
     /// Scan a skill directory (or a text blob treated as a single file).
-    /// In Phase 5, scans a text content string directly.
+    /// Scans a text content string directly.
     pub fn scan_content(content: &str, filename: &str) -> ScanResult {
         let lower = content.to_lowercase();
         let has_executable_scripts = EXECUTABLE_EXTENSIONS

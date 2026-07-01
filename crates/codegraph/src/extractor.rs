@@ -1,4 +1,4 @@
-//! Symbol extraction — tree-sitter seam with a regex stub for Phase 4.
+//! Symbol extraction — tree-sitter seam with a regex stub for the initial slice.
 
 // ── Confidence ────────────────────────────────────────────────────────────────
 
@@ -43,13 +43,13 @@ pub enum SymbolKind {
 
 /// Seam trait for language-specific symbol extraction.
 ///
-/// At Phase 4, `RegexExtractor` is the default. Tree-sitter extractors
-/// wire in Phase 5 when grammar binaries are bundled.
+/// For now, `RegexExtractor` is the default. Tree-sitter extractors
+/// wire in once grammar binaries are bundled.
 pub trait Extractor: Send + Sync {
     fn extract(&self, source: &str) -> Vec<Symbol>;
 }
 
-// ── RegexExtractor (Phase 4 stub) ─────────────────────────────────────────────
+// ── RegexExtractor (stub) ─────────────────────────────────────────────
 
 /// Extracts Rust-like function and struct declarations via simple regex patterns.
 pub struct RegexExtractor;

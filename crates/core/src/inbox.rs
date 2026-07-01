@@ -180,12 +180,12 @@ pub enum BusEvent {
     InboxArrived { recipient_id: String, count: u32 },
 }
 
-/// Seam trait for bus event delivery (real bus wires in Phase 6).
+/// Seam trait for bus event delivery (real bus wiring deferred).
 pub trait BusSender: Send + Sync {
     fn send(&self, event: BusEvent);
 }
 
-/// No-op bus sender used at Phase 4.
+/// No-op bus sender (stub).
 pub struct NoOpBusSender;
 
 impl BusSender for NoOpBusSender {

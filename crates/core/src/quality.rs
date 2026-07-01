@@ -227,7 +227,7 @@ pub enum DoneGateStatus {
 
 /// Check whether all required gates have passed for a card (QLY-1, QLY-7).
 ///
-/// In Phase 5, the real gate result store is not yet wired to the kanban board;
+/// The real gate result store is not yet wired to the kanban board;
 /// this seam accepts explicit results so callers control the outcome in tests.
 pub fn check_done_gate(gate_results: &[GateResult]) -> DoneGateStatus {
     let required_kinds = [GateKind::Tests, GateKind::Lint, GateKind::TypeFormat];

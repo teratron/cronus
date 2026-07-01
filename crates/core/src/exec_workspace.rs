@@ -1,7 +1,7 @@
 //! Execution workspace — isolated per-card environments with git worktree lifecycle.
 //!
 //! Slug naming: `<ws_id>-<card_id>-<unix_ts>`. No-remote-git contract enforced.
-//! Finalize write-back gate defers to the quality pipeline seam (Phase 6 wiring).
+//! Finalize write-back gate defers to the quality pipeline seam (wiring deferred).
 
 use std::path::{Path, PathBuf};
 
@@ -120,7 +120,7 @@ impl ExecWorkspaceManager {
     }
 
     /// Check if the worktree is pristine (no untracked or modified files).
-    /// Phase 5 implementation: checks whether the directory is empty.
+    /// Current implementation: checks whether the directory is empty.
     pub fn is_pristine(&self, id: &str) -> Result<bool> {
         let ws = self
             .workspaces
@@ -138,7 +138,7 @@ impl ExecWorkspaceManager {
     }
 
     /// Finalize: checks quality gate seam, marks as Finalized.
-    /// Gate seam returns Pass at Phase 5 (real check wires in Phase 6).
+    /// Gate seam returns Pass for now (real check wiring deferred).
     pub fn finalize(&mut self, id: &str, gate_passed: bool, now: u64) -> Result<()> {
         if !gate_passed {
             return Err(ExecError::GateNotPassed);

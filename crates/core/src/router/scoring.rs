@@ -114,7 +114,7 @@ pub fn score(
         ProviderHealth::Unavailable => 0.0,
     };
 
-    // quota: 1.0 = unlimited (Phase 4 stub — assume full quota)
+    // quota: 1.0 = unlimited (stub — assume full quota)
     let quota_score = 1.0_f64;
 
     // cost_inv: 0.0 when cost == max_cost, 1.0 when cost is free

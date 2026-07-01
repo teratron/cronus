@@ -541,7 +541,7 @@ mod tests {
     fn status_sessions_render_status_mirrors_snapshot() {
         let area = Rect::new(0, 0, 50, 6);
         let mut buf = Buffer::empty(area);
-        render_status(area, &mut buf, "0.1.0", "phase 7 | progress 60%", false);
+        render_status(area, &mut buf, "0.1.0", "running | progress 60%", false);
 
         let inner = Block::bordered().inner(area);
         assert!(
@@ -549,7 +549,7 @@ mod tests {
             "version is mirrored"
         );
         assert!(
-            area_contains(&buf, inner, "phase 7 | progress 60%"),
+            area_contains(&buf, inner, "running | progress 60%"),
             "status line is mirrored"
         );
     }

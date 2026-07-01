@@ -1,7 +1,7 @@
 //! Learning loop — post-turn background review fork and skill generation.
 //!
-//! Phase 5 stub: review fork seam returns None; approval gate is in-memory.
-//! Real LLM sub-agent wires in Phase 6.
+//! Stub: review fork seam returns None; approval gate is in-memory.
+//! Real LLM sub-agent wiring is deferred.
 
 use std::collections::HashMap;
 

@@ -1,7 +1,7 @@
 //! Semantic cache seam.
 //!
-//! At Phase 4 this is a stub that always misses. The real implementation
-//! requires an embedding encoder (sqlite-vec) which lands with Phase 5/6.
+//! This is a stub that always misses. The real implementation
+//! requires an embedding encoder (sqlite-vec) which is deferred.
 
 use crate::router::provider::RouteDecision;
 
@@ -14,14 +14,14 @@ impl SemanticCache {
 
     /// Look up a cached routing decision for a prompt hash.
     ///
-    /// Always returns `None` at Phase 4 — no embedding encoder is available.
+    /// Always returns `None` for now — no embedding encoder is available.
     pub fn lookup(&self, _prompt_hash: u64) -> Option<RouteDecision> {
         None
     }
 
     /// Store a routing decision for future lookups.
     ///
-    /// No-op at Phase 4.
+    /// No-op (stub).
     pub fn store(&self, _prompt_hash: u64, _decision: &RouteDecision) {}
 }
 

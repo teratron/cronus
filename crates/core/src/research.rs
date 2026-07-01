@@ -78,7 +78,7 @@ impl ResearchJob {
 
 // ── Research plan ─────────────────────────────────────────────────────────────
 
-/// Structured research plan generated in Phase 1 of the loop.
+/// Structured research plan generated in the planning phase of the loop.
 #[derive(Debug, Clone, Default)]
 pub struct ResearchPlan {
     /// 3–6 specific sub-questions to investigate.

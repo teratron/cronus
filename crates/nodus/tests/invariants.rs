@@ -1,6 +1,6 @@
-// Per-invariant assertions for WFL-1..9 — one named test per L1 contract clause
-// (l1-workflow-language.md §3). These guard the L1 contract directly, independent
-// of the reference corpus; they remain valid even as the reference evolves.
+// Per-invariant assertions for WFL-1..9 — one named test per workflow-language
+// invariant. These guard the language contract directly, independent of the
+// reference corpus; they remain valid even as the reference evolves.
 
 use nodus::{
     executor::{ModelProvider, Status, Value},

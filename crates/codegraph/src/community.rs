@@ -1,6 +1,6 @@
 //! Community detection — Leiden algorithm seam with a union-find stub.
 //!
-//! The real Leiden implementation wires in Phase 5. At Phase 4, connected
+//! The real Leiden implementation is deferred. For now, connected
 //! symbols are grouped by a simple union-find on explicit edges.
 
 use std::collections::HashMap;
@@ -25,12 +25,12 @@ pub struct Community {
 
 // ── CommunityDetector seam ────────────────────────────────────────────────────
 
-/// Seam trait for community detection (Leiden in Phase 5).
+/// Seam trait for community detection (real Leiden impl deferred).
 pub trait CommunityDetector: Send + Sync {
     fn detect(&self, nodes: &[i64], edges: &[Edge]) -> Vec<Community>;
 }
 
-// ── UnionFindDetector (Phase 4 stub) ─────────────────────────────────────────
+// ── UnionFindDetector (stub) ─────────────────────────────────────────
 
 /// Union-find community detection — groups connected components.
 pub struct UnionFindDetector;

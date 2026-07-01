@@ -1,7 +1,7 @@
 //! Extension registry — skills, MCP servers, and plugins.
 //!
-//! Phase 5 foundation: manifest validation, lifecycle state machine, auto-discovery.
-//! MCP transport and sandbox enforcement wire in Phase 6.
+//! Foundation: manifest validation, lifecycle state machine, auto-discovery.
+//! MCP transport and sandbox enforcement wiring is deferred.
 
 use std::collections::HashMap;
 

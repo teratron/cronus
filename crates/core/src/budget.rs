@@ -1,7 +1,7 @@
 //! Budget engine — hierarchical budget policies, cost events, hard-stop enforcement.
 //!
-//! Phase 5 foundation: policy CRUD + cost ingestion + kanban seam.
-//! Real wiring to kanban board's done-transition guard completes in Phase 6.
+//! Foundation: policy CRUD + cost ingestion + kanban seam.
+//! Real wiring to kanban board's done-transition guard is deferred.
 
 use std::collections::HashMap;
 

@@ -789,7 +789,7 @@ mod tests {
         ViewModel {
             snapshot: CoreSnapshot {
                 version: "1.2.3".to_string(),
-                status: "phase 7 | 80%".to_string(),
+                status: "running | 80%".to_string(),
                 board: BoardView {
                     cards: vec![view::BoardCard {
                         id: "k1".to_string(),
@@ -850,7 +850,7 @@ mod tests {
         let base = render_to_buffer(&populated_view(), area);
 
         let mut changed = populated_view();
-        changed.snapshot.status = "phase 7 | 100%".to_string();
+        changed.snapshot.status = "running | 100%".to_string();
         let after = render_to_buffer(&changed, area);
 
         assert_ne!(base, after, "a changed snapshot must change the frame");

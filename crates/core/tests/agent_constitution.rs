@@ -213,7 +213,7 @@ fn activate_runs_all_steps_in_order() {
     let results = activate(&ActivationStep::SEQUENCE);
     assert_eq!(results.len(), 8);
     for (step, result) in &results {
-        assert!(result.is_ok(), "step {step:?} must succeed at Phase 4");
+        assert!(result.is_ok(), "step {step:?} must succeed");
     }
 }
 

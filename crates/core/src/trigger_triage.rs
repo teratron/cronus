@@ -317,7 +317,7 @@ pub fn triage(
     let final_decision = if confidence >= CONFIDENCE_THRESHOLD {
         decision
     } else {
-        // Cloud fallback seam — at Phase 6 falls to rule classification
+        // Cloud fallback seam — for now falls to rule classification
         rule_classify(envelope)
     };
     // 5. Record dedup

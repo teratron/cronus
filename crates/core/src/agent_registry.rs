@@ -174,7 +174,7 @@ impl AgentRegistry {
         self.agents.insert(def.name.clone(), def);
     }
 
-    /// Generate a stub AgentDefinition from a description (seam; real LLM in Phase 6).
+    /// Generate a stub AgentDefinition from a description (seam; real LLM wiring deferred).
     pub fn generate_from_description(name: &str, description: &str) -> AgentDefinition {
         AgentDefinition {
             name: name.to_string(),

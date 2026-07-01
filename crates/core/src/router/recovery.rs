@@ -219,7 +219,7 @@ pub trait HealthProbe: Send + Sync {
     }
 }
 
-/// Always-healthy stub for use in tests and Phase 4.
+/// Always-healthy stub for use in tests.
 pub struct NoOpProbe;
 
 impl HealthProbe for NoOpProbe {

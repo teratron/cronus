@@ -219,7 +219,7 @@ impl ActivationStep {
     ];
 }
 
-/// Execute the 8-step activation sequence (no-op seam at Phase 4).
+/// Execute the 8-step activation sequence (no-op seam / stub).
 pub fn activate(steps: &[ActivationStep]) -> Vec<(ActivationStep, Result<(), String>)> {
     steps.iter().copied().map(|s| (s, Ok(()))).collect()
 }

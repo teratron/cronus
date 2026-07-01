@@ -151,7 +151,7 @@ impl RouterPool {
     ///
     /// Returns an error if all circuits are open (includes LKGP ID if known).
     pub fn route(&self, req: &RoutingRequest) -> Result<RouteDecision, RouterError> {
-        // Semantic cache lookup (always misses at Phase 4)
+        // Semantic cache lookup (always misses — stub)
         if let Some(cached) = self.cache.lookup(req.prompt_hash) {
             return Ok(cached);
         }

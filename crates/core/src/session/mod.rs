@@ -157,12 +157,12 @@ impl std::error::Error for SessionError {}
 
 // ── Loop runner (seam) ────────────────────────────────────────────────────────
 
-/// Seam: follow-up messages injected after each turn (wires in Phase 6).
+/// Seam: follow-up messages injected after each turn (wiring deferred).
 pub fn get_follow_up_messages(_ctx: &SessionContext) -> Vec<String> {
     vec![]
 }
 
-/// Seam: steering messages injected on text-loop detection (wires in Phase 6).
+/// Seam: steering messages injected on text-loop detection (wiring deferred).
 pub fn get_steering_messages(_ctx: &SessionContext) -> Vec<String> {
     vec![]
 }

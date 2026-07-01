@@ -167,7 +167,7 @@ fn fire_oneshot_with_delete_after_fire_removes_it() {
 
 #[test]
 fn fire_heartbeat_does_not_require_board() {
-    // Heartbeat fires as a no-op seam — no kanban interaction expected at Phase 5.
+    // Heartbeat fires as a no-op seam — no kanban interaction expected yet.
     let dir = tmp_dir("heartbeat");
     let scheduler = Scheduler::new(dir).unwrap();
     let s = cronus::scheduler::Schedule::recurring(

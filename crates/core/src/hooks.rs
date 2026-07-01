@@ -161,7 +161,7 @@ pub fn run_hooks(
         if !evaluate_conditions(&hook.conditions, fields) {
             continue;
         }
-        // In Phase 5, hooks are evaluated but not actually spawned.
+        // For now, hooks are evaluated but not actually spawned.
         // The outcome is simulated: a command starting with "deny:" blocks.
         if hook.command.starts_with("deny:") && event.can_block() {
             let reason = hook.command.trim_start_matches("deny:").to_string();

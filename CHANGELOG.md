@@ -15,15 +15,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **Portability public API**: `run_with_schema()`, `run_with_schema_and_audit()`; `Schema::with_provider()`, `is_host_command()`; schema-aware lexer (`new_with_schema`) and parser (`parse_with_schema`)
 - **Testing framework** (`workflows.rs`): `evaluate_test_block()` assertion evaluator; `test_with_tags()` with `TestOptions { tags }`; NT-1 block isolation, NT-2 input override, NT-3–NT-4 assertion pass/fail, NT-5 provider neutrality, NT-6 tag filtering, NT-7 ordered reporting
 - **Validator diagnostics**: W001 (route with no covering `@test:` block), W002 (`@test:` block with no `expected:` entries), E015 (duplicate test name in same file)
-- **Testing spec**: `l2-nodus-testing.md` v1.0.0 (Stable) — NT-1…NT-10 compliance table, `TestBlock` AST documentation, `TestReport`/`TestResult` types, diagnostic codes
+- **Testing framework spec**: NT-1…NT-10 compliance table, `TestBlock` AST documentation, `TestReport`/`TestResult` types, diagnostic codes
 
 ### Changed (crates/nodus)
 
 - `TestBlock` AST node: `input: Vec<(String, String)>`, `expected: Vec<(String, String)>`, `tags: Vec<String>` typed fields added alongside `raw_lines` backward-compat companion
 - `parse_test_block()`: now populates typed fields from `input:`/`expected:`/`tags:` key-value lines
 - `test()` function: replaced stub pass-on-Ok with full per-block assertion evaluation
-- `l2-nodus-runtime.md` bumped v1.0.2 → v1.0.3 (observability) → v1.0.4 (portability)
-- Test count: 126 (Phase 0) → 142 (Phase 2) → 143 (Phase 3) → 163 (Phase 4) → 166 (Phase 5) → **204 (Phase 6)**
+- Runtime specification revised for observability, then portability
+- Test count: 126 → 142 → 143 → 163 → 166 → **204** over the release cycle
 - All 8 nodus workspace specs promoted to `Stable`
 
 ## [Unreleased]
@@ -43,19 +43,19 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Updated 2 specifications (main)
 - Updated task plan and task index (main)
 - Updated specification `quality-pipeline` (main)
-- Completed task `phase-1` (main)
+- Completed milestone 1 (main)
 - Updated 6 specifications (main)
 - Updated 10 specifications (main)
 - Updated 4 specifications (main)
 - Updated specification `memory-store` (main)
-- Completed task `phase-2` (main)
+- Completed milestone 2 (main)
 - Updated specification `workflow-runtime` (main)
-- Completed task `phase-3` (main)
+- Completed milestone 3 (main)
 - Updated task index (main)
 - Updated global project rules (main)
-- Completed task `phase-4` (main)
+- Completed milestone 4 (main)
 - Completed 3 tasks (main)
-- Completed task `phase-5` (main)
+- Completed milestone 5 (main)
 - Completed 5 tasks (main)
 - Updated task execution state (main)
 - Added specification `harness-engineering` (main)
@@ -86,18 +86,18 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Added specification `generation-budget` (main)
 - Updated specification `navigation-model` (main)
 - Updated task plan and task index (nodus)
-- Completed task `phase-7` (nodus)
+- Completed milestone 7 (nodus)
 - Added specification `nodus-dialog` (nodus)
 - Added specification `nodus-errors` (nodus)
-- Completed task `phase-8` (nodus)
+- Completed milestone 8 (nodus)
 - Added specification `nodus-registries` (nodus)
-- Completed task `phase-9` (nodus)
-- Completed task `phase-10` (nodus)
+- Completed milestone 9 (nodus)
+- Completed milestone 10 (nodus)
 - Added specification `nodus-control-flow` (nodus)
-- Completed task `phase-11` (nodus)
+- Completed milestone 11 (nodus)
 - Updated specification `architecture` (main)
-- Completed task `phase-7` (main)
-- Completed task `phase-8` (main)
+- Completed milestone 7 (main)
+- Completed milestone 8 (main)
 - Added specification `perspective-model` (main)
 - Added specification `event-mesh` (main)
 - Added specification `claim-verification` (main)

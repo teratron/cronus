@@ -1,7 +1,7 @@
 // End-to-end smoke tests: run the compiled `cronus` binary as a subprocess and
 // check exit codes and stdout. Cargo injects CARGO_BIN_EXE_cronus at build time.
 //
-// Phase 5 smoke coverage: one success-path test per Phase 5 command group.
+// Smoke coverage: one success-path test per command group.
 
 use std::process::Command;
 
@@ -136,7 +136,7 @@ fn workflow_transpile_outputs_nonempty() {
     let _ = std::fs::remove_dir_all(&dir);
 }
 
-// ── Phase 5 smoke tests ───────────────────────────────────────────────────────
+// ── Command smoke tests ───────────────────────────────────────────────────────
 
 #[test]
 fn role_list_presets_exits_0() {
@@ -195,7 +195,7 @@ fn check_run_exits_0() {
         .args(["check", "run", "smoke-card"])
         .status()
         .expect("failed to spawn binary");
-    assert!(status.success(), "check run must exit 0 at Phase 5 seam");
+    assert!(status.success(), "check run must exit 0 at the gate-runner seam");
 }
 
 #[test]
@@ -236,7 +236,7 @@ fn registry_list_exits_0() {
     );
 }
 
-// ── Phase 6 smoke tests ───────────────────────────────────────────────────────
+// ── Additional smoke tests ───────────────────────────────────────────────────────
 
 #[test]
 fn goal_help_exits_0() {
