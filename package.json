@@ -11,7 +11,12 @@
     "build": "pnpm -r build",
     "test": "pnpm -r test",
     "lint": "biome check .",
-    "format": "biome format --write ."
+    "format": "biome format --write .",
+    "fallow": "fallow",
+    "fallow:fix": "fallow fix",
+    "audit": "fallow audit",
+    "audit:ci": "fallow audit --format json",
+    "audit:review": "fallow review --brief"
   },
   "devDependencies": {
     "@biomejs/biome": "^2.5.1",
