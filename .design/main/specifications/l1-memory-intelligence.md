@@ -1,6 +1,6 @@
 # Memory Intelligence
 
-**Version:** 0.3.0
+**Version:** 0.3.1
 **Status:** RFC
 **Layer:** concept
 
@@ -13,6 +13,7 @@ The distinction it encodes is the difference between *passive infrastructure* �
 ## Related Specifications
 
 - [l1-memory-model.md](l1-memory-model.md) - The substrate this surface sits on (scopes, recall, curation, MEM-1…MEM-9).
+- [l1-memory-consolidation.md](l1-memory-consolidation.md) - The consolidation & corpus-maintenance layer this surface sits above: it precomputes the offline ranking signals recall consumes (MC-8), owns the write-time consolidation algebra (MC-4) upstream of this spec's MI-4 conflict adjudication, and maintains the lifecycle inputs (archive) MI-9 exposes.
 - [l2-memory-store.md](l2-memory-store.md) - Concrete store carrying the bi-temporal record, typed kinds, confidence, and trust this surface queries.
 - [l1-knowledge-base.md](l1-knowledge-base.md) - Source-attribution contract (KB-6) reused by the grounded-answer projection (MI-1).
 - [l1-claim-verification.md](l1-claim-verification.md) - Ternary-verdict grounding gate (CV-3/CV-4) reused to keep answers honest (MI-1).
@@ -269,6 +270,7 @@ The workflow-language runtime carries a pending storage/knowledge extension seam
 
 | Version | Change |
 | --- | --- |
+| 0.3.1 | Linked the new sibling layer `l1-memory-consolidation` (MC-1…MC-10) in Related Specifications: it precomputes recall's ranking signals (MC-8), owns the write-time consolidation algebra (MC-4) upstream of MI-4 adjudication, and maintains the archive lifecycle input MI-9 exposes. No invariant change. |
 | 0.3.0 | Added MI-9 (reversible lifecycle states active/paused/archived), MI-10 (capture-time temporal normalization), MI-11 (caller capture directives include/exclude/custom-instructions), and MI-12 (raw vs inferred capture modes); extended MI-6 with a subject-of-memory lens (about-user vs about-agent-self); added design §4.8–§4.11; extended the Ideas-to-Adopt ledger (lifecycle/normalization/directives/raw-mode adopted; cross-agent ACL + access log, open-vocabulary auto-categories, and declarative retention policy dispositioned as refinement candidates with their correct substrate/security home) and Nodus Relevance |
 | 0.2.0 | Added MI-7 (procedural distillation — end-of-run trajectory-to-memory) and MI-8 (structured filter predicate); extended MI-6 with actor attribution, caller-declared explicit expiry, and capture-time cross-reference; extended the Ideas-to-Adopt ledger and Nodus Relevance with the newly evaluated mechanics |
 | 0.1.0 | Initial RFC — active query/intelligence surface over the memory substrate (MI-1…MI-6) and its Ideas-to-Adopt ledger |
