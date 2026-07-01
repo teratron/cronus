@@ -55,6 +55,7 @@
 - <https://github.com/plastic-labs/honcho>
 - <https://github.com/NevaMind-AI/memU>
 - <https://github.com/agentscope-ai/ReMe>
+- <https://github.com/moorcheh-ai/memanto>
 
 ## Tools
 
@@ -73,6 +74,7 @@
 - <https://github.com/microsoft/autogen>
 - <https://github.com/agentscope-ai/agentscope-runtime>
 - <https://github.com/agentscope-ai/PawBench>
+- <https://github.com/headroomlabs-ai/headroom>
 
 ### Harness
 
