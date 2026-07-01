@@ -1,0 +1,82 @@
+name: Dependency Build Gate
+
+# Compile-checks the workspace whenever a dependency manifest or lockfile
+# changes — the guard that turns a silent "manifest bumped, code no longer
+# builds against the new API" into a red check. Triggered by dependency-bump
+# PRs (Dependabot) and by any direct edit to a manifest/lockfile.
+
+on:
+  push:
+    branches: [master]
+    paths:
+      - "**/Cargo.toml"
+      - "Cargo.lock"
+      - "rust-toolchain.toml"
+      - "**/package.json"
+      - "pnpm-lock.yaml"
+      - ".github/workflows/deps-gate.yml"
+  pull_request:
+    paths:
+      - "**/Cargo.toml"
+      - "Cargo.lock"
+      - "rust-toolchain.toml"
+      - "**/package.json"
+      - "pnpm-lock.yaml"
+      - ".github/workflows/deps-gate.yml"
+
+permissions:
+  contents: read
+
+concurrency:
+  group: deps-gate-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  CARGO_TERM_COLOR: always
+  RUST_BACKTRACE: 1
+
+jobs:
+  cargo:
+    name: cargo build (workspace, all targets)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      # rustup auto-installs the channel + components pinned in
+      # rust-toolchain.toml on the first cargo invocation below.
+      - name: Show pinned toolchain
+        run: rustup show
+
+      - uses: Swatinem/rust-cache@v2
+
+      # --all-targets also compiles the benches; --locked catches manifest ↔
+      # lockfile drift introduced by a bump. This is the primary gate: it is
+      # the step that would have caught the aes-gcm 0.10 → 0.11 API break.
+      - name: Build workspace (all targets, locked)
+        run: cargo build --workspace --all-targets --locked
+
+      - name: Clippy (deny warnings)
+        run: cargo clippy --workspace --all-targets --locked -- -D warnings
+
+      - name: Test workspace
+        run: cargo test --workspace --locked
+
+  pnpm:
+    name: pnpm install (frozen lockfile)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 11.9.0
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+
+      # --frozen-lockfile fails if a package.json bump was not reflected in
+      # pnpm-lock.yaml (or vice versa) — the JS analogue of --locked.
+      - name: Install (frozen lockfile)
+        run: pnpm install --frozen-lockfile
