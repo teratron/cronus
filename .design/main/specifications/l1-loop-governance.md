@@ -1,6 +1,6 @@
 # Loop Governance
 
-**Version:** 0.1.0
+**Version:** 0.2.0
 **Status:** RFC
 **Layer:** concept
 
@@ -45,6 +45,8 @@ defers to the concrete specs for everything they already own.
 - [l1-orchestration.md](l1-orchestration.md) — the /goal+judge+budget loop and ORC-11 error containment; one host of an execution loop.
 - [l1-version-control.md](l1-version-control.md) — VC-4 virtual-staging atomicity; the rollback mechanism behind an enforced immutable set.
 - [l2-loop-runner.md](l2-loop-runner.md) — the Layer-2 realization of this concept in the engine crates.
+- [l1-context-compression.md](l1-context-compression.md) — CC-9 protected regions and CC-10 memory-safe lossy reduction are the context-side mechanisms LG-10 composes so a continuous-session loop's objective survives compaction.
+- [l1-development-workflow.md](l1-development-workflow.md) — DW-5 (after a compaction event the durable ledger, not agent memory, is authoritative) is the progress-authority LG-10 generalizes from the dev workflow to any standing-goal loop.
 
 ## 1. Motivation
 
@@ -155,6 +157,25 @@ Layer 2 realizations and any conforming loop MUST honour these.
   advisory preference (it lowers cost and raises trust), not a hard gate — some
   done-conditions are irreducibly judgmental.
 
+- **LG-10 Objective persistence across in-session reduction.** [ADDED v0.2.0] LG-5
+  externalizes loop state and opens a *fresh context* each iteration. A continuous-session
+  loop that compacts **in place** — one long session whose transcript is summarized or
+  evicted mid-run rather than discarded at an iteration boundary — needs the complementary
+  guarantee: the **standing objective and its progress-state MUST be re-projected into
+  every turn from the durable slot**, so mid-session compaction or eviction can never drop
+  the north-star. The objective is a *per-turn projection*, not a transcript element a
+  reduction may lose. Two obligations follow: **(a) compaction-immune presence** — the
+  objective block is re-materialized each turn (a protected region per `l1-context-compression`
+  CC-9, and re-projected if evicted), never left to survive only as un-reduced history; and
+  **(b) idempotent, resumable objectives** — the objective is phrased, and its progress
+  tracked, so a turn that re-reads it *after* the supporting detail was compacted away
+  **resumes** correctly rather than restarting or redoing completed work. After any
+  reduction the authoritative progress source is the durable ledger, not the compacted
+  transcript (`l1-development-workflow` DW-5), and durable progress is captured *before* the
+  lossy reduction runs (`l1-context-compression` CC-10). This is the persistent-session
+  counterpart to LG-5's fresh-context-per-iteration: it makes an indefinitely-running
+  standing-goal loop safe under continuous compaction.
+
 ## 4. Detailed Design
 
 ### 4.1 The two loop classes
@@ -236,6 +257,22 @@ avoid context rot — signal lives in compact artifacts, not in an ever-growing 
 The evolution-loop variant of this is HE-8/HE-9 (the ANALYZE artifact loaded into a
 fresh context). The execution-loop variant is the plan/status pair reconstructed each
 attempt. Both are the same invariant at different grains.
+
+**Two realizations of externalized state (LG-5 vs LG-10).** There are two ways an
+externalized objective survives context reduction, and a loop uses whichever its runtime
+shape dictates:
+
+| Realization | When | Mechanism |
+| --- | --- | --- |
+| **Fresh-context per iteration** (LG-5) | discrete iteration boundaries (harness generations, task retries) | discard the transcript; reconstruct working context from plan+status artifacts |
+| **Continuous-session re-projection** (LG-10) | one long session that compacts in place (a standing-goal heartbeat, an indefinitely-running chat) | keep the compacting session; re-project the standing objective + progress into *every turn* from the durable slot, so compaction/eviction never drops it |
+
+They are the same principle — signal lives in durable artifacts, never only in the
+mutable transcript — applied to opposite runtime shapes. LG-10's continuous-session case
+is what makes "compaction cannot hide the goal" a contract rather than a hope: the
+objective is re-materialized every turn (CC-9 protected + re-projected), progress is
+captured before any lossy reduction (CC-10), and the durable ledger outranks the
+compacted transcript after the fact (DW-5).
 
 ### 4.5 Mutation manifest & ledger
 
@@ -373,6 +410,7 @@ already largely exists; the gaps are small):
 | Ceiling (LG-6) | `~UNTIL MAX:n` + step budget + `NODUS:MAX_REACHED` error code | Already present; the runner owns it, not the actor. |
 | Mutation ledger (LG-8) | `AuditProvider` event stream keyed by `run_id` + `step_index` | The content-free, step-indexed event taxonomy is the natural append-only ledger substrate (as DH-7/DH-8 already use). |
 | Escalation gate (LG-7) | `PolicyProvider` (gate) + `StorageProvider` (provisional-vs-promoted state) | The same pending-LP-3 traits DH-10 graduates; the loop runner is another consumer that exercises the two-host rule. |
+| Objective persistence (LG-10) | `@ctx:` section + EG-11 immutable invocation context | **Satisfied by construction**: a nodus run has no in-place transcript compaction and its `@ctx`/invocation context is present to every step unchanged, so the objective can never be "compacted away." LG-10 is a guarantee nodus already provides structurally — no nodus-side invariant needed, recorded here so the mapping is explicit. |
 
 ## Canonical References
 
@@ -383,9 +421,12 @@ already largely exists; the gaps are small):
 | `[AFS]` | `.design/main/specifications/l1-agent-framework-skeleton.md` | AFS-5/AFS-6/AFS-13 and §5.7 heartbeat — the loops this spec classifies. |
 | `[TASK-GRAPH]` | `.design/main/specifications/l1-task-graph-model.md` | TG-5/TG-13/TG-14 work source and guarded autonomous delivery for the execution loop. |
 | `[VC]` | `.design/main/specifications/l1-version-control.md` | VC-4 virtual-staging rollback enforcing the immutable set. |
+| `[CTX-COMPRESS]` | `.design/main/specifications/l1-context-compression.md` | CC-9 protected regions + CC-10 memory-safe reduction that LG-10 composes. |
+| `[DEV-WF]` | `.design/main/specifications/l1-development-workflow.md` | DW-5 ledger-authoritative-after-compaction that LG-10 generalizes. |
 
 ## Document History
 
 | Version | Date | Author | Notes |
 | --- | --- | --- | --- |
+| 0.2.0 | 2026-07-02 | Core Team | Added LG-10 (objective persistence across in-session reduction) + §4.4 two-realizations table + nodus-relevance row: LG-5 opens a fresh context per iteration; LG-10 is the persistent-session counterpart — a continuous-session loop that compacts in place MUST re-project the standing objective + progress into every turn from the durable slot so mid-session compaction/eviction can never drop the north-star (compaction-immune presence via CC-9 protected + re-projected-if-evicted), and the objective must be idempotent/resumable so a post-reduction turn resumes rather than restarts/redoes (durable progress captured before the lossy reduction, CC-10; the ledger outranks the compacted transcript after, DW-5). Satisfied by construction in nodus (no in-place compaction; `@ctx`/EG-11 immutable invocation context always present) — no nodus-side invariant. Stays RFC (additive; Stable gate unchanged). |
 | 0.1.0 | 2026-06-25 | Core Team | Initial RFC — LG-1…LG-9; two loop classes (execution/evolution) with composition rule; five-tier mutation-rights ladder with criteria-immutability spine; oracle-ownership contract (deterministic/independent/human, lineage-separation reduced-confidence) generalizing DH-11 to termination authority; state externalization; mutation manifest over a closed artifact taxonomy + append-only ledger; tier-escalation promotion gate; six-question loop design checklist; ideas-to-adopt + nodus-relevance mappings. Adversarial verification of the governance claims is the gate to Stable (mirrors the dynamic-harness sibling). |
