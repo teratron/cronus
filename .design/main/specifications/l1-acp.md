@@ -1,6 +1,6 @@
 # Agent Client Protocol (ACP)
 
-**Version:** 1.1.0
+**Version:** 1.2.0
 **Status:** Stable
 **Layer:** concept
 
@@ -17,6 +17,7 @@ ACP is the external-facing complement to the internal orchestration protocol: or
 - [l1-office-model.md](l1-office-model.md) — the office entity that hosts the ACP server endpoint
 - [l2-agent-session.md](l2-agent-session.md) — concrete daemon server implementation (`/acp` endpoint, Streamable HTTP transport)
 - [l1-global-orchestration.md](l1-global-orchestration.md) — cross-office ACP routing at the building level
+- [l1-work-liveness.md](l1-work-liveness.md) — WL-4 wake-coalescing (same-session messages serialize, not spawn a concurrent turn) and §4.3 cooperative STOP/PAUSE/RESUME preemption; ACP-10 steering is the fourth control verb (redirect) beside those, at the client-interaction grain.
 
 ## 1. Motivation
 
@@ -49,6 +50,8 @@ ACP defines these boundaries explicitly, enabling any conformant client to conne
 - **ACP-8 Monotonic event ordering** [ADDED v1.1.0]: every streamed event carries a **per-session monotonic sequence number** assigned in emission order. A client orders and deduplicates the event stream by sequence number, not by arrival order, and MUST tolerate a transport that reorders or redelivers. The terminal event carries the highest sequence number of its turn; a gap in the sequence signals dropped events and MUST be surfaced, not silently ignored. This makes stream ordering an explicit protocol contract rather than a property of a particular transport's delivery guarantees.
 
 - **ACP-9 Protocol projections are pure adapters** [ADDED v1.1.0]: one running session MAY be exposed simultaneously through several external protocol surfaces (e.g. a peer-agent protocol, a client-completion protocol, a UI-event protocol). Each surface is a **pure, logic-free adapter** over the single ACP event stream: it re-frames the same ordered events (ACP-8) into its own wire shape and MUST NOT add, drop, reorder, or reinterpret semantics, hold business logic, or fork session state. All surfaces bound to a session observe the identical event sequence. Adding a protocol is adding an adapter, never changing the office.
+
+- **ACP-10 Live steering — redirect without terminate** [ADDED v1.2.0]: distinct from interrupt (ACP-6, which drains to a *partial terminal* event and *ends* the turn), a client MAY inject a **steering message** into an in-progress turn to *redirect* it without stopping it. The office absorbs the message at the **next safe boundary** — after the current atomic step completes, never mid-step (ORC-5) — and the turn **continues, redirected**, rather than terminating. When the model has planned a batch of actions and steering arrives partway through, the **not-yet-started** planned actions are **cancelled**, each surfaced to the model as an explicit *skipped-superseded-by-new-guidance* result — **never silently completed** (so a redirect like "don't send it" actually prevents the pending side effect rather than racing it) and **never silently dropped** (so the model knows exactly which planned actions did not run and can re-plan). Steering is **session-scoped**: a steering message resolves to exactly one live turn's queue and can never be injected into a different conversation, peer, or office. Same-session messages arriving during a live turn **serialize** into that turn's steering queue — they redirect the one live turn, never spawn a concurrent duplicate (the wake-coalescing of `l1-work-liveness` WL-4) — while different-session messages run concurrently. The steering queue is bounded; on overflow the office rejects the steer visibly, never silently discards it or lets it leak into the wrong turn.
 
 ## 4. Detailed Design
 
@@ -87,6 +90,8 @@ Client                                    ACP Server (Office)
 | `error` | Unrecoverable error for this turn; session remains valid | Yes |
 | `budget_exhausted` | Token/cost budget consumed; office entering hibernation | Yes |
 | `interrupted` | Turn interrupted by client signal (ACP-6); session resumable | Yes |
+| `steering` | Client-injected message redirecting the live turn (ACP-10); turn continues | No |
+| `action_skipped` | A not-yet-started planned action cancelled by steering, surfaced to the model (ACP-10) | No |
 
 ### 4.3 Capability Declaration
 
@@ -145,6 +150,41 @@ never widen a caller's capabilities. This lets a single office answer peer agent
 generic completion clients, and UI front-ends concurrently, each in its native
 protocol, with zero logic duplication and one source of truth for session state.
 
+### 4.7 Live Steering [ADDED v1.2.0]
+
+Interrupt (§4.1, ACP-6) *stops* a turn; steering (ACP-10) *redirects* it. The office
+polls the session-scoped steering queue at safe boundaries and, on a hit, cancels the
+pending planned actions and re-plans — the turn never terminates.
+
+```text
+[REFERENCE]
+run_turn(session):
+    poll_steer(session)                         // at loop start — catch messages queued during setup
+    loop:
+        plan := model_call(context)             // model plans a batch of actions
+        for action in plan.actions:
+            if steer := poll_steer(session):    // check AFTER each action completes, at the boundary
+                for pending in plan.remaining_after(action):
+                    emit action_skipped(pending, "superseded by new guidance")  // never run, never silent
+                inject(context, steer)          // ACP-10: absorb the steering message
+                break                            // re-plan against new guidance — turn CONTINUES
+            result := execute(action)            // current action runs to completion — never cut mid-step (ORC-5)
+        else:
+            if steer := poll_steer(session): continue   // steer at turn end → continuation, not orphaned
+            finalize(turn)                       // finalize only when no steer is pending
+```
+
+Polling points: loop start, after every action, after a direct (non-action) model
+response, and just before finalization — so a steer can never be orphaned in the queue
+behind a completing turn. The in-flight action is never cut mid-execution (ORC-5 atomic
+step); steering acts only at the boundary. Because each cancellation is surfaced as an
+`action_skipped` event, the model re-plans knowing exactly what did and did not happen —
+steering is a redirect the agent *understands*, not a silent rug-pull. Scoping (ACP-10)
+is enforced by resolving the steer to the routed session key *before* enqueue, so a
+message from another chat can never land in this turn. Under a trust level (§4.4), a
+`restricted` caller may steer only within its declared capability set — steering never
+widens authority, it only redirects within it.
+
 ## 5. Implementation Notes
 
 1. The concrete ACP transport for the daemon server is Streamable HTTP (`POST /acp`, Server-Sent Events for streaming) per `l2-agent-session.md`.
@@ -172,5 +212,6 @@ protocol, with zero logic duplication and one source of truth for session state.
 
 | Version | Date | Author | Notes |
 | --- | --- | --- | --- |
+| 1.2.0 | 2026-07-02 | Core Team | Added ACP-10 (live steering — redirect without terminate) + §4.7 + `steering`/`action_skipped` events: distinct from interrupt (ACP-6, which drains to a partial terminal and ends the turn), a client MAY inject a steering message that redirects an in-progress turn without stopping it, absorbed at the next safe boundary (after the current atomic step, never mid-step ORC-5); not-yet-started planned actions are cancelled and surfaced to the model as skipped-superseded (never silently completed so a "don't send it" redirect prevents the pending side effect, never silently dropped so the model re-plans knowingly); session-scoped so a steer can never leak into another conversation; same-session messages serialize into the one live turn's steering queue (WL-4 wake-coalescing) while different sessions run concurrently; bounded queue rejects on overflow visibly. The fourth client-interaction control verb (redirect) beside interrupt/stop/pause/resume. No nodus analog (nodus workflows are fixed deterministic programs, not redirectable with new arbitrary guidance). |
 | 1.1.0 | 2026-07-01 | Core Team | Added ACP-8 (per-session monotonic event ordering — order/dedup by sequence, transport-reorder-tolerant, gap = dropped events) and ACP-9 (protocol projections are pure logic-free adapters; N surfaces over one session observe the identical event sequence); new §4.6 Protocol Projections (one session projected under peer-agent / client-completion / UI-event protocols concurrently, capabilities+trust enforced once beneath all projections). |
 | 1.0.0 | 2026-06-24 | Core Team | Initial spec — ACP-1…ACP-7, session lifecycle, streaming event taxonomy, capability declaration, trust levels, cross-office routing |
