@@ -1,6 +1,6 @@
 # Nodus Execution Observability
 
-**Version:** 1.2.0
+**Version:** 1.3.0
 **Status:** Stable
 **Layer:** concept
 
@@ -53,6 +53,8 @@ Rules that Layer 2 implementations MUST NOT violate:
 - **HO-7 Monotonic sequence & correlation** [ADDED v1.1.0]: every emitted event carries (a) a run-monotonic **sequence number** assigned in strict emission order and (b) a **correlation id** shared by all events of the same logical run. Consumers order and deduplicate a multiplexed or reordered event stream by `(correlation_id, sequence)` alone — never by arrival order or wall-clock time (reinforces HO-3 append-only ordering without imposing a transport). Sequence is dense and gap-free within a run; a gap signals dropped events. This makes ordering an explicit contract rather than an emergent property of synchronous emission, so an async or buffered audit sink remains correct.
 
 - **HO-8 Cost-attribution token classes** [ADDED v1.2.0]: a `model_response` event carries a **token-class breakdown** — fresh `input`, `output`, and, when the host provider reports them, `cache_read` and `cache_creation` — as distinct fields, not a single opaque total. Because a cached-prefix read is billed at a fraction of fresh input, collapsing these into one number makes cost un-attributable and a cache regression invisible. The classes are optional (a provider that reports only a total leaves the cache fields absent, never zero-faked) and remain within the data-safety boundary (§4.4 — counts only, never content). This lets a host compute per-run and per-step cost from the trace alone, and lets an outer loop detect a cache-warmth regression from telemetry rather than from an invoice.
+
+- **HO-9 Execution-authenticity receipt** [ADDED v1.3.0]: a step's execution event MAY carry a **host-supplied, model-unforgeable receipt** binding the step's identity and its observed result, so a downstream verifier can tell a genuine step result from a fabricated one and a narration cannot claim a step ran that did not. The signing/verification mechanism is **host-supplied** (LP-2 style — no cryptographic dependency in the nodus core, mirroring the LP-9 attestation seam); the receipt is an **opaque, secret-free token** that crosses the data-safety boundary (§4.4) like any other counts-only descriptor — the signing secret is never placed in a trace, a prompt, or the model's context. Receipts are optional and additive: a host that supplies no receipt provider emits events unchanged, so observer neutrality (HO-5) is preserved. Like HO-8, this extends existing event records with an optional field rather than adding an event type (HO-6). This is the nodus realization of the main `l1-tool-receipts` execution-authenticity contract — the workflow-side witness that a step's result is real, host-supplied exactly as the LP-9 attestation witness is.
 
 ## 4. Detailed Design
 
@@ -197,6 +199,7 @@ This section is the projection substrate the environment/trajectory contract
 
 | Version | Date | Author | Notes |
 | --- | --- | --- | --- |
+| 1.3.0 | 2026-07-02 | Core Team | Added HO-9 (execution-authenticity receipt) — a step's execution event MAY carry a host-supplied, model-unforgeable receipt binding step identity + observed result, so a verifier distinguishes a genuine step result from a fabricated one; signing mechanism host-supplied (LP-2, no crypto in core, mirroring the LP-9 attestation seam), receipt an opaque secret-free token within the data-safety boundary (signing secret never in trace/prompt/context), optional + additive so HO-5 observer neutrality holds, an optional field on existing events not a new event type (HO-6). The nodus realization of the new main l1-tool-receipts execution-authenticity contract. L1 stays Stable (C9); l2-nodus-observability carries HO-9 as a pending Invariant-Compliance obligation reconciled at magic.task. |
 | 1.2.0 | 2026-07-02 | Core Team | Added HO-8 (cost-attribution token classes on model_response — fresh input/output plus optional cache_read/cache_creation as distinct fields, counts-only within the data-safety boundary) so per-run/per-step cost is computable from the trace and a cache-warmth regression is detectable from telemetry, not the invoice. Event taxonomy §4.2 model_response fields extended. |
 | 1.1.0 | 2026-07-01 | Core Team | Added HO-7 (monotonic sequence + correlation id ordering contract) and §4.6 (sequence/correlation fields, run-scoped correlation binding, streaming chunk-merge into one logical model_response). Ordering is now an explicit `(correlation_id, seq)` contract, enabling async/buffered audit sinks; underpins the trajectory projection in l1-nodus-environment.md. |
 | 1.0.0 | 2026-06-24 | Core Team | Initial spec — HO-1…HO-6, AuditProvider role, event taxonomy, run manifest, data safety boundary, frozen-vs-evolvable boundary |
