@@ -121,3 +121,4 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Added specification `context-attachment` (main)
 - Added specification `model-benchmarking` (main)
 - Added specification `crash-recovery` (main)
+- Added specification `parallel-staffing` (main)
