@@ -1,0 +1,29 @@
+# Security advisory exceptions for this crate.
+# Consumed by `cargo audit` (https://github.com/rustsec/rustsec).
+
+[advisories]
+ignore = [
+    # RUSTSEC-2024-0429 (GHSA-wrw7-89jp-8q8g): unsound `glib::VariantStrIter`
+    # iterator impls in `glib` < 0.20.0, fixed in `glib` 0.20.0.
+    #
+    # `glib` is a transitive dependency pulled in only for the Linux/GTK3
+    # webview backend:
+    #   tauri -> wry -> gtk 0.18.2 -> glib 0.18.5
+    # `gtk` (GTK3 bindings) is unmaintained upstream and frozen at 0.18.2,
+    # which pins `glib` to the 0.18 line. No `gtk` release exists that is
+    # compatible with `glib` >= 0.20, so this cannot be resolved locally
+    # until tauri/wry migrate their Linux backend off gtk3-rs.
+    #
+    # The affected code (glib::VariantStrIter) is never compiled for our
+    # shipped target (Windows, WebView2), and Linux bundling is currently
+    # inactive (see tauri.conf.json bundle.active). Re-evaluate once
+    # tauri/wry ship a gtk4-based Linux backend.
+    "RUSTSEC-2024-0429",
+]
+
+# Причина найдена и задокументирована — исправить обновлением версии нельзя, это тупик в апстриме:
+# glib 0.18.5 тянется транзитивно: tauri → wry → gtk 0.18.2 → glib 0.18.5, и только для Linux/webkit2gtk-бэкенда (на Windows/WebView2 вообще не компилируется).
+# Крейт gtk (GTK3-биндинги) официально unmaintained и заморожен на 0.18.2, привязан к glib 0.18.x. Более новой версии gtk, совместимой с glib ≥ 0.20, не существует — обновить нечем, пока tauri/wry не мигрируют на gtk4.
+# Создан apps/desktop/tauri/audit.toml с игнором RUSTSEC-2024-0429 и подробным обоснованием (цепочка зависимостей, почему это тупик, почему код не эксплуатируется в вашей реальной Windows-сборке). Изменений в Cargo.toml/Cargo.lock не делал — их и не требовалось, чинить там нечего.
+# Также сохранил контекст в память проекта, чтобы при следующем упоминании этого алерта не пришлось заново разбираться в цепочке зависимостей.
+# Что дальше: если появится намерение реально паковать Linux-сборки, стоит периодически проверять cargo tree -i glib --target x86_64-unknown-linux-gnu в этой директории — как только wry/tauri перейдут на gtk4-бэкенд, gtk 0.18.2 уйдёт из дерева, и запись в audit.toml можно будет удалить.
