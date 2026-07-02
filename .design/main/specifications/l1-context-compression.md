@@ -1,6 +1,6 @@
 # Context Compression
 
-**Version:** 1.0.0
+**Version:** 1.1.0
 **Status:** Stable
 **Layer:** concept
 
@@ -15,6 +15,7 @@ A token-economy technique that re-encodes high-volume content into a denser form
 - [l1-code-intelligence.md](l1-code-intelligence.md) - CI-6 budget-bounded context assembly with compression accounting; this concept defines the compression that accounting measures.
 - [l1-tool-composition.md](l1-tool-composition.md) - Tool/nested-call outputs are the dominant compressible content.
 - [l2-agent-session.md](l2-agent-session.md) - The turn loop where compression is applied before the context budget is enforced.
+- [l1-cache-stable-context.md](l1-cache-stable-context.md) - Compression is a live-zone-only transform; it MUST NOT mutate the cached frozen prefix (CSC-2). Cache stability constrains *where* compression may act; this spec constrains *what* it does there.
 
 ## 1. Motivation
 
@@ -41,6 +42,8 @@ Rules every Layer 2 implementation MUST NOT violate:
 - **CC-6 (Accounted):** every compression is measured — tokens before, tokens after, transform applied — and the saving is reported (the accounting CI-6 assumes). Compression that cannot be measured cannot be trusted or tuned.
 - **CC-7 (Ordering before eviction):** compression runs before the selection/summarization cascade. Budget pressure is first relieved by re-encoding redundant content; only content that is still over budget after compression is subject to trimming or summarization.
 - **CC-8 (Composable & idempotent-safe):** transforms may stack, but stacking MUST NOT corrupt content or double-compress unsafely; re-applying compression to already-compressed content is a no-op or a declared further reduction, never garbling.
+
+- **CC-9 (Protected-region deny-list):** [ADDED v1.1.0] eligibility (CC-4) is overridden by a hard deny-list that is never compressed regardless of size or redundancy: (a) content the caller explicitly tags as protected, (b) safety-critical content whose exact form is load-bearing, and (c) cryptographic signatures and encrypted/redacted reasoning payloads. The deny-list is checked first; a size or redundancy heuristic can never promote a denied region into eligibility. This makes the fidelity guarantee (CC-2) unconditional for regions where any loss is unacceptable, and aligns with the sacrosanct-field rule of the cache-stability contract (`l1-cache-stable-context.md` CSC-7).
 
 > L2 specs cannot reach RFC status until all invariants here are addressed in their "Invariant Compliance" section.
 
@@ -74,6 +77,32 @@ A policy classifies content: high-volume structured output → compress (prefer 
 
 When compressed content is sent, the model either reads the dense form directly or sees a marker indicating compression with a way to request the original (CC-5). Expansion-on-demand routes back to the recoverable original (CC-3).
 
+### 4.5 Reversibility Realization — Compress-Cache-Retrieve [ADDED v1.1.0]
+
+CC-3 (recoverable original) is realized concretely by a **compress-cache-retrieve**
+mechanism rather than by keeping the original inline:
+
+```text
+[REFERENCE]
+compress(content):
+    dense, dropped := transform(content)          // lossy on the wire
+    handle := hash(content)                         // stable content-addressed key
+    store.put(handle, content)                      // stash the ORIGINAL, keyed by handle
+    return dense + marker(handle)                   // CC-5: dense form carries a retrieval handle
+
+retrieve(handle):                                   // a first-class tool the model may call
+    return store.get(handle)  or  MISS              // serves the original back on demand
+```
+
+Properties that make this safe and cheap: the wire form is lossy but the end-to-end
+path is lossless (the original is one `retrieve(handle)` away); the store is a
+pluggable backend (in-memory for tests, durable for production) with a TTL bounding
+the recoverability *lifetime* CC-3 references; a store-init failure is surfaced, never
+silently downgraded to "recovery unavailable." The retrieval handle is a normal tool
+call, so expansion-on-demand (CC-5) needs no special protocol — the model asks for the
+original exactly as it asks for anything else. The compressed placeholder and its
+handle live in the live zone only (`l1-cache-stable-context.md` CSC-2).
+
 ## 5. Drawbacks & Alternatives
 
 - **Fidelity risk:** an over-aggressive transform can drop information the agent needed; mitigated by CC-2 (bounded, declared loss), CC-3 (recoverable original), and CC-4 (conservative eligibility). The safe default is lossless.
@@ -93,4 +122,5 @@ When compressed content is sent, the model either reads the dense form directly 
 
 | Version | Date | Author | Notes |
 | --- | --- | --- | --- |
+| 1.1.0 | 2026-07-02 | Core Team | Added CC-9 (protected-region deny-list — caller-tagged / safety-critical / crypto-thinking content never compressed regardless of size, overriding CC-4 eligibility) and §4.5 (compress-cache-retrieve realization of CC-3 — content-addressed retrieval handle + pluggable store + TTL, lossy-on-wire/lossless-end-to-end, retrieval as a normal tool call). Linked to l1-cache-stable-context (compression is a live-zone-only transform, CSC-2). |
 | 1.0.0 | 2026-06-26 | Core Team | Initial spec — context compression as the third token-economy stage beside selection and summarization: reversible/fidelity-bounded dense re-encoding of high-volume content, recoverable originals, content-aware eligibility, model legibility, accounting, ordering-before-eviction, composable-safe stacking (CC-1…CC-8). |

@@ -1,6 +1,6 @@
 # Nodus Execution Observability
 
-**Version:** 1.1.0
+**Version:** 1.2.0
 **Status:** Stable
 **Layer:** concept
 
@@ -52,6 +52,8 @@ Rules that Layer 2 implementations MUST NOT violate:
 
 - **HO-7 Monotonic sequence & correlation** [ADDED v1.1.0]: every emitted event carries (a) a run-monotonic **sequence number** assigned in strict emission order and (b) a **correlation id** shared by all events of the same logical run. Consumers order and deduplicate a multiplexed or reordered event stream by `(correlation_id, sequence)` alone — never by arrival order or wall-clock time (reinforces HO-3 append-only ordering without imposing a transport). Sequence is dense and gap-free within a run; a gap signals dropped events. This makes ordering an explicit contract rather than an emergent property of synchronous emission, so an async or buffered audit sink remains correct.
 
+- **HO-8 Cost-attribution token classes** [ADDED v1.2.0]: a `model_response` event carries a **token-class breakdown** — fresh `input`, `output`, and, when the host provider reports them, `cache_read` and `cache_creation` — as distinct fields, not a single opaque total. Because a cached-prefix read is billed at a fraction of fresh input, collapsing these into one number makes cost un-attributable and a cache regression invisible. The classes are optional (a provider that reports only a total leaves the cache fields absent, never zero-faked) and remain within the data-safety boundary (§4.4 — counts only, never content). This lets a host compute per-run and per-step cost from the trace alone, and lets an outer loop detect a cache-warmth regression from telemetry rather than from an invoice.
+
 ## 4. Detailed Design
 
 ### 4.1 AuditProvider Role
@@ -83,7 +85,7 @@ A host project plugs in an `AuditProvider` implementation that persists events t
 | `macro_enter` | When `RUN(@macro_name)` begins execution | `macro_name`, `call_step_index` |
 | `macro_exit` | When a macro body completes | `macro_name`, `call_step_index`, `elapsed_ms` |
 | `model_call` | Immediately before dispatching to the ModelProvider | `step_index`, `command`, `input_summary` (no raw text — §4.4) |
-| `model_response` | Immediately after the ModelProvider returns | `step_index`, `command`, `output_summary`, `elapsed_ms` |
+| `model_response` | Immediately after the ModelProvider returns | `step_index`, `command`, `output_summary`, `elapsed_ms`, token classes `input`/`output`/`cache_read?`/`cache_creation?` (HO-8) |
 
 > New event types added in future minor versions must not reuse existing type names.
 
@@ -195,5 +197,6 @@ This section is the projection substrate the environment/trajectory contract
 
 | Version | Date | Author | Notes |
 | --- | --- | --- | --- |
+| 1.2.0 | 2026-07-02 | Core Team | Added HO-8 (cost-attribution token classes on model_response — fresh input/output plus optional cache_read/cache_creation as distinct fields, counts-only within the data-safety boundary) so per-run/per-step cost is computable from the trace and a cache-warmth regression is detectable from telemetry, not the invoice. Event taxonomy §4.2 model_response fields extended. |
 | 1.1.0 | 2026-07-01 | Core Team | Added HO-7 (monotonic sequence + correlation id ordering contract) and §4.6 (sequence/correlation fields, run-scoped correlation binding, streaming chunk-merge into one logical model_response). Ordering is now an explicit `(correlation_id, seq)` contract, enabling async/buffered audit sinks; underpins the trajectory projection in l1-nodus-environment.md. |
 | 1.0.0 | 2026-06-24 | Core Team | Initial spec — HO-1…HO-6, AuditProvider role, event taxonomy, run manifest, data safety boundary, frozen-vs-evolvable boundary |

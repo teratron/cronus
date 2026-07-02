@@ -1,6 +1,6 @@
 # Smart Routing
 
-**Version:** 1.1.0
+**Version:** 1.2.0
 **Status:** Stable
 **Layer:** concept
 
@@ -15,6 +15,7 @@ The technology-agnostic model of Cronus's "smart routers" — one selection patt
 - [l1-architecture.md](l1-architecture.md) - Hub-and-spoke and security (INV-7) constrain model routing.
 - [l2-model-router.md](l2-model-router.md) - Model selection (local-first, cost/difficulty, fallback, cache).
 - [l2-context-router.md](l2-context-router.md) - Memory, rules, and session routing.
+- [l1-cache-stable-context.md](l1-cache-stable-context.md) - Cache-warmth is a routing signal (RTG-10): a continuing session prefers its prior lane so its cached prefix stays valid; lane choice must not void a credential scope (CSC-9).
 
 ## 1. Motivation
 
@@ -41,6 +42,8 @@ Rules every Layer 2 implementation MUST NOT violate:
 - **RTG-8 (Lifecycle routing):** session routing decides continue-vs-new and retires stale sessions (consistent with MEM-5).
 - **RTG-9 (Function-scoped model roles):** internal LLM chores — conversation titling, trigger triage, task decomposition, profile description, history summarization/compression, memory curation, vision interpretation, approval checks, and similar housekeeping — resolve their serving model through dedicated, independently-configurable *auxiliary roles*, not the user-facing model route. Each role binds to a model by configurable policy (RTG-5) with an economical default and an ordered fallback (RTG-2), and honors privacy routing (RTG-6). A housekeeping function MUST NOT consume the premium user-facing model by default. Auxiliary-role resolution is traceable (RTG-7) like any routing decision.
 
+- **RTG-10 (Credential-lane routing — cache-warm, scope-safe):** [ADDED v1.2.0] when the same model is reachable through more than one **credential lane** (a metered API key vs a subscription or borrowed-session credential), the lane is a first-class routing signal, not an afterthought. Two rules bind lane selection: (a) **cache warmth** — a continuing session prefers the lane/upstream it used before, because a lane switch abandons the provider-side cached prefix and forfeits its discount (composes with `l1-cache-stable-context.md`); (b) **scope safety** — lane selection MUST NOT leak or invalidate the chosen credential's scope: no injecting lane-revealing headers, no auto-actions (e.g. auto-inserting provider cache markers) that could void a subscription's terms. When a cheaper lane is available but switching would bust a warm cache, the router weighs the cache-read saving against the per-token delta rather than switching blindly, and records the decision (RTG-7).
+
 > L2 specs cannot reach RFC status until all invariants here are addressed in their "Invariant Compliance" section.
 
 ## 4. Detailed Design
@@ -63,7 +66,7 @@ graph TD
 
 | Router | Chooses | Key signals |
 | --- | --- | --- |
-| model | which LLM answers a user prompt | task difficulty, cost, token count, capability, latency, quota, local feasibility |
+| model | which LLM answers a user prompt | task difficulty, cost, token count, capability, latency, quota, local feasibility, credential lane + cache warmth (RTG-10) |
 | auxiliary | which model serves an internal function (titling, triage, decomposition, profiling, summarization, curation, vision, approval) | function identity, cost, latency, capability, local feasibility |
 | memory | which memories to recall / where to write | scope specificity, similarity, tags, utility |
 | rules | which rules apply to a context | scope specificity (global/workspace/role) |
@@ -116,3 +119,4 @@ Decoupling these roles keeps housekeeping cheap and the user-facing budget intac
 | --- | --- | --- |
 | 1.0.0 | 2026-06-24 | Initial stable spec — router pattern (multi-signal selection + fallback + cache), RTG-1…RTG-8, model/memory/rules/session applications |
 | 1.1.0 | 2026-06-25 | RTG-9 added — function-scoped model roles: internal LLM chores (titling, triage, decomposition, profiling, summarization/compression, curation, vision, approval) resolve through dedicated economical-by-default auxiliary bindings, never the premium user-facing route by default. `auxiliary` routing application added to §4.2; §4.3 default extended; §4.4 added. Additive invariant — the four L2 implementers (l2-model-router, l2-context-router, l2-agent-session, l2-model-error-recovery) carry RTG-9 as unaddressed pending a `magic.task` reconciliation; L1 remains Stable (no destabilization cascade). |
+| 1.2.0 | 2026-07-02 | RTG-10 added — credential-lane routing: when one model is reachable via multiple credential lanes (metered API vs subscription/session), lane is a first-class signal bound by cache-warmth (a continuing session prefers its prior lane to keep the provider cached prefix valid) and scope-safety (lane choice never leaks or voids a credential scope; no auto cache-marker injection). `model` router signals extended in §4.2; composes with l1-cache-stable-context (CSC-9). Additive — L1 stays Stable; L2 model-router carries RTG-10 pending a magic.task reconciliation. |

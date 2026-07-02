@@ -1,6 +1,6 @@
 # Nodus DSL Testing Contract
 
-**Version:** 1.0.1
+**Version:** 1.1.0
 **Status:** Stable
 **Layer:** concept
 
@@ -16,6 +16,7 @@ The testing facility is language-level: it is syntax that any conforming impleme
 - [l2-nodus-runtime.md](l2-nodus-runtime.md) — Rust runtime; `Executor`, `RunResult`
 - [l2-nodus-testing.md](l2-nodus-testing.md) — Rust implementation of this spec; `TestBlock`, `test()`/`test_with_tags()`, assertion evaluator, NT-1…NT-10 compliance table
 - [l1-nodus-observability.md](l1-nodus-observability.md) — observability contract; test runs emit execution events under the same protocol
+- [l1-nodus-portability.md](l1-nodus-portability.md) — LP-3 two-host generalisation; NT-11 differential parity is its executable form (one workflow, two conforming paths, equal results)
 
 ## 1. Motivation
 
@@ -49,6 +50,8 @@ Rules that Layer 2 implementations MUST NOT violate:
 - **NT-8 Schema inheritance**: test blocks run under the same vocabulary schema that governs the parent workflow (declared in `§runtime: { core: … }`); a test block cannot extend or replace the schema for its own run.
 - **NT-9 Parse-time validation**: a `@test:` block that references a variable that cannot exist in the parent workflow (e.g., a name not declared in `@in:`, `@out:`, or any `→ $name` step) must produce a validation error, not a silent assertion-miss at run time; the block fails before execution.
 - **NT-10 Route coverage advisory**: a workflow that declares one or more `ROUTE(wf:name)` steps SHOULD have at least one `@test:` block that exercises each routed target; absence of coverage emits a warning-severity diagnostic code `W001`; this is advisory and does not block execution.
+
+- **NT-11 Differential parity across execution paths**: [ADDED v1.1.0] when a workflow can be executed through more than one conforming path — the reference interpreter and a transpiled realization, or two independent hosts that satisfy the same capability manifest — those paths MUST produce **equal observable results** on a recorded fixture corpus: the same `@out:`/`@err:` bindings and the same trace event *shape* (event types, order, per-step attribution), modulo values a fixture explicitly declares non-deterministic. Parity is verified by recording a fixture (input + config + observed output) from one path and replaying it against the other; the determinism this contract already guarantees (block isolation NT-1, side-effect-free provider NT-5, and the observability contract's deterministic ordering) makes exact-match a viable gate. A divergence is a defect in the diverging path — not a test-authoring problem — and is reported against that path, not the fixture. This is the executable form of the portability two-host generalisation rule (`l1-nodus-portability.md` LP-3): a path is a valid realization only if it is parity-equal to the reference on the corpus.
 
 ## 4. Detailed Design
 
@@ -132,6 +135,35 @@ A test runner MAY accept a tag predicate at call time (e.g., `tags: ["smoke"]`) 
 | `W006` | Warning | `ROUTE(wf:x)` step with no `@test:` block exercising it (NT-10); code pre-exists and is re-used here |
 | `W009` | Warning | `@test:` block with no `expected:` section (block will pass trivially on `Status::Ok`) |
 
+### 4.7 Differential Parity Harness [ADDED v1.1.0]
+
+Parity (NT-11) is a *harness-level* check that reuses the same fixtures the inline
+`@test:` blocks describe, run through two paths and diffed:
+
+```text
+[REFERENCE]
+Fixture := { workflow, input, config, output, trace_shape, recorded_at, input_sha256 }
+
+record(path_A, workflow, input, config):                 // capture from the reference path
+    result := run(path_A, workflow, input, config)
+    return Fixture{ …, output: result.vars, trace_shape: shape(result.events) }
+
+check_parity(fixture, path_B):
+    result := run(path_B, fixture.workflow, fixture.input, fixture.config)
+    if result.vars != fixture.output:            return Diff(vars, …)      // NT-11 output parity
+    if shape(result.events) != fixture.trace_shape: return Diff(trace, …)  // NT-11 trace parity
+    return Match
+```
+
+Properties: fixtures are content-addressed (`input_sha256`) so a changed input is a
+new fixture, never a silent overwrite; a comparator is per-path and reports the first
+divergence with both sides; declared non-deterministic fields are excluded from the
+diff rather than making parity impossible. The corpus is normative — the same
+`crates/nodus/tests/fixtures/` corpus the inline runner uses — so interpreter and
+transpiler are held to one ground truth. Parity does **not** replace `@test:` blocks
+(which assert *correctness* against authored expectations); it asserts *equivalence*
+between realizations of an already-correct workflow.
+
 ## 5. Drawbacks & Alternatives
 
 - **Inline vs. external test files**: external test files (e.g., `*.test.nodus`) allow larger test suites without growing the workflow source. Rejected for the base contract because co-location eliminates synchronisation drift and external files would need to import the workflow schema — reintroducing the coupling problem inline tests avoid. External suites are a host-level extension, not a language invariant.
@@ -151,5 +183,6 @@ A test runner MAY accept a tag predicate at call time (e.g., `tags: ["smoke"]`) 
 
 | Version | Date | Change |
 | --- | --- | --- |
+| 1.1.0 | 2026-07-02 | Added NT-11 (differential parity across execution paths — interpreter↔transpiler or two conforming hosts must produce equal observable results, output + trace shape, on a recorded fixture corpus; the executable form of portability LP-3) and §4.7 differential-parity harness (content-addressed fixtures, per-path comparators, declared-non-determinism exclusion, shared normative corpus). Parity asserts equivalence between realizations, complementary to `@test:` correctness assertions. Related Specifications extended with l1-nodus-portability. |
 | 1.0.1 | 2026-06-24 | §4.6: corrected diagnostic codes — W006 (pre-existing ROUTE coverage) replaces spec-proposed W001; W009 (new no-expected advisory) replaces spec-proposed W002 to avoid conflict with existing validator codes |
 | 1.0.0 | 2026-06-24 | Initial spec — NT-1…NT-10 invariants, block structure, execution protocol, assertion semantics, TestReport contract, tag filtering, validation diagnostics |
