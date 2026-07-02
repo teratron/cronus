@@ -1,6 +1,6 @@
 # Nodus Portability and Extension Contract
 
-**Version:** 1.1.0
+**Version:** 1.2.0
 **Status:** Stable
 **Layer:** concept
 
@@ -62,7 +62,7 @@ Rules that every implementation of this spec (and its host projects) MUST NOT vi
 
 - **LP-8 Capability manifest & pre-run satisfiability**: a workflow declares, in its definition, the set of extension-point roles and named capabilities it requires to execute — for example a model provider, durable storage, a specific audit sink, or named commands drawn from a host schema layer (§4.4). Before execution begins, the runtime validates this manifest against the capabilities the active host actually provides. If any required capability is unsatisfiable, the workflow is rejected fail-fast with a diagnostic naming the missing capability; a partially-capable run never starts. The same manifest is the contract checked when a workflow moves between hosts (LP-3): a workflow is portable to a second host only if that host satisfies its manifest. The manifest references roles from the §4.1 taxonomy and never names a concrete host type (LP-1).
 
-## 4. Detailed Design
+- **LP-9 Extraction attestation**: [ADDED v1.2.0] the extraction deliverables (§4.5) — the portable library bundle and its accompanying capability manifest — carry an **independently-verifiable witness** binding the bundle's exact content set and its version. A host verifies the witness **before loading** an imported workflow bundle, and refuses it fail-closed when the witness is missing where required or fails verification (tampered content, unknown signer, superseded). The signing and verification mechanism is **host-supplied** (LP-2), so the library core carries no cryptographic dependency and stays host-neutral; the witness, like the manifest, never names a concrete host type (LP-1). This is the nodus realization of the host attestation contract: a workflow library that moves between hosts (LP-3) proves its integrity and authorship on arrival, rather than being trusted because of how it was fetched.
 
 ### 4.1 Extension Point Taxonomy
 
@@ -192,6 +192,7 @@ The LP-invariants are evaluated in the order that minimises rework:
 
 | Version | Date | Author | Notes |
 | --- | --- | --- | --- |
+| 1.2.0 | 2026-07-02 | Core Team | Added LP-9 (extraction attestation) — the extraction bundle + capability manifest carry an independently-verifiable witness binding exact content-set + version; a host verifies before loading an imported workflow bundle and refuses fail-closed on missing/failed witness; signing/verification mechanism host-supplied (LP-2, no crypto dependency in core), witness never names a host type (LP-1). The nodus realization of the host attestation contract (main l1-attestation AT-1/AT-2/AT-6); a library moving between hosts (LP-3) proves integrity+authorship on arrival. |
 | 1.1.0 | 2026-06-26 | Core Team | Added LP-8 (capability manifest + pre-run satisfiability validation, fail-fast); new §4.6; manifest reframed as the machine-checkable LP-3 portability contract. |
 | 1.0.1 | 2026-06-24 | Core Team | AuditProvider row filled — references l1-nodus-observability.md; PolicyProvider TBD refined |
 | 1.0.0 | 2026-06-24 | Core Team | Initial spec — portability contract, LP-1…LP-7, extension taxonomy, feedback lifecycle |

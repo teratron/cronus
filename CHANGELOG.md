@@ -106,3 +106,4 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Updated specification `nodus-environment` (nodus)
 - Added specification `context-provenance` (main)
 - Updated specification `nodus-language` (nodus)
+- Updated specification `nodus-portability` (nodus)

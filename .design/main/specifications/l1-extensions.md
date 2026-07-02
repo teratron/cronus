@@ -1,6 +1,6 @@
 # Extensions
 
-**Version:** 1.1.0
+**Version:** 1.2.0
 **Status:** Stable
 **Layer:** concept
 
@@ -16,6 +16,7 @@ The technology-agnostic model of how Cronus is extended with new capabilities. F
 - [l1-memory-model.md](l1-memory-model.md) - Skill generation distills patterns (consistent with OFF-9).
 - [l1-automation-pipeline.md](l1-automation-pipeline.md) - A connector's triggers feed the pipeline as `external_event` / `webhook` sources; its creates/searches back `action` nodes (EXT-10).
 - [l2-extension-registry.md](l2-extension-registry.md) - Concrete manifest, connection, sandbox, and commands.
+- [l1-attestation.md](l1-attestation.md) - EXT-11 verifies an imported extension's signed witness (AT-1/AT-2/AT-6) before activation; proven provenance over declared.
 
 ## 1. Motivation
 
@@ -42,6 +43,8 @@ Rules every Layer 2 implementation MUST NOT violate:
 - **EXT-9 (Manifest contract):** each extension declares a manifest (kind, capabilities, required permissions); the registry validates it before activation.
 
 - **EXT-10 (Service connector kind):** a *connector* is a fourth extension kind — a declarative integration with an external HTTP/REST service that exposes no MCP server. A connector bundles three things. (a) An **authentication scheme** from a closed taxonomy — none / basic / api-key / digest / oauth1 / oauth2 / session — each honoring one uniform contract: a connection *test*, a human-readable connection *label*, automatic credential *refresh* on a typed expiry signal, and *deauthentication* on a typed invalid-credential signal. (b) **Operations** in three roles — *triggers* (event sources), *creates* (side-effecting actions), and *searches* (lookups) — which bind into the automation pipeline and tool surface exactly as any other extension capability, never as a parallel runtime. (c) A trigger **delivery mode** — *polling* (periodic fetch, deduplicated by stable object identity, not by time window) or *subscription* (a REST hook the connector subscribes to and unsubscribes from), with polling as the mandatory fallback when subscription is unavailable. A connector obeys the same registry, lifecycle (EXT-2), default-deny trust (EXT-3), sandboxing (EXT-4), minimal grants + egress gate (EXT-6), provenance/audit (EXT-8), and manifest contract (EXT-9) as every other kind. Its credentials follow the secret-isolation rules of `l1-security.md` and MUST NOT appear in event payloads (consistent with AP-4).
+
+- **EXT-11 (Verifiable import attestation):** [ADDED v1.2.0] a third-party or imported extension — a skill, plugin, connector, or bundle originating outside the office — presents a **verifiable witness** (an independently-checkable signed attestation of its exact content set and its author, per `l1-attestation.md`) that is verified **before activation** (EXT-2). An extension whose witness is missing where one is required, or fails verification (tampered content, unknown signer, revoked), is **default-denied** — it gains no capability (composing EXT-3) and is surfaced, not silently downgraded. This sharpens EXT-8 from *declared* provenance (a self-report) to *proven* provenance (a checkable attestation): the registry trusts an imported artifact because its witness verifies, not because it says so. Preset and locally-generated extensions (EXT-5/EXT-7) are attested by the office itself; the verification burden falls on artifacts crossing the trust boundary.
 
 > L2 specs cannot reach RFC status until all invariants here are addressed in their "Invariant Compliance" section.
 
@@ -142,3 +145,4 @@ A connector's triggers surface to the automation pipeline as `external_event` (p
 | --- | --- | --- |
 | 1.0.0 | 2026-06-24 | Initial stable spec — three extension kinds (skill / mcp-server / plugin) sharing one registry, lifecycle, and trust model; EXT-1…EXT-9; default-deny + sandboxed; skill generation. |
 | 1.1.0 | 2026-06-25 | EXT-10 added — *service connector* as a fourth extension kind for external HTTP/REST services with no MCP server: closed authentication-scheme taxonomy (none/basic/api-key/digest/oauth1/oauth2/session) with a uniform test/label/refresh/deauth contract; trigger/create/search operations with an optional resource shortcut; trigger delivery duality (polling deduped by stable identity vs subscription REST hooks with mandatory polling fallback); hydration for deferred large-payload dereferencing; idempotent search-or-create; dynamic/dependent input fields. `connector` kind added to §4.1; §4.4 added; Overview now "four kinds"; Document History introduced per RULES §5. Additive invariant — the four L2 implementers (l2-extension-registry, l2-agent-migration, l2-plugin-hooks, l2-learning-loop) carry EXT-10 as unaddressed pending a `magic.task` reconciliation; L1 remains Stable (no destabilization cascade). |
+| 1.2.0 | 2026-07-02 | EXT-11 added — verifiable import attestation: a third-party/imported extension (skill/plugin/connector/bundle) presents an independently-verifiable signed witness (per new l1-attestation) verified before activation; missing/failed witness is default-denied (composes EXT-3), sharpening EXT-8 from declared to proven provenance; preset/generated extensions are office-attested, the burden falls on trust-boundary-crossing artifacts. Related Specification link to l1-attestation added. Additive — L1 stays Stable; L2 implementers (l2-extension-registry et al.) carry EXT-11 pending a magic.task reconciliation. |
