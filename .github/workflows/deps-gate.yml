@@ -40,7 +40,7 @@ jobs:
     name: cargo build (workspace, all targets)
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
 
       # rustup auto-installs the channel + components pinned in
       # rust-toolchain.toml on the first cargo invocation below.
@@ -65,7 +65,7 @@ jobs:
     name: pnpm install (frozen lockfile)
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
 
       - uses: pnpm/action-setup@v4
         with:
