@@ -1,6 +1,6 @@
 # Evaluation Suites
 
-**Version:** 1.1.0
+**Version:** 1.2.0
 **Status:** Stable
 **Layer:** concept
 
@@ -22,6 +22,7 @@ This spec defines the suite model and the grader taxonomy. It does not define a 
 - [l1-practice-analytics.md](l1-practice-analytics.md) — normalized session traces a grader reads to judge a run; complementary diagnostic layer
 - [l2-quality-pipeline.md](l2-quality-pipeline.md) — static document lint (the complementary half) and the behavior-probe grader precedent
 - [l2-self-improvement.md](l2-self-improvement.md) — skill-evolution training runs suites each rollout and gates on their scores; baseline comparison is the best-vs-current check
+- [l1-agent-coevaluation.md](l1-agent-coevaluation.md) — the model×harness co-evaluation methodology this suite's grading machinery drives; ES-17 per-slice reporting shares its orthogonal-label discipline (ACE-3/ACE-4)
 
 ## 1. Motivation
 
@@ -78,6 +79,8 @@ Rules every Layer 2 implementation MUST NOT violate:
 - **ES-15 Judge trust gate**: a judgment grader's verdicts are trusted for a run only after the judge passes a discrimination self-test — for a reference pair it MUST rank the known-worse artifact strictly worse than the known-better one on the judged axis; a judge that cannot tell the references apart is not used. A trusted judgment grader is auditable: fixed judge model and settings, a published rubric, and every verdict cites the specific construct/evidence it scored (or "none").
 
 - **ES-16 Signed metrics**: a metric declares its direction, and a minimization metric measures *unnecessary* volume, not total volume. An output that is a positive signal — a test written, an explanation the user explicitly requested — MUST NOT be counted against a size/cost metric. A suite never penalizes a necessary addition as bloat.
+
+- **ES-17 Sliceable results by orthogonal labels**: [ADDED v1.2.0] a task carries labels on a fixed set of **orthogonal** dimensions (ES-2 tags, sharpened into declared slice axes — e.g. capability, complexity, scenario, modality, environment, source), and a run reports **per-slice macro-averaged** scores over those dimensions, not only the aggregate suite verdict. A regression MUST be localizable to a slice; the aggregate is a summary, never the only signal. Macro-averaging (mean of per-value means) prevents a populous slice from masking a small brittle one. This is the suite-level companion to the cross-harness co-evaluation matrix (`l1-agent-coevaluation.md`): a suite slices one customization's results; the co-evaluation matrix slices across the model×harness grid using the same label discipline.
 
 > L2 specs cannot reach RFC status until all invariants here are addressed in their "Invariant Compliance" section.
 
@@ -249,3 +252,4 @@ This methodology is customization-agnostic: it scores a skill, a role, or a work
 | --- | --- | --- |
 | 1.0.0 | 2026-06-25 | Initial spec — evaluation suites as companion artifacts (ES-1, ES-2); typed grader taxonomy across five families composing existing validators (ES-3); global/task grader scopes (ES-4); weighted thresholded metrics with hard-gate (ES-5); stability via trials (ES-6); frozen+isolated runs (ES-7); immutable diffable results (ES-8); baseline/regression gate (ES-9); first-class activation-correctness testing (ES-10); sandboxed no-production-side-effects (ES-11); scaffold-then-maintain authoring (ES-12); static-vs-dynamic quality framing (§4.8). |
 | 1.1.0 | 2026-06-25 | Minor — control-arm attribution: credit a customization only for its margin over the best naive same-intent control (ES-13); separated non-negotiable quality/safety tier with implicit-requirement adversarial tasks, no efficiency gain buys back a quality regression (ES-14); judge trust self-test + auditable cite-the-construct verdicts (ES-15); signed metrics that never penalize necessary additions as bloat (ES-16); §4.9 added; fixed a stray "ES-13" phrasing in §4.8. Mined from an external code-minimalism customization's benchmark methodology. Re-reviewed (spec-critic + prompt-engineer PASS). |
+| 1.2.0 | 2026-07-02 | Minor — ES-17 sliceable results: a task carries orthogonal declared slice labels and a run reports per-slice macro-averaged scores (not only the aggregate), so a regression localizes to a slice; macro-average prevents a large slice masking a small brittle one. Suite-level companion to the new l1-agent-coevaluation model×harness matrix (shared ACE-3/ACE-4 label discipline). Related Specification link added. Mined from an external model×harness benchmark methodology. |

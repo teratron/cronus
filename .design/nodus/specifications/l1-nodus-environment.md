@@ -1,6 +1,6 @@
 # Nodus Environment and Evaluation Contract
 
-**Version:** 1.0.0
+**Version:** 1.1.0
 **Status:** Stable
 **Layer:** concept
 
@@ -129,6 +129,20 @@ Rules every implementation of this spec (and its host projects) MUST NOT violate
   satisfiability validation rejects the run fail-fast if the active host provides
   no environment, before the first step executes (reaffirms LP-8). A workflow with
   no environment requirement runs unchanged against the built-in stub.
+
+- **NE-11 Declared grading mode** [ADDED v1.1.0]: `evaluate()` produces its reward
+  through a **task-declared grading mode** from a closed set — `automated` (a
+  deterministic checker over the frozen trajectory / final state), `judge` (a model
+  scores against a published rubric), or `hybrid` (the deterministic checker runs
+  first as a floor; a judge runs only where the checker passes and can lower but never
+  *rescue* a run the checker already failed). The mode is declared with the task, not
+  chosen per run, so two runs of one task are graded the same way. A `judge`-mode
+  reward resolves its model through a function-scoped auxiliary binding (economical by
+  default, never the policy model), and is trusted only under a host judge-trust
+  discipline. This refines NE-9 without weakening it: nodus defines the closed mode
+  set and their composition (checker-before-judge, floor semantics); the host still
+  supplies each checker and rubric, and a mode-less environment stays valid via the
+  NE-9 no-op reward.
 
 > An L2 spec realizing this contract cannot reach RFC until every NE-invariant is
 > addressed in its Invariant Compliance section.
@@ -264,6 +278,37 @@ consumes. The division of labour:
 Keeping these separate means an environment is reusable under any improvement
 policy, and any improvement policy composes with any conforming environment.
 
+### 4.7 Grading Modes and Sliceable Task Labels [ADDED v1.1.0]
+
+`evaluate()` is not one-size-fits-all. The closed grading-mode set (NE-11) lets a task
+pick the cheapest sufficient scorer and guards against judge over-generosity:
+
+```text
+[REFERENCE]
+grade(mode, trajectory, final_state, rubric?):
+    match mode:
+      automated -> checker(trajectory, final_state)          -> Reward   // deterministic
+      judge     -> judge_model.score(trajectory, rubric)     -> Reward   // aux role (NE-8)
+      hybrid    -> a := checker(...)                                   // floor first
+                   if a.failed: return a                                // judge cannot rescue
+                   j := judge_model.score(..., rubric)
+                   return min(a, j)                                     // judge may only lower
+```
+
+The **hybrid floor** is the load-bearing rule: a deterministic check runs first and a
+judge can lower the score but never lift a run the checker already failed — a cheap
+gate before spending judge tokens and a guard against a lenient judge passing a broken
+run.
+
+Task labels make an environment run **sliceable**. The task profile (NE-6) may carry a
+fixed set of **orthogonal labels** (e.g. capability, complexity, modality,
+environment-kind, provenance); a host evaluating a workflow across many tasks then
+reports per-label macro-averages, not just one number, localizing *where* a workflow
+(or a harness embedding it) is weak. Labels are declared on the task, not inferred, so
+a slice is stable across runs. This is the nodus-side feed for the host co-evaluation
+methodology (`.design/main` agent co-evaluation): one graded environment run is one
+matrix cell; its labels are the slice dimensions.
+
 ## 5. Implementation Notes
 
 Evaluation order that minimises rework:
@@ -308,4 +353,5 @@ data-safety boundary, and creates two sources of truth for "what happened."
 
 | Version | Date | Author | Notes |
 | --- | --- | --- | --- |
+| 1.1.0 | 2026-07-02 | Core Team | Added NE-11 (declared grading mode — closed set automated/judge/hybrid; hybrid runs the deterministic checker as a floor first, a judge may only lower not rescue; judge-mode uses a function-scoped auxiliary binding under host judge-trust; refines NE-9 without weakening it) and §4.7 (grading-mode composition + sliceable orthogonal task labels on the profile, the nodus-side feed for the host agent co-evaluation methodology — one graded run = one matrix cell, labels = slice dimensions). |
 | 1.0.0 | 2026-07-01 | Core Team | Initial spec — Environment/Evaluation contract: `EnvironmentProvider` extension role, closed reset/step/evaluate lifecycle, typed `Reward`, `Trajectory` as observability projection, frozen-evaluation boundary, capability-manifest role, function-scoped auxiliary model roles; NE-1…NE-10. Adds one role to the portability taxonomy (LP-2/LP-8); the executable substrate for evaluation-driven harness improvement. |
