@@ -49,7 +49,7 @@ debug/
 **/*.rs.bk
 *.pdb
 # Note: IS committed (workspace ships binaries — reproducible builds).
-Cargo.lock
+#Cargo.lock
 
 # Node / pnpm (packages/*, apps/*)
 node_modules/
@@ -57,7 +57,7 @@ node_modules/
 .npm/
 *.tsbuildinfo
 # Note: IS committed (reproducible installs).
-pnpm-lock.yaml
+#pnpm-lock.yaml
 
 # Vite
 .vite/
