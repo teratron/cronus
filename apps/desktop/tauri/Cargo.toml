@@ -2,7 +2,7 @@
 name = "cronus-desktop"
 version = "0.1.0"
 description = "Cronus desktop application — Tauri v2 shell over the React UI"
-edition = "2021"
+edition = "2024"
 
 [lib]
 name = "cronus_desktop_lib"
