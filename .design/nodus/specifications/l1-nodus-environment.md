@@ -1,7 +1,7 @@
 # Nodus Environment and Evaluation Contract
 
 **Version:** 1.0.0
-**Status:** Draft
+**Status:** Stable
 **Layer:** concept
 
 ## Overview
