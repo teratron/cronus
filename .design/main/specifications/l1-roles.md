@@ -1,6 +1,6 @@
 # Roles
 
-**Version:** 1.0.0
+**Version:** 1.1.0
 **Status:** Stable
 **Layer:** concept
 
@@ -39,6 +39,7 @@ Rules every Layer 2 implementation MUST NOT violate:
 - **ROL-6 (Composition contract):** a role is composed of a persona, configuration (model/limits/budget), skills, and presentation; this composition is the role's contract, identical for presets and customs.
 - **ROL-7 (Catalog integrity):** preset roles are authoritative blueprints in the immutable program tier; customizing a preset produces a custom copy rather than editing the preset (STO-3).
 - **ROL-8 (Hierarchy placement):** a hired role has a place in the office hierarchy (a reporting line), consistent with the adaptive topology (ORC-2).
+- **ROL-9 (Anti-sprawl justification gate):** [ADDED v1.1.0] creating a **custom** role (rather than reusing or extending a preset) requires the role to justify itself on at least **two independent** axes — for example distinct **expertise** (a specialty no existing role covers), a **parallelism** benefit (it enables work to run concurrently), **context isolation** (it keeps an unrelated concern out of another role's context), or genuine **reuse** (it will be needed repeatedly). One weak reason is insufficient; when the gate is not cleared, reusing or extending an existing role is preferred over minting a new one. This keeps the workforce from fragmenting into many thin, overlapping specialists, and is the role-level application of the harness right-sizing discipline (`l1-harness-composition.md` HC-5); a role whose justifying gap later closes is pruned under the same discipline (HC-3, non-destructively per ROL-4).
 
 > L2 specs cannot reach RFC status until all invariants here are addressed in their "Invariant Compliance" section.
 
@@ -80,7 +81,7 @@ Hiring is instantiation (ROL-3); firing is a non-destructive release (ROL-4); th
 ## 5. Drawbacks & Alternatives
 
 - **Catalog curation cost:** maintaining quality presets takes effort; offset by their reuse across all offices.
-- **Custom-role sprawl:** many ad-hoc roles can fragment the workforce. <!-- TBD: guardrails/criteria for when to create a custom role vs reuse a preset -->
+- **Custom-role sprawl:** many ad-hoc roles can fragment the workforce — governed by the ROL-9 anti-sprawl justification gate (a custom role must justify itself on ≥2 independent axes; otherwise reuse/extend a preset).
 - **Alternative — preset-only:** rejected; too rigid for unusual projects. Alternative — fully generated roles: deferred as a later enhancement on top of presets.
 
 ## Canonical References
@@ -90,3 +91,11 @@ Hiring is instantiation (ROL-3); firing is a non-destructive release (ROL-4); th
 | `[OFFICE]` | `.design/main/specifications/l1-office-model.md` | Specialization and staffing invariants |
 | `[STORAGE]` | `.design/main/specifications/l1-storage-model.md` | Preset/instance and scope lifecycle |
 | `[CATALOG]` | `.design/main/specifications/l2-role-catalog.md` | Concrete catalog and hire/fire |
+| `[COMPOSITION]` | `.design/main/specifications/l1-harness-composition.md` | Right-sizing discipline ROL-9 applies at the role level (HC-5) |
+
+## Document History
+
+| Version | Date | Notes |
+| --- | --- | --- |
+| 1.1.0 | 2026-07-02 | ROL-9 added — anti-sprawl justification gate: a custom role must justify itself on ≥2 independent axes (distinct expertise / parallelism / context isolation / reuse); one weak reason is insufficient, reuse-or-extend-a-preset preferred otherwise. Resolves the long-standing "custom-role sprawl" TBD in Drawbacks; the role-level application of l1-harness-composition HC-5 (a role whose justifying gap later closes is pruned non-destructively per ROL-4 + HC-3). Additive — L1 stays Stable; l2-role-catalog carries ROL-9 as a pending Invariant-Compliance obligation reconciled at magic.task. |
+| 1.0.0 | 2026-06-24 | Initial stable spec — roles as specialties (ROL-1), preset + custom (ROL-2), hire=instantiate (ROL-3), fire=non-destructive release (ROL-4), manager-driven staffing (ROL-5), composition contract (ROL-6), catalog integrity (ROL-7), hierarchy placement (ROL-8). |
