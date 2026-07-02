@@ -117,3 +117,4 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Updated specification `orchestration` (main)
 - Added specification `work-convergence` (main)
 - Added specification `process-monitor` (main)
+- Added specification `issue-reporting` (main)
