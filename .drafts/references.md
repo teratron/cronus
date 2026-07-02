@@ -34,6 +34,7 @@
 - <https://github.com/HKUDS/nanobot>
 - <https://github.com/agentscope-ai/agentscope>
 - <https://github.com/agentscope-ai/AgentTeams>
+- <https://github.com/agentrq/agentrq>
 
 ## Spec-Driven Development
 

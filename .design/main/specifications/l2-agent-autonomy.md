@@ -1,6 +1,6 @@
 # Agent Autonomy
 
-**Version:** 1.0.1
+**Version:** 1.1.0
 **Status:** Stable
 **Layer:** implementation
 **Implements:** l1-security.md, l1-orchestration.md
@@ -34,8 +34,9 @@ An autonomous agent can issue shell commands, write files, and call external API
 | L1 Invariant | Implementation |
 | --- | --- |
 | SEC-6 Sandbox | Every shell/code tool call passes `gate_decision` before execution; always-forbidden patterns are blocked before any sandbox spawn. |
-| SEC-7 Auditable | Every gate decision (Allow/Prompt/Block) appends to the audit log with reason and tool context. |
+| SEC-7 Auditable | Every gate decision (Allow/Prompt/Block) appends to the audit log with reason and tool context; promotions and auto-allowed (rule-suppressed) calls are logged with the matched rule id (§4.6). |
 | ORC-9 Approval gate | `GateDecision::Prompt` parks the call in an `ApprovalRequest` with a 10-minute TTL; outcome is recorded. |
+| SEC-9 Learnable promotion | An explicit "Allow always" writes a durable, scoped `AllowRule` (§4.6): scope defaults to the narrowest offered, the key is `(risk_class-safe action signature)`, the rule is revocable (§4.7) and its max scope / persistence is clamped by policy governance. `destructive`-class and always-forbidden paths are non-promotable — "Allow always" is not offered for them, so they always re-prompt. |
 
 ## 4. Detailed Design
 
@@ -172,12 +173,51 @@ ApprovalRequest {
 
 1. `ApprovalRequest` is created and sent to the interactive session's approval UI.
 2. The agent suspends execution of the specific tool call; other turn logic is unaffected.
-3. The user chooses: Allow once / Allow for session / Deny / Deny and explain.
+3. The user chooses: Allow once / Allow for session / **Allow always (scope)** / Deny / Deny and explain. "Allow always" is offered only when the call is promotable (SEC-9f) — it is suppressed for `destructive`-class and always-forbidden calls, which can only be allowed once.
 4. **TTL expiry**: no response within `ttl_secs` → auto-Deny; agent receives `ApprovalDenied { reason: "timeout" }`.
-5. **Background/cron bypass**: `destructive`-class → auto-Deny; all others → auto-Allow. Bypass is logged.
-6. All outcomes (Allow / Deny / Timeout) are written to the audit log.
+5. **Background/cron bypass**: `destructive`-class → auto-Deny; all others → auto-Allow. Bypass is logged. A durable `AllowRule` (below) MAY auto-allow a non-destructive background call whose signature it matches; destructive and always-forbidden calls are never matched.
+6. All outcomes (Allow / Deny / Timeout / Promotion) are written to the audit log.
 
 "Allow for session" grants approval for calls with the same `(tool_name, target)` pair for the remainder of the session without re-prompting. This approval is not persisted across sessions.
+
+#### Durable allow-rules (SEC-9)
+
+"Allow always" promotes the approval into a durable `AllowRule` that survives process restart and suppresses re-prompting for genuinely-equivalent later calls. It realizes the SEC-9 discipline — explicit act, explicit minimal scope, narrow key, revocable, governed, non-promotable dangerous classes:
+
+```text
+[REFERENCE]
+AllowScope: "action" | "action_class" | "office" | "global"   // narrowest offered is the default
+
+AllowRule {
+  id:          String,             // UUID; the handle for revocation (§4.7)
+  key:         String,             // stable action signature: (tool_name, normalized_target) for
+                                   //   "action" scope; tool_name for wider scopes
+  scope:       AllowScope,
+  office_id?:  String,             // bound for "office" scope
+  created_by:  String,             // approver identity (SEC-7)
+  created_at_ms: u64,
+}
+
+promote(request, decision):                                   // step 3 "Allow always"
+    if request.risk_class == Destructive
+       or matches_always_forbidden(request):
+        refuse()                                              // SEC-9f — option was never offered
+    scope := decision.scope or narrowest_offered(request)     // SEC-9b
+    cap   := policy.max_promotion_scope()                     // SEC-9e governed clamp
+    if scope > cap or policy.promotion_disabled():
+        return                                                // fail-closed: no rule; keep prompting
+    rule_store.put(AllowRule{ key: action_key(request, scope), scope, ... })
+    audit("promotion", rule)
+
+gate_decision(request):                                        // consulted before Prompt
+    if request.risk_class != Destructive
+       and not matches_always_forbidden(request)
+       and rule_store.matches(request):                        // SEC-9c equivalence match
+        audit("auto_allowed", matched_rule); return Allow      // SEC-9d suppressed prompt logged
+    ... // fall through to the normal ladder / Prompt
+```
+
+The rule store is part of the state tier (never version-controlled, SEC-1). Governance clamps (`max_promotion_scope`, `promotion_disabled`) come from the managed policy tier; when they tighten below an existing rule's scope, the rule is inert until re-approved (fail-closed), not silently honored.
 
 ### 4.7 Command surface
 
@@ -187,6 +227,8 @@ ApprovalRequest {
 | set level | `cronus agent autonomy set --level <supervised\|semi\|auto>` | `/agent autonomy set …` | `agent.autonomy.set_level(level) -> void` |
 | set hourly cap | `cronus agent autonomy set --max-actions-per-hour <N>` | `/agent autonomy set …` | `agent.autonomy.set_cap(n) -> void` |
 | view action counts | `cronus agent autonomy status` | `/agent autonomy status` | `agent.autonomy.status() -> ActionTrackerStatus` |
+| list durable allow-rules | `cronus agent autonomy rules list` | `/agent autonomy rules list` | `agent.autonomy.rules() -> Vec<AllowRule>` |
+| revoke a durable allow-rule | `cronus agent autonomy rules revoke <id>` | `/agent autonomy rules revoke <id>` | `agent.autonomy.revoke_rule(id) -> void` |
 
 ### 4.8 Approval record manager
 
@@ -252,7 +294,16 @@ The `consumed_decision` field is set when the tool call reads the decision, prev
 
 | Alias | Path | Purpose |
 | --- | --- | --- |
-| `[SECURITY]` | `.design/main/specifications/l1-security.md` | SEC-6/SEC-7 invariants |
+| `[SECURITY]` | `.design/main/specifications/l1-security.md` | SEC-6/SEC-7 invariants; SEC-9 learnable promotion realized in §4.6 |
 | `[ORC]` | `.design/main/specifications/l1-orchestration.md` | ORC-9 approval gate |
 | `[TOOLSEC]` | `.design/main/specifications/l2-tool-security.md` | Tool guard escalation |
 | `[SCHED]` | `.design/main/specifications/l2-scheduler.md` | Cron context — bypass rules |
+| `[POLICY-GOV]` | `.design/main/specifications/l1-policy-governance.md` | Clamps promotion max scope / persistence (SEC-9e) |
+
+## Document History
+
+| Version | Date | Author | Notes |
+| --- | --- | --- | --- |
+| 1.1.0 | 2026-07-02 | Core Team | Realized SEC-9: approval gate step 3 gains "Allow always (scope)" (offered only for promotable calls); new §4.6 durable `AllowRule` store (scope ladder action/action_class/office/global, stable-signature key, revocable, governance-clamped, fail-closed, destructive/always-forbidden non-promotable); `gate_decision` consults the rule store before Prompt and audits auto-allowed calls; §4.7 `rules list` / `rules revoke <id>` command surface; SEC-9 Invariant-Compliance row. |
+| 1.0.1 | 2026-06-26 | Core Team | ApprovalRecord manager: create/register separation, RESOLVED_ENTRY_GRACE_MS=15s, idempotent register, caller-binding replay guard. |
+| 1.0.0 | 2026-06-24 | Core Team | Initial spec — autonomy ladder, CommandRiskLevel classifier, SecurityPolicy gate matrix, ActionTracker hourly cap, approval gate lifecycle. |

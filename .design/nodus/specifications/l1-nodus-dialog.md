@@ -1,6 +1,6 @@
 # Nodus Human-in-the-Loop Dialog Contract
 
-**Version:** 1.1.0
+**Version:** 1.2.0
 **Status:** Stable
 **Layer:** concept
 
@@ -65,6 +65,7 @@ Rules that Layer 2 implementations MUST NOT violate:
 - **DG-6 Default-on-absence**: when no dialog backend is available, a dialog with a declared `+default` resolves to that default without blocking; a dialog with no default and no backend fails fast with a `NODUS:DIALOG_*` error. A dialog step never hangs a non-interactive run.
 - **DG-7 Trace data-safety**: dialog prompts and answers emit execution events, but raw human text is never written verbatim to a trace — only typed/length-summarised descriptors cross the observability boundary (consistent with the observability data-safety contract).
 - **DG-8 Capability declaration**: a workflow that invokes `ASK`/`CONFIRM` requires the dialog extension role; the capability manifest (LP-8) surfaces this so a host that cannot satisfy it is rejected fail-fast before the run starts, not mid-dialog.
+- **DG-9 Memoizable approval (host-supplied, never widening)**: a dialog step MAY be declared memoize-eligible (`+remember`). A memoize-eligible `ASK`/`CONFIRM` MAY have its answer supplied by the host dialog provider from a *durable prior decision* keyed by a stable dialog identity (the resolved prompt / action signature), resolving without re-prompting. The durable-decision store, its scope, and its revocation are **host concerns** (LP-1) — the language names none of them; it only marks a dialog memoize-eligible. A memoized resolution emits an execution event with a distinct provenance (remembered vs freshly-answered) under the DG-7 data-safety boundary. Discipline: a dialog **not** carrying `+remember` always prompts; memoization MUST NOT change a decision's meaning — it never turns a rejection into an approval, never relaxes `+strict`, and never binds a remembered value that would fail the step's `+type`/`+validate`; and a host MAY decline to memoize (governance), in which case the dialog prompts normally (fail-safe to asking). This is the nodus realization of the main `l1-security` SEC-9 learnable-permission contract, kept host-neutral: nodus supplies the memoize-eligibility marker and trace provenance; the host owns the decision store, scope, and revocation.
 
 ## 4. Detailed Design
 
@@ -80,16 +81,21 @@ Rules that Layer 2 implementations MUST NOT violate:
 | `+default` | the value used when no backend is present (DG-6) or on a non-strict timeout |
 | `+validate` | a validator the answer must satisfy before binding (DG-3) |
 | `+timeout` | a duration after which the dialog raises `NODUS:DIALOG_TIMEOUT` (DG-5) |
+| `+remember` | marks the dialog memoize-eligible — the host MAY satisfy it from a durable prior decision without re-prompting (DG-9) |
 
 The answer is bound to the pipeline target as a typed `Value`. `prompt` supports
 runtime variable interpolation under the same rules as other string arguments.
 
 ### 4.2 `CONFIRM` — approval decision
 
-`CONFIRM(content) +msg +actions +default +strict → $decision`. The decision is a
-boolean-like outcome (approve / reject, or a chosen action from `+actions`).
-Under `+strict`, a rejection raises `NODUS:DIALOG_REJECTED` (DG-5); without
-`+strict`, a rejection binds a falsy decision and execution continues.
+`CONFIRM(content) +msg +actions +default +strict +remember → $decision`. The
+decision is a boolean-like outcome (approve / reject, or a chosen action from
+`+actions`). Under `+strict`, a rejection raises `NODUS:DIALOG_REJECTED` (DG-5);
+without `+strict`, a rejection binds a falsy decision and execution continues.
+`+remember` marks the approval memoize-eligible (DG-9): a repeated equivalent
+`CONFIRM` MAY resolve from a durable prior approval without re-prompting — but a
+remembered decision never turns a prior reject into an approve nor relaxes
+`+strict`.
 
 ### 4.3 Suspend / resume lifecycle
 
@@ -146,6 +152,39 @@ no `Dialog` role is required.
 
 These extend the language error taxonomy (`l1-nodus-language.md` §4.6, 11 → 24).
 
+### 4.6 Memoizable approval [ADDED v1.2.0]
+
+A workflow that gates a *routine, repeated* action behind `CONFIRM`/`ASK` trains
+the human to approve without reading — the same approval-fatigue failure the host
+security layer guards against. `+remember` lets an approval *learn* into a standing
+host decision, while nodus stays host-neutral: the language contributes only the
+memoize-eligibility marker and a trace provenance; the durable store, its scope,
+and revocation live entirely in the host (LP-1), reached through the same
+`DialogProvider` seam that already answers dialogs (LP-2).
+
+```text
+[REFERENCE]
+resolve_dialog(step):                          // executor asks the DialogProvider
+    if step.has(+remember):
+        key := stable_dialog_identity(step)    // resolved prompt / action signature
+        prior := provider.recall(key)          // host store — nodus does not define it
+        if prior is present and provider.may_memoize(key):   // host governance
+            if answer_fits(step, prior):       // +type / +validate / not a widened +strict
+                emit_event(dialog_resolved{ provenance: "remembered" })   // DG-7 summary only
+                return bind(step, prior)
+    ans := provider.prompt(step)               // fall through: normal ask (fail-safe)
+    emit_event(dialog_resolved{ provenance: "answered" })
+    if step.has(+remember): provider.offer_remember(key, ans)  // host MAY persist; nodus doesn't
+    return bind(step, ans)
+```
+
+The provider — not the language — decides whether a memoized answer exists, whether
+governance permits reusing it, and at what scope it was stored. Absent a match or on
+a host that declines to memoize, the dialog prompts exactly as an ordinary
+`ASK`/`CONFIRM` (DG-6 default-on-absence still applies to `+default`). Because the
+whole store is host-side, a paused-run/resume host, an unattended test host, and an
+interactive host each apply their own (or no) memoization without any workflow edit.
+
 ## 5. Drawbacks & Alternatives
 
 - **Dialog as a host-only concern (no language construct)**: rejected — it reintroduces the cross-host inconsistency this spec exists to remove (DG-1/DG-2). Approval and input would become out-of-band side channels invisible to the workflow text.
@@ -171,5 +210,6 @@ These extend the language error taxonomy (`l1-nodus-language.md` §4.6, 11 → 2
 
 | Version | Date | Change |
 | --- | --- | --- |
+| 1.2.0 | 2026-07-02 | Added DG-9 (memoizable approval — a `+remember`-marked `ASK`/`CONFIRM` MAY be satisfied by the host `DialogProvider` from a durable prior decision keyed by a stable dialog identity, without re-prompting; store/scope/revocation are host concerns LP-1, nodus contributes only the marker + a remembered-vs-answered trace provenance DG-7; never turns reject→approve, never relaxes `+strict`, never binds a value failing `+type`/`+validate`, host MAY decline → prompts normally). New §4.6 + `+remember` modifier on `ASK`/`CONFIRM`. The host-neutral nodus realization of main `l1-security` SEC-9 learnable-permission promotion. |
 | 1.1.0 | 2026-06-27 | Resolved both open design questions and promoted Draft → Stable. §4.3: paused-run state = `Status::Paused` + a host-persisted resume descriptor; built-in host is synchronous (default-or-Paused). §4.4: the dialog backend is a distinct `ExtensionRole::Dialog` in the LP-8 taxonomy; workflows whose dialogs all carry `+default` need no Dialog role. |
 | 1.0.0 | 2026-06-27 | Initial Draft — dialog command class (`ASK`/`CONFIRM`), suspend/resume lifecycle (`Status::Paused`), DG-1…DG-8 invariants, dialog backend extension point, dialog error subset (`DIALOG_TIMEOUT`/`DIALOG_REJECTED`/`PAUSED`). Elevates `l1-nodus-language.md` §4.6 HITL sub-section. Open design questions marked TBD (paused-state representation; `ExtensionRole::Dialog` taxonomy placement). |
