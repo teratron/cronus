@@ -1,6 +1,6 @@
 # Nodus DSL Language
 
-**Version:** 1.1.0
+**Version:** 1.2.0
 **Status:** Stable
 **Layer:** concept
 
@@ -48,6 +48,7 @@ Rules that Layer 2 implementations MUST NOT violate:
 - **NL-8 Reserved variable namespace**: a fixed set of variable names is owned by the runtime; user-defined pipeline targets must not shadow them.
 - **NL-9 Typed I/O contract**: `@in`, `@out`, `@ctx`, and `@err` are the public contract of a workflow; an implementation must enforce input presence and type at run time.
 - **NL-10 Sequential pipeline**: steps execute in declared order; a pipeline target (`→ $x`) is available from the step immediately following its definition; forward references are a validation error.
+- **NL-11 Provenance-safe interpolation** [ADDED v1.2.0]: a value interpolated into a **model-facing** string (a prompt built for a model-calling command such as `GEN`/`REFINE`) carries a provenance — *trusted* (a workflow literal or a value the author declared trusted) or *untrusted* (anything derived from a model output, an `ASK` answer, an external fetch, or a memory read; unknown provenance is untrusted). An untrusted value is **neutralized-as-data by default** at render — inserted so it cannot be read as instructions or prompt structure — and inserting it raw requires an **explicit modifier** at the interpolation site, never omission. Provenance is sticky: a value derived from an untrusted value is untrusted unless explicitly elevated. Nodus defines the provenance rule and the default-neutralize boundary; the concrete neutralization mechanism (encode/escape/delimit) is **host-supplied** (LP-2 style), so the core stays host-neutral. Interpolation into non-model-facing text is unaffected.
 
 ## 4. Detailed Design
 
@@ -190,7 +191,7 @@ A runtime error carries a typed `NODUS:*` code. The `@err:` handler is invoked f
 | `?.` | optional chaining — null-safe path access; short-circuits to `null` without raising `NODUS:UNDEFINED_VAR` |
 | `??` | null-coalescing fallback (`$a?.b ?? default`) |
 | `WHERE` / `FIRST` / `LAST` | inline collection filter/access with implicit `$it`; no match → `[]` (WHERE) or `null` (FIRST/LAST) |
-| String interpolation | `$var` / `$obj.field` expand inside string literals before the step runs (runtime-resolved, not by the model); `\$` suppresses |
+| String interpolation | `$var` / `$obj.field` expand inside string literals before the step runs (runtime-resolved, not by the model); `\$` suppresses; interpolation into a model-facing prompt is provenance-safe (NL-11) — untrusted values neutralized-as-data by default, raw insertion needs an explicit modifier |
 
 #### Human-in-the-loop dialog commands (new command class)
 
@@ -232,6 +233,7 @@ Beyond commands, the schema declares closed registries for **analysis flags** (`
 
 | Version | Date | Change |
 | --- | --- | --- |
+| 1.2.0 | 2026-07-02 | Added NL-11 provenance-safe interpolation — a value interpolated into a model-facing prompt (`GEN`/`REFINE`) carries trusted/untrusted provenance (unknown=untrusted; model-output/`ASK`-answer/external-fetch/memory-read = untrusted); untrusted is neutralized-as-data by default at render, raw insertion needs an explicit modifier, provenance is sticky; neutralization mechanism host-supplied (LP-2 style, host-neutral). The nodus realization of the main l1-context-provenance contract (CP-2/CP-3/CP-4). §4.6 interpolation row annotated. L1 stays Stable (C9); l2-nodus-runtime carries NL-11 as a pending Invariant-Compliance obligation reconciled at magic.task (RTG-9 precedent). |
 | 1.1.0 | 2026-06-25 | Added §4.6 upstream parity gaps (schema v0.4.6 → v0.7): control constructs (`?SWITCH`/`~MAP`/`~RETRY`/`!HALT`/`!PAUSE`), operators/expressions (`MATCHES`, `?.`, `??`, `WHERE`/`FIRST`/`LAST`, string interpolation), HITL dialog command class (`ASK`/`CONFIRM`), `@needs:` selective schema loading, error taxonomy 11 → 24, `@ON(priority=N)`, closed flag/validator/type registries; §4.4 target-additions note |
 | 1.0.1 | 2026-06-23 | Added macro invocation syntax (`RUN(@macro_name)`) to §4.3; added `~PARALLEL` fail-fast error propagation semantics to §4.4 |
 | 1.0.0 | 2026-06-23 | Initial spec — language invariants NL-1..NL-10, file types, section grammar, step syntax, control flow, error taxonomy |
