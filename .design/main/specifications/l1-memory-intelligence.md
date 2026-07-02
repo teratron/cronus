@@ -1,6 +1,6 @@
 # Memory Intelligence
 
-**Version:** 0.3.1
+**Version:** 0.4.0
 **Status:** RFC
 **Layer:** concept
 
@@ -59,6 +59,7 @@ Rules every Layer 2 implementation MUST NOT violate:
 - **MI-10 (Capture-time temporal normalization):** at capture, relative temporal expressions in the *content* ("yesterday", "last week", "recently") are resolved to absolute dates against the **observation instant** — when the statement was made — never against wall-clock read time, so a memory stays meaningful indefinitely. This normalizes the remembered text (the MEM-4 source of truth) and is distinct from, and composes with, the bi-temporal *metadata* (valid-time / transaction-time). It degrades gracefully: with no known observation instant it falls back to capture time; with no generator available it stores the expression verbatim rather than guessing a date.
 - **MI-11 (Caller capture directives):** capture accepts optional, caller-supplied directives that steer *what* is extracted — an **include** set (topics to prioritize), an **exclude** set (topics to drop), and free-form **custom instructions** (highest-priority rules) — scoped per office/worker/session and recorded as capture provenance. Directives shape extraction emphasis only; they MUST NOT override the MI-6 salience/confidence-honesty floor nor silently suppress a safety-relevant fact. Absent directives, baseline MI-6 capture behavior holds unchanged.
 - **MI-12 (Raw vs inferred capture):** capture exposes two declared modes — **inferred** (a model extracts salient, self-contained facts; the default) and **raw** (the content is stored verbatim, no model in the loop). Raw mode is the local-first / audit-exact / no-generator escape hatch and MUST function with no network and no model bound. The mode is explicit per write; recall, lifecycle, and every other operation treat raw and inferred items uniformly. This complements MI-3 (which makes enrichment *asynchronous*): MI-12 makes enrichment *optional*.
+- **MI-13 (Experience reuse — recall-before-acting, gated reuse):** [ADDED v0.4.0] as the **active counterpart** to MI-7 capture, the layer exposes an *experience-reuse* projection: before a costly or repeatable action, a caller MAY query for prior experiences of the same shape (semantic or exact, composing the MI-2 temporal and MI-8 structured filters). A retrieved experience is **typed** — `success`, `failure`, or `insight` — and **quality-scored**. Reuse is disciplined: a sufficiently-similar, sufficiently-high-quality **prior success MAY be reused directly**, short-circuiting re-derivation, **only** when a reuse gate (similarity **and** score **and** freshness) passes; a **prior failure** is surfaced as an *avoid* signal and never reused as a solution; an **insight** is injected as guidance (ordinary MEM-2 recall). Every action's outcome is captured back as a typed, scored experience (composing MI-6 capture policy and MI-7 distillation), so the pool improves with use. Four guards make reuse safe rather than a silent shortcut: **(a)** reuse is gated — a low-scored, stale, or safety-sensitive experience is never silently reused; **(b)** read and write are **independently controllable** — a caller may learn without reusing, or reuse without writing; **(c)** a reused result is **attributed as reused, not re-derived** (the MI-1 honesty floor — it cites the experience it came from and is never passed off as fresh work); **(d)** reuse **never bypasses the action's own authority/safety gate** — a reused plan still passes the permission gate a fresh plan would (SEC-9 / SEC-10). This is case-based reasoning over the memory substrate: the agent gets *faster* by reusing proven solutions and *safer* by remembering its failures, without either becoming an ungoverned bypass.
 
 > L2 specs cannot reach RFC status until all invariants here are addressed in their "Invariant Compliance" section.
 
@@ -205,6 +206,44 @@ graph TD
 
 Inferred is the default; raw is the escape hatch for deterministic/audit-exact captures and for local-first operation with no model bound. Both produce ordinary items — same recall, lifecycle, trust, and decay treatment. Raw complements MI-3: where MI-3 makes enrichment asynchronous, MI-12 makes it optional.
 
+### 4.12 Experience reuse (MI-13)
+
+MI-7 writes a run into a procedure memory; MI-13 is the *read-and-reuse* side. It wraps
+an action in a recall-before-acting gate:
+
+```text
+[REFERENCE]
+act_with_experience(action, req):
+    exps := recall_experiences(req, match = semantic|exact,     // MI-2/MI-8 filters apply
+                                    filter = type ∈ {success,failure,insight})
+    best := top(exps by score)
+    if best.type == success and reuse_gate(best):                // MI-13(a) gate
+        // similarity ≥ σ  AND  score ≥ τ  AND  fresh(best)  AND  not safety_sensitive(action)
+        result := best.result                                    // reuse — skip re-derivation
+        attribute(result, reused_from = best.id)                 // MI-13(c) never passed as fresh
+        require action.authority_gate(result)                    // MI-13(d) still gated (SEC-9/10)
+        return result
+    inject_as_context(exps)          // failures → "avoid"; insights → guidance (MEM-2)
+    result := execute(action, req)   // no reusable success → do the work
+    if write_enabled:                                            // MI-13(b) read/write independent
+        score := scorer(result); capture_experience(req, result, type_of(result), score)  // MI-6/MI-7
+    return result
+```
+
+| Experience type | On retrieval | Reused as a solution? |
+| --- | --- | --- |
+| `success` | reuse directly if the gate passes; else inject as an exemplar | yes, gated |
+| `failure` | inject as an *avoid* signal so the agent does not repeat it | never |
+| `insight` | inject as guidance (a lesson, not a solution) | never |
+
+The value is compounding: a proven success is reused for speed, a remembered failure is
+avoided for correctness, and every run — reused or fresh — feeds the pool back. Each guard
+exists to keep that from degrading into a silent shortcut: the gate (a) blocks stale/weak
+reuse, read/write independence (b) lets an office learn conservatively (write-only) or replay
+cautiously (read-only), attribution (c) keeps a reused answer honest under MI-1, and the
+retained authority gate (d) means reuse buys speed, never a bypass of the permission a fresh
+action would face.
+
 ## 5. Ideas-to-Adopt Mapping (No-Duplication Ledger)
 
 Disposition of every mechanic observed in the surveyed external memory-agent reference, against what this project already owns. Restated in plain language; the reference is not the source of authority — these invariants stand on their own.
@@ -261,6 +300,7 @@ The workflow-language runtime carries a pending storage/knowledge extension seam
 - **Out of scope for the DSL.** The periodic digest (MI-5) and the conflict-adjudication surface (MI-4) are host concerns — a workflow may *trigger* a digest or *consume* a conflict report, but neither belongs inside the language runtime.
 - **Structured filter predicate maps directly onto the pending operator gap.** `l1-nodus-language` §4.6 already records an upstream parity gap for operators (`MATCHES`/`?.`/`??`/`WHERE`/`FIRST`/`LAST`). MI-8's closed comparison-operator vocabulary (eq/ne/ordering/membership/containment + AND/OR/NOT) is a ready-made, backend-agnostic candidate contract for whatever `WHERE`-style filtering the language eventually adopts — the DSL operator and the StorageProvider query predicate would be the same closed vocabulary, not two independently invented ones.
 - **Procedural distillation as a candidate macro-learning source.** MI-7's end-of-run distillation of a bounded agentic trajectory is a plain-language analogue of what a nodus `@macro` already is by hand: a named, reusable procedure. A distilled procedure memory is not itself executable nodus — it is a natural-language candidate that a human or agent may promote into an authored `@macro` (harness-engineering's evidence-backed amendment protocol, HE-4, already governs that promotion path); the DSL gains no new syntax from this.
+- **Experience reuse is macro invocation, gated host-side.** MI-13's reuse projection maps onto nodus's existing `RUN(@macro)`: reusing a proven procedure *is* invoking the macro it was promoted into (per the distillation bullet above). The whole reuse decision — semantic retrieval, scoring, the reuse gate (similarity/score/freshness), and the success/failure/insight typing — lives host-side on the StorageProvider seam, not in the language: nodus contributes the reusable unit (`@macro`) and the deterministic invocation, while whether-to-reuse is a host judgement over host-stored experiences. So MI-13 needs **no nodus invariant** — the DSL already has the reuse primitive; the gating is a StorageProvider/PolicyProvider concern, recorded here so the boundary is explicit.
 - **Capture directives map onto the policy-config harness component.** MI-11's include/exclude/custom-instruction directives are exactly the "policy config" component of the six-component harness taxonomy (`l1-harness-engineering`): an office's standing "always capture X / never capture Y" is policy the StorageProvider consumes, not new DSL syntax — the same PolicyProvider seam noted for LP-3 graduation.
 - **Raw-vs-inferred is a StorageProvider write-mode flag.** MI-12's mode is a single backend-agnostic parameter on the pending memory provider's write operation — verbatim vs extracted — with the verbatim path guaranteed to function with no model bound, satisfying the local-first constraint without a language change.
 - **Lifecycle-state transitions extend the StorageProvider verb set.** MI-9 adds `pause`/`archive`/`restore` state transitions beside write/recall/forget — a small closed verb extension a workflow step can invoke. This is memory-item state and is deliberately distinct from the runtime's own execution `Status` (e.g. a paused *run*); conflating the two would be a category error.
@@ -270,6 +310,7 @@ The workflow-language runtime carries a pending storage/knowledge extension seam
 
 | Version | Change |
 | --- | --- |
+| 0.4.0 | Added MI-13 (experience reuse — recall-before-acting, gated reuse): the active counterpart to MI-7 capture — before a costly/repeatable action, query typed (`success`/`failure`/`insight`), quality-scored prior experiences (MI-2/MI-8 filters); a high-quality prior success MAY be reused directly (short-circuit) only when a similarity+score+freshness gate passes, a failure surfaces as an avoid-signal, an insight injects as guidance; every outcome captured back typed+scored (MI-6/MI-7). Four guards: gated reuse, independent read/write, reused-not-re-derived attribution (MI-1), retained authority gate (SEC-9/SEC-10). New design §4.12 + a §6 nodus row (reuse = `RUN(@macro)`, gating host-side on StorageProvider — no nodus invariant). Case-based reasoning over the memory substrate. Stays RFC (additive). |
 | 0.3.1 | Linked the new sibling layer `l1-memory-consolidation` (MC-1…MC-10) in Related Specifications: it precomputes recall's ranking signals (MC-8), owns the write-time consolidation algebra (MC-4) upstream of MI-4 adjudication, and maintains the archive lifecycle input MI-9 exposes. No invariant change. |
 | 0.3.0 | Added MI-9 (reversible lifecycle states active/paused/archived), MI-10 (capture-time temporal normalization), MI-11 (caller capture directives include/exclude/custom-instructions), and MI-12 (raw vs inferred capture modes); extended MI-6 with a subject-of-memory lens (about-user vs about-agent-self); added design §4.8–§4.11; extended the Ideas-to-Adopt ledger (lifecycle/normalization/directives/raw-mode adopted; cross-agent ACL + access log, open-vocabulary auto-categories, and declarative retention policy dispositioned as refinement candidates with their correct substrate/security home) and Nodus Relevance |
 | 0.2.0 | Added MI-7 (procedural distillation — end-of-run trajectory-to-memory) and MI-8 (structured filter predicate); extended MI-6 with actor attribution, caller-declared explicit expiry, and capture-time cross-reference; extended the Ideas-to-Adopt ledger and Nodus Relevance with the newly evaluated mechanics |
