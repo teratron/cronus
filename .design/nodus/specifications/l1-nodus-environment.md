@@ -1,6 +1,6 @@
 # Nodus Environment and Evaluation Contract
 
-**Version:** 1.1.0
+**Version:** 1.2.0
 **Status:** Stable
 **Layer:** concept
 
@@ -143,6 +143,16 @@ Rules every implementation of this spec (and its host projects) MUST NOT violate
   set and their composition (checker-before-judge, floor semantics); the host still
   supplies each checker and rubric, and a mode-less environment stays valid via the
   NE-9 no-op reward.
+
+- **NE-12 Archivable candidate result** [ADDED v1.2.0]: a completed graded run yields an
+  **archivable candidate result** — a content-addressable tuple of the executed workflow
+  (its hash), the frozen `Reward`, and the `Trajectory` — that a host outer-loop
+  optimizer can archive, compare across runs, and place on a frontier. Nodus provides
+  only the archivable *substrate* (a deterministic run, a content-addressable workflow,
+  and a reward + trajectory, per NE-2/NE-3/NE-4); the candidate space, mutation, search
+  strategy, and frontier are **host-side and host-neutral** — nodus core holds no
+  optimizer and names no search policy (LP-1/LP-2). This lets a host optimize nodus
+  workflows *as candidates* with no nodus-side coupling to how the search is run.
 
 > An L2 spec realizing this contract cannot reach RFC until every NE-invariant is
 > addressed in its Invariant Compliance section.
@@ -353,5 +363,6 @@ data-safety boundary, and creates two sources of truth for "what happened."
 
 | Version | Date | Author | Notes |
 | --- | --- | --- | --- |
+| 1.2.0 | 2026-07-02 | Core Team | Added NE-12 (archivable candidate result) — a completed graded run yields a content-addressable (workflow-hash, reward, trajectory) tuple a host outer-loop optimizer can archive, compare, and place on a frontier; nodus supplies only the archivable substrate, the candidate space / mutation / search / frontier stay host-side and host-neutral (LP-1/LP-2), so a host optimizes nodus workflows as candidates with no nodus-side coupling to a search policy. The nodus-side feed for the main l1-harness-optimization concept. |
 | 1.1.0 | 2026-07-02 | Core Team | Added NE-11 (declared grading mode — closed set automated/judge/hybrid; hybrid runs the deterministic checker as a floor first, a judge may only lower not rescue; judge-mode uses a function-scoped auxiliary binding under host judge-trust; refines NE-9 without weakening it) and §4.7 (grading-mode composition + sliceable orthogonal task labels on the profile, the nodus-side feed for the host agent co-evaluation methodology — one graded run = one matrix cell, labels = slice dimensions). |
 | 1.0.0 | 2026-07-01 | Core Team | Initial spec — Environment/Evaluation contract: `EnvironmentProvider` extension role, closed reset/step/evaluate lifecycle, typed `Reward`, `Trajectory` as observability projection, frozen-evaluation boundary, capability-manifest role, function-scoped auxiliary model roles; NE-1…NE-10. Adds one role to the portability taxonomy (LP-2/LP-8); the executable substrate for evaluation-driven harness improvement. |
