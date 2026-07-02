@@ -1,6 +1,6 @@
 # Orchestration & Autonomy
 
-**Version:** 1.1.0
+**Version:** 1.2.0
 **Status:** Stable
 **Layer:** concept
 
@@ -15,6 +15,9 @@ The technology-agnostic protocol by which an office coordinates its agents to tu
 - [l1-memory-model.md](l1-memory-model.md) - Orchestrator and agents read/write memory.
 - [l1-quality-standards.md](l1-quality-standards.md) - `done` requires gates; the orchestrator routes work through them.
 - [l2-orchestration.md](l2-orchestration.md) - Concrete delegation, messaging, judge, budget, and `/goal` flow.
+- [l1-office-visualization.md](l1-office-visualization.md) - The live projection through which coordination is *observed* (ORC-12 transparency half).
+- [l1-acp.md](l1-acp.md) - ACP-10 live steering is the *intervene* mechanism (ORC-12 intervenability half): the human redirects an in-flight turn as a first-class participant.
+- [l1-event-mesh.md](l1-event-mesh.md) - EM-8 observable-by-construction routing carries coordination events, so no exchange is off the record (ORC-12).
 
 ## 1. Motivation
 
@@ -42,6 +45,8 @@ Rules every Layer 2 implementation MUST NOT violate:
 - **ORC-9 (Approval gate for high-impact work):** before irreversible or high-impact actions, the orchestrator may require plan approval — from a higher manager or, at escalation gates, the client (consistent with OFF-6 HITL).
 - **ORC-10 (Resumable):** orchestration state (plan, delegations, goal progress) persists so an autonomous run resumes after a restart (consistent with OFF-8 / durable state).
 - **ORC-11 (Error containment):** errors in delegated work MUST NOT propagate unfiltered to the orchestrator. Each delegation boundary is an error containment point: executor failures are classified (retryable / fatal / escalation-required) before they surface upward. A single worker failure MUST NOT invalidate the orchestrator's plan unless the failed task has no viable alternative path.
+
+- **ORC-12 (Transparent, intervenable coordination):** [ADDED v1.2.0] inter-agent coordination — delegation, briefing, hand-off, cross-role messaging — flows through a medium the human can observe and interject into. There are **no hidden agent-to-agent back-channels**: every coordination exchange is **(a) surfaced** — observable through the office's live projection and event stream so the human is never surprised by what agents told one another (composes `l1-office-visualization` and the observable event mesh, EM-8) — and **(b) intervenable** — the human MAY interject into any in-flight coordination or delegated turn at any point, as a first-class participant redirecting or correcting it, not only reviewing it after the fact (composes the live-steering redirect, `l1-acp` ACP-10). This is a **capability** contract, not a mandate to babysit: the office still runs autonomously by default (OFF-5, ORC-6), but autonomy never means *opacity* — the human's ability to see and steer is preserved by construction, never traded for speed. ORC-5 context-isolation (keeping executor detail out of the orchestrator's context) and ORC-11 error-containment (not flooding the client with raw errors) govern *what is summarized upward* — signal management — and MUST NOT be read as license for a coordination path the human cannot observe or reach.
 
 > L2 specs cannot reach RFC status until all invariants here are addressed in their "Invariant Compliance" section.
 
@@ -117,6 +122,37 @@ Step 3 — LOG
 
 Error accumulation is monotone within a plan: contained failures accrue in the Blocked column. The orchestrator presents a consolidated "N tasks blocked" summary rather than a stream of individual errors.
 
+### 4.5 Transparent, intervenable coordination [ADDED v1.2.0]
+
+ORC-12 turns two capabilities the office already has — a live projection to *watch*
+and a live-steering redirect to *touch* — into a guarantee about coordination itself:
+no exchange between agents happens where the human can neither see nor reach it.
+
+```text
+[REFERENCE]
+coordination exchange (delegate / brief / hand-off / cross-role message):
+    emit to the observable event stream          // (a) surfaced — EM-8, office-visualization
+    proceed autonomously                         // OFF-5 default — no waiting on the human
+    at any point the human MAY:
+        observe   the exchange in the projection  // drill from summary → detail on demand
+        interject "@role wait, do X instead"       // (b) intervenable — ACP-10 steering redirect
+    // there is NO path where agents coordinate off the record or beyond reach
+```
+
+**Reconciling with ORC-5 / ORC-11 (isolation & containment are not hiding).** Those two
+invariants shape *what the orchestrator carries in its own context and surfaces to the
+client by default* — they keep the orchestrator uncluttered and spare the client a flood
+of raw errors. ORC-12 draws the line they must not cross: summarizing-by-default is fine;
+making a coordination path *unobservable* or *unreachable* is not. The human always has a
+route from the consolidated summary down to the underlying exchange, and a route to
+interject into it — the default is quiet, never opaque.
+
+| Concern | Owned by | Effect |
+| --- | --- | --- |
+| What the orchestrator holds in-context | ORC-5 | executor detail stays out; summaries flow up |
+| What surfaces to the client by default | ORC-11 | consolidated status, not raw error streams |
+| That coordination is *observable + reachable at all* | **ORC-12** | no hidden back-channel; drill-in + interject always available |
+
 ## 5. Drawbacks & Alternatives
 
 - **Judge cost:** an independent judge per goal-check adds calls; justified — premature "done" is worse. Cadence is tunable.
@@ -130,3 +166,13 @@ Error accumulation is monotone within a plan: contained failures accrue in the B
 | `[OFFICE]` | `.design/main/specifications/l1-office-model.md` | Orchestrator, delegation, client-interaction invariants |
 | `[KANBAN]` | `.design/main/specifications/l1-kanban-model.md` | Where plans/tasks become tracked work |
 | `[ORCH]` | `.design/main/specifications/l2-orchestration.md` | Concrete coordination mechanics |
+| `[OFFICE-VIZ]` | `.design/main/specifications/l1-office-visualization.md` | The observe surface for ORC-12 transparency |
+| `[ACP]` | `.design/main/specifications/l1-acp.md` | ACP-10 live steering — the intervene mechanism for ORC-12 |
+
+## Document History
+
+| Version | Date | Author | Notes |
+| --- | --- | --- | --- |
+| 1.2.0 | 2026-07-02 | Core Team | Added ORC-12 (transparent, intervenable coordination) + §4.5: inter-agent coordination (delegation/briefing/hand-off/cross-role messaging) flows through a medium the human can observe and interject into — no hidden agent-to-agent back-channels; surfaced (observable via office-visualization + event mesh EM-8) and intervenable (human may redirect any in-flight coordination/turn as a first-class participant, composing l1-acp ACP-10 steering); a capability contract not a babysitting mandate (autonomy stays the default per OFF-5/ORC-6, but never means opacity); reconciles with ORC-5 isolation + ORC-11 containment — those govern what is summarized upward (signal management), never license a coordination path the human cannot observe or reach. No nodus analog (nodus is a single-workflow executor, not multi-agent; step transparency = HO trace + dialog interjection, already owned). |
+| 1.1.0 | 2026-06-24 | Core Team | Added ORC-11 (error containment — each delegation boundary classifies retryable/fatal/escalation and contains before propagation) + §4.4 Error Containment Protocol. |
+| 1.0.0 | 2026-06-24 | Core Team | Initial spec — ORC-1…ORC-10, adaptive topology, /goal autonomous loop with judge + budget, delegation/monitoring/briefings, context isolation, resumability. |
