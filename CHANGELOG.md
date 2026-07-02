@@ -115,3 +115,4 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Updated specification `acp` (main)
 - Updated specification `loop-governance` (main)
 - Updated specification `orchestration` (main)
+- Added specification `work-convergence` (main)
