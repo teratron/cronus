@@ -1,6 +1,6 @@
 # Execution Graph Model
 
-**Version:** 1.1.0
+**Version:** 1.2.0
 **Status:** Stable
 **Layer:** concept
 
@@ -17,6 +17,9 @@ This spec governs the runtime execution model only. Authoring syntax (the DSL) a
 - [l1-automation-pipeline.md](l1-automation-pipeline.md) — Automation pipeline: directed graph of trigger/filter/transform/action nodes; shares the EG channel and superstep model.
 - [l2-orchestration.md](l2-orchestration.md) — Concrete Rust implementation of delegation, wave-based parallel execution, and checkpoint resumption.
 - [l2-workflow-runtime.md](l2-workflow-runtime.md) — In-tree Rust runtime for the workflow DSL; implements the EG execution loop.
+- [l1-work-liveness.md](l1-work-liveness.md) — WL-3 lists `deferred monitor` / `queued wake` / `pending interaction` as liveness next-moves; a deferred node (EG-12) is a work-grain instance of exactly those.
+- [l1-acp.md](l1-acp.md) — ACP-4 client tool delegation is the external-actor case of a deferred node (EG-12); a `client_tool_response` is a correlated completion.
+- [l1-scheduler-model.md](l1-scheduler-model.md) — the wake that re-enters a run when a deferred operation completes.
 
 ## 1. Motivation
 
@@ -51,6 +54,8 @@ Rules every Layer 2 implementation MUST NOT violate:
 - **EG-9 (Dynamic spawn directive):** a node may emit zero or more *spawn directives* as part of its output. Each directive names a target node and supplies a payload to that node's input channels. The executor creates one independent task per directive in the next superstep, enabling dynamic fan-out (map-reduce) without requiring explicit edges to be declared at compile time. All target nodes named in spawn directives MUST be declared in the graph (EG-5).
 - **EG-10 (Unified control object):** a node may return a *control object* that atomically bundles: (a) channel state updates, (b) a routing override naming the next node(s), and (c) an interrupt-resume payload. When present, the control object supersedes any channel-only output and any edge-computed routing for that step. This prevents partial-update inconsistencies when a node needs to update state and redirect execution simultaneously.
 - **EG-11 (Immutable invocation context):** a graph run may be supplied with an immutable context object at invocation time. The context is readable by all nodes throughout the run but MUST NOT be written to. It carries caller-identity, session scope, or any run-level datum that should not flow through channels (because it never changes). Absence of a context is valid; nodes that declare a context dependency fail at compile time if the graph has no declared context schema.
+
+- **EG-12 (Deferred asynchronous execution with correlated resumption):** [ADDED v1.2.0] a node MAY declare its work **deferred** — rather than completing synchronously within its superstep, it *launches* an operation whose result arrives later (a long-running tool offloaded to the background, an execution delegated to an external actor — a client-side tool, another service, a human-performed action — or a pending human decision) and immediately yields a **pending token** that uniquely correlates the eventual completion to this node. Consequences: **(a) Non-blocking** — a deferred node does NOT hold its superstep open; independent branches keep executing, and when no node is runnable the run **suspends resumably** at the run level (checkpointed, EG-6) rather than busy-waiting. **(b) Correlated resumption** — a deferred node's continuation resumes ONLY on a typed completion event carrying its pending token; concurrent deferrals are independently addressable and MUST NOT be confused, and a completion for an unknown or expired token is rejected, never applied. **(c) Result injection** — the completion supplies the node's output, staged and applied at the next superstep boundary exactly like a synchronous node's output (EG-4), preserving superstep atomicity, determinism, and checkpoint semantics. **(d) Unified pause taxonomy** — a human-decision pause (EG-7 interrupt) and an external/background execution are the SAME launch→suspend→correlated-resume shape; an interrupt is the synchronous, whole-graph special case, a deferred node the asynchronous, per-operation general case. **(e) Bounded and observable** — every deferred operation declares a timeout/expiry and is surfaced as an outstanding pending token; expiry routes to the node's error path (never a silent hang), and the set of pending tokens is inspectable.
 
 ## 4. Detailed Design
 
@@ -184,6 +189,49 @@ The step budget is an integer declared at invocation. It counts supersteps, not 
 
 The step budget is independent of and complementary to the token/cost budget managed by the orchestration and budget subsystems.
 
+### 4.8 Deferred Execution [ADDED v1.2.0]
+
+EG-7 pauses the *whole* graph at a between-node gate and waits synchronously.
+Real work also needs the opposite shape: launch one long or external operation,
+keep going, and let its completion re-enter later. A deferred node is that shape —
+a per-operation, non-blocking suspension keyed to a correlation token.
+
+```text
+[REFERENCE]
+deferred node D executes:
+    token := launch(operation)            // background tool | external actor | human decision
+    register_pending(D, token, timeout)   // EG-12(e) — bounded, inspectable
+    yield PENDING(token)                   // EG-12(a) — superstep NOT held open
+    // other independent branches proceed; if none runnable, run suspends
+    // resumably (checkpoint at boundary, EG-6) — never busy-wait
+
+on completion event e:
+    if e.token not in pending or expired(e.token):
+        reject(e)                          // EG-12(b) — no stray/late apply
+    else:
+        stage_output(D, e.result)          // EG-12(c) — applied at next boundary (EG-4)
+        clear_pending(e.token); wake(run)
+
+on expiry(token):
+    route D → error path                   // EG-12(e) — never a silent hang
+```
+
+| Deferral kind | Who completes it | Completion event |
+| --- | --- | --- |
+| Background tool offload | the runtime, on its own worker | tool-result, correlated by token |
+| External / client-side tool | an external actor / delegated client | delegated-execution result (ACP-4 `client_tool_response`) |
+| Human-performed action | a person doing something out-of-band | external-result submission |
+| Human decision / approval | a person answering | interrupt/confirm resume (EG-7, the synchronous special case) |
+
+The single mechanism (launch → pending token → correlated completion → staged
+resume) subsumes all four. This is why a human confirmation and a backgrounded
+tool are not separate subsystems: they differ only in *who* produces the correlated
+completion, not in how the run suspends and resumes. Liveness of an outstanding
+pending token is the work-grain `deferred monitor` / `pending interaction` next-move
+(`l1-work-liveness` WL-3); the re-entry is a scheduler wake (`l1-scheduler-model`);
+a large offloaded result is stored with a retrievable handle
+(`l1-context-compression` §4.5) rather than carried inline.
+
 ## 5. Implementation Notes
 
 1. Compile the graph (validate EG-5) before the first superstep — reject undefined edge targets eagerly. Also validate at compile time: at least one terminal must be reachable; a routing function returning an empty list is treated as a terminal transition (not an error).
@@ -206,6 +254,8 @@ The step budget is independent of and complementary to the token/cost budget man
 | `[WFL]` | `.design/main/specifications/l1-workflow-language.md` | DSL that compiles to execution graphs |
 | `[AUT]` | `.design/main/specifications/l1-automation-pipeline.md` | Automation pipeline sharing the same channel/superstep model |
 | `[WFR]` | `.design/main/specifications/l2-workflow-runtime.md` | Concrete Rust implementation of the execution loop |
+| `[WORK-LIVENESS]` | `.design/main/specifications/l1-work-liveness.md` | WL-3 liveness next-moves a pending deferred node instantiates |
+| `[ACP]` | `.design/main/specifications/l1-acp.md` | ACP-4 client tool delegation = external-actor deferred completion |
 
 ## Document History
 
@@ -213,3 +263,4 @@ The step budget is independent of and complementary to the token/cost budget man
 | --- | --- | --- |
 | 1.0.0 | 2026-06-24 | Initial stable spec — graph anatomy, three channel types, superstep atomicity, conditional routing, interrupt/resume, step budget |
 | 1.1.0 | 2026-06-24 | Added EG-9 (dynamic spawn directive), EG-10 (unified control object), EG-11 (immutable invocation context); checkpoint durability modes; immutable context in §2 Constraints |
+| 1.2.0 | 2026-07-02 | Added EG-12 (deferred asynchronous execution with correlated resumption) + §4.8: a node MAY declare its work deferred — launch a long/external/background operation, yield a correlated pending token, and resume the node's continuation only on a typed completion carrying that token, applied at the next superstep boundary (EG-4 atomicity preserved); non-blocking (other branches proceed, else the run suspends resumably per EG-6); bounded by a per-operation timeout routing to the error path on expiry; unifies human-decision pause (EG-7, the synchronous whole-graph special case) with background/external/client-side execution under one launch→suspend→correlated-resume mechanism. Composes l1-work-liveness (WL-3 deferred-monitor liveness), l1-acp (ACP-4 client tool = external-actor completion), l1-scheduler-model (wake), l1-context-compression (§4.5 offloaded-result handle). L1 stays Stable (C9); L2 runtimes carry EG-12 as a pending Invariant-Compliance obligation reconciled at magic.task. |

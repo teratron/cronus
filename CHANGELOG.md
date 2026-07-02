@@ -108,3 +108,4 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Updated specification `nodus-language` (nodus)
 - Updated specification `nodus-portability` (nodus)
 - Added specification `harness-optimization` (main)
+- Updated specification `execution-graph` (main)
