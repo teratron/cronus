@@ -111,3 +111,4 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Updated specification `execution-graph` (main)
 - Updated specification `security` (main)
 - Added specification `tool-receipts` (main)
+- Updated specification `context-compression` (main)
