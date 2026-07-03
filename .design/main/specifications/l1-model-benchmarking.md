@@ -1,6 +1,6 @@
 # Model Benchmarking
 
-**Version:** 1.0.0
+**Version:** 1.0.1
 **Status:** Stable
 **Layer:** concept
 
@@ -17,6 +17,7 @@ This closes a measurement gap the evaluation family leaves open: [l1-evaluations
 - [l1-routing.md](l1-routing.md) - The consumer pattern: fitness profiles are a multi-signal input (RTG-1), weighted by configurable policy (RTG-5); auxiliary-role bindings (RTG-9) are calibrated by the same profiles.
 - [l2-model-router.md](l2-model-router.md) - Concrete consumer: the "capability match" and difficulty-tier signals gain a measured, per-task-class data source.
 - [l1-evaluation-suites.md](l1-evaluation-suites.md) - Grader machinery reused, never redefined (ES-3 discipline); demarcation: suites test customizations, this spec tests the base model.
+- [l1-specialty-exemplars.md](l1-specialty-exemplars.md) - Sibling instrument: this spec measures base-model fitness per router task class (mechanical/checklist/schema grading, router consumer); specialty-exemplars measures per-specialty competency against a gold-standard exemplar (craft-vs-correctness grading, staffing consumer). Shared disciplines, different question.
 - [l1-agent-coevaluation.md](l1-agent-coevaluation.md) - Demarcation and discipline: co-evaluation diagnoses (model, harness) pairs; this spec holds the harness fixed and minimal so deltas attribute to the model (ACE-5 comparability precedent).
 - [l1-evaluations.md](l1-evaluations.md) - The subjective complement: human per-message feedback; both feed the router as signals, never overrides (EVL-5 pattern).
 - [l1-retrieval-evaluation.md](l1-retrieval-evaluation.md) - Sibling measurement discipline: fixture as ground truth, baseline persistence, delta reporting, no opaque single score (RE-1/RE-3/RE-5 precedents).
@@ -186,6 +187,7 @@ None substitutes for another; this spec is the only member that measures the mod
 | Version | Date | Change |
 | --- | --- | --- |
 | 1.0.0 | 2026-07-02 | Initial concept: hardcoded three-class micro-benchmark (code / content / instruction-compliance probes) measuring base-model fitness per task class on quality + time + tokens/cost (MB-1…MB-9); fitness profiles feed the model router as a signal, never an override; deterministic-first grading composing the evaluation-suite grader taxonomy. |
+| 1.0.1 | 2026-07-03 | Added a Related Specifications cross-reference to the new sibling spec l1-specialty-exemplars (per-specialty competency graded against gold-standard reference exemplars, staffing consumer); demarcation only, no invariant or logic change. |
 
 ## Canonical References
 
