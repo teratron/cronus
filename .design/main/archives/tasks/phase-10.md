@@ -1,18 +1,33 @@
 ---
 phase: 10
 name: "Advanced Office Features (L2) — Foundational Wave"
-status: Todo
+status: Done
 subsystem: "crates/core (office_control, acp, automation, kanban) + apps/desktop + packages/ui (navigation)"
 requires:
   - "Phase 4: agent-session, model-router, context-router, inbox, memory-store"
   - "Phase 5: kanban board, scheduler, budget-engine, quality-pipeline, extension-registry"
   - "Phase 6: orchestration, trigger-triage"
   - "Phase 8: app-ui (Tauri v2 + React 19 shell), IPC bridge"
-provides: []
+provides:
+  - "office_control: OfficeState machine, cooperative drain/checkpoint, hibernation ladder (substitute-before-hibernate, auto-recovery wake), per-subsystem toggles (OC-1…OC-5)"
+  - "acp: session store, monotonic event bus, capability/trust gate, pure projections, steering + interrupt (ACP-1…ACP-10)"
+  - "automation: node taxonomy, dedup window, payload isolation, scoped state over volatile/durable backends, control plane, lifecycle observers (AP-1…AP-15 core)"
+  - "kanban::custom_boards: custom columns with canonical anchor + saved views + re-anchor audit (KAN-8)"
+  - "packages/ui navigation: canonical sidebar catalog, four-layer nesting, floor lazy-load, two-tier settings (NV-1…NV-10 pure logic)"
 key_files:
-  created: []
-  modified: []
-patterns_established: []
+  created:
+    - crates/core/src/office_control.rs
+    - crates/core/src/acp.rs
+    - crates/core/src/automation.rs
+    - crates/core/src/kanban/custom_boards.rs
+    - packages/ui/src/navigation.ts
+    - packages/ui/src/navigation.test.ts
+  modified:
+    - crates/core/src/lib.rs
+    - crates/core/src/kanban/mod.rs
+patterns_established:
+  - "Domain-logic-first: state machines + trait seams tested against in-memory state; real bus/transport/audio wiring deferred as documented seams"
+  - "Event-before-commit state transitions (OC-5); in-process event sink stands in for the event mesh"
 duration_minutes: ~
 ---
 
@@ -25,20 +40,20 @@ duration_minutes: ~
 ## Atomic Checklist
 
 - [x] [T-10A01] Office Control — OfficeState machine + master switch
-- [ ] [T-10A02] Office Control — hibernation ladder + per-subsystem toggles
-- [ ] [T-10AT01] Validation — OC-1…OC-5
-- [ ] [T-10B01] ACP — session store + monotonic event bus + capability/trust gate
-- [ ] [T-10B02] ACP — projections + cross-office relay + steering/interrupt
-- [ ] [T-10BT01] Validation — ACP-1…ACP-10
-- [ ] [T-10C01] Automation — PipelineEngine + node executor + dedup + payload isolation
-- [ ] [T-10C02] Automation — scoped state + control plane + lifecycle observers
-- [ ] [T-10C03] Automation — composition + portable bundles + dev runs + isolation/security
-- [ ] [T-10CT01] Validation — AP-1…AP-15
-- [ ] [T-10D01] Kanban KAN-8 — custom columns (canonical anchor) + saved views + re-anchor audit
-- [ ] [T-10DT01] Validation — KAN-8 anchor resolution + view-not-store
-- [ ] [T-10E01] Navigation — four-layer tree + floor tab bar + lazy load + live OfficeState icons
-- [ ] [T-10E02] Navigation — two-tier settings + Open-in-IDE launcher
-- [ ] [T-10ET01] Validation — NV parity + presentation-only (fallow audit)
+- [x] [T-10A02] Office Control — hibernation ladder + per-subsystem toggles
+- [x] [T-10AT01] Validation — OC-1…OC-5
+- [x] [T-10B01] ACP — session store + monotonic event bus + capability/trust gate
+- [x] [T-10B02] ACP — projections + cross-office relay + steering/interrupt
+- [x] [T-10BT01] Validation — ACP-1…ACP-10
+- [x] [T-10C01] Automation — PipelineEngine + node executor + dedup + payload isolation
+- [x] [T-10C02] Automation — scoped state + control plane + lifecycle observers
+- [x] [T-10C03] Automation — composition + portable bundles + dev runs + isolation/security
+- [x] [T-10CT01] Validation — AP-1…AP-15
+- [x] [T-10D01] Kanban KAN-8 — custom columns (canonical anchor) + saved views + re-anchor audit
+- [x] [T-10DT01] Validation — KAN-8 anchor resolution + view-not-store
+- [x] [T-10E01] Navigation — four-layer tree + floor tab bar + lazy load + live OfficeState icons
+- [x] [T-10E02] Navigation — two-tier settings + Open-in-IDE launcher
+- [x] [T-10ET01] Validation — NV parity + presentation-only (fallow audit)
 
 ## Detailed Tracking
 

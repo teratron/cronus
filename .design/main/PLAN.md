@@ -243,7 +243,7 @@ Execution mode: **Parallel** (C3); tracks grouped by file independence. Critical
 
 *L2 implementation specs for the L1 concepts added in 2026-06. These specs must be authored via `/magic.spec` before implementation tasks can be generated.*
 
-> **Status:** In progress — **all 11 L2 specs authored & Stable** (foundational + dependent waves). The full Phase 10 is ready to decompose. Kanban KAN-8 custom-boards delta rides here (spec already Stable at 1.1.0).
+> **Status:** Done (2026-07-04) — all 11 L2 specs implemented across `crates/core` (office_control, acp, automation, deliberation, version_control, inner_monologue, lookahead, global_orch, voice) + kanban KAN-8 custom_boards + presentation-only navigation/canvas in `packages/ui`. 33 tasks across two workbooks (phase-10.md tracks A–E, phase-10b.md tracks F–L). Domain-logic-first per the Phase-9 precedent: each subsystem's algorithm is implemented and tested against in-memory/mock state; OS/network/audio integration (real event bus, ACP transport, cpal/ONNX, cross-office relay) is deferred as documented seams. Gates green: cargo 250 lib tests + clippy `-D warnings` + fmt; vitest 39 tests (8 files) + biome. Kanban KAN-8 custom-boards delta implemented (spec Stable at 1.1.0).
 
 *Foundational wave — authored & Stable:*
 

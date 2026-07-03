@@ -1,9 +1,15 @@
 //! Office control — the OfficeState machine driving start/pause/resume/hibernate.
 //!
-//! Foundation: the state machine, guarded transitions, the master switch, and the
-//! state-change event emitted before a transition commits. The cooperative worker
-//! drain is modeled as a recorded checkpoint here; real wiring to the orchestration
-//! drain bus and the session-checkpoint store is deferred.
+//! Foundation: the state machine, guarded transitions, the master switch, the
+//! state-change event emitted before a transition commits, the token-exhaustion
+//! hibernation ladder (substitute-before-hibernate, auto resource-recovery wake),
+//! and per-subsystem pause toggles. The cooperative worker drain is modeled as a
+//! recorded checkpoint here; real wiring to the orchestration drain bus, the
+//! session-checkpoint store, and the model-router substitution is deferred — the
+//! substitution *decision* is resolved by the caller (OC-3 delegates entirely to
+//! the model-router) and handed in.
+
+use std::collections::HashSet;
 
 /// The lifecycle state of an office.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -70,6 +76,28 @@ pub enum Workload {
     Empty,
 }
 
+/// A subsystem that can be individually paused, independent of the master switch.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+pub enum Subsystem {
+    /// Scheduled/cron jobs.
+    Scheduler,
+    /// Auto-starting kanban tasks.
+    KanbanAutorun,
+    /// Event-driven automation pipelines.
+    Automation,
+    /// Heartbeat / pulse (inner monologue).
+    Heartbeat,
+}
+
+/// The outcome of handling a quota-exhaustion signal (OC-3).
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum HibernationOutcome {
+    /// A viable substitute model was available; the office stayed running.
+    Substituted,
+    /// No substitute within budget; the office drained and hibernated.
+    Hibernated,
+}
+
 /// The office control service. Sole writer of `OfficeState`; frontends read the
 /// state and request transitions, never set it directly.
 ///
@@ -84,6 +112,9 @@ pub struct OfficeControl {
     /// Whether a drain checkpoint exists to restore from (OC-1/OC-2). A frozen
     /// state always has one; resume clears it after restore.
     checkpoint: bool,
+    /// Subsystems the user has individually paused (OC §4.4). Survive a master
+    /// resume; the master switch only resumes subsystems not in this set.
+    paused_subsystems: HashSet<Subsystem>,
     events: Vec<StateChange>,
 }
 
@@ -94,6 +125,7 @@ impl OfficeControl {
             office_id: office_id.to_string(),
             state: OfficeState::Offline,
             checkpoint: false,
+            paused_subsystems: HashSet::new(),
             events: Vec::new(),
         }
     }
@@ -198,6 +230,68 @@ impl OfficeControl {
             }),
         }
     }
+
+    /// Handle a model quota-exhaustion signal (OC-3). The substitution decision is
+    /// resolved by the caller via the model-router (`substitute_available`); this
+    /// service holds no substitution logic. A viable substitute keeps the office
+    /// running; otherwise it drains and hibernates.
+    ///
+    /// Inert unless the office is running (`Active`/`Idle`).
+    pub fn on_quota_exhausted(
+        &mut self,
+        substitute_available: bool,
+        at: u64,
+    ) -> Option<HibernationOutcome> {
+        if !self.state.accepts_intake() {
+            return None;
+        }
+        if substitute_available {
+            // The swap itself is the model-router's job; the office stays running.
+            Some(HibernationOutcome::Substituted)
+        } else {
+            // No substitute within budget: drain and hibernate.
+            self.transition(OfficeState::Hibernating, at)
+                .expect("Active/Idle -> Hibernating is a valid edge");
+            Some(HibernationOutcome::Hibernated)
+        }
+    }
+
+    /// Handle a resource-recovery signal for a hibernation-causing resource (OC-4).
+    /// A `Hibernating` office auto-resumes with no user action. Inert otherwise.
+    pub fn on_quota_recovered(&mut self, workload: Workload, at: u64) -> bool {
+        if self.state != OfficeState::Hibernating {
+            return false;
+        }
+        let to = match workload {
+            Workload::Queued => OfficeState::Active,
+            Workload::Empty => OfficeState::Idle,
+        };
+        self.transition(to, at)
+            .expect("Hibernating -> Active/Idle is a valid edge");
+        true
+    }
+
+    /// Individually pause a subsystem (OC §4.4). Persists across a master resume.
+    pub fn pause_subsystem(&mut self, subsystem: Subsystem) {
+        self.paused_subsystems.insert(subsystem);
+    }
+
+    /// Individually resume a subsystem.
+    pub fn resume_subsystem(&mut self, subsystem: Subsystem) {
+        self.paused_subsystems.remove(&subsystem);
+    }
+
+    /// Whether a subsystem is individually paused.
+    pub fn is_subsystem_paused(&self, subsystem: Subsystem) -> bool {
+        self.paused_subsystems.contains(&subsystem)
+    }
+
+    /// Whether a subsystem is currently active: the office is running AND the
+    /// subsystem is not individually paused. A master resume therefore restores
+    /// only subsystems not individually paused.
+    pub fn is_subsystem_active(&self, subsystem: Subsystem) -> bool {
+        self.state.accepts_intake() && !self.is_subsystem_paused(subsystem)
+    }
 }
 
 #[cfg(test)]
@@ -295,5 +389,80 @@ mod tests {
         oc.resume(Workload::Queued, 5).unwrap();
         assert_eq!(oc.state(), OfficeState::Active);
         assert!(oc.take_events().is_empty());
+    }
+
+    #[test]
+    fn quota_exhausted_with_substitute_stays_running() {
+        // OC-3: a viable substitute keeps the office running — no hibernation.
+        let mut oc = active_office();
+        let outcome = oc.on_quota_exhausted(true, 10);
+        assert_eq!(outcome, Some(HibernationOutcome::Substituted));
+        assert_eq!(oc.state(), OfficeState::Active);
+        assert!(oc.take_events().is_empty());
+    }
+
+    #[test]
+    fn quota_exhausted_without_substitute_hibernates() {
+        // OC-3: no substitute within budget -> drain + hibernate + checkpoint.
+        let mut oc = active_office();
+        let outcome = oc.on_quota_exhausted(false, 10);
+        assert_eq!(outcome, Some(HibernationOutcome::Hibernated));
+        assert_eq!(oc.state(), OfficeState::Hibernating);
+        assert!(oc.has_checkpoint());
+        let events = oc.take_events();
+        assert_eq!(events.len(), 1);
+        assert_eq!(events[0].to, OfficeState::Hibernating);
+    }
+
+    #[test]
+    fn quota_recovered_auto_wakes_from_hibernation() {
+        // OC-4: recovery auto-resumes with no user action; checkpoint cleared.
+        let mut oc = active_office();
+        oc.on_quota_exhausted(false, 10);
+        oc.take_events();
+        let woke = oc.on_quota_recovered(Workload::Queued, 20);
+        assert!(woke);
+        assert_eq!(oc.state(), OfficeState::Active);
+        assert!(!oc.has_checkpoint());
+    }
+
+    #[test]
+    fn quota_signals_inert_when_not_applicable() {
+        // Exhaustion is inert while frozen; recovery is inert while running.
+        let mut paused = active_office();
+        paused.pause(5).unwrap();
+        assert_eq!(paused.on_quota_exhausted(false, 6), None);
+        assert_eq!(paused.state(), OfficeState::Paused);
+
+        let mut running = active_office();
+        assert!(!running.on_quota_recovered(Workload::Empty, 6));
+        assert_eq!(running.state(), OfficeState::Active);
+    }
+
+    #[test]
+    fn individually_paused_subsystem_survives_master_resume() {
+        // OC §4.4: a subsystem paused individually stays paused after master resume.
+        let mut oc = active_office();
+        oc.pause_subsystem(Subsystem::Scheduler);
+        assert!(oc.is_subsystem_paused(Subsystem::Scheduler));
+
+        oc.pause(10).unwrap();
+        oc.resume(Workload::Empty, 20).unwrap();
+        // Master resume restored the office, but the scheduler stays paused.
+        assert_eq!(oc.state(), OfficeState::Idle);
+        assert!(oc.is_subsystem_paused(Subsystem::Scheduler));
+        assert!(!oc.is_subsystem_active(Subsystem::Scheduler));
+        // A subsystem never individually paused is active once the office runs.
+        assert!(oc.is_subsystem_active(Subsystem::Automation));
+    }
+
+    #[test]
+    fn subsystem_inactive_while_office_frozen() {
+        let mut oc = active_office();
+        oc.pause(10).unwrap();
+        // No subsystem is active while the office itself is paused.
+        assert!(!oc.is_subsystem_active(Subsystem::Heartbeat));
+        oc.resume_subsystem(Subsystem::Scheduler); // idempotent when not paused
+        assert!(!oc.is_subsystem_paused(Subsystem::Scheduler));
     }
 }

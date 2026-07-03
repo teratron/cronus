@@ -4,23 +4,25 @@
 <!-- Maximum 100 lines. Agent updates AFTER each completed action. -->
 
 **Workspace:** main
-**Updated:** 2026-07-03 20:43
-**Phase:** 10 — Advanced Office Features (L2)
+**Updated:** 2026-07-03 21:08
+**Phase:** 11 — Content, Sharing & Dev-Workflow Subsystems
 **Status:** Active
 
 ## Current Position
 
-- **Task:** T-10A01 Done (office_control.rs, 8 tests green, clippy/fmt clean); 1 of 33 Phase-10 tasks complete
-- **Spec:** PLAN v2.12.0 / TASKS v1.16.0 / INDEX v1.0.64 in sync; all 11 Phase-10 L2 authored & Stable (foundational + dependent waves); KAN-8 delta tracked
-- **Next Action:** Execute T-10A02 (hibernation ladder + per-subsystem toggles) via /magic.run main, then Track B/C/D in parallel
+- **Task:** Phase 10 COMPLETE — all 33/33 tasks Done (phase-10a archived; phase-10b Done). 9 new crates/core modules + kanban KAN-8 + 2 packages/ui modules
+- **Spec:** PLAN v2.12.0 / TASKS v1.16.0 / INDEX v1.0.64 in sync; all 11 Phase-10 L2 Stable + implemented
+- **Next Action:** Run /magic.task main to decompose Phase 11 (resource-sharing, notes, file-store, development-workflow — L2 specs already Stable), then /magic.run main
 
 ## Progress
 
 ```
-Build phases: Done 1–9 (Seed→Hardening) | Phase 10 ▶ all 11 L2 Stable + decomposed (33 tasks: 15 in phase-10a / 18 in phase-10b) | Executed: T-10A01 ✓ | Remaining: 32 tasks + Phase 11
+Build phases: Done 1–10 (Seed→Advanced Office Features) | Gates green: cargo 250 lib tests + clippy + fmt · vitest 39 (8 files) + biome | Next: Phase 11 (content/sharing/dev-workflow)
 ```
 
 ## Recent Decisions
+
+- 2026-07-03 **Decision:** Phase 10 complete (33/33 tasks). Provides: office_control/acp/automation/deliberation/version_control/inner_monologue/lookahead/global_orch/voice in crates/core + kanban KAN-8 custom_boards + navigation/canvas in packages/ui. Domain-logic-first; OS/network/audio wiring deferred as seams. Gates green: cargo 250 lib tests + clippy + fmt; vitest 39 + biome.
 - 2026-07-03 **Decision:** Phase 9 complete. Provides: sandbox policy, multi-user auth, doctor + cronus doctor verb, config hot-reload, backup/restore + verbs, agent migration, GitHub issue reporting, self-improvement brief, telemetry, and a cross-subsystem hardening integration proof. All gates green workspace-wide.
 - 2026-07-03 **Decision:** Phase 8 complete. Provides: Tauri v2 desktop shell (typed IPC bridge, settings, tray/shortcuts/overlay/single-instance logic, provider prompt dispatch, XML env context, MCP client model) + React UI (five-surface workbench, theming, en/ru i18n, Office View, Dashboard). All gates green: cargo 34/34, vitest 27/27, fallow audit clean.
 
@@ -47,10 +49,6 @@ Build phases: Done 1–9 (Seed→Hardening) | Phase 10 ▶ all 11 L2 Stable + de
 - 2026-06-28 **Run prep (Phase 7 de-risk, no code yet):** Pre-flight green (ok:true, header parity clean). Resolved the planner-flagged hidden dependency for the TUI render loop: (1) **Binding pattern** — frontends bind to subsystems by calling the public core modules **directly** (`cronus::kanban::{Board,CardState}`, `cronus::session`, `cronus::workspace::WorkspaceManager`, `cronus::roles::RoleManager`, …), exactly as `crates/cli/src/commands.rs` does; the thin `Capabilities` trait is version/status only, NOT the subsystem surface. TUI parity (INV-3) = invoke the same core fns the CLI verbs do. (2) **No core event bus** → render loop uses the poll-snapshot fallback (re-read core state per tick), INV-5 view-only preserved. (3) **Toolchain OK + network available** → add `crossterm` (± `ratatui`) as the terminal backend; NOT blocked (unlike Phase 1's pnpm/Tauri). T-7A01 needs a DI-mockable terminal abstraction (raw mode is untestable in the non-TTY runner). Paused here for context budget — tree left green (`cargo build -p cronus-tui` passes). Resume execution in a fresh session.
 
 - 2026-06-28 **Decision:** Plan v2.5.0 → v2.6.0 registry re-sync (INDEX raced to v1.0.36). 48 orphaned specs absorbed: 39 newly-authored Stable L1 concepts folded into Phase 0; 4 ready Stable L2 subsystems (resource-sharing, notes, file-store, development-workflow) became Phase 11; 5 non-Stable (l1-spec-driven-governance/dynamic-harness/loop-governance RFC, l2-knowledge-store RFC, l2-loop-runner Draft) parked in Backlog. Phase 7 (TUI) decomposed: 9 tasks, render-loop carries a poll-snapshot fallback if the core lacks an event seam. (Revert: git restore .design/main/PLAN.md .design/main/TASKS.md .design/main/tasks/phase-7.md)
-
-- 2026-06-23 **Decision:** nodus workspace created under `.design/nodus/` — PLAN.md (3 phases), TASKS.md, tasks/phase-1.md (7 tasks: T-1A01..T-1T01). Phase 1 covers spec completeness (TBDs in §4.4 parallel error propagation + §4.3 macro invocation), vocabulary alignment, and NL invariant test coverage.
-
-
 
 ## Blockers
 

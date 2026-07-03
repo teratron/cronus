@@ -1,8 +1,12 @@
 //! Kanban board — single per-workspace board with file-backed cards.
 //!
-//! Fixed state set: triage → todo → ready → running → blocked → done.
+//! Fixed canonical state set: triage → todo → ready → running → blocked → done.
 //! Each transition appends a history entry (KAN-7). Done cards are auto-archived
-//! to `<ws>/kanban/archive/` without deletion (KAN-4).
+//! to `<ws>/kanban/archive/` without deletion (KAN-4). Custom columns and saved
+//! views (KAN-8) extend the canonical backbone as mapped extensions — see
+//! [`custom_boards`].
+
+pub mod custom_boards;
 
 use std::fmt;
 use std::fs;
