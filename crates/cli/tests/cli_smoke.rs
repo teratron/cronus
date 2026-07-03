@@ -195,7 +195,10 @@ fn check_run_exits_0() {
         .args(["check", "run", "smoke-card"])
         .status()
         .expect("failed to spawn binary");
-    assert!(status.success(), "check run must exit 0 at the gate-runner seam");
+    assert!(
+        status.success(),
+        "check run must exit 0 at the gate-runner seam"
+    );
 }
 
 #[test]

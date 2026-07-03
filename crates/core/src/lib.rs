@@ -3,14 +3,20 @@
 //! All domain logic lives here; frontends (CLI, TUI, app) are thin and call the
 //! capability contract below. The core has no presentation dependencies.
 
+pub mod agent_migration;
 pub mod agent_registry;
+pub mod auth;
 pub mod autonomy;
+pub mod backup;
 pub mod budget;
 pub mod checkpoint;
+pub mod config_hotreload;
 pub mod constitution;
 pub mod context_mgmt;
 pub mod context_router;
+pub mod doctor;
 pub mod egress;
+pub mod error_reporting;
 pub mod exec_workspace;
 pub mod extensions;
 pub mod hooks;
@@ -26,11 +32,14 @@ pub mod redact;
 pub mod research;
 pub mod roles;
 pub mod router;
+pub mod sandbox_policy;
 pub mod scheduler;
 pub mod secrets;
+pub mod self_improvement;
 pub mod session;
 pub mod state;
 pub mod store;
+pub mod telemetry;
 pub mod tool_security;
 pub mod trigger_triage;
 pub mod workspace;

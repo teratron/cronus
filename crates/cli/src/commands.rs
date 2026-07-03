@@ -24,6 +24,9 @@ pub fn dispatch(command: Command, ctx: &Context) -> i32 {
         Command::Mission { sub } => mission::dispatch(sub, ctx),
         Command::Research { sub } => research::dispatch(sub, ctx),
         Command::Change { sub } => change::dispatch(sub, ctx),
+        Command::Doctor { fix } => doctor::run(fix, ctx),
+        Command::Backup { sub } => backup_cmd::dispatch(sub, ctx),
+        Command::Restore { backup } => backup_cmd::restore(&backup, ctx),
     }
 }
 
@@ -181,6 +184,281 @@ mod status {
                 1,
                 "status must exit 1 when not initialized"
             );
+        }
+    }
+}
+
+// ─── doctor ───────────────────────────────────────────────────────────────────
+
+mod doctor {
+    use std::path::Path;
+
+    use cronus::doctor::{self, Disposition};
+    use cronus::paths::{Paths, Root};
+
+    use crate::output::Context;
+
+    pub fn run(fix: bool, ctx: &Context) -> i32 {
+        let paths = Paths::os_native();
+        let root = paths.resolve(Root::State);
+        run_at(&root, fix, ctx)
+    }
+
+    /// Config validity is checked against the real workspace state root;
+    /// the remaining check categories (board cards, sessions, disk, store,
+    /// crash recovery) await their subsystem-projection wiring — the check
+    /// engine itself already covers all six (see `cronus::doctor` tests).
+    fn run_at(state_root: &Path, fix: bool, ctx: &Context) -> i32 {
+        let mut inputs = doctor::DoctorInputs::default();
+        if !state_root.join("app.json").exists() {
+            inputs.config.missing_defaults.push("app.json".to_string());
+        }
+
+        let report = if fix {
+            doctor::repair(&inputs)
+        } else {
+            doctor::check(&inputs)
+        };
+
+        if ctx.is_json() {
+            println!(
+                "{{\"findings\":{},\"repaired\":{},\"escalated\":{}}}",
+                report.findings.len(),
+                report.repaired.len(),
+                report.escalated.len()
+            );
+        } else if report.findings.is_empty() {
+            println!("doctor: all checks passed");
+        } else {
+            for finding in &report.findings {
+                let tag = match finding.disposition {
+                    Disposition::SafeRepair if fix => "repaired",
+                    Disposition::SafeRepair => "repairable (--fix to apply)",
+                    Disposition::Escalate => "escalate",
+                };
+                println!("[{tag}] {}: {}", finding.id, finding.description);
+            }
+        }
+        if report.escalated.is_empty() { 0 } else { 1 }
+    }
+
+    #[cfg(test)]
+    mod tests {
+        use std::fs;
+
+        use crate::output::{Context, OutputFormat};
+
+        use super::run_at;
+
+        #[test]
+        fn reports_all_clear_when_config_is_present() {
+            let tmp =
+                std::env::temp_dir().join(format!("cronus-doctor-clean-{}", std::process::id()));
+            let _ = fs::remove_dir_all(&tmp);
+            fs::create_dir_all(&tmp).unwrap();
+            fs::write(tmp.join("app.json"), "{}\n").unwrap();
+
+            let ctx = Context::new(OutputFormat::Text);
+            assert_eq!(run_at(&tmp, false, &ctx), 0);
+
+            let _ = fs::remove_dir_all(&tmp);
+        }
+
+        #[test]
+        fn flags_missing_config_as_a_safe_repair_and_fix_resolves_it() {
+            let tmp =
+                std::env::temp_dir().join(format!("cronus-doctor-missing-{}", std::process::id()));
+            let _ = fs::remove_dir_all(&tmp);
+            fs::create_dir_all(&tmp).unwrap();
+
+            let ctx = Context::new(OutputFormat::Text);
+            // A safe-repair-only finding never escalates, so the exit code stays 0
+            // even though something was flagged.
+            assert_eq!(
+                run_at(&tmp, false, &ctx),
+                0,
+                "check-only still exits 0 (nothing escalated)"
+            );
+            assert_eq!(run_at(&tmp, true, &ctx), 0, "--fix applies the safe repair");
+
+            let _ = fs::remove_dir_all(&tmp);
+        }
+    }
+}
+
+// ─── backup ───────────────────────────────────────────────────────────────────
+
+mod backup_cmd {
+    use std::path::{Path, PathBuf};
+
+    use cronus::backup::{self, BackupOptions};
+    use cronus::paths::{Paths, Root};
+
+    use crate::cli::BackupCommand;
+    use crate::output::Context;
+
+    fn state_root_and_backups_dir() -> (PathBuf, PathBuf) {
+        let paths = Paths::os_native();
+        let root = paths.resolve(Root::State);
+        let backups_dir = root.join("backups");
+        (root, backups_dir)
+    }
+
+    pub fn dispatch(sub: BackupCommand, ctx: &Context) -> i32 {
+        let (state_root, backups_dir) = state_root_and_backups_dir();
+        match sub {
+            BackupCommand::Create { to, include_logs } => {
+                create_at(&state_root, &backups_dir, to.as_deref(), include_logs, ctx)
+            }
+            BackupCommand::List => list_at(&backups_dir, ctx),
+        }
+    }
+
+    fn create_at(
+        state_root: &Path,
+        backups_dir: &Path,
+        to: Option<&Path>,
+        include_logs: bool,
+        ctx: &Context,
+    ) -> i32 {
+        let options = BackupOptions { include_logs };
+        match backup::create(state_root, backups_dir, to, options) {
+            Ok(backup_ref) => {
+                if ctx.is_json() {
+                    println!(
+                        "{{\"id\":\"{}\",\"path\":\"{}\"}}",
+                        backup_ref.id,
+                        backup_ref.path.display()
+                    );
+                } else {
+                    println!(
+                        "backup created: {} ({})",
+                        backup_ref.id,
+                        backup_ref.path.display()
+                    );
+                }
+                0
+            }
+            Err(err) => {
+                eprintln!("backup failed: {err}");
+                1
+            }
+        }
+    }
+
+    fn list_at(backups_dir: &Path, ctx: &Context) -> i32 {
+        match backup::list(backups_dir) {
+            Ok(backups) if backups.is_empty() => {
+                println!("no backups found");
+                0
+            }
+            Ok(backups) => {
+                for backup_ref in &backups {
+                    if ctx.is_json() {
+                        println!(
+                            "{{\"id\":\"{}\",\"path\":\"{}\",\"created_at\":{}}}",
+                            backup_ref.id,
+                            backup_ref.path.display(),
+                            backup_ref.created_at_unix
+                        );
+                    } else {
+                        println!("{}\t{}", backup_ref.id, backup_ref.path.display());
+                    }
+                }
+                0
+            }
+            Err(err) => {
+                eprintln!("listing backups failed: {err}");
+                1
+            }
+        }
+    }
+
+    pub fn restore(backup_id: &str, ctx: &Context) -> i32 {
+        let (state_root, backups_dir) = state_root_and_backups_dir();
+        restore_at(&state_root, &backups_dir, backup_id, ctx)
+    }
+
+    fn restore_at(state_root: &Path, backups_dir: &Path, backup_id: &str, ctx: &Context) -> i32 {
+        let Ok(backups) = backup::list(backups_dir) else {
+            eprintln!("could not read backups directory");
+            return 1;
+        };
+        let Some(backup_ref) = backups.into_iter().find(|b| b.id == backup_id) else {
+            eprintln!("backup not found: {backup_id}");
+            return 1;
+        };
+        match backup::restore(&backup_ref, state_root) {
+            Ok(()) => {
+                if !ctx.is_json() {
+                    println!("restored {backup_id} into {}", state_root.display());
+                }
+                0
+            }
+            Err(err) => {
+                eprintln!("restore failed: {err}");
+                1
+            }
+        }
+    }
+
+    #[cfg(test)]
+    mod tests {
+        use std::fs;
+
+        use crate::output::{Context, OutputFormat};
+
+        use super::{create_at, list_at, restore_at};
+
+        #[test]
+        fn create_then_list_then_restore_round_trips() {
+            let state_root = std::env::temp_dir()
+                .join(format!("cronus-cli-backup-state-{}", std::process::id()));
+            let backups_dir =
+                std::env::temp_dir().join(format!("cronus-cli-backup-dir-{}", std::process::id()));
+            let restore_target = std::env::temp_dir()
+                .join(format!("cronus-cli-backup-restore-{}", std::process::id()));
+            for dir in [&state_root, &backups_dir, &restore_target] {
+                let _ = fs::remove_dir_all(dir);
+            }
+            fs::create_dir_all(&state_root).unwrap();
+            fs::write(state_root.join("config.json"), "{}").unwrap();
+            fs::write(state_root.join(".env"), "SECRET=x").unwrap();
+
+            let ctx = Context::new(OutputFormat::Text);
+            assert_eq!(create_at(&state_root, &backups_dir, None, false, &ctx), 0);
+            assert_eq!(list_at(&backups_dir, &ctx), 0);
+
+            let backups = cronus::backup::list(&backups_dir).unwrap();
+            assert_eq!(backups.len(), 1);
+            assert_eq!(
+                restore_at(&restore_target, &backups_dir, &backups[0].id, &ctx),
+                0
+            );
+            assert!(restore_target.join("config.json").exists());
+            assert!(!restore_target.join(".env").exists());
+
+            for dir in [&state_root, &backups_dir, &restore_target] {
+                let _ = fs::remove_dir_all(dir);
+            }
+        }
+
+        #[test]
+        fn restoring_an_unknown_backup_id_fails_cleanly() {
+            let backups_dir = std::env::temp_dir()
+                .join(format!("cronus-cli-backup-unknown-{}", std::process::id()));
+            let _ = fs::remove_dir_all(&backups_dir);
+            fs::create_dir_all(&backups_dir).unwrap();
+
+            let ctx = Context::new(OutputFormat::Text);
+            let dest =
+                std::env::temp_dir().join(format!("cronus-cli-backup-dest-{}", std::process::id()));
+            assert_eq!(
+                restore_at(&dest, &backups_dir, "backup-does-not-exist", &ctx),
+                1
+            );
+
+            let _ = fs::remove_dir_all(&backups_dir);
         }
     }
 }

@@ -102,9 +102,9 @@
 
 ### Tauri
 
-- <https://github.com/agmmnn/tauri-ui>
 - <https://github.com/tauri-apps/plugins-workspace>
 - <https://github.com/tauri-apps/awesome-tauri>
+- <https://github.com/agmmnn/tauri-ui>
 - <https://madewithtauri.com>
 
 ### Примеры GUI
@@ -116,8 +116,6 @@
 - <https://github.com/janhq/jan>
 - <https://github.com/mountain-loop/yaak>
 - <https://github.com/aptakube/aptakube>
-- <https://github.com/mdSilo/mdSilo-app>
-- <https://github.com/janhq/jan>
 
 ## Misc
 

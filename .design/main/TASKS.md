@@ -9,7 +9,7 @@
 
 ## Overview
 
-Tactical registry of all phases and their statuses, ordered by the growth metaphor (seed → stem → leaf → flower). Atomic checklists live in `tasks/phase-{N}.md`. Phases 2-8 are Done (Archived); Phase 9 (Operational Hardening) is next and is decomposed on entry, like all later phases.
+Tactical registry of all phases and their statuses, ordered by the growth metaphor (seed → stem → leaf → flower). Atomic checklists live in `tasks/phase-{N}.md`. Phases 2-9 are Done; Phase 10 is next and is decomposed on entry, like all later phases.
 
 ## Active Phases
 
@@ -23,11 +23,11 @@ Tactical registry of all phases and their statuses, ordered by the growth metaph
 | [Phase 6](archives/tasks/phase-6.md) | Orchestration & Autonomy: delegation, /goal+judge+budget, briefings | `Done (Archived)` |
 | [Phase 7](archives/tasks/phase-7.md) | Leaf — TUI (interactive terminal) | `Done (Archived)` |
 | [Phase 8](archives/tasks/phase-8.md) | Flower — Desktop App: application UI, office view, dashboard | `Done (Archived)` |
-| [Phase 9](tasks/phase-9.md) | Operational Hardening: sandbox policy, multi-user auth, doctor, config hot-reload, backup, agent migration, GitHub issue reporting, self-improvement, telemetry | `Todo` |
+| [Phase 9](archives/tasks/phase-9.md) | Operational Hardening: sandbox policy, multi-user auth, doctor, config hot-reload, backup, agent migration, GitHub issue reporting, self-improvement, telemetry | `Done (Archived)` |
 | Phase 10 | Advanced Office Features (L2): automation engine, canvas, office control, navigation, voice input, deliberation, version control, inner monologue, lookahead planning, ACP, global orchestration — L2 specs pending authoring | `Pending` |
 | Phase 11 | Content, Sharing & Dev-Workflow Subsystems: resource-sharing, notes, file-store, development-workflow (L2 specs Stable) — decomposed on entry | `Pending` |
 
 ## Meta Information
 
-- **Last Updated**: 2026-07-03 (Phase 9 — Operational Hardening decomposed: 9 Stable specs -> 10 tasks / 5 tracks in tasks/phase-9.md; Tracks A-D parallel with intra-track serialization only; shared CLI wiring flagged as the cross-track serialization point; T-9D02 flagged for run-time ID-splitting if it overruns. Prior: registry re-sync to INDEX v1.0.61 / PLAN v2.9.0)
+- **Last Updated**: 2026-07-03 (Phase 9 — Operational Hardening complete: all 10 tasks across 5 tracks done, workspace-wide gates green, archived to archives/tasks/phase-9.md. Prior: Phase 9 decomposed: 9 Stable specs -> 10 tasks / 5 tracks. Prior: registry re-sync to INDEX v1.0.61 / PLAN v2.9.0)
 - **Maintainer**: Core Team

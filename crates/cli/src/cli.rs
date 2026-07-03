@@ -122,6 +122,37 @@ pub enum Command {
         #[command(subcommand)]
         sub: ChangeCommand,
     },
+    /// Self-healing: run health checks, optionally applying safe repairs
+    Doctor {
+        /// Apply safe, deterministic repairs (risky findings still escalate)
+        #[arg(long)]
+        fix: bool,
+    },
+    /// Back up the state tier (secrets and cache excluded)
+    Backup {
+        #[command(subcommand)]
+        sub: BackupCommand,
+    },
+    /// Restore a backup into the current state tier
+    Restore {
+        /// Backup id (as shown by `cronus backup list`)
+        backup: String,
+    },
+}
+
+#[derive(Subcommand)]
+pub enum BackupCommand {
+    /// Create a backup
+    Create {
+        /// Destination path (defaults to `<state>/backups/backup-<timestamp>`)
+        #[arg(long = "to")]
+        to: Option<PathBuf>,
+        /// Include the regenerable logs directory (excluded by default)
+        #[arg(long)]
+        include_logs: bool,
+    },
+    /// List backups under the state tier's `backups/` directory
+    List,
 }
 
 #[derive(Subcommand)]

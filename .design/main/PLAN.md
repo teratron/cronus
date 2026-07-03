@@ -7,7 +7,7 @@
 
 ## Overview
 
-Implementation plan for Cronus from the project registry (146 registered specs: 139 Stable, 6 RFC, 1 Draft). Phases follow a **growth order**: the agent grows like a sprout from a seed. This revision re-syncs the plan with registry v1.0.61: 15 newly authored Stable L1 concepts fold into Phase 0 (concept-only, C28), and the two RFC memory-layer concepts park in the Backlog (no spec is left orphaned). The active implementation phase remains Phase 8 (Flower — Desktop App).
+Implementation plan for Cronus from the project registry (146 registered specs: 139 Stable, 6 RFC, 1 Draft). Phases follow a **growth order**: the agent grows like a sprout from a seed. This revision re-syncs the plan with registry v1.0.61: 15 newly authored Stable L1 concepts fold into Phase 0 (concept-only, C28), and the two RFC memory-layer concepts park in the Backlog (no spec is left orphaned). Phases 1–9 are complete (Seed through Hardening); Phase 10 (Advanced Office Features) is next once its L2 specs are authored.
 
 - **Seed = the library** (`crates/core` + `crates/nodus` runtime) — Phases 1–2.
 - **Stem = the CLI** — Phase 3, the first usable surface, emerging straight from the seed.
@@ -220,16 +220,18 @@ Execution mode: **Parallel** (C3); tracks grouped by file independence. Critical
 *Self-healing, backup, error reporting, telemetry, and the deferred security-hardening layer.*
 
 > **Relocated from Phase 1 (2026-06-30):** `l2-sandbox-policy` and `l2-multi-user-auth` are security-hardening specs that never gated any earlier phase; they sit here with the rest of the productionization work rather than blocking the foundation. Decomposed into tasks on entry.
+>
+> **Done (2026-07-03):** all 10 tasks across 5 tracks complete — sandbox policy + multi-user auth (security), doctor + config hot-reload (self-healing), backup + agent migration (data safety), GitHub issue reporting + self-improvement + telemetry (reporting/improvement), and a cross-subsystem hardening integration test proving no seeded secret reaches any egress surface. Domain-logic-first scope throughout: each subsystem's algorithm is fully implemented and tested against seeded/mock state; OS-level integration (real file watchers, GitHub API transport, SQLite persistence for dedup/brief tables) is deferred, documented per task. 40 new tests added to `crates/core` this phase (184 lib + 5 integration); workspace-wide gates green. See `archives/tasks/phase-9.md`.
 
-- [ ] **Sandbox Policy** ([l2-sandbox-policy.md](specifications/l2-sandbox-policy.md)) [L2] — deny-by-default network egress (named entries + binary allowlists), isolation tiers (restricted/balanced/open), preset catalog, PolicyContext, access failure classification (depends on security)
-- [ ] **Multi-User Auth** ([l2-multi-user-auth.md](specifications/l2-multi-user-auth.md)) [L2] — bcrypt passwords, session tokens, TOTP 2FA, privilege map, admin promote/demote, reserved sentinel usernames (depends on security)
-- [ ] **Doctor** ([l2-doctor.md](specifications/l2-doctor.md)) [L2]
-- [ ] **Config Hot-Reload** ([l2-config-hotreload.md](specifications/l2-config-hotreload.md)) [L2] — file-watcher with bounded backoff+polling fallback, prefix-keyed reload plan, subsystem action dispatch, skills snapshot invalidation (depends on doctor + scheduler + extension-registry)
-- [ ] **Backup** ([l2-backup.md](specifications/l2-backup.md)) [L2]
-- [ ] **GitHub Issue Reporting** ([l2-github-issue.md](specifications/l2-github-issue.md)) [L2] — consent + scrub + dedup pipeline, GitHub issue filing; error fingerprinting (BLAKE3 normalized hash, cross-episode dedup, prior-resolution surfacing)
-- [ ] **Self-Improvement** ([l2-self-improvement.md](specifications/l2-self-improvement.md)) [L2] — calibration buckets (overconfidence metric, verified-ratio warning), mistake log (project/category/files), should-have-asked (trigger→question→answer), ask-backs (at-most-one-pending per project via partial UNIQUE INDEX), reasoning templates (task_type+domain → JSON steps, dream cycle extracted), brief surface (5-signal join at task start, cross-project mode) (depends on memory-store + learning-loop + agent-session + github-issue)
-- [ ] **Telemetry** ([l1-telemetry.md](specifications/l1-telemetry.md)) [L1] — opt-in program metrics (implementation light)
-- [ ] **Agent Migration** ([l2-agent-migration.md](specifications/l2-agent-migration.md)) [L2] — migration manifest v1, two-layer import (archives vs memory candidates), staged apply, source adapters (depends on memory-store + extension-registry + backup)
+- [x] **Sandbox Policy** ([l2-sandbox-policy.md](specifications/l2-sandbox-policy.md)) [L2] — deny-by-default network egress (named entries + binary allowlists), isolation tiers (restricted/balanced/open), preset catalog, PolicyContext, access failure classification (depends on security)
+- [x] **Multi-User Auth** ([l2-multi-user-auth.md](specifications/l2-multi-user-auth.md)) [L2] — bcrypt passwords, session tokens, TOTP 2FA, privilege map, admin promote/demote, reserved sentinel usernames (depends on security)
+- [x] **Doctor** ([l2-doctor.md](specifications/l2-doctor.md)) [L2]
+- [x] **Config Hot-Reload** ([l2-config-hotreload.md](specifications/l2-config-hotreload.md)) [L2] — file-watcher with bounded backoff+polling fallback, prefix-keyed reload plan, subsystem action dispatch, skills snapshot invalidation (depends on doctor + scheduler + extension-registry)
+- [x] **Backup** ([l2-backup.md](specifications/l2-backup.md)) [L2]
+- [x] **GitHub Issue Reporting** ([l2-github-issue.md](specifications/l2-github-issue.md)) [L2] — consent + scrub + dedup pipeline, GitHub issue filing; error fingerprinting (BLAKE3 normalized hash, cross-episode dedup, prior-resolution surfacing)
+- [x] **Self-Improvement** ([l2-self-improvement.md](specifications/l2-self-improvement.md)) [L2] — calibration buckets (overconfidence metric, verified-ratio warning), mistake log (project/category/files), should-have-asked (trigger→question→answer), ask-backs (at-most-one-pending per project via partial UNIQUE INDEX), reasoning templates (task_type+domain → JSON steps, dream cycle extracted), brief surface (5-signal join at task start, cross-project mode) (depends on memory-store + learning-loop + agent-session + github-issue)
+- [x] **Telemetry** ([l1-telemetry.md](specifications/l1-telemetry.md)) [L1] — opt-in program metrics (implementation light)
+- [x] **Agent Migration** ([l2-agent-migration.md](specifications/l2-agent-migration.md)) [L2] — migration manifest v1, two-layer import (archives vs memory candidates), staged apply, source adapters (depends on memory-store + extension-registry + backup)
 
 ## Phase 10 — Advanced Office Features (L2)
 

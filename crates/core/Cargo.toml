@@ -8,10 +8,15 @@ repository.workspace = true
 [dependencies]
 aes-gcm = { workspace = true }
 argon2 = { workspace = true }
+bcrypt = { workspace = true }
+blake3 = { workspace = true }
 chrono = { workspace = true }
 cron = { workspace = true }
+getrandom = { workspace = true }
+hmac = { workspace = true }
 keyring = { workspace = true }
 rusqlite = { workspace = true }
+sha1 = { workspace = true }
 
 # Benchmarks use a std-only timing harness (no external bench crate — see the
 # dependency policy). Each bench target is a plain `fn main()` gated behind
