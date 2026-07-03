@@ -92,20 +92,31 @@
 
 ## UI/UX
 
-- tauri приложения: <https://madewithtauri.com>
-- tauri приложения: <https://github.com/tauri-apps/awesome-tauri>
-- <https://github.com/agmmnn/tauri-ui>
+### Компоненты
+
 - <https://github.com/shadcn-ui/ui>
 - <https://github.com/chakra-ui/chakra-ui>
 - <https://github.com/ant-design/ant-design>
 - <https://github.com/mantinedev/mantine>
 - <https://github.com/radix-ui/themes>
-- пример GUI: <https://github.com/hoppscotch/hoppscotch>
-- пример GUI: <https://github.com/gitbutlerapp/gitbutler>
-- пример GUI: <https://github.com/spacedriveapp/spacedrive>
-- пример GUI: <https://github.com/CapSoftware/Cap>
-- пример GUI: <https://github.com/janhq/jan>
-- пример GUI: <https://github.com/mountain-loop/yaak>
+
+### Tauri
+
+- <https://github.com/agmmnn/tauri-ui>
+- <https://github.com/tauri-apps/plugins-workspace>
+- <https://github.com/tauri-apps/awesome-tauri>
+- <https://madewithtauri.com>
+
+### Примеры GUI
+
+- <https://github.com/hoppscotch/hoppscotch>
+- <https://github.com/gitbutlerapp/gitbutler>
+- <https://github.com/spacedriveapp/spacedrive>
+- <https://github.com/CapSoftware/Cap>
+- <https://github.com/janhq/jan>
+- <https://github.com/mountain-loop/yaak>
+- <https://github.com/aptakube/aptakube>
+- <https://github.com/mdSilo/mdSilo-app>
 
 ## Misc
 
