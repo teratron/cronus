@@ -6,7 +6,9 @@
 
 pub mod bridge;
 pub mod instance;
+pub mod mcp;
 pub mod overlay;
+pub mod prompts;
 pub mod settings;
 pub mod shortcuts;
 pub mod tray;

@@ -49,13 +49,13 @@ Track C — UI Surfaces & Views (React side, l2-app-ui §4.1/4.5/4.6 + sibling s
 
 Track D — Integrations (l2-app-ui §4.12–4.14)
 
-- [ ] [T-8D01] Per-provider system prompt dispatch (§4.12) + XML structured environment context (§4.13)
-- [ ] [T-8D02] MCP client transports (Stdio/SSE/StreamableHTTP) + connection status states + OAuth flow (§4.14)
+- [x] [T-8D01] Per-provider system prompt dispatch (§4.12) + XML structured environment context (§4.13)
+- [x] [T-8D02] MCP client transports (Stdio/SSE/StreamableHTTP) + connection status states + OAuth flow (§4.14)
 
 Track T — Validation
 
-- [ ] [T-8T01] Validate presentation-only + dependency direction (UI → core over IPC, no business logic in TS; `fallow audit` clean; tsc no `any` on public surfaces)
-- [ ] [T-8T02] Validate store-compliance + theming/i18n behavior (§4.4): single-authority state, render-from-state, localized strings, theme tokens honored
+- [!] [T-8T01] Validate presentation-only + dependency direction (UI → core over IPC, no business logic in TS; `fallow audit` clean; tsc no `any` on public surfaces)
+- [x] [T-8T02] Validate store-compliance + theming/i18n behavior (§4.4): single-authority state, render-from-state, localized strings, theme tokens honored
 
 ## Detailed Tracking
 
@@ -133,29 +133,33 @@ Track T — Validation
 ### [T-8D01] Per-provider prompt dispatch + XML env context
 
 - **Spec:** l2-app-ui.md §4.12 (Per-provider system prompt dispatch), §4.13 (XML structured environment context)
-- **Status:** Todo
+- **Status:** Done
 - **Assignment:** Agent
 - **Verify:** `cargo test` / `pnpm -C packages/ui test` — a provider key (anthropic/gpt/gemini/…) selects the matching system-prompt variant; the `env` + `available_references` XML blocks are assembled with the expected structure.
 - **Handoff:** Feeds provider-correct prompts + environment context to the core session surface.
-- **Notes:** Provider-keyed variants; XML blocks are structural — assert shape, not model output.
+- **Changes:** `apps/desktop/tauri/src/prompts.rs` — `build_system_prompt(provider_id, model_id)` single dispatch point (anthropic / openai o-series / openai codex / openai gpt / google / openrouter kimi / default) with model-family branches contained inside their provider; `EnvContext::to_xml()` — the `<env>` envelope (working_directory, optional worktree, git_status branch+clean, platform, date, model id+provider) byte-deterministic for KV-cache stability, session-start snapshot semantics; `references_xml()` — one `<reference>` (name/path/description) per active reference; XML text-node escaping. Verify: `cargo test` 30/30 (7-way dispatch matrix, family-containment negatives, structural landmarks, worktree omission, determinism, per-entry references + escaping), clippy `-D warnings` clean, fmt clean.
+- **Notes:** Provider-keyed variants; XML blocks are structural — assert shape, not model output. Variant bodies are provider-framing stubs; the full persona text is assembled by the core session layer when it consumes this dispatch.
 
 ### [T-8D02] MCP client transports + status + OAuth
 
 - **Spec:** l2-app-ui.md §4.14 (MCP client connection and status)
-- **Status:** Todo
+- **Status:** Done
 - **Assignment:** Agent
 - **Verify:** `cargo test` — the transport variants (Stdio/SSE/StreamableHTTP) construct with `DEFAULT_TIMEOUT=30_000ms`; the connection-status state machine moves through connected/disabled/failed/needs_auth/needs_client_registration; the OAuth flow tracks a pending-transport map.
 - **Handoff:** Connects the desktop app to external MCP servers.
-- **Notes:** Roots capability declared at connect; OAuth pending-transport map keyed per connection.
+- **Changes:** `apps/desktop/tauri/src/mcp.rs` — `Transport` variants Stdio (no timeout) / Sse / StreamableHttp constructing with `DEFAULT_TIMEOUT_MS = 30_000`; `McpStatus` five-state machine (connected / disabled / failed{error} / needs_auth / needs_client_registration{error}); `client_capabilities()` declaring roots only + `roots_response()` answering with the worktree file URI; `McpRegistry` per-server status + `pending_oauth_transports` map — `begin_oauth` parks the transport, `complete_oauth` always consumes the entry and resumes it only on success (failure → needs_auth retryable / registration-required with error). Verify: `cargo test` 34/34, clippy `-D warnings` clean, fmt clean.
+- **Notes:** Roots capability declared at connect; OAuth pending-transport map keyed per connection. Wire protocol (real subprocess/SSE/HTTP + local OAuth callback server) binds behind these types when the MCP feature surfaces in the UI.
 
 ### [T-8T01] Validation — presentation-only + dependency direction
 
 - **Goal:** Prove INV-2 (no business logic in the UI; UI → core inward) structurally.
 - **Method:** `fallow audit --changed-since <base>` — no new dead code, duplication, circular deps, or architecture-boundary violations (presentation-only UI, inward-pointing deps). `tsc --noEmit` shows no `any` on public surfaces. The React layer contains no domain logic — behavior delegates to the core over the IPC bridge.
-- **Status:** Todo
+- **Status:** Blocked [!]
+- **Notes:** Blocked on environment: the `fallow` CLI is not installed on this host, and the method names `fallow audit` explicitly — the structural gate cannot run. Partial evidence green: 0 `any` in non-test sources across `packages/ui` + `apps/desktop`; zero `@tauri-apps` imports inside `packages/ui` (shell coupling confined to the injected invoke); `tsc --noEmit` clean via builds; all behavior delegates over the bridge (27 vitest tests). Resolution: install `fallow` (or wire it in CI) and re-run this task.
 
 ### [T-8T02] Validation — store-compliance + theming/i18n
 
 - **Goal:** Prove the store-compliance notes (l2-app-ui §4.4) and INV-7/i18n/theming behavior.
 - **Method:** `pnpm -C packages/ui test` — single-authority state with render-from-state components (same state ⇒ same render); a known secret in a projection renders masked (INV-7); every visible string resolves through i18n (no hard-coded user text); theme tokens are honored (no literal colors on themed surfaces).
-- **Status:** Todo
+- **Status:** Done
+- **Changes:** `packages/ui/src/store-compliance.test.tsx` — same state ⇒ byte-identical render (innerHTML equality across mounts); masked secret renders verbatim, never reconstructed (INV-7); themed root carries token attributes with no inline style; full locale swap leaves no stale visible text. Verify: vitest 27/27 (6 files), biome clean.

@@ -4,15 +4,15 @@
 <!-- Maximum 100 lines. Agent updates AFTER each completed action. -->
 
 **Workspace:** main
-**Updated:** 2026-07-03 04:49
+**Updated:** 2026-07-03 04:59
 **Phase:** 8 — Flower: Desktop App
-**Status:** Done
+**Status:** Blocked
 
 ## Current Position
 
-- **Task:** T-8C03 Dashboard panel
+- **Task:** T-8T02 Store-compliance validation
 - **Spec:** l2-app-ui.md (Stable, large — §4.1–4.14), l2-office-view.md (Stable), l2-dashboard.md (Stable)
-- **Next Action:** Execute T-8D01 Per-provider system prompt dispatch (§4.12) + XML structured environment context (§4.13) via /magic.run main
+- **Next Action:** Continue Phase 8 via /magic.run main
 
 ## Progress
 
