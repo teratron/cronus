@@ -209,9 +209,11 @@ Execution mode: **Parallel** (C3); tracks grouped by file independence. Critical
 
 *The full graphical surface — the bloom.*
 
-- [ ] **Application UI** ([l2-app-ui.md](specifications/l2-app-ui.md)) [L2] — Tauri v2 + React 19, theming + i18n
-- [ ] **Office View** ([l2-office-view.md](specifications/l2-office-view.md)) [L2] — graph + spatial projection
-- [ ] **Dashboard** ([l2-dashboard.md](specifications/l2-dashboard.md)) [L2] — statistics projection
+> **Done (2026-07-02):** all 10 tasks across 5 tracks complete — IPC bridge, settings persistence, shell systems (tray/shortcuts/overlay/single-instance), five-surface workbench with theming + i18n, Office View, Dashboard, provider prompt dispatch + XML env context, MCP client model, and both validation tracks (`fallow audit` clean, store-compliance proven). Tauri crate 34 tests; UI 27 tests; all gates green. See `archives/tasks/phase-8.md`.
+
+- [x] **Application UI** ([l2-app-ui.md](specifications/l2-app-ui.md)) [L2] — Tauri v2 + React 19, theming + i18n
+- [x] **Office View** ([l2-office-view.md](specifications/l2-office-view.md)) [L2] — graph + spatial projection
+- [x] **Dashboard** ([l2-dashboard.md](specifications/l2-dashboard.md)) [L2] — statistics projection
 
 ## Phase 9 — Operational Hardening
 

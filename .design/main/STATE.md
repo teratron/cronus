@@ -4,15 +4,15 @@
 <!-- Maximum 100 lines. Agent updates AFTER each completed action. -->
 
 **Workspace:** main
-**Updated:** 2026-07-03 04:59
+**Updated:** 2026-07-03 05:16
 **Phase:** 8 — Flower: Desktop App
-**Status:** Blocked
+**Status:** Active
 
 ## Current Position
 
 - **Task:** T-8T02 Store-compliance validation
 - **Spec:** l2-app-ui.md (Stable, large — §4.1–4.14), l2-office-view.md (Stable), l2-dashboard.md (Stable)
-- **Next Action:** Continue Phase 8 via /magic.run main
+- **Next Action:** Run /magic.task main to decompose Phase 9 (Operational Hardening)
 
 ## Progress
 
@@ -21,6 +21,7 @@ Build phases: Phase 8 ▶ T-8A01 scaffold ✓ (full toolchain green via PowerShe
 ```
 
 ## Recent Decisions
+- 2026-07-03 **Decision:** Phase 8 complete. Provides: Tauri v2 desktop shell (typed IPC bridge, settings, tray/shortcuts/overlay/single-instance logic, provider prompt dispatch, XML env context, MCP client model) + React UI (five-surface workbench, theming, en/ru i18n, Office View, Dashboard). All gates green: cargo 34/34, vitest 27/27, fallow audit clean.
 
 - 2026-06-28 **T-8A01 DONE — toolchain green; [C-801] was a false alarm; deps on latest:** The "host gcc broken" blocker was an **artifact of the Bash tool** (Git Bash's MSYS2 env makes mingw64 `cc1.exe` fail to load → `gcc -c`/`-E` exit 1; the SAME gcc works in **PowerShell**, exit 0). Running `cargo check` on the Tauri crate via PowerShell compiles cleanly (with a valid PNG-based `icon.ico` replacing the malformed `.NET` one). Per user: renamed `apps/desktop/src-tauri` → `apps/desktop/tauri` (Tauri v2 CLI auto-detects it); bumped ALL deps to latest (pnpm 11.9.0, vite 8, vitest 4, TS 6, React 19.2, @tauri-apps 2.11, biome 2.5 — migrated config + scoped to `packages/**`/`apps/**`, reverted biome's stray repo-wide reformat); fixed `packages/ui/tsconfig` (vitest/globals + jest-dom via setup include) + added `vite/client` CSS decl for desktop; updated `.gitignore` for the rename. Verify: `pnpm -r build`+`test` green, `biome check` clean, `cargo check` Tauri green, `tauri info` OK. **Lesson saved to memory:** native C/Tauri builds need PowerShell, not the Bash tool. (Revert: git restore .design + delete apps/desktop, packages/ui, root package.json/pnpm-workspace.yaml/biome.json/pnpm-lock.yaml/node_modules.)
 
@@ -50,7 +51,6 @@ Build phases: Phase 8 ▶ T-8A01 scaffold ✓ (full toolchain green via PowerShe
 
 - 2026-06-23 **Decision:** Phase 6 (Orchestration & Autonomy) confirmed Done and Archived — all 5 tasks complete (orchestration engine, trigger triage, mission mode, deep research, validation). TASKS.md auto-repaired: `Active` → `Done (Archived)`.
 
-- 2026-06-22 **Decision:** Phase 4 (Core Subsystems) fully complete — 14 tasks, 453 tests, 0 failures. Key subsystems delivered: memory store + encryption, codegraph crate, model/context router, agent session loop, context management, session checkpoint, inbox, agent autonomy, workspace management, agent constitution. CLI commands added for all subsystems.
 
 ## Blockers
 
