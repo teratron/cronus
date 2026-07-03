@@ -117,6 +117,7 @@
 - <https://github.com/mountain-loop/yaak>
 - <https://github.com/aptakube/aptakube>
 - <https://github.com/mdSilo/mdSilo-app>
+- <https://github.com/janhq/jan>
 
 ## Misc
 

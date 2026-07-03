@@ -4,15 +4,15 @@
 <!-- Maximum 100 lines. Agent updates AFTER each completed action. -->
 
 **Workspace:** main
-**Updated:** 2026-07-03 05:16
-**Phase:** 8 — Flower: Desktop App
+**Updated:** 2026-07-03 10:08
+**Phase:** 9 — Operational Hardening
 **Status:** Active
 
 ## Current Position
 
 - **Task:** T-8T02 Store-compliance validation
 - **Spec:** l2-app-ui.md (Stable, large — §4.1–4.14), l2-office-view.md (Stable), l2-dashboard.md (Stable)
-- **Next Action:** Run /magic.task main to decompose Phase 9 (Operational Hardening)
+- **Next Action:** Execute T-9A01 Sandbox policy: deny-by-default egress entries + binary allowlists, isolation tiers (restricted/balanced/open), preset catalog, PolicyContext, access-failure classification via /magic.run main
 
 ## Progress
 
