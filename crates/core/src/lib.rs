@@ -25,6 +25,7 @@ pub mod kanban;
 pub mod learning;
 pub mod memory;
 pub mod mission;
+pub mod office_control;
 pub mod orchestration;
 pub mod paths;
 pub mod quality;

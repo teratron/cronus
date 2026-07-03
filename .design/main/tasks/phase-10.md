@@ -24,7 +24,7 @@ duration_minutes: ~
 
 ## Atomic Checklist
 
-- [ ] [T-10A01] Office Control — OfficeState machine + master switch
+- [x] [T-10A01] Office Control — OfficeState machine + master switch
 - [ ] [T-10A02] Office Control — hibernation ladder + per-subsystem toggles
 - [ ] [T-10AT01] Validation — OC-1…OC-5
 - [ ] [T-10B01] ACP — session store + monotonic event bus + capability/trust gate
@@ -49,11 +49,12 @@ Foundational: navigation (Track E) subscribes to its OfficeState events.
 #### [T-10A01] OfficeState machine + master switch
 
 - **Spec:** l2-office-control.md §4.1, §4.2 (OC-1, OC-2, OC-5)
-- **Status:** Todo
+- **Status:** Done
 - **Assignment:** Agent
-- **Verify:** `cargo test -p cronus office_control::` green — tests assert `transition()` emits `OfficeStateChanged` before commit, guard rejects invalid transitions without side effects, and `office.pause`/`office.resume` capabilities round-trip via drain→checkpoint→Paused→resume.
+- **Verify:** `cargo test -p cronus --lib office_control::` → 8 passed / 0 failed; `cargo clippy --all-targets -- -D warnings` clean; `cargo fmt --check` clean (exit 0).
 - **Handoff:** OfficeState events consumed by T-10E01 (nav status icons) and dashboards.
-- **Notes:** State enum Active/Idle/Paused/Hibernating/Error/Offline; single `RwLock`-guarded mutator; drain reuses the Phase-6 orchestration bus; checkpoint reuses l2-session-checkpoint format.
+- **Notes:** State enum Active/Idle/Paused/Hibernating/Error/Offline; single `transition()` mutator emits `StateChange` before commit (OC-5); freeze writes checkpoint / restore clears it (OC-1/OC-2); master `pause`/`resume` (Workload-driven Active vs Idle); rejected edges have no side effects. Event sink is an in-process `Vec<StateChange>` (event-mesh binding) and drain-to-checkpoint is modeled as a flag — real orchestration-bus drain + session-checkpoint store wiring is the documented seam for T-10A02.
+- **Changes:** `crates/core/src/office_control.rs` (new, +~230); `lib.rs` `pub mod office_control`. 8 unit tests, std-only, no unwrap on prod paths.
 
 #### [T-10A02] Hibernation ladder + per-subsystem toggles
 

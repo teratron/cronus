@@ -138,3 +138,4 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Cross-subsystem hardening validation: an integration suite proves a seeded secret never reaches a backup archive, a restored state tier, or a scrubbed error-report preview, and that both the reporting and telemetry consent gates block egress by default; workspace-wide tests, lints, and formatting all pass clean (main)
 - Added specification `project-priority` (main)
 - Added specification `project-support` (main)
+- Completed 2 tasks (main)

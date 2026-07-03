@@ -4,20 +4,20 @@
 <!-- Maximum 100 lines. Agent updates AFTER each completed action. -->
 
 **Workspace:** main
-**Updated:** 2026-07-03 20:16
+**Updated:** 2026-07-03 20:43
 **Phase:** 10 — Advanced Office Features (L2)
 **Status:** Active
 
 ## Current Position
 
-- **Task:** Phase 10 decomposed — 15 tasks / 5 tracks in tasks/phase-10.md (Todo); no task started yet
-- **Spec:** PLAN v2.11.0 / TASKS v1.15.0 / INDEX v1.0.63 in sync; foundational L2 wave authored & Stable — l2-office-control, l2-acp, l2-navigation, l2-automation-pipeline (1.0.0); KAN-8 custom-boards delta tracked
-- **Next Action:** Run /magic.run main to execute Phase 10 foundational wave (Track A/B/C/D parallel, then E)
+- **Task:** T-10A01 Done (office_control.rs, 8 tests green, clippy/fmt clean); 1 of 33 Phase-10 tasks complete
+- **Spec:** PLAN v2.12.0 / TASKS v1.16.0 / INDEX v1.0.64 in sync; all 11 Phase-10 L2 authored & Stable (foundational + dependent waves); KAN-8 delta tracked
+- **Next Action:** Execute T-10A02 (hibernation ladder + per-subsystem toggles) via /magic.run main, then Track B/C/D in parallel
 
 ## Progress
 
 ```
-Build phases: Done 1–9 (Seed→Hardening) | Phase 10 ▶ foundational L2 wave authored + decomposed (15 tasks) | Dependent wave (7 L2) + Phase 11 pending
+Build phases: Done 1–9 (Seed→Hardening) | Phase 10 ▶ all 11 L2 Stable + decomposed (33 tasks: 15 in phase-10a / 18 in phase-10b) | Executed: T-10A01 ✓ | Remaining: 32 tasks + Phase 11
 ```
 
 ## Recent Decisions
