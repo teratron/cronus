@@ -1,6 +1,6 @@
 # Project Context
 
-**Generated:** 2026-06-30
+**Generated:** 2026-07-02
 
 ## Active Technologies
 
@@ -18,7 +18,7 @@
 ├── .claude/
 │   ├── commands/
 │   ├── rules/
-│   ├── settings.local.json
+│   ├── scheduled_tasks.lock
 │   └── skills/
 ├── .codex/
 │   ├── prompts/
@@ -44,6 +44,9 @@
 │   └── technology-stack-research.md
 ├── .env
 ├── .env.example
+├── .github/
+│   ├── dependabot.yml
+│   └── workflows/
 ├── .gitignore
 ├── .markdownlint.json
 ├── .release/

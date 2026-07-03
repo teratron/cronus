@@ -1,13 +1,13 @@
 # Implementation Plan
 
-**Version:** 2.8.0
-**Generated:** 2026-06-30
-**Based on:** .design/main/INDEX.md v1.0.39
+**Version:** 2.9.0
+**Generated:** 2026-07-02
+**Based on:** .design/main/INDEX.md v1.0.61
 **Status:** Active
 
 ## Overview
 
-Implementation plan for Cronus from the project registry (129 specs: 124 Stable, 4 RFC, 1 Draft). Phases follow a **growth order**: the agent grows like a sprout from a seed. The registry expanded substantially since plan v2.5.0 (INDEX v1.0.4 → v1.0.36); this revision re-syncs the plan — newly authored Stable L1 concepts are folded into Phase 0, four ready Stable L2 subsystems form the new Phase 11, and non-Stable specs are parked in the Backlog (no spec is left orphaned).
+Implementation plan for Cronus from the project registry (146 registered specs: 139 Stable, 6 RFC, 1 Draft). Phases follow a **growth order**: the agent grows like a sprout from a seed. This revision re-syncs the plan with registry v1.0.61: 15 newly authored Stable L1 concepts fold into Phase 0 (concept-only, C28), and the two RFC memory-layer concepts park in the Backlog (no spec is left orphaned). The active implementation phase remains Phase 8 (Flower — Desktop App).
 
 - **Seed = the library** (`crates/core` + `crates/nodus` runtime) — Phases 1–2.
 - **Stem = the CLI** — Phase 3, the first usable surface, emerging straight from the seed.
@@ -103,6 +103,24 @@ Execution mode: **Parallel** (C3); tracks grouped by file independence. Critical
 - [x] **Event Mesh** ([l1-event-mesh.md](specifications/l1-event-mesh.md)) [L1] — single in-process routing substrate: uniform event envelope, topic-based addressing, producer/consumer decoupling (producers name what happened, never a consumer) (EM-1…EM-10)
 - [x] **Claim Verification** ([l1-claim-verification.md](specifications/l1-claim-verification.md)) [L1] — runtime hallucination detector over `(claims, sources)`: per-claim verdict (supported/contradicted/unverifiable) with evidence span; grounding-only, never world-truth (CV-1…CV-9)
 - [x] **Perspective Model** ([l1-perspective-model.md](specifications/l1-perspective-model.md)) [L1] — theory-of-mind representation: every belief keyed by `(observer → subject)`, generalizing the single-vantage user model to perspectival self/other knowledge (PM-1…PM-8)
+
+*Concepts authored since plan v2.8.0 (registry sync INDEX v1.0.39 → v1.0.61). All Stable, all `concept-only` (C28) — durable design contracts with no authored L2 yet; the marker auto-reverts when an `Implements:` L2 lands.*
+
+- [x] **Work Convergence** ([l1-work-convergence.md](specifications/l1-work-convergence.md)) [L1] — all office activity through one legible surface (the board); materialize/drive/surface relations, exhaustive+exclusive, no shadow work (CONV-1…CONV-8)
+- [x] **Context Provenance** ([l1-context-provenance.md](specifications/l1-context-provenance.md)) [L1] — per-fragment trust provenance, untrusted-neutralized-by-default at every composition boundary, sticky monotonic trust, structural injection defense (CP-1…CP-8)
+- [x] **Attestation** ([l1-attestation.md](specifications/l1-attestation.md)) [L1] — signed, offline-verifiable artifact witnesses: content-set binding, authorship, typed claims, default-deny unattested, revocation-by-supersession (AT-1…AT-9)
+- [x] **Tool Receipts** ([l1-tool-receipts.md](specifications/l1-tool-receipts.md)) [L1] — model-unforgeable per-action execution receipts; narrated-but-unreceipted actions treated as fabricated; ephemeral isolated signing secret (TR-1…TR-9)
+- [x] **Issue Reporting** ([l1-issue-reporting.md](specifications/l1-issue-reporting.md)) [L1] — user-initiated report button/function: narrative + bug/feedback/idea categories, preview-before-send consent, opt-in diagnostics, shared error-reporting pipeline (ISS-1…ISS-7)
+- [x] **Process Monitor** ([l1-process-monitor.md](specifications/l1-process-monitor.md)) [L1] — read-only live view of the app's own OS process tree with per-process CPU/memory, topology classified against sanctioned boundaries, CLI/TUI/GUI parity (PM-1…PM-7)
+- [x] **Harness Optimization** ([l1-harness-optimization.md](specifications/l1-harness-optimization.md)) [L1] — outer-loop search over a harness-candidate space toward a frontier; archivable graded candidates, host-side search policy
+- [x] **Harness Composition** ([l1-harness-composition.md](specifications/l1-harness-composition.md)) [L1] — right-sizing discipline for assembling harnesses; justification gates and pruning (HC), applied at role level by ROL-9
+- [x] **Context Attachment** ([l1-context-attachment.md](specifications/l1-context-attachment.md)) [L1] — user-attached context artifacts as first-class turn inputs
+- [x] **Agent Co-Evaluation** ([l1-agent-coevaluation.md](specifications/l1-agent-coevaluation.md)) [L1] — Performance = f(Model, Harness): the (model, harness) diagnostic matrix, orthogonal task labels, comparability contract, per-layer failure attribution (ACE)
+- [x] **Cache-Stable Context** ([l1-cache-stable-context.md](specifications/l1-cache-stable-context.md)) [L1] — prompt-cache stability discipline: provider cache key as a cost lever, frozen prefixes, cache-warmth as a routing signal (CSC)
+- [x] **Model Benchmarking** ([l1-model-benchmarking.md](specifications/l1-model-benchmarking.md)) [L1] — hardcoded three-class micro-benchmark (code/content/instruction-compliance) scoring base models on quality + time + tokens/cost into router-consumed fitness profiles (MB-1…MB-9)
+- [x] **Crash Recovery** ([l1-crash-recovery.md](specifications/l1-crash-recovery.md)) [L1] — crash-safe writes, verified single-instant snapshots, unclean-shutdown detection, strict recovery ladder, work resumption + honest loss reporting (CR-1…CR-9)
+- [x] **Parallel Staffing** ([l1-parallel-staffing.md](specifications/l1-parallel-staffing.md)) [L1] — same-specialty scale-out: ephemeral same-role instances under one accountable lead, parallelism only via disjoint decomposition, bounded width, first-class fan-in (PS-1…PS-9)
+- [x] **Employee Availability** ([l1-employee-availability.md](specifications/l1-employee-availability.md)) [L1] — workforce state model: available/working/resting/on-leave/truant + released exit; office-state dominance, detected-never-declared truancy, resource-honest rest, honest metaphor binding (EMP-1…EMP-9)
 
 ## Phase 1 — Seed I: Foundation
 
@@ -242,6 +260,8 @@ Execution mode: **Parallel** (C3); tracks grouped by file independence. Critical
 
 *Non-Stable specs parked until they reach `Stable` (C6). Promoted into an active phase by a later `/magic.task` run once their status and any parent dependency clear.*
 
+- [ ] **Memory Intelligence** ([l1-memory-intelligence.md](specifications/l1-memory-intelligence.md)) [L1] — `RFC` — active query & intelligence surface over the memory substrate (MI-1…MI-13); backlog until reviewed to Stable
+- [ ] **Memory Consolidation** ([l1-memory-consolidation.md](specifications/l1-memory-consolidation.md)) [L1] — `RFC` — consolidation & corpus-maintenance layer between substrate and query surface (MC-1…MC-10); backlog until reviewed to Stable
 - [ ] **Spec-Driven Governance** ([l1-spec-driven-governance.md](specifications/l1-spec-driven-governance.md)) [L1] — `RFC` — SDD governance meta-spec (SDG-1…SDG-15); backlog until reviewed to Stable
 - [ ] **Dynamic Harness** ([l1-dynamic-harness.md](specifications/l1-dynamic-harness.md)) [L1] — `RFC` — run-time complement to harness engineering (DH-1…DH-12); backlog until reviewed to Stable
 - [ ] **Loop Governance** ([l1-loop-governance.md](specifications/l1-loop-governance.md)) [L1] — `RFC` — loop-governance keystone (LG-1…LG-9); backlog until reviewed to Stable
@@ -254,5 +274,6 @@ Execution mode: **Parallel** (C3); tracks grouped by file independence. Critical
 - **CLI-first surface (stem) is intentionally thin at Phase 3**: it ships the command framework + grammar + the commands available then; subsystem phases (4–6) attach their commands to it, and the TUI (Phase 7) mirrors the matured command set. This staging is the growth model, not scope creep.
 - **nodus port size**: ~5k lines across six modules; Phase 2 builds it as a vertical slice (parse → transpile → minimal execute) before completing validator/lint and the full command set. Track parity against the reference test corpus.
 - **Mobile/Tauri scaffold**: iOS/Android Tauri setup is toolchain-fragile (stack §5) — smoke-test the build/sign pipeline in Phase 1, not at Phase 8.
-- **Registry sync debt (resolved this revision)**: 48 specs had accumulated outside the plan (INDEX raced ahead to v1.0.36). This revision absorbs them — but the new Phase 0 concept additions (e.g. execution-graph, code-intelligence, model-runtime, knowledge-base) imply future L2 implementation work not yet phased. Most have no authored L2 yet; they will surface as new phases via `/magic.spec` → `/magic.task` when promoted.
+- **Concept-only growth (v2.9.0 sync)**: 17 more specs absorbed (15 Stable L1 concept-only into Phase 0, 2 RFC into Backlog). The concept-only count keeps rising while Phase 8 implementation is in flight — a C28 health signal worth watching: the concept caul is far ahead of code, and several new concepts (crash-recovery, employee-availability, parallel-staffing, model-benchmarking, process-monitor, issue-reporting) are natural L2 candidates for Phases 9–10 when authored.
+- **Registry sync debt (resolved in v2.8.0)**: 48 specs had accumulated outside the plan (INDEX raced ahead to v1.0.36). That revision absorbed them — but the new Phase 0 concept additions (e.g. execution-graph, code-intelligence, model-runtime, knowledge-base) imply future L2 implementation work not yet phased. Most have no authored L2 yet; they will surface as new phases via `/magic.spec` → `/magic.task` when promoted.
 - **TUI event-seam dependency (Phase 7)**: the render loop assumes a core event/subscribe seam. If the core exposes no pub/sub observer, the TUI must fall back to polling durable-state snapshots (INV-5 view-only). The Phase 7 tasks carry this fallback so the view panels are not hard-blocked on the subscription mechanism. Verify the seam first (T-7A02).

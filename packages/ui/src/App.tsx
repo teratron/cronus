@@ -1,22 +1,45 @@
 /**
  * Root application surface.
  *
- * Presentation only: it renders from props and holds no business logic — all
- * domain state arrives from the core over the shell bridge (wired in a later
- * task). This is the scaffold root the desktop shell mounts.
+ * Presentation only: renders from props and holds no business logic — all
+ * domain state arrives from the core over the shell bridge. The only local
+ * state is view state (which surface is active); everything visible resolves
+ * through the i18n catalog and the theme tokens.
  */
+
+import { useState } from "react";
+import type { Locale } from "./i18n";
+import { type SurfaceId, Workbench } from "./surfaces";
+import type { Theme } from "./theme";
+
 export interface AppProps {
   /** Core status line, supplied by the shell bridge. */
   status?: string;
+  /** Active locale; defaults to English. */
+  locale?: Locale;
+  /** Theme choice; `system` follows the OS preference. */
+  theme?: Theme;
+  /** OS dark-mode preference, injected by the hosting shell. */
+  systemPrefersDark?: boolean;
 }
 
-export function App({ status }: AppProps) {
+export function App({
+  status,
+  locale = "en",
+  theme = "system",
+  systemPrefersDark,
+}: AppProps) {
+  // View state only: which surface the user is looking at.
+  const [active, setActive] = useState<SurfaceId>("office");
+
   return (
-    <main className="flex h-screen flex-col items-center justify-center gap-2 bg-neutral-950 text-neutral-100">
-      <h1 className="text-2xl font-semibold">Cronus</h1>
-      <p className="text-sm text-neutral-400" data-testid="status">
-        {status ?? "connecting…"}
-      </p>
-    </main>
+    <Workbench
+      active={active}
+      onSelect={setActive}
+      status={status}
+      locale={locale}
+      theme={theme}
+      systemPrefersDark={systemPrefersDark}
+    />
   );
 }

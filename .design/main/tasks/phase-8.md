@@ -34,18 +34,18 @@ duration_minutes: ~
 Track A — Scaffold & Bridge (l2-app-ui §2, §4.2) — **gating**
 
 - [x] [T-8A01] Provision frontend toolchain (pnpm + Tauri v2 CLI) + scaffold `apps/desktop` (Tauri v2 shell) and `packages/ui` (React 19 + Vite + TS + Tailwind v4 + shadcn/ui)
-- [ ] [T-8A02] Shell ↔ core IPC bridge: typed UI→core command surface over Tauri IPC (presentation-only; mirrors the capability set)
+- [x] [T-8A02] Shell ↔ core IPC bridge: typed UI→core command surface over Tauri IPC (presentation-only; mirrors the capability set)
 
 Track B — Shell Systems (Rust/Tauri side, l2-app-ui §4.7–4.11)
 
-- [ ] [T-8B01] Settings persistence (§4.7): load_or_create, dual deserializer, additive migration, platform defaults, AtomicU8 hot settings
-- [ ] [T-8B02] Tray icon state machine + global shortcut binding + overlay window + single-instance (§4.8–4.11)
+- [x] [T-8B01] Settings persistence (§4.7): load_or_create, dual deserializer, additive migration, platform defaults, AtomicU8 hot settings
+- [x] [T-8B02] Tray icon state machine + global shortcut binding + overlay window + single-instance (§4.8–4.11)
 
 Track C — UI Surfaces & Views (React side, l2-app-ui §4.1/4.5/4.6 + sibling specs)
 
-- [ ] [T-8C01] Surfaces + theming + i18n (§4.1, §4.5, §4.6): render-from-state surfaces, theme tokens, externalized strings
-- [ ] [T-8C02] Office View panel (l2-office-view): graph + spatial projection of agents/tasks
-- [ ] [T-8C03] Dashboard panel (l2-dashboard): live read-only statistics projection
+- [x] [T-8C01] Surfaces + theming + i18n (§4.1, §4.5, §4.6): render-from-state surfaces, theme tokens, externalized strings
+- [x] [T-8C02] Office View panel (l2-office-view): graph + spatial projection of agents/tasks
+- [x] [T-8C03] Dashboard panel (l2-dashboard): live read-only statistics projection
 
 Track D — Integrations (l2-app-ui §4.12–4.14)
 
@@ -73,56 +73,62 @@ Track T — Validation
 ### [T-8A02] Shell ↔ core IPC bridge
 
 - **Spec:** l2-app-ui.md §4.2 (Shell ↔ core bridge), l1-architecture.md (INV-1 embeddable core, INV-2 logic-in-core)
-- **Status:** Todo
+- **Status:** Done
 - **Assignment:** Agent
 - **Verify:** A round-trip test — the UI invokes a core capability (e.g. `status`) over the Tauri IPC command and renders the returned value; assert the TS side holds no business logic (it only marshals the call). `cargo test` on the Tauri crate for the command registration; `pnpm -C packages/ui test` for the client wrapper.
 - **Handoff:** Establishes the typed command channel every UI surface reads/writes through (INV-2 boundary).
-- **Notes:** The bridge marshals UI intents to core capability calls and core state back; mirrors the shared capability set the CLI/TUI bind (INV-3). Secrets masked via the core redaction path (INV-7), never re-implemented in TS.
+- **Changes:** Rust: `apps/desktop/tauri/src/bridge.rs` — `Bridge<C: Capabilities>` over the embedded `cronus::Engine`, output masked via `cronus::redact` (INV-7, never re-implemented); IPC commands `capability_version`/`capability_status` registered in `run()` via `generate_handler!`; `cronus` path dependency added. TS: `packages/ui/src/bridge.ts` — `createCoreClient(invoke)` typed marshalling wrapper (shell-agnostic, injected invoke; no logic), exported from the package index; `apps/desktop/src/main.tsx` wires it over `@tauri-apps/api/core` invoke with a `core unavailable` fallback. Verify: Tauri crate `cargo test` 3/3 + clippy `-D warnings` + fmt clean; `pnpm -C packages/ui test` 5/5 (incl. round-trip render of the bridged status); biome clean; `pnpm -r build` (tsc + vite, both packages) green; root workspace `cargo test` 0 failures.
+- **Notes:** The bridge marshals UI intents to core capability calls and core state back; mirrors the shared capability set the CLI/TUI bind (INV-3). Secrets masked via the core redaction path (INV-7), never re-implemented in TS. Two environment constraints recorded: (1) lib `crate-type` reduced to `rlib` — with the embedded core, cdylib linking overflows the windows-gnu 64K DLL export-ordinal limit; mobile crate types return when mobile targets land; (2) IPC registration is compile-time-verified (`generate_handler!`) — the tauri `test`-feature mock runtime makes the windows-gnu test binary fail to load (STATUS_ENTRYPOINT_NOT_FOUND), so no mock IPC round-trip test. `fallow` CLI is not installed on this host — the structural audit gate defers to T-8T01 (install or CI).
 
 ### [T-8B01] Settings persistence
 
 - **Spec:** l2-app-ui.md §4.7 (Settings Persistence System)
-- **Status:** Todo
+- **Status:** Done
 - **Assignment:** Agent
 - **Verify:** `cargo test` on the Tauri crate — `load_or_create` returns defaults on a missing file and round-trips a saved file; the dual deserializer reads a legacy shape; an additive migration preserves unknown fields; platform defaults resolve per-OS.
 - **Handoff:** Provides the durable settings store the shell + UI read (hot settings via AtomicU8).
-- **Notes:** Backward-compatible (dual deserializer); additive migration only. Lives in the Tauri/Rust shell, not the React layer.
+- **Changes:** `apps/desktop/tauri/src/settings.rs` — `Settings` (log_level / overlay_position / shortcuts map + flattened `extra` preserving unknown keys), every field `serde(default = …)`; dual log-level deserializer (string first, legacy 0–5 integer fallback); `ensure_defaults()` additive migration (inserts newly shipped shortcut bindings, never touches user values); per-OS default inside the default fn (overlay off on Linux); `LOG_LEVEL_HOT: AtomicU8` hot copy with Relaxed reads; atomic temp-file+rename saves. Fail-soft wiring in `run()` setup: broken file → stderr note + defaults, never a startup crash. Verify: `cargo test` 9/9 (6 settings + 3 bridge), clippy `-D warnings` clean, fmt clean.
+- **Notes:** Backward-compatible (dual deserializer); additive migration only. Lives in the Tauri/Rust shell, not the React layer. Settings managed as Tauri state; consumers (tray/shortcuts/overlay) bind in T-8B02.
 
 ### [T-8B02] Tray + shortcuts + overlay + single-instance
 
 - **Spec:** l2-app-ui.md §4.8 (Tray), §4.9 (Global shortcuts), §4.10 (Overlay), §4.11 (Single instance)
-- **Status:** Todo
+- **Status:** Done
 - **Assignment:** Agent
 - **Verify:** `cargo test` — the tray state machine resolves the correct icon/menu for each State×Theme (9 variants) with the copy-last-result fallback; a `ShortcutBinding` registers and auto-rolls-back on conflict; overlay position maps per-OS; a second instance hands off to the running one.
 - **Handoff:** Completes the desktop-shell affordances around the main window.
-- **Notes:** Rust/Tauri side. Dual shortcut backend with auto-rollback; overlay has an OS escape hatch.
+- **Changes:** Four shell-system modules in `apps/desktop/tauri/src/`: `tray.rs` — 9-variant State×Theme icon matrix preloaded at startup (no I/O on transitions), state-rebuilt menu (Cancel only while an operation runs), copy-last-result fallback chain; `shortcuts.rs` — `ShortcutBinding` (factory default in code, user override from settings), `ShortcutBackend` trait with `register_all` auto-rollback-to-default on conflict + `switch_backend` re-validation/reset reporting, `ShortcutManager` suspend/resume + dynamic cancel shortcut; `overlay.rs` — fixed-size geometry with per-OS vertical clearance, saturating math on tiny screens, `APP_NO_GTK_LAYER_SHELL` escape hatch; `instance.rs` — runtime-only CLI flag parsing (never persisted), `InstanceChannel` single-instance acquire-or-forward with surfaced handoff failure, single `dispatch` entry for shortcut/signal/CLI triggers. Verify: `cargo test` 25/25 (16 new), clippy `-D warnings` clean, fmt clean.
+- **Notes:** Rust/Tauri side. Systems are pure state/logic with backend trait seams; the OS adapters (tauri tray-icon feature + global-shortcut/single-instance plugins, real icon assets, NSPanel/layer-shell windows) bind when the consuming surfaces land (T-8C01+), same staging as the T-8A02 bridge.
 
 ### [T-8C01] Surfaces + theming + i18n
 
 - **Spec:** l2-app-ui.md §4.1 (Surfaces), §4.5 (Theming), §4.6 (Localization)
-- **Status:** Todo
+- **Status:** Done
 - **Assignment:** Agent
 - **Verify:** `pnpm -C packages/ui test` (vitest) — surfaces render from injected state (render-from-state, no domain mutation); switching theme swaps tokens; switching locale swaps all visible strings (no hard-coded user-facing text). `biome` lint + `tsc --noEmit` clean.
 - **Handoff:** The surface shell that hosts the Office View and Dashboard panels.
-- **Notes:** Render-only components fed by core state over the bridge (INV-2). All strings externalized; theme via design tokens.
+- **Changes:** `packages/ui/src/` — `i18n.ts` (typed `MessageKey` catalog, en default + ru pack, `t()`/`translator()` with English fallback for missing keys; ru deliberately partial to exercise the fallback); `theme.ts` (`Theme` system/light/dark, `resolveTheme` against the injected OS preference, `themeAttributes` → `data-theme` + Tailwind `dark` class — tokens only, no literal colors); `surfaces.tsx` (`Workbench`: five-surface nav office/board/chat/editor/dashboard, active surface from props, selection forwarded as intent callback, localized labels, status footer); `App.tsx` recomposed over `Workbench` (only view state: active surface); package index exports. Verify: vitest 14/14 (render-from-state + intent forwarding, theme token swap on rerender, full nav locale swap, localized placeholder, real English-fallback key), biome clean, `pnpm -r build` (tsc + vite) green.
+- **Notes:** Render-only components fed by core state over the bridge (INV-2). All strings externalized; theme via design tokens. Surface panels are placeholders — Office View / Dashboard content lands in T-8C02/T-8C03; shadcn/ui component setup (deferred here from T-8A01) moves with them, since no shadcn primitive is needed by the shell itself.
 
 ### [T-8C02] Office View panel
 
 - **Spec:** l2-office-view.md, l1-office-visualization.md
-- **Status:** Todo
+- **Status:** Done
 - **Assignment:** Agent
 - **Verify:** `pnpm -C packages/ui test` — given an office projection, the panel renders the agent graph + spatial floor; a state change in the next projection re-renders. biome + tsc clean.
 - **Handoff:** Reads the office projection from the IPC bridge view-model.
-- **Notes:** Graph + spatial projection; presentation only — no office mutation in TS.
+- **Changes:** `packages/ui/src/office-view.tsx` — `OfficeProjection` view-model (agent nodes with reporting edges/activity/room, task nodes with assignment edges) consumed by BOTH render modes from one model (OVZ-3): `GraphRender` (nodes + reporting/assignment edge lists + live-activity marker) and `FloorRender` (rooms/seats, no-room agents in open-space); inspect forwarded as intent (OVZ-4), mode is caller-owned view state; localized empty state; hosted by the office surface in `Workbench` when a projection is supplied. Verify: vitest 19/19 (graph nodes/edges/activity, floor seating, re-render on next projection, intent forwarding, empty state, surface hosting), biome clean, `pnpm -r build` green.
+- **Notes:** Graph + spatial projection; presentation only — no office mutation in TS. Semantic DOM render; a visual graph/canvas library and drag-layout persistence (layout.json) bind later without changing the projection contract.
 
 ### [T-8C03] Dashboard panel
 
 - **Spec:** l2-dashboard.md, l1-dashboard.md
-- **Status:** Todo
+- **Status:** Done
 - **Assignment:** Agent
 - **Verify:** `pnpm -C packages/ui test` — the dashboard renders per-office + building-aggregate statistics from a projection; updates on a new projection. biome + tsc clean.
 - **Handoff:** Completes the read-only graphical surface ahead of integrations.
-- **Notes:** Live read-only statistics projection (mirrors the `dashboard` capability).
+- **Changes:** `packages/ui/src/dashboard.tsx` — `DashboardProjection` (per-office `OfficeStats`: active agents + cards-by-state; optional core-computed `BuildingStats` aggregate) rendered read-only by `DashboardPanel`; building section omitted when the projection carries none; localized labels (4 new i18n keys en+ru); hosted by the dashboard surface in `Workbench`. Verify: vitest 23/23 (per-office + building stats, update on next projection, optional aggregate, surface hosting), biome clean, `pnpm -r build` green.
+- **Notes:** Live read-only statistics projection (mirrors the `dashboard` capability). Aggregation stays in the core — the panel never derives authoritative numbers.
 
 ### [T-8D01] Per-provider prompt dispatch + XML env context
 

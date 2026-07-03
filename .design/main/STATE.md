@@ -4,15 +4,15 @@
 <!-- Maximum 100 lines. Agent updates AFTER each completed action. -->
 
 **Workspace:** main
-**Updated:** 2026-07-02 20:07
+**Updated:** 2026-07-03 04:49
 **Phase:** 8 — Flower: Desktop App
-**Status:** Active
+**Status:** Done
 
 ## Current Position
 
-- **Task:** T-8A01 (gating scaffold) **DONE & fully green.** pnpm 11.9.0 (corepack) + pnpm workspace; `packages/ui` (React 19.2 / Vite 8 / TS 6 / vitest 4) builds + 2 tests pass; `apps/desktop` (Vite/React/Tailwind v4 frontend + Tauri v2 in `apps/desktop/tauri`, renamed from `src-tauri`) builds; `cargo check` on the Tauri crate compiles; `biome check` (2.x, scoped) clean; `pnpm tauri info` OK. All deps on latest. **[C-801] was a false alarm** — gcc is fine; the earlier failure was the Bash tool's Git Bash env breaking MSYS2 `cc1` → native builds run via **PowerShell**.
+- **Task:** T-8C03 Dashboard panel
 - **Spec:** l2-app-ui.md (Stable, large — §4.1–4.14), l2-office-view.md (Stable), l2-dashboard.md (Stable)
-- **Next Action:** Run /magic.task main to update the plan
+- **Next Action:** Execute T-8D01 Per-provider system prompt dispatch (§4.12) + XML structured environment context (§4.13) via /magic.run main
 
 ## Progress
 
