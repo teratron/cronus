@@ -1,6 +1,6 @@
 # Kanban Board
 
-**Version:** 1.0.5
+**Version:** 1.1.0
 **Status:** Stable
 **Layer:** implementation
 **Implements:** l1-kanban-model.md
@@ -25,7 +25,7 @@ The model requires a single per-office board, office-driven movement, and automa
 ## 2. Constraints & Assumptions
 
 - One board per workspace, stored under `<ws>/kanban/`; archived cards under `<ws>/kanban/archive/`.
-- The fixed state set from the model; no user-defined boards in v0.1.0.
+- The canonical state set from the model is the mandatory backbone; custom columns/board views are mapped extensions per KAN-8 (each custom column stores an anchor to a canonical state; views are saved filters over the single card set).
 - The frontend holds no logic; board operations are core calls (INV-2).
 - Card content references the office's tasks; the board does not duplicate task bodies.
 
@@ -33,13 +33,14 @@ The model requires a single per-office board, office-driven movement, and automa
 
 | L1 Invariant | Implementation |
 | --- | --- |
-| KAN-1 Canonical pipeline | A single board with the fixed ordered states; state is an enum, not user-editable. |
+| KAN-1 Canonical pipeline | A single board of record with the fixed ordered canonical states; the canonical state is an enum and cannot be removed or renamed. |
 | KAN-2 Office-managed | Manager/agents call `board.move`; the client UI is read-first; no client setup required. |
 | KAN-3 Auto-archival | A scheduled archival job moves `done` cards meeting the condition into `<ws>/kanban/archive/`. |
 | KAN-4 Non-destructive archive | Archived cards are moved (not deleted); they remain readable in the archive store. |
 | KAN-5 Card = unit of work | Each card record references a task and carries `state`; `blocked` requires a `reason`. |
 | KAN-6 One board / isolation | Exactly one board per `<ws>/kanban/`; no cross-office board. |
 | KAN-7 Traceable transitions | Each move appends a transition record (from, to, actor, time, reason). |
+| KAN-8 Custom boards map to canon | `board.json` may declare custom columns, each with a mandatory `anchor` canonical enum value; the archival job, analytics, and projections read the anchor. Custom boards are saved view definitions (filter/scope) in `board.json` — no second card store; deleting a view never touches cards. Re-anchoring a column appends a transition-style audit record. |
 
 ## 4. Detailed Design
 
@@ -47,7 +48,7 @@ The model requires a single per-office board, office-driven movement, and automa
 
 ```plaintext
 <ws>/kanban/
-├── board.json                     # board meta + ordered state set + card index
+├── board.json                     # board meta + ordered state set (canonical + custom columns with anchors) + saved views + card index
 ├── cards/<card-id>.json           # card record (state, task ref, history[])
 ├── runs/<card-id>/<run-id>.json   # per-execution run records (§4.6)
 ├── events/<card-id>.jsonl         # append-only event log per card (§4.7)
@@ -427,3 +428,10 @@ Symmetrically for P2 → P3.
 | `[MODEL]` | `.design/main/specifications/l1-kanban-model.md` | Invariants this board satisfies |
 | `[LAYOUT]` | `.design/main/specifications/l2-filesystem-layout.md` | `kanban/` location in a workspace |
 | `[CLI]` | `.design/main/specifications/l2-cli.md` | Command grammar standard |
+
+## Document History
+
+| Version | Date | Notes |
+| --- | --- | --- |
+| ≤1.0.5 | 2026-06-24…2026-07-02 | Initial stable spec and incremental extensions (storage, transitions, archival job, execution semantics, event/comment logs) |
+| 1.1.0 | 2026-07-03 | KAN-8 reconciliation — "no user-defined boards" constraint replaced with the mapped-extension model: custom columns carry a mandatory canonical `anchor` in `board.json`, custom boards are saved views over the single card set; compliance row added; storage comment extended. Aligns with l1-kanban-model 1.1.0. |

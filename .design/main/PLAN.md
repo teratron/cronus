@@ -1,13 +1,13 @@
 # Implementation Plan
 
-**Version:** 2.9.0
-**Generated:** 2026-07-02
-**Based on:** .design/main/INDEX.md v1.0.61
+**Version:** 2.10.0
+**Generated:** 2026-07-03
+**Based on:** .design/main/INDEX.md v1.0.62
 **Status:** Active
 
 ## Overview
 
-Implementation plan for Cronus from the project registry (146 registered specs: 139 Stable, 6 RFC, 1 Draft). Phases follow a **growth order**: the agent grows like a sprout from a seed. This revision re-syncs the plan with registry v1.0.61: 15 newly authored Stable L1 concepts fold into Phase 0 (concept-only, C28), and the two RFC memory-layer concepts park in the Backlog (no spec is left orphaned). Phases 1–9 are complete (Seed through Hardening); Phase 10 (Advanced Office Features) is next once its L2 specs are authored.
+Implementation plan for Cronus from the project registry (149 registered specs: 142 Stable, 6 RFC, 1 Draft). Phases follow a **growth order**: the agent grows like a sprout from a seed. This revision re-syncs the plan with registry v1.0.62: 3 newly authored Stable L1 concepts (specialty-exemplars, project-priority, project-support) fold into Phase 0 (concept-only, C28), and the kanban 1.1.0 amendment (KAN-8 custom boards) is reconciled — its implementation delta over the Done Phase-5 board is tracked as an explicit Phase 10 item. Phases 1–9 are complete (Seed through Hardening); Phase 10 (Advanced Office Features) is next once its L2 specs are authored.
 
 - **Seed = the library** (`crates/core` + `crates/nodus` runtime) — Phases 1–2.
 - **Stem = the CLI** — Phase 3, the first usable surface, emerging straight from the seed.
@@ -122,6 +122,12 @@ Execution mode: **Parallel** (C3); tracks grouped by file independence. Critical
 - [x] **Parallel Staffing** ([l1-parallel-staffing.md](specifications/l1-parallel-staffing.md)) [L1] — same-specialty scale-out: ephemeral same-role instances under one accountable lead, parallelism only via disjoint decomposition, bounded width, first-class fan-in (PS-1…PS-9)
 - [x] **Employee Availability** ([l1-employee-availability.md](specifications/l1-employee-availability.md)) [L1] — workforce state model: available/working/resting/on-leave/truant + released exit; office-state dominance, detected-never-declared truancy, resource-honest rest, honest metaphor binding (EMP-1…EMP-9)
 
+*Concepts authored since plan v2.9.0 (registry sync INDEX v1.0.61 → v1.0.62). All Stable, all `concept-only` (C28).*
+
+- [x] **Specialty Exemplars** ([l1-specialty-exemplars.md](specifications/l1-specialty-exemplars.md)) [L1] — per-specialty competency instrument, sibling to model-benchmarking pointed at staffing competency: one small concentrated exemplar suite per specialty
+- [x] **Project Priority** ([l1-project-priority.md](specifications/l1-project-priority.md)) [L1] — cross-office resource arbitration: explicit user/board-set ordered priority per office/project governing how finite shared resources (building-level token/budget pool) are distributed under scarcity
+- [x] **Project Support** ([l1-project-support.md](specifications/l1-project-support.md)) [L1] — the office's operational posture for a delivered/live project: ongoing upkeep (content updates, issue-driven fixes, product improvement) beginning where the build ends
+
 ## Phase 1 — Seed I: Foundation
 
 *Buildable monorepo + engine skeleton + state + security. The soil and the seed coat.*
@@ -177,7 +183,7 @@ Execution mode: **Parallel** (C3); tracks grouped by file independence. Critical
 > **Done (2026-06-22):** 11 atomic tasks across 4 tracks complete — tool security (skill scanner + runtime guard + guardrail pipeline), role catalog (25 built-in roles, hire/fire/adapter), kanban board (card CRUD + state machine + archival), scheduler (recurring + oneshot + cron + isolated sessions), budget engine (hierarchical policies + hard-stop enforcement + monthly reset), execution workspace (git worktree lifecycle + finalize write-back gate), quality pipeline (per-language gate runner + board integration), extension registry (lifecycle states + component auto-discovery + MCP transport variants), plugin hooks (9 HookEvents + rule evaluation engine + hook security), agent registry (7 built-ins + user config layer + generate-from-description seam), learning loop (post-turn review fork + skill package format + curator approval gate). 36 test suites, 0 failures. See [archives/tasks/phase-5.md](archives/tasks/phase-5.md).
 
 - [x] **Role Catalog** ([l2-role-catalog.md](specifications/l2-role-catalog.md)) [L2]
-- [x] **Kanban Board** ([l2-kanban-board.md](specifications/l2-kanban-board.md)) [L2]
+- [x] **Kanban Board** ([l2-kanban-board.md](specifications/l2-kanban-board.md)) [L2] — implemented at 1.0.x; the 1.1.0 KAN-8 custom-boards delta is tracked as an explicit Phase 10 item
 - [x] **Scheduler** ([l2-scheduler.md](specifications/l2-scheduler.md)) [L2] — recurrence + cron + webhooks + event-driven triggers; cron isolated session execution (session key, model preflight, run log, delivery dispatch, failure notification)
 - [x] **Budget Engine** ([l2-budget-engine.md](specifications/l2-budget-engine.md)) [L2] — hierarchical budget policies, cost events, hard-stop enforcement, monthly reset (depends on roles + kanban)
 - [x] **Execution Workspace** ([l2-execution-workspace.md](specifications/l2-execution-workspace.md)) [L2] — isolated execution environments, no-remote-git contract, finalize write-back gate; git worktree lifecycle (slug naming, boot sequence, isPristine, reset+prune, events) (depends on security + kanban)
@@ -250,6 +256,7 @@ Execution mode: **Parallel** (C3); tracks grouped by file independence. Critical
 - [ ] **L2 Lookahead Planning** (`l2-lookahead-planning.md` — to author) [L2] — lookahead engine implementation: trigger detection, consequence simulation runner (LP-2 no real exec), budget guard, conclusion dispatcher, decision log writer; `Implements: l1-lookahead-planning.md`; depends on orchestration + kanban-board + execution-workspace
 - [ ] **L2 Agent Client Protocol** (`l2-acp.md` — to author) [L2] — ACP server implementation; boundary with l2-agent-session's /acp endpoint must be clarified (l2-agent-session owns the Streamable HTTP transport; l2-acp owns session lifecycle + capability registry + trust enforcement + relay); `Implements: l1-acp.md`; depends on agent-session + security + orchestration
 - [ ] **L2 Global Orchestration** (`l2-global-orchestration.md` — to author) [L2] — building manager implementation: office event bus aggregation (GO-4), ACP relay router (GO-5), phase-awareness concern catalog enforcement (GO-3), cross-office deliberation dispatch (GO-6); `Implements: l1-global-orchestration.md`; depends on l2-acp + orchestration + deliberation + office-control
+- [ ] **Kanban Custom Boards (KAN-8 delta)** ([l2-kanban-board.md](specifications/l2-kanban-board.md)) [L2] — spec already Stable at 1.1.0 (no authoring needed); implement the amendment delta over the Done Phase-5 board: custom columns with a mandatory canonical `anchor` in `board.json`, saved views over the single card set (no second store), re-anchor audit records; board UI surfaces follow the existing app-ui board line; depends on kanban-board (Phase 5) + app-ui (Phase 8)
 
 ## Phase 11 — Content, Sharing & Dev-Workflow Subsystems
 
@@ -280,4 +287,5 @@ Execution mode: **Parallel** (C3); tracks grouped by file independence. Critical
 - **Mobile/Tauri scaffold**: iOS/Android Tauri setup is toolchain-fragile (stack §5) — smoke-test the build/sign pipeline in Phase 1, not at Phase 8.
 - **Concept-only growth (v2.9.0 sync)**: 17 more specs absorbed (15 Stable L1 concept-only into Phase 0, 2 RFC into Backlog). The concept-only count keeps rising while Phase 8 implementation is in flight — a C28 health signal worth watching: the concept caul is far ahead of code, and several new concepts (crash-recovery, employee-availability, parallel-staffing, model-benchmarking, process-monitor, issue-reporting) are natural L2 candidates for Phases 9–10 when authored.
 - **Registry sync debt (resolved in v2.8.0)**: 48 specs had accumulated outside the plan (INDEX raced ahead to v1.0.36). That revision absorbed them — but the new Phase 0 concept additions (e.g. execution-graph, code-intelligence, model-runtime, knowledge-base) imply future L2 implementation work not yet phased. Most have no authored L2 yet; they will surface as new phases via `/magic.spec` → `/magic.task` when promoted.
+- **Amendment deltas over Done phases (v2.10.0)**: the kanban 1.1.0 amendment (KAN-8 custom boards) is the first spec change landing after its implementation phase closed. Pattern: the delta becomes an explicit item in the next open phase (here Phase 10) rather than being silently absorbed or reopening the Done phase — keeps Done phases immutable and the spec-vs-code gap visible.
 - **TUI event-seam dependency (Phase 7)**: the render loop assumes a core event/subscribe seam. If the core exposes no pub/sub observer, the TUI must fall back to polling durable-state snapshots (INV-5 view-only). The Phase 7 tasks carry this fallback so the view panels are not hard-blocked on the subscription mechanism. Verify the seam first (T-7A02).

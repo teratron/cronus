@@ -69,6 +69,7 @@
 │   ├── nodus/
 │   └── tui/
 ├── docs/
+│   └── README.md
 ├── installer/
 ├── package.json
 ├── packages/
