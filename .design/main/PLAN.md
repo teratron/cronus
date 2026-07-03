@@ -1,13 +1,13 @@
 # Implementation Plan
 
-**Version:** 2.10.0
+**Version:** 2.11.0
 **Generated:** 2026-07-03
-**Based on:** .design/main/INDEX.md v1.0.62
+**Based on:** .design/main/INDEX.md v1.0.63
 **Status:** Active
 
 ## Overview
 
-Implementation plan for Cronus from the project registry (149 registered specs: 142 Stable, 6 RFC, 1 Draft). Phases follow a **growth order**: the agent grows like a sprout from a seed. This revision re-syncs the plan with registry v1.0.62: 3 newly authored Stable L1 concepts (specialty-exemplars, project-priority, project-support) fold into Phase 0 (concept-only, C28), and the kanban 1.1.0 amendment (KAN-8 custom boards) is reconciled — its implementation delta over the Done Phase-5 board is tracked as an explicit Phase 10 item. Phases 1–9 are complete (Seed through Hardening); Phase 10 (Advanced Office Features) is next once its L2 specs are authored.
+Implementation plan for Cronus from the project registry (153 registered specs: 146 Stable, 6 RFC, 1 Draft). Phases follow a **growth order**: the agent grows like a sprout from a seed. This revision opens Phase 10 (Advanced Office Features) with the **foundational L2 wave authored & Stable** — office-control, acp, navigation, automation-pipeline — the tap-root specs that unblock the dependent wave (canvas, deliberation, inner-monologue, global-orchestration). The remaining 7 Phase-10 L2 specs are authored in the next `/magic.spec` run. Phases 1–9 are complete (Seed through Hardening). Prior revision (v2.10.0) absorbed 3 orphaned Stable L1 concepts into Phase 0 and reconciled the kanban 1.1.0 KAN-8 custom-boards amendment.
 
 - **Seed = the library** (`crates/core` + `crates/nodus` runtime) — Phases 1–2.
 - **Stem = the CLI** — Phase 3, the first usable surface, emerging straight from the seed.
@@ -243,19 +243,24 @@ Execution mode: **Parallel** (C3); tracks grouped by file independence. Critical
 
 *L2 implementation specs for the L1 concepts added in 2026-06. These specs must be authored via `/magic.spec` before implementation tasks can be generated.*
 
-> **Status:** Pending — L2 specifications not yet authored. Use `/magic.spec` to create each before running `/magic.task` to decompose into tasks.
+> **Status:** In progress — foundational L2 wave authored (Stable). The tap-root specs (office-control, acp, navigation, automation-pipeline) are Stable and ready to decompose; the dependent wave (7 specs) is authored in the next `/magic.spec` run, then decomposed. Kanban KAN-8 custom-boards delta rides here (spec already Stable at 1.1.0).
 
-- [ ] **L2 Automation Engine** (`l2-automation-pipeline.md` — to author) [L2] — runtime engine for event-driven automation pipelines; `Implements: l1-automation-pipeline.md`; trigger dispatcher, node executor, deduplication window, office-scoped isolation, AuditProvider binding
-- [ ] **L2 Automation Canvas UI** (`l2-automation-canvas.md` — to author) [L2] — visual canvas renderer; `Implements: l1-automation-canvas.md`; three-panel layout implementation, node palette, live state indicators, implicit-to-explicit conversion; depends on automation-engine + app-ui
-- [ ] **L2 Office Control** (`l2-office-control.md` — to author) [L2] — OfficeState machine, drain protocol, checkpoint write/restore, model-router fallback integration, per-subsystem pause toggles; `Implements: l1-office-control.md`; depends on orchestration + budget-engine + model-router
-- [ ] **L2 Navigation** (`l2-navigation.md` — to author) [L2] — sidebar tab rendering, office tab bar, lazy loading, live status icons, two-tier settings surfaces, IDE launch; `Implements: l1-navigation-model.md`; depends on app-ui + office-control
+*Foundational wave — authored & Stable (decompose on entry):*
+
+- [x] **Office Control** ([l2-office-control.md](specifications/l2-office-control.md)) [L2] — OfficeState machine, cooperative drain-and-checkpoint, token-exhaustion hibernation ladder (substitute-before-hibernate, auto-recovery wake), per-subsystem toggles; `Implements: l1-office-control.md`; deps orchestration + budget-engine + model-router (all Done)
+- [x] **Agent Client Protocol** ([l2-acp.md](specifications/l2-acp.md)) [L2] — session store, monotonic event bus, capability/trust gate, pure projection adapters, cross-office relay, live-steering + interrupt over the agent-session `/acp` transport; `Implements: l1-acp.md`; deps agent-session + security + orchestration (all Done)
+- [x] **Navigation** ([l2-navigation.md](specifications/l2-navigation.md)) [L2] — four-layer component tree, floor tab bar with lazy load + live OfficeState icons, frozen sidebar catalog, recursive mechanism sub-nav, two-tier settings, IDE launcher; `Implements: l1-navigation-model.md`; deps app-ui (Done) + office-control (this wave)
+- [x] **Automation Engine** ([l2-automation-pipeline.md](specifications/l2-automation-pipeline.md)) [L2] — single PipelineEngine behind both modes, topological node executor, dedup window, scoped state over volatile/durable backends, control plane, lifecycle observers, composition, portable bundles; `Implements: l1-automation-pipeline.md`; deps trigger-triage + scheduler + orchestration (all Done)
+
+*Dependent wave — to author (next `/magic.spec` run):*
+
+- [ ] **L2 Automation Canvas UI** (`l2-automation-canvas.md` — to author) [L2] — visual canvas renderer; `Implements: l1-automation-canvas.md`; three-panel layout implementation, node palette, live state indicators, implicit-to-explicit conversion; depends on automation-pipeline (authored) + app-ui
 - [ ] **L2 Voice Input** (`l2-voice-input.md` — to author) [L2] — cpal audio capture, ONNX VAD, on-device speech model integration, review overlay, push-to-talk/toggle activation; `Implements: l1-voice-input.md`; depends on technology-stack + security
-- [ ] **L2 Deliberation Engine** (`l2-deliberation.md` — to author) [L2] — parallel argument dispatch, orchestrator synthesis, deliberation log storage, Channels tab rendering; `Implements: l1-deliberation.md`; depends on orchestration + inbox + navigation
+- [ ] **L2 Deliberation Engine** (`l2-deliberation.md` — to author) [L2] — parallel argument dispatch, orchestrator synthesis, deliberation log storage, Channels tab rendering; `Implements: l1-deliberation.md`; depends on orchestration + inbox + navigation (authored)
 - [ ] **L2 Version Control** (`l2-version-control.md` — to author) [L2] — virtual staging area lifecycle, role authority enforcement, Conventional Commits generation, remote platform adapter; `Implements: l1-version-control.md`; depends on execution-workspace + quality-pipeline + kanban-board
-- [ ] **L2 Inner Monologue** (`l2-inner-monologue.md` — to author) [L2] — heartbeat cycle implementation, state snapshot assembly, intention dispatch pipeline, Pulse log SQLite storage, proactivity threshold; `Implements: l1-inner-monologue.md`; depends on scheduler + inbox + navigation + agent-session
+- [ ] **L2 Inner Monologue** (`l2-inner-monologue.md` — to author) [L2] — heartbeat cycle implementation, state snapshot assembly, intention dispatch pipeline, Pulse log SQLite storage, proactivity threshold; `Implements: l1-inner-monologue.md`; depends on scheduler + inbox + navigation (authored) + agent-session
 - [ ] **L2 Lookahead Planning** (`l2-lookahead-planning.md` — to author) [L2] — lookahead engine implementation: trigger detection, consequence simulation runner (LP-2 no real exec), budget guard, conclusion dispatcher, decision log writer; `Implements: l1-lookahead-planning.md`; depends on orchestration + kanban-board + execution-workspace
-- [ ] **L2 Agent Client Protocol** (`l2-acp.md` — to author) [L2] — ACP server implementation; boundary with l2-agent-session's /acp endpoint must be clarified (l2-agent-session owns the Streamable HTTP transport; l2-acp owns session lifecycle + capability registry + trust enforcement + relay); `Implements: l1-acp.md`; depends on agent-session + security + orchestration
-- [ ] **L2 Global Orchestration** (`l2-global-orchestration.md` — to author) [L2] — building manager implementation: office event bus aggregation (GO-4), ACP relay router (GO-5), phase-awareness concern catalog enforcement (GO-3), cross-office deliberation dispatch (GO-6); `Implements: l1-global-orchestration.md`; depends on l2-acp + orchestration + deliberation + office-control
+- [ ] **L2 Global Orchestration** (`l2-global-orchestration.md` — to author) [L2] — building manager implementation: office event bus aggregation (GO-4), ACP relay router (GO-5), phase-awareness concern catalog enforcement (GO-3), cross-office deliberation dispatch (GO-6); `Implements: l1-global-orchestration.md`; depends on l2-acp (authored) + orchestration + deliberation + office-control (authored)
 - [ ] **Kanban Custom Boards (KAN-8 delta)** ([l2-kanban-board.md](specifications/l2-kanban-board.md)) [L2] — spec already Stable at 1.1.0 (no authoring needed); implement the amendment delta over the Done Phase-5 board: custom columns with a mandatory canonical `anchor` in `board.json`, saved views over the single card set (no second store), re-anchor audit records; board UI surfaces follow the existing app-ui board line; depends on kanban-board (Phase 5) + app-ui (Phase 8)
 
 ## Phase 11 — Content, Sharing & Dev-Workflow Subsystems
