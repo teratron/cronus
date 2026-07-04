@@ -12,7 +12,7 @@
 use std::collections::BTreeMap;
 use std::time::{Duration, Instant};
 
-use hmac::{Hmac, Mac};
+use hmac::{Hmac, KeyInit, Mac};
 use sha1::Sha1;
 
 type HmacSha1 = Hmac<Sha1>;
@@ -432,7 +432,7 @@ impl SessionStore {
 /// HOTP (RFC 4226) at a given counter value. Returns `None` only if the HMAC
 /// key construction fails, which fails the caller closed (no code matches).
 fn hotp(secret: &[u8], counter: u64) -> Option<u32> {
-    let mut mac = <HmacSha1 as Mac>::new_from_slice(secret).ok()?;
+    let mut mac = <HmacSha1 as KeyInit>::new_from_slice(secret).ok()?;
     Mac::update(&mut mac, &counter.to_be_bytes());
     let digest = mac.finalize().into_bytes();
     let offset = (digest[digest.len() - 1] & 0x0f) as usize;
@@ -515,7 +515,7 @@ mod base32 {
 /// that panics rather than propagating a `Result` no caller could act on.
 fn random_bytes<const N: usize>() -> [u8; N] {
     let mut bytes = [0u8; N];
-    getrandom::getrandom(&mut bytes).expect("OS CSPRNG unavailable — cannot mint secrets safely");
+    getrandom::fill(&mut bytes).expect("OS CSPRNG unavailable — cannot mint secrets safely");
     bytes
 }
 
