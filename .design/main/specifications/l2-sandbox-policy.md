@@ -190,6 +190,7 @@ PolicyPreset {
 ```
 
 Preset resolution:
+
 1. The active tier's preset list is the starting set.
 2. Additional presets may be requested through the approval gate (`l2-agent-autonomy.md §4.8`).
 3. Unknown or unverified presets are listed in `known_unapplied_presets` (§4.8) and not automatically applied.

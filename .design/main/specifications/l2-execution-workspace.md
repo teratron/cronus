@@ -67,6 +67,7 @@ stateDiagram-v2
 ```
 
 State definitions:
+
 - **active** — a run is currently executing inside this workspace.
 - **idle** — run is paused (waiting for approval, budget, or a wake signal); workspace is held warm.
 - **finalized** — run completed, changes written back to the control-plane; workspace may be kept for inspection.
@@ -124,6 +125,7 @@ When a run completes:
 5. **Schedule cleanup** — set `cleanupEligibleAt = now() + retention_window` (default: 7 days).
 
 If step 2 or 3 fails:
+
 - Set `workspace.status = abandoned`.
 - Set the owning issue's `executionLockedAt = null` (release the run's ownership lock).
 - Emit `workspace_finalize_failed` event — dependent issues with a wake-on-finalize dependency remain `blocked`.

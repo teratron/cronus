@@ -64,6 +64,7 @@ Two review passes run (separately or together based on config):
 
 **Pass 1 — Memory review**
 "Has the user revealed preferences, persona, working style, or expectations worth remembering?"
+
 - Prefer specific, durable facts over session-transient details.
 - Write to the scope the fact belongs to: global (about the user across projects) / workspace (about this office) / employee (about this role).
 - If nothing durable surfaces: "Nothing to save." and stop.
@@ -72,11 +73,13 @@ Two review passes run (separately or together based on config):
 "Most sessions produce at least one skill update, even if small. A pass that does nothing is a missed learning opportunity."
 
 Signals that warrant action (any one suffices):
+
 - User corrected style, tone, format, verbosity, or workflow — encode the correction.
 - Non-trivial technique, fix, workaround, or debugging path emerged.
 - A loaded skill proved wrong, missing a step, or outdated — patch it now.
 
 Preference order (prefer earlier action):
+
 1. **Update a currently-loaded skill** — the skill was in play; it is the right one to extend.
 2. **Update an existing umbrella skill** — match by topic from `skills_list`.
 3. **Add a support file** under an existing umbrella (`references/`, `templates/`).
@@ -119,11 +122,13 @@ CuratorConfig {
 ```
 
 Curator responsibilities (in order):
+
 1. **Auto-transitions (deterministic, no LLM):** active → stale when unused ≥ `stale_after_days`; stale → archived when unused ≥ `archive_after_days`. Pinned skills are exempt from all auto-transitions.
 2. **Background review fork (LLM):** reviews quality of agent-created skills; patches, archives, or consolidates via `skill_manage` tool.
 3. **Persist curator state** (see §4.4).
 
 Hard invariants:
+
 - Only touches agent-created skills (`source: generated | custom`). Preset (`source: preset`) and user-authored skills are never auto-transitioned.
 - Never auto-deletes — only archives. Archive is reversible.
 - Pinned skills bypass all auto-transitions.

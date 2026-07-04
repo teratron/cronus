@@ -299,7 +299,7 @@ Base: abc1234
 ## Tasks
 
 | # | Name | Status | Commits | Review |
-|---|------|--------|---------|--------|
+| --- | --- | --- | --- | --- |
 | 1 | Component scaffold | Complete | abc1234..def5678 | Clean |
 | 2 | Core logic | Complete | def5678..789abcd | Clean (1 minor logged) |
 | 3 | Integration tests | In Progress | — | — |

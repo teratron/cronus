@@ -128,7 +128,7 @@ Query flow for a semantic retrieval request:
 ### 4.6 Lifecycle Summary
 
 | Action | Effect |
-|---|---|
+| --- | --- |
 | Create collection | Empty collection created; index initialised. |
 | Add document | Document queued for ingestion; status `pending → indexing → ready`. |
 | Replace document | Old chunks removed from index; new document ingested. |
@@ -176,7 +176,7 @@ The agent owns `draft`; only human action advances `reviewed`/`stable`. Retrieva
 ## Canonical References
 
 | Alias | Path | Purpose |
-|---|---|---|
+| --- | --- | --- |
 | `[IMPL]` | `.design/main/specifications/l2-knowledge-store.md` | Concrete schema, indexing pipeline, and Rust implementation. |
 | `[MEMORY]` | `.design/main/specifications/l2-memory-store.md` | Memory store also uses sqlite-vec; share the embedding engine pattern. |
 

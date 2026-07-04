@@ -31,7 +31,7 @@ Notes are user-facing artifacts distinct from sessions and memory. A dedicated n
 ## 3. Invariant Compliance (Layer 2)
 
 | L1 Invariant | Implementation |
-|---|---|
+| --- | --- |
 | NOT-1 Artifact | `note` table with stable PK, `created_at`/`updated_at`, never deleted on session close. |
 | NOT-2 Rich structure | `content` stored as JSON document tree (`ProseMirror`-compatible node format). |
 | NOT-3 Access control | `access-grants` crate; `has_access(Note, note_id, Permission::Read/Write)` enforced at service boundary. |
@@ -170,7 +170,7 @@ crates/
 ## Canonical References
 
 | Alias | Path | Purpose |
-|---|---|---|
+| --- | --- | --- |
 | `[L1]` | `.design/main/specifications/l1-notes.md` | Invariants NOT-1…NOT-8. |
 | `[SHARING]` | `.design/main/specifications/l2-resource-sharing.md` | Grant enforcement for note access. |
 | `[FILES]` | `.design/main/specifications/l2-file-store.md` | File references embedded in note content. |

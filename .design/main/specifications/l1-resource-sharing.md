@@ -84,7 +84,7 @@ graph TD
 ### 4.3 Public vs. Authenticated Access
 
 | Grant | Effect |
-|---|---|
+| --- | --- |
 | None | Private — owner only. |
 | `(public, *, read)` | Readable by anyone, including unauthenticated callers. |
 | `(public, *, write)` | Writable by anyone — reserved for specific scenarios (e.g., community upload channels). |
@@ -94,7 +94,7 @@ graph TD
 ### 4.4 Applicable Resources
 
 | Resource | Notes |
-|---|---|
+| --- | --- |
 | knowledge collection | Read = query/retrieve; write = add/remove documents. |
 | skill | Read = invoke; write = edit content. |
 | tool | Read = invoke; write = edit code/specs. |
@@ -124,5 +124,5 @@ graph TD
 ## Canonical References
 
 | Alias | Path | Purpose |
-|---|---|---|
+| --- | --- | --- |
 | `[IMPL]` | `.design/main/specifications/l2-resource-sharing.md` | Concrete implementation: table schema, query patterns, Rust types. |

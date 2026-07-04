@@ -793,7 +793,7 @@ Add a `## Complexity Justifications` section to the relevant CONTEXT.md or PLAN.
 ## Complexity Justifications
 
 | Violation | Why Needed | Simpler Alternative Rejected Because |
-|-----------|------------|--------------------------------------|
+| --- | --- | --- |
 | Added `serde` for a 3-field struct | Upstream crate requires `Serialize`; hand-rolling is error-prone at their API boundary | Would break upstream deserialization |
 | Four config layers instead of three | Security policy mandates per-environment secret isolation | Merging env/secret layers leaks secrets |
 ```

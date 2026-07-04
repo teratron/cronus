@@ -32,7 +32,7 @@ Multiple subsystems (knowledge base, notes, chat attachments) need to store and 
 ## 3. Invariant Compliance (Layer 2)
 
 | L1 Invariant | Implementation |
-|---|---|
+| --- | --- |
 | FM-1 Explicit ingestion | Upload endpoint + server-side ingest function; no implicit capture path. |
 | FM-2 Content-addressed dedup | SHA-256 computed server-side; `storage_path` is derived from the hash. Before writing, check if the blob already exists at that path. |
 | FM-3 Metadata decoupled | `file` table holds metadata; blob lives at `storage_path` in the backend. |
@@ -217,7 +217,7 @@ crates/
 ## Canonical References
 
 | Alias | Path | Purpose |
-|---|---|---|
+| --- | --- | --- |
 | `[L1]` | `.design/main/specifications/l1-file-management.md` | Invariants FM-1…FM-7. |
 | `[LAYOUT]` | `.design/main/specifications/l2-filesystem-layout.md` | State tier path where blobs live. |
 | `[SHARING]` | `.design/main/specifications/l2-resource-sharing.md` | Grant enforcement for file access. |

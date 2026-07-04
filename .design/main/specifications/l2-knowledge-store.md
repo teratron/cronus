@@ -31,7 +31,7 @@ The memory store is per-user, conversational, and ephemeral by design. A separat
 ## 3. Invariant Compliance (Layer 2)
 
 | L1 Invariant | Implementation |
-|---|---|
+| --- | --- |
 | KB-1 Collection isolation | Every ANN and FTS query is scoped to explicit `collection_ids`; no implicit cross-collection search. |
 | KB-2 Hierarchical organisation | `knowledge_directory` table stores the tree; retrieval queries ignore directory structure. |
 | KB-3 Incremental indexing | Ingestion job operates on one document; existing chunks for that document are deleted before re-insert. |
@@ -132,7 +132,7 @@ graph TD
 **Chunking parameters (defaults, configurable per collection):**
 
 | Parameter | Default |
-|---|---|
+| --- | --- |
 | Chunk size | 512 tokens |
 | Overlap | 64 tokens |
 | Splitter | Sentence boundary (Unicode sentence segmentation) |
@@ -216,7 +216,7 @@ crates/
 ## Canonical References
 
 | Alias | Path | Purpose |
-|---|---|---|
+| --- | --- | --- |
 | `[L1]` | `.design/main/specifications/l1-knowledge-base.md` | Invariants KB-1…KB-8. |
 | `[MEMORY]` | `.design/main/specifications/l2-memory-store.md` | Shared EmbeddingEngine pattern and sqlite-vec usage. |
 | `[FILES]` | `.design/main/specifications/l2-file-store.md` | FileId referenced in knowledge_document. |

@@ -91,7 +91,7 @@ Each adapter runs isolated; a crash or auth failure marks that platform degraded
 ## Canonical References
 
 | Alias | Path | Purpose |
-|---|---|---|
+| --- | --- | --- |
 | `[ROUTING]` | `.design/main/specifications/l1-routing.md` | Routes resolved inbound messages to the correct office/session. |
 | `[ACP]` | `.design/main/specifications/l1-acp.md` | Agent protocol the gateway drives (sessions, streaming, interrupt). |
 | `[SECURITY]` | `.design/main/specifications/l1-security.md` | Authorization, loopback-default exposure, and transit privacy. |

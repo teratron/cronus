@@ -52,10 +52,12 @@ Autonomous offices can consume significant model API costs. Users need a reliabl
 ### 4.2 Master Switch
 
 The master switch is available from:
+
 - The office tab's settings dropdown (primary)
 - The Office sidebar tab header (secondary)
 
 Semantics:
+
 - `Active` or `Idle` → drain-and-checkpoint → `Paused`
 - `Paused` → resume → `Active` (if queued tasks) or `Idle`
 - `Hibernating` → early manual resume → `Active` or `Idle`

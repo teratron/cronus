@@ -73,7 +73,7 @@ A managed-tier value short-circuits resolution: lower tiers are not consulted fo
 Each class names a surface owned by another spec. The managed tier may set each to one of: `open` (default — user/project instances load), `managed-only` (only administrator-supplied instances load), or `off` (the class is disabled entirely).
 
 | Class | Governs | Lockdown effect |
-|---|---|---|
+| --- | --- | --- |
 | Extensions / plugins | extension registry surface | `managed-only` → only administrator-installed extensions load |
 | Hooks | hook system | `managed-only` → user/project hooks are ignored |
 | Permission rules | approval-gate allow/ask/deny rules | `managed-only` → only administrator rules apply; user/project rules dropped |
@@ -107,7 +107,7 @@ Distinguishing "no policy" (legitimately unmanaged → PG-7 fail-open) from "pol
 ## Canonical References
 
 | Alias | Path | Purpose |
-|---|---|---|
+| --- | --- | --- |
 | `[AUTH]` | `.design/main/specifications/l2-multi-user-auth.md` | Defines the administrator/superadmin principal whose authority sets the managed tier. |
 | `[REGISTRY]` | `.design/main/specifications/l2-extension-registry.md` | Extension supply-chain surface governed by PG-4/PG-5. |
 | `[HOOKS]` | `.design/main/specifications/l2-plugin-hooks.md` | Hook surface governed by PG-4 managed-only mode. |

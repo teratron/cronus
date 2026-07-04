@@ -93,7 +93,7 @@ The user can view the complete model with provenance and confidence, correct any
 ## Canonical References
 
 | Alias | Path | Purpose |
-|---|---|---|
+| --- | --- | --- |
 | `[MEMORY]` | `.design/main/specifications/l2-memory-store.md` | Store the model is derived from and persisted in. |
 | `[LEDGER]` | `.design/main/specifications/l1-operational-ledger.md` | Asserted-fact kind the user model is deliberately distinct from. |
 | `[SECURITY]` | `.design/main/specifications/l1-security.md` | Consent, on-device storage, and inspect/erase rights. |

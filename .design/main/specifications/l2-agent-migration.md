@@ -111,6 +111,7 @@ An adapter translates a source-specific format into `agent-migration.v1`. Adapte
 - Script-based — read-only helper that writes JSON without importing Cronus modules.
 
 Adapter responsibilities:
+
 - Read source files (e.g. `~/.hermes/config.yaml`, ChatGPT `conversations.json`, a Markdown notes folder).
 - Normalize to `agent-migration.v1` items.
 - Never write to `data/` or call an LLM.

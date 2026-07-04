@@ -107,6 +107,7 @@ SessionToken {
 ### 4.5 TOTP two-factor authentication
 
 Enrollment flow:
+
 1. Generate random Base32 secret → store as `totp_secret_pending`.
 2. Display `otpauth://` QR URI to user.
 3. User submits a code; verify against `totp_secret_pending` with `valid_window=1`.
@@ -119,10 +120,12 @@ Backup codes are single-use: consuming one removes it from the stored list.
 ### 4.6 Promote/demote with privilege stashing
 
 Promoting a user to admin:
+
 1. Stash current `privileges` into `privileges_before_admin`.
 2. Set `is_admin = true` and `privileges = ADMIN_PRIVILEGES`.
 
 Demoting:
+
 1. Restore `privileges` from `privileges_before_admin` (fallback: `DEFAULT_PRIVILEGES`).
 2. Set `is_admin = false`.
 

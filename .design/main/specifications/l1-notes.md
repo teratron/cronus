@@ -100,7 +100,7 @@ An agent may create a note as part of its output (e.g., after a research task). 
 The content tree supports these node types at minimum:
 
 | Node Type | Notes |
-|---|---|
+| --- | --- |
 | `heading` (h1–h6) | Section structure. |
 | `paragraph` | Body text with inline formatting. |
 | `code_block` | Monospaced, optional language hint. |
@@ -123,6 +123,6 @@ The content tree supports these node types at minimum:
 ## Canonical References
 
 | Alias | Path | Purpose |
-|---|---|---|
+| --- | --- | --- |
 | `[IMPL]` | `.design/main/specifications/l2-notes.md` | Concrete storage, CRDT sync, and Rust/TS implementation. |
 | `[SHARING]` | `.design/main/specifications/l1-resource-sharing.md` | Access grant model governing note visibility. |

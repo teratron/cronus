@@ -78,6 +78,7 @@ The active mode is a user preference in Global Settings → Appearance.
 ### 4.3 Review Overlay
 
 After recording stops, an overlay presents:
+
 - Editable transcript text (with word-level confidence indicators where the model provides them)
 - **Confirm** action — inject the (optionally edited) text at the cursor
 - **Cancel** action — discard everything (VI-5)

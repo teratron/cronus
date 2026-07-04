@@ -99,14 +99,16 @@ struct ClassifiedError {
 
 The classifier checks these stages in order, returning on the first match:
 
-**1. Provider-specific patterns (highest priority)**
+**1. Provider-specific** patterns (highest priority)
+
 - Content-policy blocks: deterministic refusals by provider safety filters. `retryable: false, should_fallback: true`. Must run before status-based classification so a 400 safety block is not downgraded to a generic `FormatError`.
 - Provider-specific subscription/entitlement errors (e.g. expired OAuth tokens, model tier restrictions). Classify as `Auth` with `retryable: false, should_fallback: true`.
 - Thinking-block signature invalidity: `retryable: true` (strip reasoning blocks and retry).
 - Long-context tier gate: `should_compress: true, retryable: true`.
 - Grammar pattern rejection (local inference): `retryable: true` (strip unsupported schema fields).
 
-**2. HTTP status code + message-aware refinement**
+**2. HTTP status code** + **message-aware refinement**
+
 - `401` → `Auth` (`should_rotate_credential: true, should_fallback: true`)
 - `402` → disambiguate billing vs transient quota:
   - usage-limit pattern + transient signal ("try again", "resets at") → `RateLimit`
@@ -122,6 +124,7 @@ The classifier checks these stages in order, returning on the first match:
 - Other `5xx` → `ServerError` (retry)
 
 **400 sub-pipeline (ordered by specificity)**:
+
 1. Multimodal tool content rejected → strip image parts from tool messages, record (provider, model), retry
 2. Image too large → `ImageTooLarge` (shrink and retry)
 3. Invalid encrypted replay blob → strip replay state, retry

@@ -81,6 +81,7 @@ CostEvent {
 ```
 
 Cost events are append-only and written to the audit log. They are then rolled up into:
+
 - `agent.spentMonthlyCents` — per-agent running total for the current window
 - `project.spentMonthlyCents` — per-project running total
 - `office.spentMonthlyCents` — office-level aggregate
@@ -107,6 +108,7 @@ BudgetIncident {
 `warn` — spending crossed `warnPercent` of `amount`. Notification only; agent continues.
 
 `hard_stop` — spending reached `amount`. If `hardStopEnabled = true`:
+
 1. The current run receives a `BudgetExhausted` stop signal; the run terminates with status `budget_paused`.
 2. The agent's `status` is set to `paused` with `pauseReason = "budget_exhausted"`.
 3. Cards assigned to this agent that are in `running` state transition to `blocked` with reason `"budget_exhausted"`.
@@ -122,6 +124,7 @@ graph TD
 ```
 
 Hierarchy rules:
+
 - A manager can set a budget policy for any agent in its reporting subtree.
 - A policy's `amount` cannot exceed the parent scope's `(policy.amount - spentToDate)` at the time of creation.
 - The board can override any policy regardless of hierarchy.
@@ -130,6 +133,7 @@ Hierarchy rules:
 ### 4.5 Monthly reset
 
 At the start of each new window (midnight UTC for `monthly_utc`), the engine:
+
 1. Resets all `spentMonthlyCents` to zero for agents and projects.
 2. Unpauses agents whose `pauseReason = "budget_exhausted"` (budget is fresh again).
 3. Transitions their `blocked` cards back to `ready` (unless blocked for another reason).

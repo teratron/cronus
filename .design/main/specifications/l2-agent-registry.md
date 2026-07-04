@@ -69,6 +69,7 @@ AgentDefinition {
 ```
 
 `mode` governs where the agent appears:
+
 - `primary` — selectable by the user as the main interactive agent.
 - `subagent` — spawnable only by the orchestrator or other agents; never directly selectable.
 - `all` — usable both ways (custom agents default to this).

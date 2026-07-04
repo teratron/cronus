@@ -54,7 +54,7 @@ Rules every Layer 2 implementation MUST NOT violate:
 A *signal* is a named, measurable operational quantity with an optional threshold and weight. Signals fall into families:
 
 | Family | Example signals | Source |
-|---|---|---|
+| --- | --- | --- |
 | Reliability | error-rate, crash/restart count, stuck-work count | error log, doctor checks |
 | Resource | memory pressure, queue depth | runtime resource samples |
 | Engagement | sessions/day, messages/session, idle-since | session traces |
@@ -118,7 +118,7 @@ A health snapshot bundles, per monitored unit: the score with its breakdown, act
 ## Canonical References
 
 | Alias | Path | Purpose |
-|---|---|---|
+| --- | --- | --- |
 | `[BUDGET]` | `.design/main/specifications/l2-budget-engine.md` | Authoritative source of cost/token accounting consumed by OH-6. |
 | `[DASHBOARD]` | `.design/main/specifications/l1-dashboard.md` | Surface contract that renders the health snapshot (OH-8). |
 | `[TELEMETRY]` | `.design/main/specifications/l1-telemetry.md` | Boundary spec — defines what stays local vs. what may be shared, which OH-1 must not cross. |

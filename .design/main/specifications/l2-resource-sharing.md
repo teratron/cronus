@@ -30,7 +30,7 @@ Each resource type (skills, tools, notes, channels, knowledge) needs sharing sup
 ## 3. Invariant Compliance (Layer 2)
 
 | L1 Invariant | Implementation |
-|---|---|
+| --- | --- |
 | RS-1 Uniform grant primitive | Single `access_grant` table. The `resource_type` column distinguishes entity kinds; no per-entity grant table. |
 | RS-2 Principal types | `principal_type IN ('user', 'group', 'public')`. `public` has `principal_id = '*'`. |
 | RS-3 Permission levels | `permission IN ('read', 'write')`. `write` implies `read` enforced at the query layer. |
@@ -223,7 +223,7 @@ crates/
 ## Canonical References
 
 | Alias | Path | Purpose |
-|---|---|---|
+| --- | --- | --- |
 | `[L1]` | `.design/main/specifications/l1-resource-sharing.md` | The model this spec implements; invariants RS-1…RS-8. |
 | `[CORE]` | `.design/main/specifications/l2-core-library.md` | Typed ID system: `grn/` prefix, branded type enforcement. |
 | `[SEC]` | `.design/main/specifications/l2-security.md` | Audit log that receives `AuditEvent::GrantChange` entries. |

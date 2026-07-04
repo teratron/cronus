@@ -64,6 +64,7 @@ The office declares one of two branching strategies in Local Settings → Git. T
 The office uses trunk-based by default; Git Flow is selected when the office manages versioned software releases with explicit release cycles.
 
 Regardless of strategy:
+
 - `main`/`trunk` is always protected (VC-5)
 - Hotfix branches follow trunk-based semantics even in Git Flow offices (speed constraint)
 
