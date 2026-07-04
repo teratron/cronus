@@ -267,10 +267,12 @@ Execution mode: **Parallel** (C3); tracks grouped by file independence. Critical
 
 *Ready Stable L2 subsystems authored after the Phase 1–10 narrative was drafted. Access-controlled content stores plus the bundled dev-workflow skill catalog. Decomposed into atomic tasks on entry (like Phases 8–10). Natural build order: resource-sharing (the access layer) before notes/file-store; development-workflow is independent.*
 
-- [ ] **Resource Sharing** ([l2-resource-sharing.md](specifications/l2-resource-sharing.md)) [L2] — single SQLite `access_grant` table, `has_access` resolution (owner→user→group→public), batch grant loader, group membership cache; `Implements: l1-resource-sharing.md` — the access foundation for notes/files/knowledge
-- [ ] **Notes** ([l2-notes.md](specifications/l2-notes.md)) [L2] — SQLite schema (note/pinned/version/crdt), ProseMirror JSON content tree, Yjs CRDT update log, version history, soft-delete GC; `Implements: l1-notes.md`; depends on resource-sharing
-- [ ] **File Store** ([l2-file-store.md](specifications/l2-file-store.md)) [L2] — SQLite schema, StorageBackend trait (local FS + S3 plug-in), SHA-256 content-addressed dedup, magic-byte MIME allowlist, GC scheduler; `Implements: l1-file-management.md`; depends on resource-sharing
-- [ ] **Development Workflow** ([l2-development-workflow.md](specifications/l2-development-workflow.md)) [L2] — bundled 12-skill catalog, session-bootstrap hook, implementer/reviewer dispatch templates, model-tier table, progress ledger; `Implements: l1-development-workflow.md`; depends on extension-registry + agent-session
+> **Status:** Done (2026-07-04) — all 4 subsystems implemented in `crates/core` domain-logic-first. resource_sharing (access foundation) → file_store + notes; development_workflow independent. 8 tasks; +26 unit tests. SQLite schemas, Yjs binary CRDT, StorageBackend, and SHA-256 are deferred seams; the resolution/dedup/convergence/stage-gate algebra is implemented and tested. Gates green: cargo 276 lib tests + clippy `-D warnings` + fmt.
+
+- [x] **Resource Sharing** ([l2-resource-sharing.md](specifications/l2-resource-sharing.md)) [L2] — uniform access-grant model, `has_access` resolution (owner→user→group→public), write-implies-read, additive grants, audit events (RS-1…RS-8); `Implements: l1-resource-sharing.md` — the access foundation for notes/files/knowledge
+- [x] **Notes** ([l2-notes.md](specifications/l2-notes.md)) [L2] — insertion-CRDT with order-independent convergence + idempotent merge, append-only version history, non-destructive soft-delete; `Implements: l1-notes.md`; depends on resource-sharing
+- [x] **File Store** ([l2-file-store.md](specifications/l2-file-store.md)) [L2] — content-addressed dedup, reference-tracking GC, immutable blobs, metadata decoupled from bytes; `Implements: l1-file-management.md`; depends on resource-sharing
+- [x] **Development Workflow** ([l2-development-workflow.md](specifications/l2-development-workflow.md)) [L2] — five-stage pipeline (Design→Plan→Execute→Review→Deliver), two-stage quality gate, human checkpoint, append-only progress ledger; `Implements: l1-development-workflow.md`; depends on extension-registry + agent-session
 
 ## Backlog
 

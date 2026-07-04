@@ -4,23 +4,25 @@
 <!-- Maximum 100 lines. Agent updates AFTER each completed action. -->
 
 **Workspace:** main
-**Updated:** 2026-07-03 21:08
-**Phase:** 11 — Content, Sharing & Dev-Workflow Subsystems
-**Status:** Active
+**Updated:** 2026-07-04 05:01
+**Phase:** 11 — Content, Sharing & Dev-Workflow Subsystems (Done)
+**Status:** Active — all planned phases (1–11) complete
 
 ## Current Position
 
-- **Task:** Phase 10 COMPLETE — all 33/33 tasks Done (phase-10a archived; phase-10b Done). 9 new crates/core modules + kanban KAN-8 + 2 packages/ui modules
-- **Spec:** PLAN v2.12.0 / TASKS v1.16.0 / INDEX v1.0.64 in sync; all 11 Phase-10 L2 Stable + implemented
-- **Next Action:** Run /magic.task main to decompose Phase 11 (resource-sharing, notes, file-store, development-workflow — L2 specs already Stable), then /magic.run main
+- **Task:** Phase 11 COMPLETE (8/8) + Phase 10 COMPLETE (33/33). All active plan phases 1–11 Done. Backlog holds only non-Stable RFC/Draft specs (not auto-plannable per C6)
+- **Spec:** PLAN v2.12.0 / TASKS v1.16.0 / INDEX v1.0.64 in sync; all Stable L2 implemented
+- **Next Action:** Plan-complete. To extend: review a Backlog RFC spec to Stable (`/magic.spec review l1-memory-intelligence`) then `/magic.task`; or author new scope
 
 ## Progress
 
 ```
-Build phases: Done 1–10 (Seed→Advanced Office Features) | Gates green: cargo 250 lib tests + clippy + fmt · vitest 39 (8 files) + biome | Next: Phase 11 (content/sharing/dev-workflow)
+Build phases: Done 1–11 (Seed → Advanced Office Features → Content/Sharing/Dev-Workflow) | Gates green: cargo 276 lib tests + clippy + fmt · vitest 39 (8 files) + biome | Remaining: Backlog RFC/Draft specs only
 ```
 
 ## Recent Decisions
+
+- 2026-07-04 **Decision:** Phase 11 complete (8/8 tasks). Provides: resource_sharing (access foundation), file_store (content-addressed dedup+GC), notes (CRDT convergence+soft-delete), development_workflow (5-stage pipeline+2-stage gate+ledger). Domain-logic-first; SQLite/Yjs/StorageBackend/SHA-256 deferred as seams. Gates green: cargo 276 lib tests + clippy + fmt.
 
 - 2026-07-03 **Decision:** Phase 10 complete (33/33 tasks). Provides: office_control/acp/automation/deliberation/version_control/inner_monologue/lookahead/global_orch/voice in crates/core + kanban KAN-8 custom_boards + navigation/canvas in packages/ui. Domain-logic-first; OS/network/audio wiring deferred as seams. Gates green: cargo 250 lib tests + clippy + fmt; vitest 39 + biome.
 - 2026-07-03 **Decision:** Phase 9 complete. Provides: sandbox policy, multi-user auth, doctor + cronus doctor verb, config hot-reload, backup/restore + verbs, agent migration, GitHub issue reporting, self-improvement brief, telemetry, and a cross-subsystem hardening integration proof. All gates green workspace-wide.
@@ -47,8 +49,6 @@ Build phases: Done 1–10 (Seed→Advanced Office Features) | Gates green: cargo
 - 2026-06-28 **Track A delivered (T-7A01, T-7A02):** `crates/tui` converted to lib+bin; `crossterm` added. `terminal` module — `TerminalBackend` DI trait + `CrosstermBackend` + panic-safe/idempotent `Tui` RAII guard. `app` module — `App::tick` pure step-fn (input-first → non-blocking on slow snapshot → exactly one redraw), view-only `ViewModel`/`CoreSnapshot`, `SnapshotSource` poll seam + `CapabilitySource`, `Renderer` seam + `PlainRenderer`, `run`/`run_with`. **Event-seam resolved:** core has no pub/sub → poll-snapshot fallback taken (INV-5 preserved). 9 unit tests pass; clippy/fmt clean. Note: `update-state` script mislabeled STATE Status as Done/"Plan complete" — corrected manually (phase is In Progress). (Revert: git restore crates/tui Cargo.toml Cargo.lock .design/main)
 
 - 2026-06-28 **Run prep (Phase 7 de-risk, no code yet):** Pre-flight green (ok:true, header parity clean). Resolved the planner-flagged hidden dependency for the TUI render loop: (1) **Binding pattern** — frontends bind to subsystems by calling the public core modules **directly** (`cronus::kanban::{Board,CardState}`, `cronus::session`, `cronus::workspace::WorkspaceManager`, `cronus::roles::RoleManager`, …), exactly as `crates/cli/src/commands.rs` does; the thin `Capabilities` trait is version/status only, NOT the subsystem surface. TUI parity (INV-3) = invoke the same core fns the CLI verbs do. (2) **No core event bus** → render loop uses the poll-snapshot fallback (re-read core state per tick), INV-5 view-only preserved. (3) **Toolchain OK + network available** → add `crossterm` (± `ratatui`) as the terminal backend; NOT blocked (unlike Phase 1's pnpm/Tauri). T-7A01 needs a DI-mockable terminal abstraction (raw mode is untestable in the non-TTY runner). Paused here for context budget — tree left green (`cargo build -p cronus-tui` passes). Resume execution in a fresh session.
-
-- 2026-06-28 **Decision:** Plan v2.5.0 → v2.6.0 registry re-sync (INDEX raced to v1.0.36). 48 orphaned specs absorbed: 39 newly-authored Stable L1 concepts folded into Phase 0; 4 ready Stable L2 subsystems (resource-sharing, notes, file-store, development-workflow) became Phase 11; 5 non-Stable (l1-spec-driven-governance/dynamic-harness/loop-governance RFC, l2-knowledge-store RFC, l2-loop-runner Draft) parked in Backlog. Phase 7 (TUI) decomposed: 9 tasks, render-loop carries a poll-snapshot fallback if the core lacks an event seam. (Revert: git restore .design/main/PLAN.md .design/main/TASKS.md .design/main/tasks/phase-7.md)
 
 ## Blockers
 

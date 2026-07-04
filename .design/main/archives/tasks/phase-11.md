@@ -1,20 +1,27 @@
 ---
 phase: 11
 name: "Content, Sharing & Dev-Workflow Subsystems"
-status: In Progress
+status: Done
 subsystem: "crates/core (resource_sharing, notes, file_store, development_workflow)"
 requires:
   - "Phase 4: memory-store, agent-session"
   - "Phase 5: extension-registry"
 provides:
   - "resource_sharing: uniform access-grant model — has_access resolution (owner→user→group→public), write-implies-read, additive grants, audit events (RS-1…RS-8)"
+  - "file_store: content-addressed dedup, reference-tracking GC, immutable blobs, metadata decoupled from bytes"
+  - "notes: insertion-CRDT with order-independent convergence, idempotent merge, append-only history, non-destructive soft-delete"
+  - "development_workflow: five-stage pipeline (Design→Plan→Execute→Review→Deliver), two-stage quality gate, human checkpoint, append-only progress ledger"
 key_files:
   created:
     - crates/core/src/resource_sharing.rs
+    - crates/core/src/file_store.rs
+    - crates/core/src/notes.rs
+    - crates/core/src/development_workflow.rs
   modified:
     - crates/core/src/lib.rs
 patterns_established:
-  - "Access resolution as pure in-memory algebra; SQLite access_grant table is the deferred seam"
+  - "Access resolution / content addressing / CRDT convergence / stage-gate as pure in-memory algebra; SQLite, Yjs binary, and storage backends are deferred seams"
+  - "Content-hash seam: std hash stands in for SHA-256 so dedup/GC is testable without a crypto dependency"
 duration_minutes: ~
 ---
 
@@ -28,12 +35,12 @@ duration_minutes: ~
 
 - [x] [T-11A01] Resource Sharing — access-grant model + has_access resolution + audit
 - [x] [T-11AT01] Validation — RS-1…RS-8
-- [ ] [T-11B01] File Store — content-addressed dedup + reference-tracking GC + immutable blobs
-- [ ] [T-11BT01] Validation — content addressing + GC
-- [ ] [T-11C01] Notes — schema + CRDT update log + version history + soft-delete
-- [ ] [T-11CT01] Validation — CRDT merge convergence + soft-delete
-- [ ] [T-11D01] Development Workflow — skill catalog + implementer/reviewer dispatch + progress ledger
-- [ ] [T-11DT01] Validation — DW-1…DW-10
+- [x] [T-11B01] File Store — content-addressed dedup + reference-tracking GC + immutable blobs
+- [x] [T-11BT01] Validation — content addressing + GC
+- [x] [T-11C01] Notes — schema + CRDT update log + version history + soft-delete
+- [x] [T-11CT01] Validation — CRDT merge convergence + soft-delete
+- [x] [T-11D01] Development Workflow — skill catalog + implementer/reviewer dispatch + progress ledger
+- [x] [T-11DT01] Validation — DW-1…DW-10
 
 ## Detailed Tracking
 
