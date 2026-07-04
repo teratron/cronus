@@ -35,6 +35,7 @@
 - <https://github.com/agentscope-ai/agentscope>
 - <https://github.com/agentscope-ai/AgentTeams>
 - <https://github.com/agentrq/agentrq>
+- <https://github.com/stablyai/orca>
 
 ## Spec-Driven Development
 

@@ -1,0 +1,53 @@
+# UI/UX
+
+## Основное системное меню приложения
+
+Находится в самой верхней части на уровне кнопок закрытия/сворачивания/востановить. Кнопки выпадающих меню имеют горячие клавиши.
+
+```plaintext
+File
+├── Open File...
+├── Settings...
+├───────────────
+├── Close Window
+└── Exit
+
+Edit            
+├── Undo
+├── Redo
+├────────────────
+├── Cut
+├── Copy
+├── Paste
+├── Select All
+├────────────────
+├── Find
+├── Find Next
+└── Find Previous
+
+View
+├── Reload
+├──────────────
+├── Actual Size
+├── Zoom In
+├── Zoom Out
+├──────────────
+└── Copy URL
+
+Help
+├── Open Documentation
+├── Check for Updates...
+├───────────────────────
+├── Troubleshooting ->
+│   ├── Show Logs in Explorer
+│   ├── 
+│   ├──────────────────────────
+│   ├── 
+│   ├── 
+│   ├──────────────────────────
+│   ├── Clear Cache and Restart
+│   └── Reset App Data
+├───────────────────────
+├── Get Support
+└── About...
+```
