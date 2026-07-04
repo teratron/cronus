@@ -1,6 +1,6 @@
 # Nodus Runtime (Rust)
 
-**Version:** 1.1.0
+**Version:** 1.2.0
 **Status:** Stable
 **Layer:** implementation
 **Implements:** l1-nodus-language.md
@@ -98,6 +98,17 @@ pub enum Value {
 4. Register `@in` / `@ctx` inputs into the value environment; fail on missing required inputs.
 5. Match `@ON` triggers against current input.
 6. Execute `@steps` sequentially; thread `→` pipeline targets between steps.
+
+<!-- [ADDED] v1.2.0 -->
+#### `~PARALLEL` branch execution
+
+The language defines `~PARALLEL` as a scheduling hint; this crate upgrades it to real concurrency when the injected providers allow it, staying `std`-only:
+
+- **Eligibility**: branches run concurrently only when every injected provider used inside the block is thread-shareable (`Send + Sync`). Otherwise the executor falls back to sequential branch execution — permitted by the language contract and behaviorally identical under the fail-fast rule.
+- **Mechanism**: scoped OS threads from the standard library (`std::thread::scope`) — no new runtime dependency, no unbounded detach. Width is bounded by `max_parallel_branches` (default: branch count capped at 4); excess branches queue.
+- **Isolation & join**: each branch executes over an isolated snapshot of the value environment; writes merge at `~JOIN` in **declared branch order**, so `$target` is deterministic regardless of completion order.
+- **Fail-fast**: the first branch error puts the block in fail-fast state per the language semantics — `~JOIN` is bypassed and the error routes to `@err:`. Already-running sibling branches are not force-killed (no mid-step cancellation); they run to completion and their results are discarded. Not-yet-started branches never start.
+- **Audit ordering**: events emitted from concurrent branches carry the `(correlation_id, seq)` ordering fields; per-branch event sequences remain internally ordered, and interleaving across branches is resolved by the observability contract, not by wall-clock arrival.
 
 ### 4.5 Public library API
 
@@ -206,6 +217,7 @@ Single-character `;` inline comments (only `;;` is recognized) and the `\$` inte
 
 | Version | Date | Change |
 | --- | --- | --- |
+| 1.2.0 | 2026-07-04 | §4.4: real `~PARALLEL` branch execution via `std::thread::scope` when providers are `Send + Sync` (sequential fallback otherwise); bounded width (`max_parallel_branches`, default cap 4); isolated branch environments with deterministic declared-order `~JOIN`; fail-fast without mid-step cancellation; audit interleaving resolved by `(correlation_id, seq)` |
 | 1.1.0 | 2026-06-25 | Added §4.7 upstream parity gaps (v0.4.6 → v0.7): missing `ASK`/`CONFIRM` commands, control constructs (`?SWITCH`/`~MAP`/`~RETRY`/`!HALT`/`!PAUSE`), operators/expressions, `@needs:`, `error_code` 11 → 24, closed flag/validator/type registries, macro execution, `Status::Paused`, lexer parity items |
 | 1.0.4 | 2026-06-24 | §4.1: add `portability.rs` module; §4.5: add `run_with_schema` and `run_with_schema_and_audit` rows; update extension-point note to reference `SchemaProvider` |
 | 1.0.3 | 2026-06-24 | §4.1: add `observability.rs` module; §4.5: add `run_with_audit` and `run_with_provider_and_audit` rows; note `AuditProvider` as second extension point |

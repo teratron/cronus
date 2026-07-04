@@ -22,6 +22,7 @@ ACP is the external-facing complement to the internal orchestration protocol: or
 ## 1. Motivation
 
 Autonomous offices need external entry points: a remote user, another office, a CI job, or a mobile client must be able to start and continue an agent interaction without being co-located. Without a defined protocol:
+
 - Clients are tightly coupled to implementation details that change between versions
 - Security boundaries are implicit and inconsistently enforced
 - Streaming responses (agent thinking, tool calls, partial text) have no canonical format

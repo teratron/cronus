@@ -1,6 +1,6 @@
 # Orchestration
 
-**Version:** 1.0.12
+**Version:** 1.1.0
 **Status:** Stable
 **Layer:** implementation
 **Implements:** l1-orchestration.md
@@ -383,6 +383,9 @@ When mixing modes in one batch:
   A "sequential" tool that is batched with "parallel" tools waits for the parallel
   group to finish before it executes (serialized after the parallel group).
 ```
+
+<!-- [ADDED] v1.1.0 -->
+**Read-only ⇒ parallel policy.** Built-in tools whose execution is read-only (file read, content/path search, status and listing queries) declare `executionMode: "parallel"` in their definitions — they are safe to run concurrently by construction, so a batch of reads completes in the time of its slowest member. Effectful tools (write/edit, shell execution, network side effects) keep the sequential default. Write safety across concurrent agents is guaranteed by the file-mutation queue below regardless of declared mode.
 
 #### File-mutation queue (multi-agent safety)
 
@@ -1060,3 +1063,9 @@ The NUL separator byte ensures a document ending with `[` cannot collide with a 
 | `[PROTOCOL]` | `.design/main/specifications/l1-orchestration.md` | Invariants this implements |
 | `[BOARD]` | `.design/main/specifications/l2-kanban-board.md` | Delegation channel |
 | `[OFFICE]` | `.design/main/specifications/l1-office-model.md` | Roles and staffing that execute delegated work |
+
+## Document History
+
+| Version | Date | Notes |
+| --- | --- | --- |
+| 1.1.0 | 2026-07-04 | Read-only ⇒ parallel tool policy (§4.10): built-in read-only tools declare `executionMode: "parallel"`; effectful tools keep the sequential default; file-mutation queue remains the write-safety guarantee. History table added with this entry. |

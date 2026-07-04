@@ -1,6 +1,6 @@
 # Nodus DSL Testing — Rust Implementation
 
-**Version:** 1.0.0
+**Version:** 1.1.0
 **Status:** Stable
 **Layer:** implementation
 **Implements:** [l1-nodus-testing.md](l1-nodus-testing.md)
@@ -112,6 +112,9 @@ invariant enforced by `TestReport::from_results`.
 
 4. **Evaluate (NT-3 / NT-4)**: `evaluate_test_block(&run_result.vars, &run_result.status, &tb.expected)`.
 
+<!-- [ADDED] v1.1.0 -->
+**Parallel-safe stub (NT-5 extension).** `StubProvider` is stateless and input-keyed (`Send + Sync`), which makes it the parallel-safe stub the language contract permits hosts to provide: a `@test:` block whose body contains `~PARALLEL` exercises the executor's real concurrent branch scheduling (see `l2-nodus-runtime.md §4.4`) instead of the sequential fallback. Assertions stay deterministic — stub responses depend only on inputs, and `~JOIN` merges in declared branch order, so `expected:` values are independent of interleaving. Block-level isolation is unchanged: one fresh executor per block, blocks themselves run in declaration order.
+
 ## 6. Assertion Evaluator
 
 ```rust
@@ -190,4 +193,5 @@ gate and cannot execute.
 
 | Version | Date | Change |
 | --- | --- | --- |
+| 1.1.0 | 2026-07-04 | Parallel-safe stub (§5): `StubProvider` documented as `Send + Sync`, so `@test:` blocks containing `~PARALLEL` exercise real concurrent branch scheduling with deterministic assertions (input-keyed stub + declared-order `~JOIN`); realizes the NT-5 host extension the language contract permits |
 | 1.0.0 | 2026-06-24 | Initial spec — Rust implementation of NT-1…NT-10; types, API, evaluator, validator diagnostics |

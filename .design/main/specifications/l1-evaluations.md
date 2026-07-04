@@ -60,7 +60,7 @@ Evaluation {
 ### 4.2 Standard Reason Tags
 
 | Tag | Meaning |
-|---|---|
+| --- | --- |
 | `inaccurate` | The response contained factual errors. |
 | `incomplete` | The response did not fully address the query. |
 | `off-topic` | The response was not relevant to the question. |
@@ -101,6 +101,7 @@ The aggregate is updated asynchronously after each evaluation submission. The ro
 ### 4.5 Admin View
 
 Admins may access:
+
 - Per-model aggregate statistics (positive/negative/neutral rates, common tags).
 - Filtered search across individual evaluations (by date, model, sentiment, user — subject to data retention policy).
 
@@ -120,6 +121,6 @@ Individual annotations are shown only to admins with explicit audit access; they
 ## Canonical References
 
 | Alias | Path | Purpose |
-|---|---|---|
+| --- | --- | --- |
 | `[ROUTER]` | `.design/main/specifications/l2-model-router.md` | How evaluation scores feed into model selection weights. |
 | `[DASH]` | `.design/main/specifications/l2-dashboard.md` | Analytics surface that aggregates evaluation statistics. |

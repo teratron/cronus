@@ -1,6 +1,6 @@
 # Backup & Restore
 
-**Version:** 1.0.0
+**Version:** 1.1.0
 **Status:** Stable
 **Layer:** implementation
 **Implements:** l1-storage-model.md
@@ -57,6 +57,9 @@ graph TD
     DROP --> RESUME[runtime resumes]
 ```
 
+<!-- [ADDED] v1.1.0 -->
+**Non-blocking, consistent capture.** A backup runs as a background job on the durable scheduled tier — it never blocks the engine's hot path or a frontend thread, and it emits progress events (started / files / bytes / done) observable from any surface. Live SQLite databases are captured through the engine's online-backup path (snapshot semantics: `VACUUM INTO` or the SQLite Online Backup API), never by raw-copying a database file with active writers — a raw copy of a live WAL database can yield a torn, unrestorable archive. Plain files are copied after the database snapshots; the archive records a capture timestamp per entry. Backup I/O is rate-capped (configurable) so a large state tier does not starve foreground work.
+
 Optional: a scheduled `routine` runs periodic backups (retention configurable). <!-- TBD: default retention/rotation policy -->
 
 ### 4.3 Command surface
@@ -79,3 +82,10 @@ Optional: a scheduled `routine` runs periodic backups (retention configurable). 
 | --- | --- | --- |
 | `[STORAGE]` | `.design/main/specifications/l1-storage-model.md` | Invariants this implements |
 | `[LAYOUT]` | `.design/main/specifications/l2-filesystem-layout.md` | What the state tier contains |
+
+## Document History
+
+| Version | Date | Notes |
+| --- | --- | --- |
+| 1.1.0 | 2026-07-04 | Non-blocking consistent capture (§4.2): backup runs on the durable background tier with progress events; live SQLite captured via online-backup snapshot semantics (never raw-copied under active writers); rate-capped I/O. |
+| 1.0.0 | 2026-06-24 | Initial spec — include/exclude sets, flow, command surface. |

@@ -310,6 +310,7 @@ Base: abc1234
 ```
 
 **Ledger discipline:**
+
 - Write the Task N record in the same coordinator turn as the review approval — never batch.
 - On resume (after compaction or restart), read the ledger before dispatching any task.
 - If `git log` and the ledger disagree, trust `git log` for commit existence; trust the ledger for review status.
@@ -323,6 +324,7 @@ Extracts task N from the plan to a uniquely named temp file and prints the path.
 
 **`review-package BASE HEAD`**
 Produces a diff package file containing:
+
 - Commit list: `git log --oneline BASE..HEAD`
 - Stat summary: `git diff --stat BASE..HEAD`
 - Full diff with context: `git diff -U10 BASE..HEAD`
@@ -364,13 +366,13 @@ Implementation complete. What would you like to do?
 4. Discard this work
 ```
 
-4. Execute the chosen option:
+1. Execute the chosen option:
    - **Merge:** `cd` to main repo root → `git checkout <base>` → `git pull` → `git merge <feature>` → run tests → cleanup worktree (Step 5) → `git branch -d <feature>`.
    - **Push PR:** `git push -u origin <feature>`. Do NOT remove the worktree.
    - **Keep:** Report path. Do NOT remove the worktree.
    - **Discard:** Require the human to type `discard`. `cd` to main repo root → cleanup worktree (Step 5) → `git branch -D <feature>`.
 
-5. Worktree cleanup (Merge and Discard only):
+2. Worktree cleanup (Merge and Discard only):
 
 ```bash
 cd "$(git -C "$(git rev-parse --git-common-dir)/.." rev-parse --show-toplevel)"

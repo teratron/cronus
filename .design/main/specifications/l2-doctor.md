@@ -1,6 +1,6 @@
 # Doctor
 
-**Version:** 1.0.1
+**Version:** 1.1.0
 **Status:** Stable
 **Layer:** implementation
 **Implements:** l1-doctor.md
@@ -85,6 +85,9 @@ DoctorRunContext {
 ```
 
 Extension execution order: manual registrations first (alphabetical by id), then entry-point discoveries (alphabetical by name). Each extension runs in isolation — a panicking or erroring extension logs a warning and is skipped; it does not abort the rest of the check suite.
+
+<!-- [ADDED] v1.1.0 -->
+**Concurrent probe execution.** Checks and runbook probes are read-only and independent, so the suite executes them concurrently under a bounded cap (default 4) with the existing per-check `timeout` applied individually; suite wall-clock approaches the slowest probe instead of the sum. The report is assembled after all probes settle and is always rendered in the canonical (alphabetical/runbook) order above — execution order is a scheduling detail, output order is deterministic. Probes that touch the same exclusive resource (e.g. a repair dry-run over one database) declare an exclusivity key and serialize against each other only. `--fix` repairs never run concurrently with probes: the suite settles first, then repairs apply one at a time (HEAL-2 logging preserved).
 
 ### 4.3 Extended check runbook
 
@@ -171,3 +174,9 @@ Each runbook probe is registered as an extension check (same mechanism as §4.2)
 | --- | --- | --- |
 | `[DOCTOR]` | `.design/main/specifications/l1-doctor.md` | Invariants this implements |
 | `[CLI]` | `.design/main/specifications/l2-cli.md` | Command grammar standard |
+
+## Document History
+
+| Version | Date | Notes |
+| --- | --- | --- |
+| 1.1.0 | 2026-07-04 | Concurrent probe execution (§4.2): read-only checks/probes run under a bounded cap with per-check timeouts; deterministic report ordering after settle; exclusivity keys for same-resource probes; `--fix` repairs stay serialized after the suite settles. History table added with this entry. |

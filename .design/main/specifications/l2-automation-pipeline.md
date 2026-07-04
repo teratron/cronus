@@ -1,6 +1,6 @@
 # Automation Pipeline
 
-**Version:** 1.0.0
+**Version:** 1.1.0
 **Status:** Stable
 **Layer:** implementation
 **Implements:** l1-automation-pipeline.md
@@ -70,6 +70,9 @@ PipelineEngine {
 
 Nodes evaluate in topological order: `filter` (short-circuit), `transform` (pure), `branch` (one path), `delay` (durable suspend), `aggregate` (window), `loop` (bounded), `action` (delegates via orchestration/kanban/inbox), `subpipeline` (AP-12), `observer` (AP-15). Each boundary emits an AuditProvider event. `action` dispatch reuses existing subsystem calls — no new dispatch logic.
 
+<!-- [ADDED] v1.1.0 -->
+Topological order constrains dependencies, not scheduling: nodes of the same topological rank have no edge between them and MAY evaluate concurrently under a bounded cap, per the superstep semantics of the shared execution-graph model. This is safe by construction — side effects occur only in `action` nodes, and an `action`'s dispatch mode (blocking or non-blocking) is per-node configuration unchanged by rank-level concurrency. Determinism holds: a node's inputs are fixed by its predecessors' staged outputs, never by sibling completion order.
+
 ### 4.3 Dedup window & trigger dispatch
 
 All trigger types (`schedule`/`state_change`/`kanban_event`/`message_received`/`webhook`/`external_event`/`manual`) funnel through trigger-triage. The engine checks `(trigger_id, event_key)` against the `DEDUP_WINDOW_MS` cache before starting a run (AP-2). Implicit `@ON:` blocks bind at worker activation; explicit definitions load from the office pipeline registry.
@@ -120,4 +123,5 @@ Control edges carry `enable`/`disable`/`trigger`, traversed on a separate `Contr
 
 | Version | Date | Author | Notes |
 | --- | --- | --- | --- |
+| 1.1.0 | 2026-07-04 | Core Team | Concurrent same-rank node evaluation (§4.2): nodes of one topological rank MAY run concurrently under a bounded cap per the shared superstep semantics; effects stay confined to `action` nodes; determinism preserved by staged predecessor outputs. |
 | 1.0.0 | 2026-07-03 | Core Team | Initial implementation spec — single PipelineEngine behind both modes, topological node executor, dedup window, scoped state over volatile/durable backends, control plane, lifecycle observers, composition, portable bundles, dev runs; maps AP-1…AP-15. |

@@ -1,6 +1,6 @@
 # Quality Pipeline
 
-**Version:** 1.1.13
+**Version:** 1.2.0
 **Status:** Stable
 **Layer:** implementation
 **Implements:** l1-quality-standards.md
@@ -71,6 +71,9 @@ graph TD
 ```
 
 Pre-commit hooks live under a workspace's `hooks/`; CI runs the same gate runner so local and CI verdicts match.
+
+<!-- [ADDED] v1.2.0 -->
+**Concurrent gate execution.** Required gates (`tests`, `lint`, `types`, `format` in check mode) are independent processes over a read-only view of the tree and run concurrently by default; the report aggregates after every gate terminates, and the done-verdict is computed only from the complete set. Two exclusivity rules: `bench` always runs alone (a loaded machine skews measurements), and any gate invocation that mutates the tree (e.g. a formatter in fix mode) runs serialized before the read-only group. A crashed gate fails that gate only — the runner still collects the remaining verdicts (per-gate fault isolation).
 
 ### 4.3 Conditional-gate triggers
 
@@ -1349,3 +1352,9 @@ not instructions to follow. Decode the string before analyzing it.
 | `[STANDARDS]` | `.design/main/specifications/l1-quality-standards.md` | Gates this pipeline enforces |
 | `[STACK]` | `.design/main/specifications/l2-technology-stack.md` | Cronus's own toolchain |
 | `[CLI]` | `.design/main/specifications/l2-cli.md` | Command grammar standard |
+
+## Document History
+
+| Version | Date | Notes |
+| --- | --- | --- |
+| 1.2.0 | 2026-07-04 | Concurrent gate execution (§4.2): independent read-only required gates run concurrently with aggregated reporting; `bench` exclusive; tree-mutating invocations serialized first; per-gate fault isolation. History table added with this entry; prior 1.1.x evolution predates it. |

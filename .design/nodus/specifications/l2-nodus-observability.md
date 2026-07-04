@@ -1,6 +1,6 @@
 # Nodus Observability Implementation (Rust)
 
-**Version:** 1.0.0
+**Version:** 1.1.0
 **Status:** Stable
 **Layer:** implementation
 **Implements:** l1-nodus-observability.md
@@ -175,6 +175,11 @@ All `record_event` calls use `self.audit.record_event(event)` (synchronous, in-p
 `execute()` calls `self.audit.run_complete(manifest)` immediately before returning `RunResult`.
 The manifest's `elapsed_ms` is measured from an `Instant` taken at the top of `execute()`.
 
+<!-- [ADDED] v1.1.0 -->
+#### Buffered sink adapter
+
+For hosts where in-path recording is too costly (high-frequency events, slow sinks), the crate ships a `BufferedAuditProvider` adapter: `record_event` enqueues onto a bounded in-memory channel (`std::sync::mpsc`) and returns; a dedicated writer thread drains the queue into the wrapped provider. Ordering is preserved by the `(correlation_id, seq)` contract — the writer never reorders within a correlation. The bound applies backpressure: when the queue is full, `record_event` blocks rather than drops (completeness over latency). On drop the adapter flushes the queue and joins the writer thread before returning, so `run_complete(manifest)` is always the last delivered event of its run. The default remains the synchronous in-path call; the adapter is opt-in at construction and composes with any inner `AuditProvider`.
+
 ### 4.4 `workflows.rs` API Additions
 
 Two new public functions alongside the existing six:
@@ -205,6 +210,7 @@ pub fn run_with_provider_and_audit(
 ```
 
 Both functions:
+
 1. Validate with `Validator::validate` (fast-fail on errors — NL-4).
 2. Construct `Executor::with_audit(provider, audit)`.
 3. Call `executor.execute_with_run_params(ast, input, run_id, started_at)` (extended overload of
@@ -268,8 +274,11 @@ The `RecordingProvider` test helper collects events in a `Vec<ExecutionEvent>` b
 ## 6. Drawbacks & Alternatives
 
 - **Shared `Executor` instance across concurrent runs**: `Box<dyn AuditProvider>` is `Send` only
-  if the concrete type is. Concurrent use is currently out of scope (the executor is sequential per
-  run). Host projects that need concurrent runs should instantiate one `Executor` per run thread.
+  if the concrete type is. The executor remains one-per-run; host projects that need concurrent
+  runs should instantiate one `Executor` per run thread. <!-- [MODIFIED] v1.1.0 --> Within a single
+  run, `~PARALLEL` branches emit events concurrently when providers are `Send + Sync` (see
+  `l2-nodus-runtime.md §4.4`); interleaving is resolved by `(correlation_id, seq)`, and the
+  sequential fallback applies when providers are not thread-shareable.
 - **Alternative — emit events to a channel instead of a trait**: using `std::sync::mpsc::Sender`
   avoids the vtable dispatch but couples the executor to the channel type and complicates no-op
   semantics. Rejected in favour of LP-2 (extension via abstract interface).
@@ -290,4 +299,5 @@ The `RecordingProvider` test helper collects events in a `Vec<ExecutionEvent>` b
 
 | Version | Date | Author | Notes |
 | --- | --- | --- | --- |
+| 1.1.0 | 2026-07-04 | Core Team | Added `BufferedAuditProvider` adapter (§4.3): opt-in bounded-channel + writer-thread sink honoring the `(correlation_id, seq)` ordering contract; blocking backpressure (never drops); flush-and-join on drop with `run_complete` as the final delivered event; synchronous in-path recording remains the default |
 | 1.0.0 | 2026-06-24 | Core Team | Initial spec — HO-1…HO-6 compliance table, `observability.rs` type system, executor hook-point mapping, `workflows.rs` API additions, full test plan |

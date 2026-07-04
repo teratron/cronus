@@ -1,6 +1,6 @@
 # Memory Store
 
-**Version:** 1.2.0
+**Version:** 1.3.0
 **Status:** Stable
 **Layer:** implementation
 **Implements:** l1-memory-model.md
@@ -92,6 +92,9 @@ graph TD
     FUSE --> MERGE[Merge across scopes: employee>workspace>global]
     MERGE --> BUD[Truncate to token budget]
 ```
+
+<!-- [ADDED] v1.3.0 -->
+**Concurrent recall legs and scopes.** The recall legs are independent until the fuse: the FTS5 pass and the tag filter run while the query embedding is computed (the embedding call is the latency-dominant leg; lexical results never wait on it), and the vec0 KNN pass starts as soon as the embedding is ready. Because each scope (employee / workspace / global) is a separate database file, the per-scope leg sets execute concurrently on scope-local read connections and meet at the existing cross-scope merge step. The fuse remains a single deterministic reduction over the joined candidate sets — concurrency changes arrival order, never ranking (weights and the §4.2.2 refinements apply after the join).
 
 #### 4.2.1 Multi-script lexical robustness
 
@@ -925,6 +928,7 @@ The archivist's `reconcile` stage reads the pending review queue and either:
 
 | Version | Change |
 | --- | --- |
+| 1.3.0 | Concurrent recall legs and scopes (§4.2): FTS5 + tag legs run during query-embedding computation, KNN starts when the embedding is ready; per-scope database files queried concurrently on scope-local read connections; fuse unchanged — a deterministic reduction after the join |
 | 1.2.0 | Added §4.2.2 diversity & recency ranking refinements — config-gated MMR diversity (`mmr_lambda`) and opt-in recency weight (`recency_weight`/`recency_halflife_days`), defaults = no behavior change; effect measurable via the retrieval-evaluation harness |
 | 1.1.0 | Added §4.2.1 multi-script lexical robustness — FTS5 `MATCH`→`LIKE` fallback for scripts the default tokenizer under-segments (CJK / unsegmented text), engaged only on empty `MATCH` results |
 | 1.0.6 | Baseline (history tracking introduced at 1.1.0; see INDEX for prior change log) |

@@ -50,7 +50,7 @@ Rules every Layer 2 implementation MUST NOT violate:
 ### 4.1 Confinement Axes
 
 | Axis | Denies by default | Grants back (minimal) | Breach response |
-|---|---|---|---|
+| --- | --- | --- | --- |
 | Operations | all but an allowlist of low-level calls | task-appropriate calls | block at boundary (ES-2) |
 | Privileges | all ambient capabilities + escalation | the few capabilities the task needs | no-new-privileges enforced (ES-3) |
 | Resources | unbounded use | capped CPU/mem/procs/IO | throttle/terminate sandbox (ES-4) |
@@ -97,7 +97,7 @@ A bypass of any one does not relax the others.
 ## Canonical References
 
 | Alias | Path | Purpose |
-|---|---|---|
+| --- | --- | --- |
 | `[SECURITY]` | `.design/main/specifications/l1-security.md` | SEC-6 sandboxed-execution invariant this spec elaborates. |
 | `[NET-POLICY]` | `.design/main/specifications/l2-sandbox-policy.md` | The network/binary-allowlist confinement slice this spec complements. |
 | `[WORKSPACE]` | `.design/main/specifications/l2-execution-workspace.md` | The isolated filesystem environment confinement applies within. |

@@ -1,6 +1,6 @@
 # Core Library (Foundation)
 
-**Version:** 1.1.2
+**Version:** 1.2.0
 **Status:** Stable
 **Layer:** implementation
 **Implements:** l1-architecture.md
@@ -107,6 +107,9 @@ mm.load_model(model_id).await?;
 
 Managers are initialized once in a defined order. Later managers may hold `Arc` references to earlier ones. All domain logic lives inside a manager; no domain logic lives in handler glue code.
 
+<!-- [ADDED] v1.2.0 -->
+The "defined order" is a dependency DAG, not a chain: managers with no dependency edge between them (datastore open, extension scan, provider probing, config load) initialize concurrently in dependency waves — a manager starts as soon as every manager it holds an `Arc` to is ready. Cold-start latency approaches the longest dependency path instead of the sum of all initializations; per-manager failure semantics are unchanged (a failed manager fails exactly the wave members that depend on it).
+
 #### RAII loading guard
 
 When a manager transitions to a "loading" state, wrap the transition in a guard struct that resets the state on drop — ensuring atomic cleanup even if the work panics or returns early:
@@ -145,6 +148,9 @@ InactivityTimeout enum: Never | Immediately | Sec15 | Min2 | Min5 | Min10 | Min1
 
 last_activity is updated by every successful use of the resource.
 ```
+
+<!-- [ADDED] v1.2.0 -->
+When several managers hold idle-released resources, they share **one** watcher — a single timer task multiplexing per-manager deadlines — rather than one polling thread per manager; a fired deadline dispatches that manager's `unload_resource()` and re-arms on next use.
 
 #### Backend enum for polymorphic dispatch
 
@@ -303,3 +309,9 @@ transformation.
 | --- | --- | --- |
 | `[ARCH]` | `.design/main/specifications/l1-architecture.md` | Invariants the core must satisfy |
 | `[STACK]` | `.design/main/specifications/l2-technology-stack.md` | Technology choices for the core |
+
+## Document History
+
+| Version | Date | Notes |
+| --- | --- | --- |
+| 1.2.0 | 2026-07-04 | Manager initialization as dependency waves (§4.5): independent managers initialize concurrently, cold start bounded by the longest dependency path; idle watchers consolidated into one multiplexed timer task. History table added with this entry. |

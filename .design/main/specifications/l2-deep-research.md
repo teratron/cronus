@@ -1,6 +1,6 @@
 # Deep Research
 
-**Version:** 1.1.0
+**Version:** 1.2.0
 **Status:** Stable
 **Layer:** implementation
 **Implements:** l1-orchestration.md
@@ -61,6 +61,9 @@ graph TD
     LOOP -->|max_rounds reached| PARTIAL[Emit partial report with coverage note]
     SYNTH --> DONE[Return cited report]
 ```
+
+<!-- [ADDED] v1.2.0 -->
+**Concurrent fan-out within a round.** The search and fetch stages are I/O-bound and independent per item: the round's `num_queries` searches execute concurrently, and the resulting top-k page fetches execute concurrently, both under one bounded worker cap (`research.max_concurrent_fetches`, default 4). Results join before the extract stage, so extraction sees the same complete round a sequential engine would produce — within-round ordering carries no semantics, and the content filter (§4.5) and untrusted wrapping (§4.6) apply per result independently. A failed or timed-out fetch is dropped by the existing quality filter without failing the round. Wall-clock time per round approaches the slowest single fetch instead of the sum of all fetches.
 
 ### 4.2 Date grounding
 
@@ -219,4 +222,5 @@ These facets compose cleanly with existing subsystems: the durability tier from 
 | Version | Date | Change |
 | --- | --- | --- |
 | 1.0.0 | 2026-06-22 | Initial specification: iterative Think→Plan→Search→Extract→Synthesize loop, date grounding, ResearchPlan (sub-questions + success criteria), content filtering, untrusted-content wrapping, ResearchReport with citations, `max_rounds` circuit breaker, async-job command surface. |
+| 1.2.0 | 2026-07-04 | Bounded-concurrent fan-out within a round (§4.1): per-round searches and top-k page fetches run under one shared worker cap (default 4) with a join before extraction; per-result filtering/wrapping unchanged; failed fetches drop via the quality filter instead of failing the round. |
 | 1.1.0 | 2026-06-25 | Long-running operation lifecycle (§4.10): detached/attached start, streaming progress events, blocking wait, threaded continuation with `parent_job_id` lineage, caller-supplied output-format contract, and cost/time/token transparency with budget-engine gating. Command surface extended (stream/wait/continue, `--format`/`--detach`/`--json`/`--raw`). |

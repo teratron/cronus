@@ -1,6 +1,6 @@
 # Extension Registry
 
-**Version:** 1.0.9
+**Version:** 1.1.0
 **Status:** Stable
 **Layer:** implementation
 **Implements:** l1-extensions.md
@@ -221,6 +221,9 @@ Install flow:
 3. Verify `sha256(archive) == contentHash` — reject if mismatch.
 4. Run skill scanner (static analysis, `trustLevel`-appropriate checks).
 5. Register as `discovered`; activate only after explicit grant.
+
+<!-- [ADDED] v1.1.0 -->
+Bulk operations (pack sync, multi-skill install, startup re-verification) run the per-item pipeline (steps 1–4: resolve → download → hash-verify → scan) concurrently under a bounded cap (default 4) — items are independent until registration. Step 5 registration remains serialized through the registry's single writer, so the registry never sees a partial item. A failed item is reported and skipped without aborting the batch.
 
 ```text
 [REFERENCE]
@@ -949,3 +952,9 @@ of the default system prompt; the LLM learns about them only from the tool schem
 | `[SECURITY]` | `.design/main/specifications/l2-security.md` | Sandbox + egress enforcement |
 | `[TOOLSEC]` | `.design/main/specifications/l2-tool-security.md` | Skill scanner runs at activation gate |
 | `[CLI]` | `.design/main/specifications/l2-cli.md` | Command grammar standard |
+
+## Document History
+
+| Version | Date | Notes |
+| --- | --- | --- |
+| 1.1.0 | 2026-07-04 | Bounded-concurrent bulk install/verify (§Catalog operations): resolve/download/hash-verify/scan run concurrently per item under a cap; registration stays serialized through the registry's single writer; per-item failure isolation. History table added with this entry. |

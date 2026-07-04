@@ -1,6 +1,6 @@
 # Technology Stack
 
-**Version:** 1.0.2
+**Version:** 1.1.0
 **Status:** Stable
 **Layer:** implementation
 **Implements:** l1-architecture.md
@@ -279,6 +279,18 @@ Lazy-close mode:  keep stream alive for a configurable idle timeout after record
 Default idle timeout: STREAM_IDLE_TIMEOUT = 30 s
 ```
 
+### 4.7 SQLite Concurrency Policy
+
+<!-- [ADDED] v1.1.0 -->
+
+Nearly every subsystem persists through SQLite (state, memory scopes, knowledge base, code index, file store, inbox, board). One uniform access discipline applies to every database file the engine opens; per-subsystem deviation is a defect, not a choice:
+
+- **WAL mode everywhere** — every database opens in WAL journal mode: readers never block the writer, the writer never blocks readers.
+- **Single-writer discipline** — each database file has exactly one owning writer task; all mutations are submitted to that task's serialized queue (write-behind). Subsystems never open ad-hoc write connections to a file they do not own. This is the same per-resource serialization the engine already applies to file mutations, extended to databases.
+- **Read pool** — reads go through a small pool of read-only connections per database; read concurrency is bounded by pool size, not by locking.
+- **Timeouts, not spin-retries** — every connection sets `busy_timeout`; an `SQLITE_BUSY` that reaches a subsystem indicates a discipline violation to fix, never an error to retry in a loop.
+- **Short transactions on the hot path** — long-running work (consolidation sweeps, reindexing, vacuum, backup snapshots) runs on the background tier in bounded batches; a hot-path transaction never spans a model call or network I/O.
+
 ## 5. Drawbacks & Alternatives
 
 - **sqlite-vec is pre-1.0:** breaking changes possible; mitigate by pinning and isolating the vector access behind a core repository interface.
@@ -292,3 +304,9 @@ Default idle timeout: STREAM_IDLE_TIMEOUT = 30 s
 | `[ARCH]` | `.design/main/specifications/l1-architecture.md` | Architecture invariants this stack must satisfy |
 | `[ENVEXAMPLE]` | `.env.example` | Declares required environment variables / secrets layout |
 | `[GITIGNORE]` | `.gitignore` | Secret-exclusion contract (INV-7) |
+
+## Document History
+
+| Version | Date | Notes |
+| --- | --- | --- |
+| 1.1.0 | 2026-07-04 | Added §4.7 SQLite Concurrency Policy — uniform cross-subsystem discipline: WAL everywhere, single owning writer task per database file (write-behind queue), bounded read pool, busy_timeout instead of spin-retries, short hot-path transactions with heavy work on the background tier. History table added with this entry. |

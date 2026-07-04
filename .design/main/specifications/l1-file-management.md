@@ -99,7 +99,7 @@ graph LR
 The system defines a configurable allowlist of accepted MIME types. Common defaults:
 
 | Category | Examples |
-|---|---|
+| --- | --- |
 | Documents | `application/pdf`, `text/markdown`, `text/plain`, `text/html` |
 | Images | `image/jpeg`, `image/png`, `image/gif`, `image/webp` |
 | Structured | `application/json`, `text/csv`, `application/xml` |
@@ -121,6 +121,6 @@ Binary executables and unsupported types are rejected.
 ## Canonical References
 
 | Alias | Path | Purpose |
-|---|---|---|
+| --- | --- | --- |
 | `[IMPL]` | `.design/main/specifications/l2-file-store.md` | Concrete upload pipeline, backend trait, hash logic, GC scheduler. |
 | `[STORAGE]` | `.design/main/specifications/l1-storage-model.md` | Tier model that governs where files live. |

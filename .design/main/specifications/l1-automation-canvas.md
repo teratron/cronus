@@ -11,6 +11,7 @@ The automation canvas is the visual representation of the automation pipeline mo
 The canvas is a **projection** of the pipeline engine: it does not introduce new execution semantics. Every pipeline composed in the canvas runs through the same engine as pipelines defined implicitly in worker workflow files. The canvas adds visibility and interactive editing; it does not add a separate runtime.
 
 The canvas serves three user needs:
+
 1. **Composition** — create a new explicit pipeline by connecting trigger, logic, and action nodes visually.
 2. **Inspection** — observe running and historical pipelines: trace per-node execution, view payloads, spot failures.
 3. **Legibility** — make the office's automation graph readable to users who need to understand or modify it without reading DSL files.
@@ -27,6 +28,7 @@ The canvas serves three user needs:
 Implicit automation (per-worker `@ON:` rules) is adequate for isolated, per-role reactions. As office complexity grows — multiple roles handing off to each other, conditional branching across role boundaries, time-gated aggregations — implicit automation becomes difficult to audit or modify because it is scattered across many workflow files.
 
 The canvas makes the whole-office automation graph visible in one place. It answers:
+
 - What happens when event X arrives?
 - Which roles are involved in this pipeline?
 - Why did this pipeline fail on Tuesday?
@@ -127,6 +129,7 @@ For any pipeline run (explicit or implicit):
 ### 4.5 Implicit Pipeline Surfaces
 
 Implicit pipelines (from `@ON:` blocks) appear in the canvas as a collapsed group per role. Expanding the group shows the individual trigger-action pairs as read-only nodes. The canvas renders a "Convert to explicit" action, which:
+
 1. Extracts the `@ON:` blocks from the workflow file into a standalone pipeline definition
 2. Marks the source `@ON:` blocks as superseded in the workflow file (without deleting them — the user confirms removal)
 3. Registers the new explicit pipeline with the same semantics

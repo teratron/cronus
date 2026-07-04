@@ -79,7 +79,7 @@ graph TD
 ### 4.4 Operations
 
 | Operation | Behaviour |
-|---|---|
+| --- | --- |
 | Create folder | Add a new folder at given parent (or root). |
 | Rename folder | Update name; validate uniqueness among siblings. |
 | Move folder | Change parent; validate no circular nesting. |
@@ -101,5 +101,5 @@ graph TD
 ## Canonical References
 
 | Alias | Path | Purpose |
-|---|---|---|
+| --- | --- | --- |
 | `[SESSION]` | `.design/main/specifications/l2-agent-session.md` | Session record that carries the folder_id field. |

@@ -58,6 +58,7 @@ Total wall-clock time ≈ max(individual argument times) + orchestrator synthesi
 ### 4.2 Participant Selection
 
 Priority order:
+
 1. Active workers in the office whose declared specialties overlap with the question domain
 2. Preset-catalog roles with relevant specialties, hired on demand for the round and released afterward
 3. Workers on different model tiers — mixing a high-capability reasoning model with a cost-efficient model broadens perspective diversity
@@ -83,6 +84,7 @@ Each log entry stored in the Channels tab:
 ### 4.4 Communication Visibility
 
 The deliberation log is the structured form of "inter-worker chat" visible to the user. Unlike unstructured chat, it provides:
+
 - Clear attribution per argument (which worker said what)
 - Explicit decision and reasoning (what the orchestrator concluded and why)
 - Searchable, filterable history of all deliberation rounds in the office session

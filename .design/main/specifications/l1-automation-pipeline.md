@@ -138,7 +138,7 @@ The graph must be acyclic (no pipeline-level loops between nodes). Iteration wit
 
 ### 4.4 Dual-mode Architecture
 
-**Implicit mode (per-worker automation)**
+**Implicit mode** (per-worker automation)
 
 Each worker defines automation rules in its nodus workflow file using `@ON:` trigger blocks. The automation engine binds these blocks as pipeline trigger nodes at worker activation time. The user does not interact with these rules directly — they are part of the worker's role definition.
 
@@ -152,7 +152,7 @@ Implicit mode binding:
 
 Implicit pipelines are per-worker and per-role. They are not visible in the canvas unless the user explicitly expands a role's embedded rules.
 
-**Explicit mode (canvas-authored pipeline)**
+**Explicit mode** (canvas-authored pipeline)
 
 Explicit pipelines are composed in the automation canvas. They are cross-role by design: a trigger in role A can delegate to role B via an action node. Explicit pipelines are stored as versioned pipeline definition files, separate from role workflow files.
 

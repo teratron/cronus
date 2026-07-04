@@ -96,6 +96,6 @@ On group deletion: all access grants referencing the deleted `group_id` must be 
 ## Canonical References
 
 | Alias | Path | Purpose |
-|---|---|---|
+| --- | --- | --- |
 | `[AUTH]` | `.design/main/specifications/l2-multi-user-auth.md` | User identity and privilege level used in GRP-2. |
 | `[SHARING]` | `.design/main/specifications/l1-resource-sharing.md` | Group as principal type in the grant model. |

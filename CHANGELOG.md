@@ -141,3 +141,5 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Advanced office features: office lifecycle control (pause/hibernate with model-substitution and auto-recovery), the agent client protocol server (sessions, ordered event stream, trust, live steering), the automation engine (node pipelines, dedup, scoped state, control plane, observers), custom Kanban columns/views, and desktop navigation (main)
 - Advanced office features: deliberation rounds, virtual-staging version control with role authority, the heartbeat inner monologue, lookahead planning, building-level orchestration, on-device voice input, and the visual automation canvas (main)
 - Content, sharing & dev-workflow subsystems: a uniform access-grant sharing model, a content-addressed file store with reference-tracking garbage collection, CRDT-merged notes with soft delete, and the five-stage development-delivery pipeline with a two-stage quality gate (main)
+- Updated 20 specifications (main)
+- Updated 3 specifications (nodus)
