@@ -71,6 +71,7 @@
 - <https://github.com/huginn/huginn>
 - <https://github.com/lmstudio-ai/lms>
 - <https://github.com/ollama/ollama>
+- <https://github.com/jundot/omlx>
 - <https://github.com/superagent-ai/superagent>
 - <https://github.com/microsoft/semantic-kernel>
 - <https://github.com/microsoft/autogen>
