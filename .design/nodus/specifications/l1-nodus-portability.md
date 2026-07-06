@@ -1,6 +1,6 @@
 # Nodus Portability and Extension Contract
 
-**Version:** 1.3.0
+**Version:** 1.4.0
 **Status:** Stable
 **Layer:** concept
 
@@ -66,6 +66,8 @@ Rules that every implementation of this spec (and its host projects) MUST NOT vi
 
 - **LP-10 Host-granted authority, never self-authored**: [ADDED v1.3.0] a workflow has **no ambient authority**. It **declares** the capabilities it needs (the LP-8 manifest) and **reads** host-supplied policy decisions (the PolicyProvider extension role), but it MUST NOT grant itself a capability, relax a policy, widen its reach, or otherwise author the authority under which it runs — the authority plane is **host-supplied and workflow-read-only**. The language gives a workflow no vocabulary to *write* policy: a step may *request* an outcome (a dialog or approval, NL-12) but never self-authorize one, and the request is data, not a grant. Because a workflow may be assembled under untrusted influence — a definition built after reading model output or external content is itself untrusted (NL-11) — its declared-capability manifest is the **single consent point the host resolves before the run**, not a per-step self-grant; an injected instruction inside a workflow therefore cannot escalate what the run may do beyond its pre-consented manifest. The library defines only *declare-and-read*; *granting* stays entirely host-side (LP-1/LP-2). This is the nodus realization of the main `l1-security` SEC-10 authority-self-containment contract: a portable workflow, like the agent that runs it, can ask for authority but never mint it.
 
+- **LP-11 Per-effect authorization seam**: [ADDED v1.4.0] an **effectful step** — one that calls a model (GEN/REFINE), invokes a host tool/operation, or suspends for a deferred/external completion (NL-12) — MAY be gated by a host-supplied **authorization decision** evaluated **before** the effect occurs. The runtime guarantees the ordering **decide → effect → observe**: the authorization runs before the effect is performed, and the audit observer (`l1-nodus-observability` HO-*) runs after, against the real result. The gate is **fail-closed**: a *deny*, or an authorization that errors or times out, aborts the effect with a typed `NODUS:*` code — it never silently permits and never hangs (fail-fast). The decision is **host-supplied** through the `PolicyProvider` role (LP-2): the nodus core names no policy vocabulary and no metric; a step may **declare its effect class** (model-call / tool-use / deferred) so the host gate can match, but consistent with LP-10 it can neither author nor relax the policy. This is the *dynamic per-effect* complement to the *static whole-run* LP-8 manifest: LP-8 rejects, before the run, an effect the host **cannot** satisfy (the effect is stripped/unavailable); LP-11 evaluates, per attempt, an effect the host **can** satisfy but may refuse on its arguments (the effect is attempted and may be denied). A step with no matching policy proceeds unchanged, and a host supplying no `PolicyProvider` runs exactly as today (additive). This is the nodus realization of the main `l1-interception-model` decide-class seam (INT-1), its check-before-use ordering (INT-2), its fail-closed direction for guards (INT-3), and its strip-vs-deny axis (INT-6, LP-8 = strip / LP-11 = deny).
+
 ### 4.1 Extension Point Taxonomy
 
 Each extension point is identified by role. An implementation must provide exactly one built-in (stub or no-op) implementation that satisfies the interface without external I/O.
@@ -75,7 +77,7 @@ Each extension point is identified by role. An implementation must provide exact
 | Model | `ModelProvider` | Invoke AI model; return structured output | `StubProvider` (deterministic) |
 | Storage | `StorageProvider` | Persist and retrieve workflow state across invocations | <!-- TBD: define when first host requires durable state --> |
 | Audit | `AuditProvider` | Record execution events for observability and replay | `NoopAuditProvider` (discards all events; see `l1-nodus-observability.md`) |
-| Policy | `PolicyProvider` | Evaluate runtime policy decisions beyond hard schema rules: spend caps, approval gates, tool-access restrictions | <!-- TBD: define when first host requires dynamic policy beyond !!NEVER/!PREF --> |
+| Policy | `PolicyProvider` | Evaluate a per-effect authorization decision before an effectful step (model call / tool use / deferred completion): allow / deny / require-approval, fail-closed (LP-11, §4.7) | Built-in *allow-all* (no gate; existing behaviour) |
 
 > New roles are added only when LP-3 is satisfied. The table above is the authoritative extension point registry; an implementation that introduces a role not listed here must first amend this spec.
 
@@ -164,6 +166,29 @@ validate(manifest, host):
 
 Two consequences follow. First, failures surface as a precise pre-run diagnostic ("workflow requires Storage; host provides none") instead of an opaque mid-run error after side effects have begun. Second, the manifest is the machine-checkable portability contract: the two-host generalisation rule (LP-3) reduces, for a given workflow, to "does host B satisfy the same manifest host A satisfied?". A built-in host (the in-process test configuration) satisfies a minimal manifest, so manifest-free or model-only workflows remain runnable without any host wiring.
 
+### 4.7 Per-Effect Authorization Seam (LP-11)
+
+The `PolicyProvider` role is a *decide-class* seam over effectful steps. It is distinct from the LP-8 manifest along two axes: **when** (LP-8 pre-run, once; LP-11 per effect, at each attempt) and **what** (LP-8 checks a capability *exists*; LP-11 checks this *use* of it is permitted). The executor brackets every effectful step so the authorization is settled before the effect and the observer runs after it:
+
+```text
+[REFERENCE]
+run_effect(step, host):
+    if host.has(PolicyProvider):
+        decision := host.policy.authorize(step.effect_class, step.args)   // decide, pre-effect
+        // fail-closed: any of {Deny, error, timeout} -> abort
+        if decision != Allow:
+            emit(NODUS:CAPABILITY_UNMET | NODUS:POLICY_DENIED)            // typed, never hang
+            route_to(@err) or bypass per NL-2                            // !! violations bypass @err
+            return
+    result := perform(step)                    // the effect happens exactly once, here
+    host.audit.record(step, result)            // observe, post-effect (HO-*, after the real result)
+    return result
+
+effect_class(step) := one of { model_call, tool_use, deferred }   // declared, host-matchable (LP-10: read-only)
+```
+
+Two guarantees follow. First, the ordering is authoritative: a `PolicyProvider` never sees a post-effect state and an `AuditProvider` never observes a not-yet-happened effect — mirroring the main interception model's check-before-use rule. Second, the seam is purely additive: with no `PolicyProvider` the built-in *allow-all* applies and execution is byte-for-byte today's behaviour, so LP-11 imposes no cost on hosts that do not opt in.
+
 ## 5. Implementation Notes
 
 The LP-invariants are evaluated in the order that minimises rework:
@@ -194,6 +219,7 @@ The LP-invariants are evaluated in the order that minimises rework:
 
 | Version | Date | Author | Notes |
 | --- | --- | --- | --- |
+| 1.4.0 | 2026-07-06 | Core Team | Added LP-11 (per-effect authorization seam) — an effectful step (model call / tool use / deferred NL-12 completion) MAY be gated by a host-supplied authorization decision evaluated before the effect, with the runtime guaranteeing decide → effect → observe ordering (the AuditProvider observer runs after, on the real result); fail-closed on deny/error/timeout with a typed `NODUS:*` code (never silently permits, never hangs); the decision is host-supplied through the now-concretized `PolicyProvider` role (LP-2, no policy vocabulary in core), a step declaring only its effect class for host matching and — per LP-10 — never authoring or relaxing the policy; the dynamic per-effect complement to the static whole-run LP-8 manifest (LP-8 = strip an unsatisfiable effect pre-run, LP-11 = deny a satisfiable effect per attempt); purely additive — no PolicyProvider = built-in allow-all = today's behaviour. §4.1 PolicyProvider row concretized (TBD resolved), new §4.7. The nodus realization of the new main l1-interception-model decide-class seam INT-1 / check-before-use ordering INT-2 / fail-closed guard direction INT-3 / strip-vs-deny axis INT-6. L1 stays Stable (C9); l2-nodus-portability carries LP-11 as a pending Invariant-Compliance obligation reconciled at magic.task (LP-8/LP-9/LP-10 precedent). |
 | 1.3.0 | 2026-07-02 | Core Team | Added LP-10 (host-granted authority, never self-authored) — a workflow has no ambient authority: it declares capability needs (LP-8) and reads host-supplied policy (PolicyProvider) but MUST NOT grant itself a capability, relax a policy, or widen its reach; the language has no vocabulary to write policy, a step may request an outcome (NL-12) but never self-authorize; because a workflow may be assembled under untrusted influence (NL-11) its declared-capability manifest is the single consent point the host resolves before the run, so an injected instruction cannot escalate beyond the pre-consented manifest; granting stays host-side (LP-1/LP-2). The nodus realization of the new main l1-security SEC-10 authority-self-containment contract. L1 stays Stable (C9); l2-nodus-runtime carries LP-10 as a pending Invariant-Compliance obligation reconciled at magic.task. |
 | 1.2.0 | 2026-07-02 | Core Team | Added LP-9 (extraction attestation) — the extraction bundle + capability manifest carry an independently-verifiable witness binding exact content-set + version; a host verifies before loading an imported workflow bundle and refuses fail-closed on missing/failed witness; signing/verification mechanism host-supplied (LP-2, no crypto dependency in core), witness never names a host type (LP-1). The nodus realization of the host attestation contract (main l1-attestation AT-1/AT-2/AT-6); a library moving between hosts (LP-3) proves integrity+authorship on arrival. |
 | 1.1.0 | 2026-06-26 | Core Team | Added LP-8 (capability manifest + pre-run satisfiability validation, fail-fast); new §4.6; manifest reframed as the machine-checkable LP-3 portability contract. |

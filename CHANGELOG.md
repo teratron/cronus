@@ -144,3 +144,4 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Updated 20 specifications (main)
 - Updated 3 specifications (nodus)
 - Added specification `competitive-execution` (main)
+- Added specification `interception-model` (main)
