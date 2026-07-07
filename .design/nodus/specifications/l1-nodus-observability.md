@@ -1,6 +1,6 @@
 # Nodus Execution Observability
 
-**Version:** 1.3.0
+**Version:** 1.4.0
 **Status:** Stable
 **Layer:** concept
 
@@ -55,6 +55,8 @@ Rules that Layer 2 implementations MUST NOT violate:
 - **HO-8 Cost-attribution token classes** [ADDED v1.2.0]: a `model_response` event carries a **token-class breakdown** — fresh `input`, `output`, and, when the host provider reports them, `cache_read` and `cache_creation` — as distinct fields, not a single opaque total. Because a cached-prefix read is billed at a fraction of fresh input, collapsing these into one number makes cost un-attributable and a cache regression invisible. The classes are optional (a provider that reports only a total leaves the cache fields absent, never zero-faked) and remain within the data-safety boundary (§4.4 — counts only, never content). This lets a host compute per-run and per-step cost from the trace alone, and lets an outer loop detect a cache-warmth regression from telemetry rather than from an invoice.
 
 - **HO-9 Execution-authenticity receipt** [ADDED v1.3.0]: a step's execution event MAY carry a **host-supplied, model-unforgeable receipt** binding the step's identity and its observed result, so a downstream verifier can tell a genuine step result from a fabricated one and a narration cannot claim a step ran that did not. The signing/verification mechanism is **host-supplied** (LP-2 style — no cryptographic dependency in the nodus core, mirroring the LP-9 attestation seam); the receipt is an **opaque, secret-free token** that crosses the data-safety boundary (§4.4) like any other counts-only descriptor — the signing secret is never placed in a trace, a prompt, or the model's context. Receipts are optional and additive: a host that supplies no receipt provider emits events unchanged, so observer neutrality (HO-5) is preserved. Like HO-8, this extends existing event records with an optional field rather than adding an event type (HO-6). This is the nodus realization of the main `l1-tool-receipts` execution-authenticity contract — the workflow-side witness that a step's result is real, host-supplied exactly as the LP-9 attestation witness is.
+
+- **HO-10 Trace-completeness honesty** [ADDED v1.4.0]: a persisted trace is either **complete** — it carries a terminal `RunManifest` (status ∈ {Ok, Error, ConstraintHalt, ValidationError}, delivered by `run_complete`) — or explicitly **truncated**, and a consumer can tell which **from the trace alone**. If the host process is killed, panics, or is otherwise lost mid-run, `run_complete` is never called and the trace is a *headless fragment*: events up to some `seq` with no terminal manifest. Such a fragment MUST be distinguishable from a completed run and from a still-running one, and MUST NOT be mistaken for a whole run by any downstream consumer (the outer evolution loop, health scoring, differential replay). The absence of a terminal manifest is itself the signal "this run did not finish — treat the trace as a fragment." This extends the honesty HO-7 already gives for *dropped* events (a gap in the dense `seq` inside the recorded range) to the *truncated tail* (missing records after the last recorded event), so any trace classifies as complete, gap-damaged, or truncated. Crucially, nodus does **not** attempt to capture the crash that truncated the trace — that is the host's forensic diagnostic-log plane (the nodus realization of the main `l1-diagnostic-log` concept, whose DL-2 owns native-fault and pre-init capture); HO-10 guarantees only that the *semantic* trace never lies about being complete when it was truncated, naming the boundary between what nodus witnessed and what only the host's lower plane could. This is the observability analog of the honest-coverage-boundary discipline (a named gap is not a hidden one): the invariant is a read-side interpretation of manifest presence/absence, adds no new hot-path emission, and leaves a normally-completing run entirely unaffected (purely additive, HO-5 observer-neutrality preserved).
 
 ## 4. Detailed Design
 
@@ -172,6 +174,44 @@ This section is the projection substrate the environment/trajectory contract
 (`l1-nodus-environment.md`) relies on: a `TrajectoryEntry.seq` is exactly this
 `seq`, so a trajectory is an ordered slice of the correlated event stream.
 
+### 4.7 Trace Completeness & Abnormal Termination [ADDED v1.4.0]
+
+The `RunManifest` (§4.3) is the **completeness witness**. Its presence or absence
+classifies any persisted trace without inspecting event contents:
+
+```text
+[REFERENCE]
+A trace is COMPLETE   iff it carries a terminal RunManifest (run_complete was called).
+A trace is TRUNCATED  iff it has ≥1 event but no terminal RunManifest.
+A trace is EMPTY      iff it has neither events nor a manifest.
+
+Consumer rule (decidable from the trace alone, HO-10):
+  terminal manifest present → COMPLETE  — trust the whole trace
+  events but no manifest     → TRUNCATED — treat as a fragment, never a whole run
+```
+
+**Why absence is the signal.** A run that panics, is OOM-killed, or whose host
+process is lost emits events up to some `seq = N` and then stops; `run_complete` is
+never reached, so no manifest is written. The highest recorded `seq` marks *how far*
+the run got; the missing manifest marks *that it did not finish*. Together with
+HO-7's dense gap-free sequence — which exposes events dropped *inside* the recorded
+range — this lets a consumer classify every trace as one of {complete, gap-damaged,
+truncated} and never silently mistake a crash-truncated fragment for a whole run.
+
+**Boundary with the host forensic plane.** nodus owns the semantic trace and its
+completeness signal; it does **not** own crash capture. Whether a native traceback
+of the terminating fault exists is a host concern — the forensic diagnostic-log
+plane (the nodus realization of the main `l1-diagnostic-log` concept, DL-2), which
+is installed below and earlier than the executor and survives a native fault the
+executor cannot. nodus's contract stops precisely at "my trace honestly signals its
+own truncation"; reconstructing what happened after the executor lost control is the
+host's lower plane, and HO-10 forbids nodus from pretending otherwise.
+
+**No hot-path cost.** HO-10 adds no new emission: a normally-completing run already
+writes its manifest via `run_complete`, and an aborted run cannot emit anything more
+(it is gone). The invariant fixes only the *interpretation* of a manifest's
+presence/absence on the read side, so observer neutrality (HO-5) is untouched.
+
 ## 5. Implementation Notes
 
 1. `record_event` is called in the executor's hot path — the built-in no-op implementation costs a single indirect call.
@@ -199,6 +239,7 @@ This section is the projection substrate the environment/trajectory contract
 
 | Version | Date | Author | Notes |
 | --- | --- | --- | --- |
+| 1.4.0 | 2026-07-07 | Core Team | Added HO-10 (trace-completeness honesty) + §4.7 — a persisted trace is complete (carries a terminal RunManifest via run_complete) or explicitly truncated (events but no manifest), decidable from the trace alone; a headless fragment left by a killed/panicked/OOM'd host process MUST NOT be mistaken for a whole run. Extends HO-7's dropped-event gap detection to the truncated tail (missing records after the last event), so any trace classifies as complete / gap-damaged / truncated. nodus does not capture the terminating crash — that is the host's forensic diagnostic-log plane (nodus realization of the new main l1-diagnostic-log concept, DL-2); HO-10 guarantees only that the semantic trace never lies about its own completeness. Read-side interpretation of manifest presence/absence — no new hot-path emission, HO-5 observer-neutrality preserved (purely additive). L1 stays Stable (C9); l2-nodus-observability carries HO-10 as a pending Invariant-Compliance obligation reconciled at magic.task (HO-8/HO-9 precedent). |
 | 1.3.0 | 2026-07-02 | Core Team | Added HO-9 (execution-authenticity receipt) — a step's execution event MAY carry a host-supplied, model-unforgeable receipt binding step identity + observed result, so a verifier distinguishes a genuine step result from a fabricated one; signing mechanism host-supplied (LP-2, no crypto in core, mirroring the LP-9 attestation seam), receipt an opaque secret-free token within the data-safety boundary (signing secret never in trace/prompt/context), optional + additive so HO-5 observer neutrality holds, an optional field on existing events not a new event type (HO-6). The nodus realization of the new main l1-tool-receipts execution-authenticity contract. L1 stays Stable (C9); l2-nodus-observability carries HO-9 as a pending Invariant-Compliance obligation reconciled at magic.task. |
 | 1.2.0 | 2026-07-02 | Core Team | Added HO-8 (cost-attribution token classes on model_response — fresh input/output plus optional cache_read/cache_creation as distinct fields, counts-only within the data-safety boundary) so per-run/per-step cost is computable from the trace and a cache-warmth regression is detectable from telemetry, not the invoice. Event taxonomy §4.2 model_response fields extended. |
 | 1.1.0 | 2026-07-01 | Core Team | Added HO-7 (monotonic sequence + correlation id ordering contract) and §4.6 (sequence/correlation fields, run-scoped correlation binding, streaming chunk-merge into one logical model_response). Ordering is now an explicit `(correlation_id, seq)` contract, enabling async/buffered audit sinks; underpins the trajectory projection in l1-nodus-environment.md. |
