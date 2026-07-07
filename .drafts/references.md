@@ -37,6 +37,8 @@
 - <https://github.com/agentscope-ai/AgentTeams>
 - <https://github.com/agentrq/agentrq>
 - <https://github.com/stablyai/orca>
+- <https://github.com/nexu-io/open-design>
+- <https://github.com/linear/linear>
 
 ## Spec-Driven Development
 
