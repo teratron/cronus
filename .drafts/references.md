@@ -6,6 +6,7 @@
 - <https://github.com/google-gemini/gemini-cli>
 - <https://github.com/openai/codex>
 - <https://github.com/QwenLM/qwen-code>
+- <https://github.com/QwenLM/Qwen-Agent>
 - <https://github.com/XiaomiMiMo/MiMo-Code>
 - <https://github.com/openclaw/openclaw>
 - <https://github.com/NVIDIA/NemoClaw>
@@ -58,6 +59,8 @@
 - <https://github.com/NevaMind-AI/memU>
 - <https://github.com/agentscope-ai/ReMe>
 - <https://github.com/moorcheh-ai/memanto>
+- <https://github.com/tinyhumansai/tinyjuice>
+- <https://github.com/tinyhumansai/tinycortex>
 
 ## Tools
 
@@ -78,6 +81,8 @@
 - <https://github.com/agentscope-ai/agentscope-runtime>
 - <https://github.com/agentscope-ai/PawBench>
 - <https://github.com/headroomlabs-ai/headroom>
+- <https://github.com/tinyhumansai/tiny.place>
+- <https://github.com/tinyhumansai/tinyflows>
 
 ## Harness
 
@@ -91,6 +96,7 @@
 - <https://github.com/omnigent-ai/omnigent>
 - <https://github.com/ruvnet/ruflo>
 - <https://github.com/ruvnet/agent-harness-generator>
+- <https://github.com/tinyhumansai/tinyagents>
 
 ## UI/UX
 
