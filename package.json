@@ -19,7 +19,7 @@
     "audit:review": "fallow review --brief"
   },
   "devDependencies": {
-    "@biomejs/biome": "^2.5.2",
+    "@biomejs/biome": "^2.5.3",
     "fallow": "^3.2.0"
   }
 }
