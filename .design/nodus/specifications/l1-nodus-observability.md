@@ -1,6 +1,6 @@
 # Nodus Execution Observability
 
-**Version:** 1.4.0
+**Version:** 1.5.0
 **Status:** Stable
 **Layer:** concept
 
@@ -57,6 +57,8 @@ Rules that Layer 2 implementations MUST NOT violate:
 - **HO-9 Execution-authenticity receipt** [ADDED v1.3.0]: a step's execution event MAY carry a **host-supplied, model-unforgeable receipt** binding the step's identity and its observed result, so a downstream verifier can tell a genuine step result from a fabricated one and a narration cannot claim a step ran that did not. The signing/verification mechanism is **host-supplied** (LP-2 style — no cryptographic dependency in the nodus core, mirroring the LP-9 attestation seam); the receipt is an **opaque, secret-free token** that crosses the data-safety boundary (§4.4) like any other counts-only descriptor — the signing secret is never placed in a trace, a prompt, or the model's context. Receipts are optional and additive: a host that supplies no receipt provider emits events unchanged, so observer neutrality (HO-5) is preserved. Like HO-8, this extends existing event records with an optional field rather than adding an event type (HO-6). This is the nodus realization of the main `l1-tool-receipts` execution-authenticity contract — the workflow-side witness that a step's result is real, host-supplied exactly as the LP-9 attestation witness is.
 
 - **HO-10 Trace-completeness honesty** [ADDED v1.4.0]: a persisted trace is either **complete** — it carries a terminal `RunManifest` (status ∈ {Ok, Error, ConstraintHalt, ValidationError}, delivered by `run_complete`) — or explicitly **truncated**, and a consumer can tell which **from the trace alone**. If the host process is killed, panics, or is otherwise lost mid-run, `run_complete` is never called and the trace is a *headless fragment*: events up to some `seq` with no terminal manifest. Such a fragment MUST be distinguishable from a completed run and from a still-running one, and MUST NOT be mistaken for a whole run by any downstream consumer (the outer evolution loop, health scoring, differential replay). The absence of a terminal manifest is itself the signal "this run did not finish — treat the trace as a fragment." This extends the honesty HO-7 already gives for *dropped* events (a gap in the dense `seq` inside the recorded range) to the *truncated tail* (missing records after the last recorded event), so any trace classifies as complete, gap-damaged, or truncated. Crucially, nodus does **not** attempt to capture the crash that truncated the trace — that is the host's forensic diagnostic-log plane (the nodus realization of the main `l1-diagnostic-log` concept, whose DL-2 owns native-fault and pre-init capture); HO-10 guarantees only that the *semantic* trace never lies about being complete when it was truncated, naming the boundary between what nodus witnessed and what only the host's lower plane could. This is the observability analog of the honest-coverage-boundary discipline (a named gap is not a hidden one): the invariant is a read-side interpretation of manifest presence/absence, adds no new hot-path emission, and leaves a normally-completing run entirely unaffected (purely additive, HO-5 observer-neutrality preserved).
+
+- **HO-11 Single-stream dual legibility** [ADDED v1.5.0]: an `ExecutionEvent` MAY carry a **host-rendered, human-legible one-line message derived from its own structured fields**, so the same single event stream serves both a machine/AI analyzer and a human reader without a second, parallel human log to keep in sync — double-logging both risks divergence and doubles the volume a reader must reconcile. The structured fields remain the **source of truth**: the human rendering MUST NOT introduce a fact absent from the fields nor contradict them (it is a faithful projection, not a new record), and it stays within the data-safety boundary (§4.4) — it renders descriptors and counts, never raw user content. The rendering, and any localization of it, is **host-supplied** (LP-2 style — the nodus core names no rendering or locale vocabulary); a host that supplies no renderer emits events exactly as today, so this is optional and additive and preserves observer neutrality (HO-5). Like HO-8/HO-9, it extends existing event records with an optional field rather than adding an event type (HO-6). This is the nodus realization of the main `l1-log-legibility` single-canonical-event / dual-audience-faithfulness contract (LL-1/LL-2): one stream legible to both a human and a machine, machine-is-truth, instead of two streams that can drift. The broader legibility & economy controls that *bound* a stream — payload policy, compaction, a budget-bounded agent-context feed (LL-4/LL-8) — stay host-side (LP-1/LP-2); nodus already contributes the pieces it owns (HO-6 closed structured taxonomy, §4.4 counts-not-content payload economy at the source, HO-7 sequence for dedup/ordering), and HO-11 adds only the dual-legibility of the single event.
 
 ## 4. Detailed Design
 
@@ -212,6 +214,46 @@ writes its manifest via `run_complete`, and an aborted run cannot emit anything 
 (it is gone). The invariant fixes only the *interpretation* of a manifest's
 presence/absence on the read side, so observer neutrality (HO-5) is untouched.
 
+### 4.8 Single-Stream Dual Legibility [ADDED v1.5.0]
+
+One event serves two readers. An `ExecutionEvent` MAY carry an optional
+host-rendered `message` derived from its own fields, so a single `AuditProvider`
+stream drives both a human-facing view and a machine/AI analyzer — no second prose
+log to keep in sync, and none to drift:
+
+```text
+[REFERENCE]
+ExecutionEvent gains (optional):
+  message : Text?   — host-rendered one-line human rendering DERIVED from this
+                      event's own structured fields (HO-11)
+
+Faithfulness rule (LL-1/LL-2):
+  `message` asserts nothing the structured fields do not already carry.
+  A consumer that ignores `message` loses no fact (the fields are complete);
+  a consumer that reads only `message` gets a faithful human summary.
+
+Data-safety (§4.4): `message` renders descriptors and counts, never raw content —
+  e.g. "step 4 GEN produced 2 output fields in 812 ms", never the generated text.
+```
+
+The structured fields stay the source of truth; the rendering is a projection of
+them (LL-1). The renderer — and any localization — is **host-supplied** (LP-2), so
+the nodus core carries no format or locale vocabulary and a host that supplies none
+emits events exactly as today. The invariant is additive: it only fixes what an
+optional `message` field *means* and constrains it to faithfulness plus §4.4, adding
+no new hot-path obligation (a host that renders nothing pays nothing) and preserving
+observer neutrality (HO-5) and the closed event taxonomy (HO-6).
+
+**Boundary with host-side economy.** HO-11 makes the *single event* legible to both
+audiences; it does not govern how a *stream* is bounded. The controls that keep a
+stream from overloading a reader — payload policy, compaction/folding, a
+budget-bounded feed of the trace back into an agent's own context — are the host's
+(main `l1-log-legibility` LL-4/LL-8, LP-1/LP-2). nodus already supplies the
+source-side pieces those controls build on: the closed structured taxonomy (HO-6, so
+the stream is machine-parseable not ad-hoc prose), counts-not-content descriptors
+(§4.4, so the source is payload-economical), and the dense correlation/sequence
+(HO-7, so a consumer can order, deduplicate, and window).
+
 ## 5. Implementation Notes
 
 1. `record_event` is called in the executor's hot path — the built-in no-op implementation costs a single indirect call.
@@ -239,6 +281,7 @@ presence/absence on the read side, so observer neutrality (HO-5) is untouched.
 
 | Version | Date | Author | Notes |
 | --- | --- | --- | --- |
+| 1.5.0 | 2026-07-07 | Core Team | Added HO-11 (single-stream dual legibility) + §4.8 — an ExecutionEvent MAY carry an optional host-rendered human-legible one-line `message` derived from its own structured fields, so one AuditProvider stream serves both a human reader and a machine/AI analyzer without a second parallel prose log that can drift; the structured fields stay the source of truth (the rendering is a faithful projection that adds/contradicts no fact, LL-1/LL-2) and stays within §4.4 (descriptors/counts, never raw content); renderer + localization host-supplied (LP-2, no format/locale vocabulary in core), optional + additive so a host that renders nothing emits events as today, HO-5 observer-neutrality and HO-6 closed taxonomy preserved (an optional field on existing events, like HO-8/HO-9). Stream-bounding economy (payload policy, compaction, budget-bounded agent feed, LL-4/LL-8) stays host-side; nodus contributes the source-side pieces (HO-6 taxonomy, §4.4 counts-not-content, HO-7 sequence). The nodus realization of the new main l1-log-legibility single-canonical-event / dual-audience-faithfulness contract. L1 stays Stable (C9); l2-nodus-observability carries HO-11 as a pending Invariant-Compliance obligation reconciled at magic.task (HO-8/HO-9/HO-10 precedent). |
 | 1.4.0 | 2026-07-07 | Core Team | Added HO-10 (trace-completeness honesty) + §4.7 — a persisted trace is complete (carries a terminal RunManifest via run_complete) or explicitly truncated (events but no manifest), decidable from the trace alone; a headless fragment left by a killed/panicked/OOM'd host process MUST NOT be mistaken for a whole run. Extends HO-7's dropped-event gap detection to the truncated tail (missing records after the last event), so any trace classifies as complete / gap-damaged / truncated. nodus does not capture the terminating crash — that is the host's forensic diagnostic-log plane (nodus realization of the new main l1-diagnostic-log concept, DL-2); HO-10 guarantees only that the semantic trace never lies about its own completeness. Read-side interpretation of manifest presence/absence — no new hot-path emission, HO-5 observer-neutrality preserved (purely additive). L1 stays Stable (C9); l2-nodus-observability carries HO-10 as a pending Invariant-Compliance obligation reconciled at magic.task (HO-8/HO-9 precedent). |
 | 1.3.0 | 2026-07-02 | Core Team | Added HO-9 (execution-authenticity receipt) — a step's execution event MAY carry a host-supplied, model-unforgeable receipt binding step identity + observed result, so a verifier distinguishes a genuine step result from a fabricated one; signing mechanism host-supplied (LP-2, no crypto in core, mirroring the LP-9 attestation seam), receipt an opaque secret-free token within the data-safety boundary (signing secret never in trace/prompt/context), optional + additive so HO-5 observer neutrality holds, an optional field on existing events not a new event type (HO-6). The nodus realization of the new main l1-tool-receipts execution-authenticity contract. L1 stays Stable (C9); l2-nodus-observability carries HO-9 as a pending Invariant-Compliance obligation reconciled at magic.task. |
 | 1.2.0 | 2026-07-02 | Core Team | Added HO-8 (cost-attribution token classes on model_response — fresh input/output plus optional cache_read/cache_creation as distinct fields, counts-only within the data-safety boundary) so per-run/per-step cost is computable from the trace and a cache-warmth regression is detectable from telemetry, not the invoice. Event taxonomy §4.2 model_response fields extended. |
