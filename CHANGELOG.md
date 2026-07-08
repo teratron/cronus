@@ -149,3 +149,4 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Added specification `log-legibility` (main)
 - Updated specification `scheduler-model` (main)
 - Added specification `simulation` (main)
+- Added specification `dev-office` (main)
