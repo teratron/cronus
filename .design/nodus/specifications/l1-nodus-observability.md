@@ -1,6 +1,6 @@
 # Nodus Execution Observability
 
-**Version:** 1.5.0
+**Version:** 1.6.0
 **Status:** Stable
 **Layer:** concept
 
@@ -59,6 +59,8 @@ Rules that Layer 2 implementations MUST NOT violate:
 - **HO-10 Trace-completeness honesty** [ADDED v1.4.0]: a persisted trace is either **complete** — it carries a terminal `RunManifest` (status ∈ {Ok, Error, ConstraintHalt, ValidationError}, delivered by `run_complete`) — or explicitly **truncated**, and a consumer can tell which **from the trace alone**. If the host process is killed, panics, or is otherwise lost mid-run, `run_complete` is never called and the trace is a *headless fragment*: events up to some `seq` with no terminal manifest. Such a fragment MUST be distinguishable from a completed run and from a still-running one, and MUST NOT be mistaken for a whole run by any downstream consumer (the outer evolution loop, health scoring, differential replay). The absence of a terminal manifest is itself the signal "this run did not finish — treat the trace as a fragment." This extends the honesty HO-7 already gives for *dropped* events (a gap in the dense `seq` inside the recorded range) to the *truncated tail* (missing records after the last recorded event), so any trace classifies as complete, gap-damaged, or truncated. Crucially, nodus does **not** attempt to capture the crash that truncated the trace — that is the host's forensic diagnostic-log plane (the nodus realization of the main `l1-diagnostic-log` concept, whose DL-2 owns native-fault and pre-init capture); HO-10 guarantees only that the *semantic* trace never lies about being complete when it was truncated, naming the boundary between what nodus witnessed and what only the host's lower plane could. This is the observability analog of the honest-coverage-boundary discipline (a named gap is not a hidden one): the invariant is a read-side interpretation of manifest presence/absence, adds no new hot-path emission, and leaves a normally-completing run entirely unaffected (purely additive, HO-5 observer-neutrality preserved).
 
 - **HO-11 Single-stream dual legibility** [ADDED v1.5.0]: an `ExecutionEvent` MAY carry a **host-rendered, human-legible one-line message derived from its own structured fields**, so the same single event stream serves both a machine/AI analyzer and a human reader without a second, parallel human log to keep in sync — double-logging both risks divergence and doubles the volume a reader must reconcile. The structured fields remain the **source of truth**: the human rendering MUST NOT introduce a fact absent from the fields nor contradict them (it is a faithful projection, not a new record), and it stays within the data-safety boundary (§4.4) — it renders descriptors and counts, never raw user content. The rendering, and any localization of it, is **host-supplied** (LP-2 style — the nodus core names no rendering or locale vocabulary); a host that supplies no renderer emits events exactly as today, so this is optional and additive and preserves observer neutrality (HO-5). Like HO-8/HO-9, it extends existing event records with an optional field rather than adding an event type (HO-6). This is the nodus realization of the main `l1-log-legibility` single-canonical-event / dual-audience-faithfulness contract (LL-1/LL-2): one stream legible to both a human and a machine, machine-is-truth, instead of two streams that can drift. The broader legibility & economy controls that *bound* a stream — payload policy, compaction, a budget-bounded agent-context feed (LL-4/LL-8) — stay host-side (LP-1/LP-2); nodus already contributes the pieces it owns (HO-6 closed structured taxonomy, §4.4 counts-not-content payload economy at the source, HO-7 sequence for dedup/ordering), and HO-11 adds only the dual-legibility of the single event.
+
+- **HO-12 Execution-mode provenance** [ADDED v1.6.0]: the `RunManifest` declares the run's **execution mode** — `real` versus `simulated` (a modeled/dry-run play-out where effects are mocked or suppressed) — and, when simulated, its fidelity, so a downstream consumer can exclude simulated runs from real-run analytics and never mistake a modeled play-out for production behaviour. A simulated run is one where the **host** has substituted modeled providers (a mock `ModelProvider`, a no-effect tool/host surface) to exercise the workflow's mechanics without real effects; nodus itself mocks nothing (host-neutral, LP-1/LP-2 — the substitution is host-supplied), it only records which mode the host declared for the run. The marker is optional and additive: a manifest without it is `real` (today's behaviour), so observer neutrality (HO-5) and the closed taxonomy (HO-6) are preserved. This is the nodus realization of the main `l1-simulation` legible-fidelity / observable-play-out contract (SIM-3/SIM-6) — the manifest-level witness that keeps a simulated trace from being read as, or polluting the analytics (HO-8 cost accounting, host health scoring) of, a real run. It sits in the same honesty family as HO-10 (a trace never lies about its completeness) and HO-11 (a rendering never lies about its fields): here, a trace never lies about whether it was real.
 
 ## 4. Detailed Design
 
@@ -254,6 +256,35 @@ the stream is machine-parseable not ad-hoc prose), counts-not-content descriptor
 (§4.4, so the source is payload-economical), and the dense correlation/sequence
 (HO-7, so a consumer can order, deduplicate, and window).
 
+### 4.9 Execution-Mode Provenance [ADDED v1.6.0]
+
+A trace should say whether it came from a real run or a simulated play-out, so the
+two are never confused and simulated runs never corrupt real analytics:
+
+```text
+[REFERENCE]
+RunManifest gains (optional):
+  execution_mode : Enum   — real | simulated   (absent → real; today's behaviour)
+  sim_fidelity   : Text?  — when simulated: structural | modeled | shadow (host-declared)
+
+Consumer rule (HO-12):
+  execution_mode = simulated → exclude from real-run analytics (host health scoring,
+                               HO-8 cost/usage accounting, the outer evolution loop);
+                               the trace is a play-out of the mechanics, not production.
+```
+
+nodus does not mock anything. A host runs a workflow *in simulation* by substituting
+modeled providers — a mock `ModelProvider`, a no-effect tool/host surface — to
+exercise the mechanics without real effects; that modeling, the fidelity choice, and
+the bounding are the host's simulation capability (main `l1-simulation` SIM-2/SIM-3,
+host-side per LP-1/LP-2). nodus's sole contribution is to *record which mode the host
+declared* on the manifest, making the trace self-describing: a consumer distinguishes
+a real run from a simulated one from the manifest alone — exactly as HO-10 lets it
+distinguish a complete trace from a truncated one. Without this marker, a hundred
+simulated runs would be indistinguishable from a hundred real ones and would corrupt
+cost and health analytics. Optional and additive: no marker means `real`, so a host
+that never simulates is unaffected (HO-5/HO-6 preserved).
+
 ## 5. Implementation Notes
 
 1. `record_event` is called in the executor's hot path — the built-in no-op implementation costs a single indirect call.
@@ -281,6 +312,7 @@ the stream is machine-parseable not ad-hoc prose), counts-not-content descriptor
 
 | Version | Date | Author | Notes |
 | --- | --- | --- | --- |
+| 1.6.0 | 2026-07-07 | Core Team | Added HO-12 (execution-mode provenance) + §4.9 — the RunManifest declares the run's execution mode (real vs simulated, plus fidelity when simulated) so a consumer excludes simulated runs from real-run analytics (health scoring, HO-8 cost accounting, the outer evolution loop) and never mistakes a modeled play-out for production. nodus mocks nothing (host substitutes modeled providers to run in simulation, LP-1/LP-2); it only records the host-declared mode, making the trace self-describing — a real run is distinguishable from a simulated one from the manifest alone, as HO-10 distinguishes complete from truncated. Optional + additive (absent = real, today's behaviour), HO-5/HO-6 preserved. The nodus realization of the new main l1-simulation legible-fidelity / observable-play-out contract (SIM-3/SIM-6); same honesty family as HO-10 (completeness) and HO-11 (legibility). L1 stays Stable (C9); l2-nodus-observability carries HO-12 as a pending Invariant-Compliance obligation reconciled at magic.task (HO-8/HO-9/HO-10/HO-11 precedent). |
 | 1.5.0 | 2026-07-07 | Core Team | Added HO-11 (single-stream dual legibility) + §4.8 — an ExecutionEvent MAY carry an optional host-rendered human-legible one-line `message` derived from its own structured fields, so one AuditProvider stream serves both a human reader and a machine/AI analyzer without a second parallel prose log that can drift; the structured fields stay the source of truth (the rendering is a faithful projection that adds/contradicts no fact, LL-1/LL-2) and stays within §4.4 (descriptors/counts, never raw content); renderer + localization host-supplied (LP-2, no format/locale vocabulary in core), optional + additive so a host that renders nothing emits events as today, HO-5 observer-neutrality and HO-6 closed taxonomy preserved (an optional field on existing events, like HO-8/HO-9). Stream-bounding economy (payload policy, compaction, budget-bounded agent feed, LL-4/LL-8) stays host-side; nodus contributes the source-side pieces (HO-6 taxonomy, §4.4 counts-not-content, HO-7 sequence). The nodus realization of the new main l1-log-legibility single-canonical-event / dual-audience-faithfulness contract. L1 stays Stable (C9); l2-nodus-observability carries HO-11 as a pending Invariant-Compliance obligation reconciled at magic.task (HO-8/HO-9/HO-10 precedent). |
 | 1.4.0 | 2026-07-07 | Core Team | Added HO-10 (trace-completeness honesty) + §4.7 — a persisted trace is complete (carries a terminal RunManifest via run_complete) or explicitly truncated (events but no manifest), decidable from the trace alone; a headless fragment left by a killed/panicked/OOM'd host process MUST NOT be mistaken for a whole run. Extends HO-7's dropped-event gap detection to the truncated tail (missing records after the last event), so any trace classifies as complete / gap-damaged / truncated. nodus does not capture the terminating crash — that is the host's forensic diagnostic-log plane (nodus realization of the new main l1-diagnostic-log concept, DL-2); HO-10 guarantees only that the semantic trace never lies about its own completeness. Read-side interpretation of manifest presence/absence — no new hot-path emission, HO-5 observer-neutrality preserved (purely additive). L1 stays Stable (C9); l2-nodus-observability carries HO-10 as a pending Invariant-Compliance obligation reconciled at magic.task (HO-8/HO-9 precedent). |
 | 1.3.0 | 2026-07-02 | Core Team | Added HO-9 (execution-authenticity receipt) — a step's execution event MAY carry a host-supplied, model-unforgeable receipt binding step identity + observed result, so a verifier distinguishes a genuine step result from a fabricated one; signing mechanism host-supplied (LP-2, no crypto in core, mirroring the LP-9 attestation seam), receipt an opaque secret-free token within the data-safety boundary (signing secret never in trace/prompt/context), optional + additive so HO-5 observer neutrality holds, an optional field on existing events not a new event type (HO-6). The nodus realization of the new main l1-tool-receipts execution-authenticity contract. L1 stays Stable (C9); l2-nodus-observability carries HO-9 as a pending Invariant-Compliance obligation reconciled at magic.task. |
