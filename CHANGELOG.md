@@ -147,3 +147,4 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Added specification `interception-model` (main)
 - Added specification `diagnostic-log` (main)
 - Added specification `log-legibility` (main)
+- Updated specification `scheduler-model` (main)
