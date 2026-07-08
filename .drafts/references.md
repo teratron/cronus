@@ -6,6 +6,7 @@
 - <https://github.com/google-gemini/gemini-cli>
 - <https://github.com/openai/codex>
 - <https://github.com/QwenLM/qwen-code>
+- <https://github.com/QwenLM/Qwen-Agent>
 - <https://github.com/XiaomiMiMo/MiMo-Code>
 - <https://github.com/openclaw/openclaw>
 - <https://github.com/NVIDIA/NemoClaw>
@@ -36,6 +37,8 @@
 - <https://github.com/agentscope-ai/AgentTeams>
 - <https://github.com/agentrq/agentrq>
 - <https://github.com/stablyai/orca>
+- <https://github.com/nexu-io/open-design>
+- <https://github.com/linear/linear>
 
 ## Spec-Driven Development
 
@@ -58,6 +61,9 @@
 - <https://github.com/NevaMind-AI/memU>
 - <https://github.com/agentscope-ai/ReMe>
 - <https://github.com/moorcheh-ai/memanto>
+- <https://github.com/tinyhumansai/tinyjuice>
+- <https://github.com/tinyhumansai/tinycortex>
+- <https://github.com/awrshift/claude-memory-kit>
 
 ## Tools
 
@@ -78,6 +84,9 @@
 - <https://github.com/agentscope-ai/agentscope-runtime>
 - <https://github.com/agentscope-ai/PawBench>
 - <https://github.com/headroomlabs-ai/headroom>
+- <https://github.com/tinyhumansai/tiny.place>
+- <https://github.com/tinyhumansai/tinyflows>
+- <https://github.com/snyk/agent-scan>
 
 ## Harness
 
@@ -91,6 +100,8 @@
 - <https://github.com/omnigent-ai/omnigent>
 - <https://github.com/ruvnet/ruflo>
 - <https://github.com/ruvnet/agent-harness-generator>
+- <https://github.com/tinyhumansai/tinyagents>
+- <https://github.com/ShunsukeHayashi/gws-harness>
 
 ## UI/UX
 
