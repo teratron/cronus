@@ -1,6 +1,6 @@
 # Extension Registry
 
-**Version:** 1.1.0
+**Version:** 1.2.0
 **Status:** Stable
 **Layer:** implementation
 **Implements:** l1-extensions.md
@@ -16,6 +16,7 @@ The concrete extension system: the manifest format, where extensions live (progr
 - [l2-filesystem-layout.md](l2-filesystem-layout.md) - Preset (program) and custom (state) locations.
 - [l2-workflow-runtime.md](l2-workflow-runtime.md) - Skills authored as workflows run here.
 - [l2-cli.md](l2-cli.md) - Command grammar standard.
+- [l2-skill-system.md](l2-skill-system.md) - Canonical skill stores (`<program>/skills/`, `<state>/skills/`), execution stack, and conversion pipeline.
 
 ## 1. Motivation
 
@@ -35,9 +36,9 @@ The model needs a concrete registry with a uniform manifest so all three kinds c
 | EXT-2 Lifecycle | Registry states: discovered → permitted → active → inactive; use requires `active`. |
 | EXT-3 Default-deny | New/external extensions register as `discovered`; activation requires an explicit grant. |
 | EXT-4 Sandboxed | Plugins and MCP processes run via the security sandbox; tools cannot exceed grants. |
-| EXT-5 Preset + custom | Presets under `<program>/extensions/`; custom/generated under `<state>/extensions/`. |
+| EXT-5 Preset + custom | Preset skills under `<program>/skills/`, other preset kinds under `<program>/extensions/`; custom/generated skills under `<state>/skills/`, other custom kinds under `<state>/extensions/`. |
 | EXT-6 Scoped grants | Manifest `permissions` (fs/network/secrets) are minimal; network passes the egress gate. |
-| EXT-7 Skill generation | The curator distills patterns into candidate skills written to `<state>/extensions/skills/`. |
+| EXT-7 Skill generation | The curator distills patterns into candidate skills written to `<state>/skills/`. |
 | EXT-8 Provenance & audit | Each entry records `source`; activations and tool calls append to the audit log. |
 | EXT-9 Manifest contract | `extension.json` validated against a schema before activation. |
 
@@ -65,14 +66,16 @@ The model needs a concrete registry with a uniform manifest so all three kinds c
 ### 4.2 Locations
 
 ```plaintext
-<program>/extensions/        # read-only preset extensions (skills, bundled MCP configs)
+[MODIFIED]
+<program>/skills/            # read-only preset skill store (canonical packages)
+<program>/extensions/        # read-only preset non-skill extensions (bundled MCP configs, plugins)
+<state>/skills/              # custom + generated skills (canonical packages)
 <state>/extensions/
-├── skills/                  # custom + generated skills
 ├── mcp/                     # connected MCP server configs
 └── plugins/                 # installed plugins
 ```
 
-Skills also attach to roles (`<state>/employees/<role>/skills/`) and offices (`<ws>/skills/`); the registry indexes all scopes.
+Skills root at the top level of each tier (`<program>/skills/`, `<state>/skills/` — see the skill system spec); the other kinds live under `extensions/`. Skills also attach to roles (`<state>/employees/<role>/skills/`) and offices (`<ws>/skills/`); the registry indexes all scopes.
 
 ### 4.3 Connecting each kind
 
@@ -82,7 +85,7 @@ Skills also attach to roles (`<state>/employees/<role>/skills/`) and offices (`<
 
 ### 4.4 Skill generation
 
-The curator/archivist role detects recurring successful patterns and distills a candidate `SKILL` into `<state>/extensions/skills/`, marked `source: generated`, status `discovered` (inactive) pending review. <!-- TBD: distillation trigger threshold + whether generated skills auto-activate after N successful reuses -->
+The curator/archivist role detects recurring successful patterns and distills a candidate `SKILL` into `<state>/skills/`, marked `source: generated`, status `discovered` (inactive) pending review. <!-- TBD: distillation trigger threshold + whether generated skills auto-activate after N successful reuses -->
 
 ### 4.5 Plugin manifest extended schema
 
@@ -341,14 +344,14 @@ skills/
 
 ### 4.9.1 Skill pack override (shipped vs. user-owned)
 
-Shipped skills are read-only — they live in the system extensions directory and are replaced on upgrade. Users can override any shipped skill by placing an edited copy in the workspace skill scope (`<ws>/skills/<pack>/<name>.md`) or the user-scope skill directory (`<state>/extensions/skills/<pack>/<name>/SKILL.md`).
+Shipped skills are read-only — they live in the preset skill store and are replaced on upgrade. Users can override any shipped skill by placing an edited copy in the workspace skill scope (`<ws>/skills/<pack>/<name>.md`) or the user-scope skill store (`<state>/skills/<pack>/<name>/SKILL.md`).
 
 ```text
-[REFERENCE]
+[REFERENCE] [MODIFIED]
 Resolution order (first match wins):
   1. workspace skills     <ws>/skills/<pack>/<name>.md           (highest precedence)
-  2. user-scope skills    <state>/extensions/skills/<pack>/<name>/SKILL.md
-  3. shipped skills       <program>/extensions/skills/<pack>/<name>/SKILL.md
+  2. user-scope skills    <state>/skills/<pack>/<name>/SKILL.md
+  3. shipped skills       <program>/skills/<pack>/<name>/SKILL.md
 
 Override contract:
   - Updates to shipped skills NEVER overwrite user-owned copies.
@@ -958,3 +961,4 @@ of the default system prompt; the LLM learns about them only from the tool schem
 | Version | Date | Notes |
 | --- | --- | --- |
 | 1.1.0 | 2026-07-04 | Bounded-concurrent bulk install/verify (§Catalog operations): resolve/download/hash-verify/scan run concurrently per item under a cap; registration stays serialized through the registry's single writer; per-item failure isolation. History table added with this entry. |
+| 1.2.0 | 2026-07-08 | `[MODIFIED]` Skill store paths re-rooted to tier top level per the skill system spec: `<state>/extensions/skills/` → `<state>/skills/`, `<program>/extensions/skills/` → `<program>/skills/` (§4.2 Locations, §4.4 Skill generation, §4.9.1 override resolution, EXT-5/EXT-7 compliance rows); non-skill kinds remain under `extensions/`. Related Specifications link to the skill system spec added. Path alignment — status remains Stable. |

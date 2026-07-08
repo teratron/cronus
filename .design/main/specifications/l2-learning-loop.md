@@ -1,6 +1,6 @@
 # Learning Loop
 
-**Version:** 1.0.0
+**Version:** 1.1.0
 **Status:** Stable
 **Layer:** implementation
 **Implements:** l1-extensions.md, l1-memory-model.md
@@ -16,6 +16,7 @@ The concrete mechanism by which Cronus improves itself over time: a post-turn ba
 - [l2-extension-registry.md](l2-extension-registry.md) - Skill manifest format and lifecycle states.
 - [l2-memory-store.md](l2-memory-store.md) - Memory write targets for the review fork.
 - [l2-agent-session.md](l2-agent-session.md) - `should_review_memory` flag that gates the post-turn review.
+- [l2-skill-system.md](l2-skill-system.md) - The mutable skill store (`<state>/skills/`) and the canonical package/execution stack generated skills must conform to.
 
 ## 1. Motivation
 
@@ -89,19 +90,20 @@ Target library shape: class-level skills with rich `SKILL.md` and `references/` 
 
 ### 4.2 Skill package format
 
-Each skill is a directory (package) in `<state>/extensions/skills/<name>/`:
+Each skill is a directory (package) in `<state>/skills/<name>/` (the mutable skill store — see the skill system spec):
 
 ```plaintext
+[MODIFIED]
 <skill-name>/
 ├── SKILL.md          # Full spec: triggers, instructions, constraints, examples
 ├── DESCRIPTION.md    # Lightweight discovery file (name, one-line description, platform tags)
 ├── references/       # Progressive disclosure: session-specific detail, archived versions
 ├── templates/        # Reusable templates the skill produces
 ├── assets/           # Static assets the skill references
-└── scripts/          # Automation scripts the skill may invoke
+└── workflow.nd       # Optional procedure: nodus workflow over built-in commands (canonical stack)
 ```
 
-`references/`, `templates/`, `assets/`, and `scripts/` are **support directories** — never scanned as standalone skill roots. A `SKILL.md` inside `references/` is a preserved old version, not an active skill.
+`references/`, `templates/`, and `assets/` are **support directories** — never scanned as standalone skill roots. A `SKILL.md` inside `references/` is a preserved old version, not an active skill. Generated skills carry no interpreted scripts: procedural behavior is expressed as a nodus workflow per the canonical execution stack.
 
 Discovery: the registry indexes `SKILL.md` files that are not inside a support directory and not inside an excluded path (VCS metadata, virtualenvs, caches).
 
@@ -176,3 +178,11 @@ Generated skills enter at `discovered` (inactive) per EXT-3. User review and exp
 | `[MEM]` | `.design/main/specifications/l1-memory-model.md` | Curator role and scope lifecycle |
 | `[SESSION]` | `.design/main/specifications/l2-agent-session.md` | should_review_memory gate |
 | `[REGISTRY]` | `.design/main/specifications/l2-extension-registry.md` | Skill manifest + lifecycle states |
+| `[STORE]` | `.design/main/specifications/l2-skill-system.md` | Mutable skill store + canonical package form |
+
+## Document History
+
+| Version | Date | Notes |
+| --- | --- | --- |
+| 1.0.0 | 2026-06-25 | Initial stable spec — post-turn background review fork, skill package format, idle-triggered curator with lifecycle transitions. |
+| 1.1.0 | 2026-07-08 | `[MODIFIED]` Skill package path aligned to the mutable skill store (`<state>/extensions/skills/` → `<state>/skills/`); package tree aligned to the canonical execution stack (`scripts/` support directory replaced by optional `workflow.nd` — generated skills carry no interpreted scripts). Related Specifications + Canonical References link to the skill system spec. History table added with this entry. Path alignment — status remains Stable. |

@@ -1,6 +1,6 @@
 # Filesystem Layout (OS-native)
 
-**Version:** 1.0.0
+**Version:** 1.1.0
 **Status:** Stable
 **Layer:** implementation
 **Implements:** l1-storage-model.md
@@ -14,6 +14,7 @@ The concrete on-disk realization of the storage model: OS-native install locatio
 - [l1-storage-model.md](l1-storage-model.md) - The model this layout implements.
 - [l2-technology-stack.md](l2-technology-stack.md) - SQLite + sqlite-vec; optional libSQL/PostgreSQL sync.
 - [l2-core-library.md](l2-core-library.md) - The core resolves these paths and owns persistence.
+- [l2-skill-system.md](l2-skill-system.md) - The two-tier skill stores rooted at `<program>/skills/` and `<state>/skills/`.
 
 ## 1. Motivation
 
@@ -59,6 +60,7 @@ A single path resolver in the core maps the abstract roots (`<program>`, `<state
 ├── app/            # core engine library + desktop application shell
 ├── templates/      # employee/ , workspace/ (blueprints copied on init)
 ├── employees/      # read-only role catalog (CATALOG.md + role blueprints)
+├── skills/         # [ADDED] read-only preset skill store (canonical packages)
 ├── languages/  themes/
 └── VERSION
 ```
@@ -71,7 +73,7 @@ A single path resolver in the core maps the abstract roots (`<program>`, `<state
 ├── app.json  config.json  auth.json  channels.json  models.json  routing.json  gateway.json
 ├── AGENTS.md
 ├── memory/               # GLOBAL: global.db (SQLite+vec), graph.db, notes/
-├── skills/               # globally learned skills
+├── skills/               # [MODIFIED] mutable skill store: user-added + generated (canonical packages)
 ├── employees/<role>/     # EMPLOYEE: config.json, RULES.md, memory/, skills/, skins/
 └── workspaces/<ws>/      # WORKSPACE (office)
     ├── config.json  RULES.md  STATE.md
@@ -114,3 +116,10 @@ Physical consolidation (one file with attached schemas vs separate files per lev
 | `[MODEL]` | `.design/main/specifications/l1-storage-model.md` | Invariants this layout satisfies |
 | `[STACK]` | `.design/main/specifications/l2-technology-stack.md` | Storage engine choices |
 | `[STUB]` | `.release/` | On-disk visualization of both tiers |
+
+## Document History
+
+| Version | Date | Notes |
+| --- | --- | --- |
+| 1.0.0 | 2026-06-24 | Initial stable spec — OS-native tier locations, program/state trees, database placement, repository visualization stub. |
+| 1.1.0 | 2026-07-08 | `[ADDED]` `<program>/skills/` (read-only preset skill store) to the program tier tree; `[MODIFIED]` `<state>/skills/` comment to reflect the mutable skill store (user-added + generated canonical packages); Related Specifications link to the skill system spec. Additive — status remains Stable. |
