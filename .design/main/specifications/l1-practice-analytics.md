@@ -1,6 +1,6 @@
 # Practice Analytics & Coaching Engine
 
-**Version:** 1.0.0
+**Version:** 1.1.0
 **Status:** Stable
 **Layer:** concept
 
@@ -148,6 +148,21 @@ Rules that any Layer 2 implementation MUST NOT violate:
   inline test fixtures are checked at load time so a rule that fails its own
   fixtures is rejected rather than silently shipped.
 
+- **PA-15 — Agent-Initiated Retrospective → Consolidated Plan.** [ADDED v1.1.0]
+  Beyond the passive, dashboard-consumed findings, the office MAY *initiate its own*
+  retrospective — the agent asking "where am I losing time?" — that runs the same
+  detectors and rules (PA-1/PA-2) across a chosen scope (one session, one
+  office/project, or all history) and consolidates the resulting findings, scores, and
+  mined clusters into a single **prioritized improvement plan**: highest-cost habits
+  first, each carrying its concrete remedy (PA-11) and, where applicable, the skill
+  candidate that would eliminate it (PA-12). The retrospective obeys every other
+  invariant — read-only (PA-10), honest about coverage and abstaining on thin samples
+  (PA-7/PA-8). The plan is a *recommendation handed off*, never an auto-applied change
+  (PA-12): the office and its human decide what to act on. This makes self-diagnosis a
+  first-class agent-initiated act *over the existing engine*, not a second engine —
+  nothing new is measured, the novelty is the self-directed, cross-scope, plan-shaped
+  consumption of what the engine already produces.
+
 > An L2 spec cannot reach RFC status until all PA invariants are addressed in its
 > "Invariant Compliance" section.
 
@@ -286,6 +301,26 @@ and by time, with the structurally-impossible cases excluded from the denominato
 A score with poor coverage is labelled as such rather than presented as
 authoritative.
 
+### 5.4 Self-Directed Retrospective (PA-15)
+
+The engine is normally a passive projection the dashboard consumes. PA-15 adds one
+active entry point: the agent, on its own initiative or a schedule, runs the pipeline
+over a chosen scope and folds the output into a ranked plan.
+
+```text
+[REFERENCE]
+retrospect(scope ∈ {session, office, all-history}):
+    findings, scores, clusters := run_pipeline(scope)      # PA-1..PA-9, PA-12 — same engine
+    plan := prioritize(findings + clusters by cost/impact)  # highest-cost habit first
+    for each item: attach remedy (PA-11) + skill candidate if any (PA-12)
+    return plan                 # a recommendation, handed off — never auto-applied (PA-10/PA-12)
+```
+
+"Where am I losing time?" resolves to: run the detectors over my own history, rank
+what they find by cost, and present the fixes. Nothing new is measured; the novelty is
+the self-directed, cross-scope, plan-shaped consumption of what the engine already
+produces — the active complement to the passive dashboard read.
+
 ## 6. Context & Configuration Health (PA-13)
 
 A secondary projection audits the *static* context an office presents to its
@@ -392,4 +427,5 @@ Mechanics worth importing, in plain language, and where each lands in the projec
 
 | Version | Date | Change |
 | --- | --- | --- |
+| 1.1.0 | 2026-07-07 | PA-15 added — agent-initiated retrospective → consolidated plan: the office may initiate its own "where am I losing time?" retrospective that runs the same detectors/rules (PA-1/PA-2) across a chosen scope (session / office / all-history) and consolidates findings + scores + mined clusters into one prioritized improvement plan (highest-cost habit first, each with its PA-11 remedy and any PA-12 skill candidate); read-only and honest (PA-7/PA-8/PA-10), the plan handed off never auto-applied (PA-12). Self-diagnosis as a first-class agent-initiated act *over the existing engine*, not a new engine; §5.4 added. Additive — L1 stays Stable; L2 implementers carry PA-15 pending a magic.task reconciliation. |
 | 1.0.0 | 2026-06-25 | Initial specification: PA-1…PA-14 invariants; data-driven rule engine (detector/rule split, metric DSL, trust-gated layered sources), normalized cross-runtime trace model with honest data-gap accounting, severity-weighted practice scoring, context/config health auditing, and workflow-to-skill mining. |

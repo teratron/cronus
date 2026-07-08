@@ -1,6 +1,6 @@
 # Smart Routing
 
-**Version:** 1.2.0
+**Version:** 1.3.0
 **Status:** Stable
 **Layer:** concept
 
@@ -44,6 +44,8 @@ Rules every Layer 2 implementation MUST NOT violate:
 
 - **RTG-10 (Credential-lane routing — cache-warm, scope-safe):** [ADDED v1.2.0] when the same model is reachable through more than one **credential lane** (a metered API key vs a subscription or borrowed-session credential), the lane is a first-class routing signal, not an afterthought. Two rules bind lane selection: (a) **cache warmth** — a continuing session prefers the lane/upstream it used before, because a lane switch abandons the provider-side cached prefix and forfeits its discount (composes with `l1-cache-stable-context.md`); (b) **scope safety** — lane selection MUST NOT leak or invalidate the chosen credential's scope: no injecting lane-revealing headers, no auto-actions (e.g. auto-inserting provider cache markers) that could void a subscription's terms. When a cheaper lane is available but switching would bust a warm cache, the router weighs the cache-read saving against the per-token delta rather than switching blindly, and records the decision (RTG-7).
 
+- **RTG-11 (User-adjustable effort, office-autonomy default):** [ADDED v1.3.0] the reasoning **effort** a model applies to a request — a low↔high scale (a quick answer at one end, deep deliberation at the other) — is a first-class routing signal. By default the office chooses effort autonomously per task: the professionals judge how much thinking a task warrants (consistent with the autonomy posture and RTG-9's per-function economy). The human MAY set or bias the effort scale — globally, per office, or for a single request — and a human-set effort is honoured as an **envelope the office routes within**, not a value that seizes the per-task decision: the office still selects the concrete model + configuration, but within the human's floor / ceiling / bias. Higher effort costs more and is bounded by budget (composes the generation-budget), and the resolved effort is traceable like any routing choice (RTG-7). This is a participation lever — the human feels and exercises real control over how hard the models work without micromanaging each task the office is better placed to size. Absent any human setting, the office's autonomous per-task effort choice stands.
+
 > L2 specs cannot reach RFC status until all invariants here are addressed in their "Invariant Compliance" section.
 
 ## 4. Detailed Design
@@ -66,7 +68,7 @@ graph TD
 
 | Router | Chooses | Key signals |
 | --- | --- | --- |
-| model | which LLM answers a user prompt | task difficulty, cost, token count, capability, latency, quota, local feasibility, credential lane + cache warmth (RTG-10) |
+| model | which LLM answers a user prompt | task difficulty, cost, token count, capability, latency, quota, local feasibility, credential lane + cache warmth (RTG-10), effort within the human envelope (RTG-11) |
 | auxiliary | which model serves an internal function (titling, triage, decomposition, profiling, summarization, curation, vision, approval) | function identity, cost, latency, capability, local feasibility |
 | memory | which memories to recall / where to write | scope specificity, similarity, tags, utility |
 | rules | which rules apply to a context | scope specificity (global/workspace/role) |
@@ -101,6 +103,25 @@ Resolution per role:  configured binding (RTG-5) → economical default → fall
 
 Decoupling these roles keeps housekeeping cheap and the user-facing budget intact, lets a capability-bound role (vision) pick an appropriate model without affecting the chat route, and makes each chore's model independently tunable. A role left unconfigured resolves to its economical default rather than silently inheriting the premium conversational model.
 
+### 4.5 The effort scale [ADDED v1.3.0]
+
+```text
+[REFERENCE]
+effort ∈ [low .. high]        # a quick answer  ← → deep deliberation
+
+default:    office chooses effort per task (autonomous, cost-aware — RTG-9 economy)
+human sets: an ENVELOPE — a floor, a ceiling, or a bias — global | per-office | per-request
+resolve:    office picks the concrete model + config WITHIN the human envelope
+            (human effort narrows/biases; the office still decides; RTG-7 traces the pick)
+bound:      higher effort ⇒ higher cost, clamped by budget (generation-budget)
+```
+
+The scale keeps two things true at once: the office (the professionals) still makes
+the concrete per-task call it is best placed to make, and the human has a real,
+legible lever over how hard the models work — participation without micromanagement.
+A human who never touches the scale changes nothing; the office's autonomous choice
+is the default (RTG-11).
+
 - **Mis-routing risk:** a bad policy picks poorly; mitigated by traceability (RTG-7) and tunable config (RTG-5).
 - **Cache staleness:** semantic cache can return outdated results. <!-- TBD: cache invalidation/TTL policy per router -->
 - **Alternative — fixed choices:** rejected; loses cost/privacy optimization and graceful degradation.
@@ -120,3 +141,4 @@ Decoupling these roles keeps housekeeping cheap and the user-facing budget intac
 | 1.0.0 | 2026-06-24 | Initial stable spec — router pattern (multi-signal selection + fallback + cache), RTG-1…RTG-8, model/memory/rules/session applications |
 | 1.1.0 | 2026-06-25 | RTG-9 added — function-scoped model roles: internal LLM chores (titling, triage, decomposition, profiling, summarization/compression, curation, vision, approval) resolve through dedicated economical-by-default auxiliary bindings, never the premium user-facing route by default. `auxiliary` routing application added to §4.2; §4.3 default extended; §4.4 added. Additive invariant — the four L2 implementers (l2-model-router, l2-context-router, l2-agent-session, l2-model-error-recovery) carry RTG-9 as unaddressed pending a `magic.task` reconciliation; L1 remains Stable (no destabilization cascade). |
 | 1.2.0 | 2026-07-02 | RTG-10 added — credential-lane routing: when one model is reachable via multiple credential lanes (metered API vs subscription/session), lane is a first-class signal bound by cache-warmth (a continuing session prefers its prior lane to keep the provider cached prefix valid) and scope-safety (lane choice never leaks or voids a credential scope; no auto cache-marker injection). `model` router signals extended in §4.2; composes with l1-cache-stable-context (CSC-9). Additive — L1 stays Stable; L2 model-router carries RTG-10 pending a magic.task reconciliation. |
+| 1.3.0 | 2026-07-07 | RTG-11 added — user-adjustable model effort with office-autonomy default: the reasoning effort a model applies (low↔high, quick↔deep) is a first-class routing signal; the office chooses effort autonomously per task by default, while the human MAY set a floor/ceiling/bias envelope (global/per-office/per-request) the office routes within — the human gets a real, traceable lever over how hard the models work without seizing the per-task decision the office is better placed to make, higher effort cost-bounded by the generation-budget. `model` signals extended in §4.2; §4.5 added. Additive — L1 stays Stable; the model-router/error-recovery L2s carry RTG-11 pending a magic.task reconciliation. |
