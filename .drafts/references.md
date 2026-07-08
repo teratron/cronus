@@ -63,6 +63,7 @@
 - <https://github.com/moorcheh-ai/memanto>
 - <https://github.com/tinyhumansai/tinyjuice>
 - <https://github.com/tinyhumansai/tinycortex>
+- <https://github.com/awrshift/claude-memory-kit>
 
 ## Tools
 
@@ -100,6 +101,7 @@
 - <https://github.com/ruvnet/ruflo>
 - <https://github.com/ruvnet/agent-harness-generator>
 - <https://github.com/tinyhumansai/tinyagents>
+- <https://github.com/ShunsukeHayashi/gws-harness>
 
 ## UI/UX
 
