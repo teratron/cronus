@@ -1,6 +1,6 @@
 # Harness Optimization
 
-**Version:** 1.0.0
+**Version:** 1.1.0
 **Status:** Stable
 **Layer:** concept
 
@@ -134,6 +134,26 @@ Rules every Layer 2 implementation MUST NOT violate:
   (no lost updates under parallel evaluation) and are observable, so the search is
   auditable, **resumable** across restarts, and the frontier's evolution is inspectable.
 
+- **HX-11 Budget-normalized evaluation & mutation-invariant metric**: [ADDED v1.1.0]
+  when candidates in one search differ in dimensions that affect resource consumption
+  (size, structure, strategy), their evaluations MUST be **budget-comparable**: the
+  preferred design is **budget normalization** — the evaluation contract fixes the
+  **resource budget** (wall-clock, compute, tokens, trials), not the workload, and every
+  candidate is measured on **outcome achieved within that fixed budget** — so radically
+  heterogeneous candidates compete directly and fairly, and efficiency is absorbed into
+  the outcome (a faster candidate does more inside the budget) instead of being a second
+  axis to hand-weigh. Where budgets do differ, the difference **partitions the frontier**
+  (HX-7, sharpening the comparability contract's a-longer-budget-is-a-different-task
+  rule into a design principle): scores earned under different budgets never compete.
+  A budget-normalized optimum is honestly **platform-relative** — the best candidate
+  *for this platform within this budget* — so the budget and the platform are recorded
+  with every score (composing MR-14's estimate-vs-measurement honesty). And the scoring
+  **metric MUST be mutation-invariant**: chosen so it remains meaningful across the
+  *entire* mutable candidate space — a candidate mutation MUST NOT be able to change
+  what the metric measures (a metric a mutation can redefine lets the search optimize
+  the metric's blind spot rather than the outcome, a criteria-drift sibling of the
+  loop-governance oracle-ownership rule).
+
 > L2 specs cannot reach RFC status until all invariants here are addressed in their "Invariant Compliance" section.
 
 ## 4. Detailed Design
@@ -261,4 +281,5 @@ evolver, or a runtime.
 
 | Version | Date | Author | Notes |
 | --- | --- | --- | --- |
+| 1.1.0 | 2026-07-09 | Core Team | Added HX-11 (budget-normalized evaluation & mutation-invariant metric) — when candidates in one search differ in resource-affecting dimensions, evaluations MUST be budget-comparable: preferred design is budget normalization (the evaluation contract fixes the resource budget — wall-clock/compute/tokens/trials — not the workload, every candidate measured on outcome-within-fixed-budget), so radically heterogeneous candidates compete directly, efficiency is absorbed into the outcome rather than hand-weighed as a second axis, and the optimum is honestly platform-relative (budget + platform recorded with every score, composing MR-14 estimate-vs-measurement honesty); differing budgets partition the frontier (HX-7, sharpening the ACE-5 a-longer-budget-is-a-different-task row into a design principle), scores under different budgets never competing; and the scoring metric MUST be mutation-invariant — chosen to remain meaningful across the entire mutable candidate space, a mutation never able to change what the metric measures (a criteria-drift sibling of the loop-governance oracle-ownership rule). Invariant-only addition. Distilled from an adoption pass over an external autonomous-experimentation-loop reference whose core (autonomous modify→run→measure→keep/discard loop, mutable-surface restriction with an immutable oracle, experiment journal) was already realized by HX-1…HX-10 + l1-loop-governance mutation-rights/oracle-ownership + NE-12 — HX-11 captures the genuine delta (fixed-budget comparability + metric invariance). L1 stays Stable (C9, additive); the nodus realization is l1-nodus-environment NE-13. |
 | 1.0.0 | 2026-07-02 | Core Team | Initial spec — harness optimization as an outer-loop search over a candidate space, the third activity beside harness-engineering (evolve one) and agent-coevaluation (measure): searchable space (HX-1); outer-loop/inner-runtime separation (HX-2); content-addressed archived candidates with provenance (HX-3); trace-rich proposer reading source+scores+traces (HX-4); declared bounded wrapper-first mutation space (HX-5); frontier of non-dominated candidates across the objective vector, not a scalar best (HX-6); comparability-partitioned frontier + task-selection-hash-guarded baseline reuse or fresh run (HX-7); regression-bounded, held-out-honest, train/eval-disjoint, reward-hacking-guarded acceptance (HX-8); budgeted terminating search (HX-9); durable, concurrency-safe, resumable, observable frontier (HX-10). Composes harness-engineering / agent-coevaluation / evaluation-suites / attestation / nodus-environment; adds the search+frontier layer none owned. HX-8 also formalizes the reward-hacking-filter + train/eval-disjointness mechanic. |
