@@ -80,7 +80,7 @@ Track T — Validation
 - **Spec:** l2-source-layout.md §4.1
 - **Status:** Done
 - **Verify:** `cargo metadata --no-deps` lists `cronus`, `nodus`, `cronus-cli`, `cronus-tui`; `cargo build` exit 0 (4 crates).
-- **Changes:** Root Cargo workspace (edition 2024, pinned 1.96); 4 member crates. `nodus` empty lib (port in Phase 2).
+- **Changes:** Root Cargo workspace (edition 2024, pinned 1.97); 4 member crates. `nodus` empty lib (port in Phase 2).
 
 ### [T-1A02] JS workspace + Tauri scaffold
 
