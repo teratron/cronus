@@ -87,6 +87,7 @@
 - <https://github.com/tinyhumansai/tiny.place>
 - <https://github.com/tinyhumansai/tinyflows>
 - <https://github.com/snyk/agent-scan>
+- <https://github.com/karpathy/autoresearch>
 
 ## Harness
 
