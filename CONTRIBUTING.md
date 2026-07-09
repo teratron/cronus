@@ -30,6 +30,7 @@ The runtime resolves these paths through a single path resolver. Cache and logs 
 │   ├── employee/   # Skeleton for a hired employee (config, rules, memory, skills, skins).
 │   └── workspace/  # Skeleton for an office/project workspace.
 ├── employees/      # Read-only role CATALOG (hireable specialists). See employees/CATALOG.md.
+├── skills/         # Globally skills.
 ├── languages/      # Language packs: prompt locales and UI localization.
 ├── themes/         # UI themes and skins.
 └── VERSION         # Program/engine version (update contract).
