@@ -162,3 +162,4 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Added specification `pattern-codification` (main)
 - Added specification `provenance-taint` (main)
 - Added specification `action-gating` (main)
+- Added specification `recursive-decomposition` (main)
