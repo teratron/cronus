@@ -1,6 +1,6 @@
 # Work Convergence
 
-**Version:** 1.0.0
+**Version:** 1.1.0
 **Status:** Stable
 **Layer:** concept
 
@@ -19,6 +19,7 @@ This is a **model-spec** — a sibling to [l1-kanban-model.md](l1-kanban-model.m
 - [l1-work-liveness.md](l1-work-liveness.md) - The affirmative liveness contract (WL-3) is why the board can hold no silently-dead work; convergence makes the board the surface that contract keeps honest.
 - [l1-office-model.md](l1-office-model.md) - Managed work lifecycle (OFF-7) and client-not-managing (OFF-5); convergence never shifts board management to the client.
 - [l1-global-orchestration.md](l1-global-orchestration.md) - Building-level unified visibility (GO-4) is a read-only projection *of* office boards; convergence makes each board the ground truth those views roll up from.
+- [l1-work-import.md](l1-work-import.md) - Onboarding migration of an existing external backlog; imported work-items are a *materialize* stream (§4.2) that lands as canonical cards, never a shadow queue.
 
 ## 1. Motivation
 
@@ -40,7 +41,7 @@ The subtlety this spec resolves is that "everything goes through the board" does
 
 Rules every Layer 2 implementation MUST NOT violate:
 
-- **CONV-1 (Single activity surface — no shadow work):** an office's Kanban board is the one canonical, legible surface for all of its activity. Every stream — client-originated tasks, scheduled fires, the autonomous pulse, automation reactions — relates to that board; none executes entirely off-board and invisible. "What is this office doing" MUST be answerable by reading one board.
+- **CONV-1 (Single activity surface — no shadow work):** an office's Kanban board is the one canonical, legible surface for all of its activity. Every stream — client-originated tasks, scheduled fires, the autonomous pulse, automation reactions, onboarding imports of an existing external backlog — relates to that board; none executes entirely off-board and invisible. "What is this office doing" MUST be answerable by reading one board.
 - **CONV-2 (Three convergence relations):** every activity event relates to the board through exactly one declared relation: **materialize** (creates a persistent pipeline card), **drive** (advances or transitions existing cards without creating one), or **surface** (emits an observable, traceable signal that never enters the pipeline). A stream MUST declare which relation(s) it uses; "touches work but shows nothing on the board" is forbidden.
 - **CONV-3 (One kind of work unit — the card):** convergence introduces no parallel work representation. When activity *materializes* work, the unit is a Kanban card obeying the canonical pipeline (KAN-1, KAN-5). There is never a second, hidden queue of work units running alongside the board.
 - **CONV-4 (Pulse drives, never manufactures):** the autonomous pulse/heartbeat's convergence relation is **drive** — it rouses the office to advance work that already exists and MUST NOT materialize a card (reaffirming SCH-4). "The pulse passes through the board" means precisely that the pulse's only effect is to move board cards, not to spawn them.
@@ -59,7 +60,7 @@ Every activity event answers one question — *how does this touch the board?* �
 
 | Relation | Effect on the board | The card | Example streams |
 | --- | --- | --- | --- |
-| **materialize** | a new card enters the pipeline (at `triage`/`todo`) | created | a client task, a `routine` schedule fire, work spawned by an automation |
+| **materialize** | a new card enters the pipeline (at `triage`/`todo`) | created | a client task, a `routine` schedule fire, work spawned by an automation, an imported external work-item (onboarding migration) |
 | **drive** | one or more existing cards advance / transition | moved, not created | the pulse/`wake` heartbeat, an automation acting on `kanban_event`, the manager routing work |
 | **surface** | an observable signal is emitted, traceable, outside the pipeline | none | a `reminder` fire, a notification, a status announcement |
 
@@ -74,9 +75,12 @@ graph LR
     PULSE[Pulse: wake / heartbeat] -->|drive| BOARD
     AUTO[Automation: kanban_event / action] -->|drive| BOARD
     AUTOWORK[Automation-spawned work] -->|materialize| BOARD
+    IMPORT[Onboarding import of external backlog] -->|materialize| BOARD
     REMIND[Schedule: reminder] -.->|surface| BOARD
     BOARD -->|read-only projection| AGG[Building-level view]
 ```
+
+Onboarding import (a bounded, one-directional migration of an existing external backlog) is a **materialize** stream: each imported work-item becomes a canonical card, entering through triage exactly as any other materialized work, never a shadow queue. The migration mechanics — source adapters, entity reconciliation, provenance — are owned by [l1-work-import.md](l1-work-import.md); convergence owns only that its output lands on the one board.
 
 | Stream | Convergence relation | Governing invariant | Composes |
 | --- | --- | --- | --- |
@@ -108,6 +112,7 @@ CONV-3 and CONV-6 together forbid the most common way convergence erodes in prac
 | Version | Date | Change |
 | --- | --- | --- |
 | 1.0.0 | 2026-07-02 | Initial concept: convergence contract (CONV-1…8) binding every activity stream (task, `routine`, pulse, `reminder`, automation) to the single Kanban board via three relations — materialize / drive / surface; reconciles the pulse with SCH-4 as *drive*, not *materialize*. |
+| 1.1.0 | 2026-07-09 | Onboarding import of an existing external backlog added as a **materialize** stream — CONV-1 enumeration, §4.1 materialize examples, and the §4.2 stream→relation map extended so imported work-items land as canonical cards through triage, never a shadow queue; migration mechanics delegated to the new l1-work-import (source adapters / entity reconciliation / provenance). Additive — no CONV invariant changes (materialize already covered it); L1 stays Stable (C9). |
 
 ## Canonical References
 
