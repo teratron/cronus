@@ -152,3 +152,4 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Added specification `dev-office` (main)
 - Added specification `system-readout` (main)
 - Added specification `component-scanning` (main)
+- Added specification `iterative-refinement` (main)
