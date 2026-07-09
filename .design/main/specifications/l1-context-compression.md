@@ -1,6 +1,6 @@
 # Context Compression
 
-**Version:** 1.2.0
+**Version:** 1.3.0
 **Status:** Stable
 **Layer:** concept
 
@@ -47,6 +47,8 @@ Rules every Layer 2 implementation MUST NOT violate:
 - **CC-9 (Protected-region deny-list):** [ADDED v1.1.0] eligibility (CC-4) is overridden by a hard deny-list that is never compressed regardless of size or redundancy: (a) content the caller explicitly tags as protected, (b) safety-critical content whose exact form is load-bearing, and (c) cryptographic signatures and encrypted/redacted reasoning payloads. The deny-list is checked first; a size or redundancy heuristic can never promote a denied region into eligibility. This makes the fidelity guarantee (CC-2) unconditional for regions where any loss is unacceptable, and aligns with the sacrosanct-field rule of the cache-stability contract (`l1-cache-stable-context.md` CSC-7).
 
 - **CC-10 (Memory-safe lossy reduction):** [ADDED v1.2.0] the *lossy* stages of the token-economy family — summarization/compaction and hard eviction (§4.1, owned by `l2-context-management`) — MUST NOT be the point at which durable knowledge is lost. Durable knowledge carried by the history being reduced — user preferences, decisions, commitments, in-flight task state — MUST already be secured in the persistent memory store before the reduction discards the transcript that held it. A lossy reduction is thereby loss-of-*detail*, never loss-of-*knowledge*: what summarization drops is redundancy the memory subsystem already holds. This is distinct from CC-3, which keeps a *compressed* original recoverable via a handle — CC-3 protects the reversible stage; CC-10 protects the lossy stages, where **no inline original survives**, so the safety net is the memory subsystem, not a retrieval handle. Continuous per-turn capture (the memory subsystem's normal operation) satisfies CC-10 while it keeps pace; when a reduction is imminent and capture may be behind, a **pre-reduction capture pass** secures durable knowledge first. That pass is ordered-before but best-effort: its failure is non-fatal and retried on the next cycle, and it never blocks the user-facing turn — but a reduction MUST NOT be reported as knowledge-safe on the strength of a capture pass that did not actually run.
+
+- **CC-11 (Content-type-routed, signal-preserving reduction):** [ADDED v1.3.0] the compression transform is **selected by detecting the content's type or producing command** — structured logs, a diff, a JSON blob, a source file, a markup page, or the output of a recognized command (a package manager, a container/orchestration tool, a test runner, a search) — and each type's reducer is **signal-preserving**: it keeps the high-value elements characteristic of that type (errors, warnings, and stack traces in a log; file and hunk headers and changed lines in a diff; imports, signatures, and top-level structure in code; schema shape and anomaly rows in JSON; readable text in markup; top matches and counts in search results) and collapses only the redundant remainder. Reduction is **deterministic-first**: content with **no structural reducer** (free prose) passes through **untouched** unless the host explicitly enables a semantic (model-based) reducer — a blanket truncation that ignores the content's shape is forbidden, because it drops signal and noise indiscriminately. This sharpens CC-1 (the dense re-encoding is *type-specific*, not one blanket transform) and CC-4 (eligibility gains a *how* — detect → route → preserve the type's signal), and it keeps CC-2's fidelity guarantee substantive: a reducer preserves what matters *for its type* rather than trimming to a byte budget blind to structure. Which types and commands are recognized, and their concrete reducers, are an L2 catalog.
 
 > L2 specs cannot reach RFC status until all invariants here are addressed in their "Invariant Compliance" section.
 
@@ -140,6 +142,24 @@ where recall can reach it later — independent of whether this session's transc
 still holds it. This is the coupling that makes an indefinitely-running session shed
 transcript bulk without ever losing what it learned.
 
+### 4.7 Content-type-routed reduction — detect, route, preserve signal [ADDED v1.3.0]
+
+CC-11 makes reduction structure-aware rather than a blanket byte-trim:
+
+```text
+[REFERENCE]
+compress(content):
+    kind := detect(content)                    // json | log | diff | code | markup | search | <command>-output | prose
+    reducer := route(kind)                      // a signal-preserving reducer per type
+    if reducer is None:                          // no structural reducer for this kind
+        if host.semantic_reducer_enabled:  return summarize_semantically(content)   // opt-in, model-based
+        else:                              return content unchanged                 // deterministic-first: pass through
+    dense, dropped := reducer(content)          // keep the type's signal, collapse the redundancy
+    return dense + marker(dropped)              // CC-5 marks what was dropped; CC-3 keeps the original recoverable
+```
+
+Two properties keep it honest. First, **signal-preservation over byte-budget**: a log reducer keeps every error and stack trace and folds the passing chatter; a diff reducer keeps every changed hunk and drops unchanged context; a code reducer keeps signatures and structure and elides bodies — each keeps *what the agent reasons over* for that type, which a size-blind truncation cannot. Second, **deterministic-first**: recognized structure is reduced by a deterministic reducer (cheap, exact, no model call); only unstructured prose, and only when the host opts in, is handed to a semantic reducer — so compression never silently spends a model call or paraphrases where a faithful structural reshape was available. The catalog of recognized types/commands and their reducers is an L2 concern; the L1 rule is *detect → route → preserve the type's signal, deterministic-first*.
+
 ## 5. Drawbacks & Alternatives
 
 - **Fidelity risk:** an over-aggressive transform can drop information the agent needed; mitigated by CC-2 (bounded, declared loss), CC-3 (recoverable original), and CC-4 (conservative eligibility). The safe default is lossless.
@@ -161,5 +181,6 @@ transcript bulk without ever losing what it learned.
 | Version | Date | Author | Notes |
 | --- | --- | --- | --- |
 | 1.2.0 | 2026-07-02 | Core Team | Added CC-10 (memory-safe lossy reduction — the lossy stages summarization/compaction + hard eviction MUST be preceded by durable capture into the persistent memory store, so a lossy reduction is loss-of-detail never loss-of-knowledge; distinct from CC-3 which keeps a compressed original recoverable by handle — CC-10 protects the lossy stages where no inline original survives, so the safety net is memory not a handle; satisfied by continuous per-turn capture while it keeps pace, backstopped by an ordered-before best-effort pre-reduction capture pass whose failure is non-fatal/retried and never blocks the turn) + §4.6 (capture-before-reduce pseudocode + memory-gated family table). Couples the token-economy family to the memory subsystem: an indefinitely-running session sheds transcript bulk without losing what it learned. |
+| 1.3.0 | 2026-07-09 | Core Team | Added CC-11 (content-type-routed, signal-preserving reduction) + §4.7 — the compression transform is selected by detecting the content's type or producing command (structured logs, diff, JSON, source, markup, search results, or a recognized command's output — package manager / container-orchestration / test-runner), and each type's reducer is signal-preserving: it keeps the high-value elements characteristic of that type (errors + stack traces in a log, file/hunk headers + changed lines in a diff, imports + signatures + top-level structure in code, schema shape + anomaly rows in JSON, readable text in markup, top matches + counts in search) and collapses only the redundant remainder; deterministic-first — content with no structural reducer (free prose) passes through untouched unless the host explicitly enables a semantic model-based reducer, a blanket structure-blind truncation being forbidden; sharpens CC-1 (dense re-encoding is type-specific not one blanket transform) and CC-4 (eligibility gains a how: detect → route → preserve-the-type's-signal), keeping CC-2's fidelity guarantee substantive; the concrete type/command catalog + reducers are an L2 concern. Distilled from an adoption pass over an external tool-output token-compression reference whose core (recoverable-original-behind-a-handle, fidelity-bound, content-aware eligibility, model legibility, accounting) was already realized by CC-1…CC-10 + §4.5 compress-cache-retrieve — CC-11 captures the one genuine delta (type-routed signal-preserving reduction). L1 stays Stable (C9, additive). |
 | 1.1.0 | 2026-07-02 | Core Team | Added CC-9 (protected-region deny-list — caller-tagged / safety-critical / crypto-thinking content never compressed regardless of size, overriding CC-4 eligibility) and §4.5 (compress-cache-retrieve realization of CC-3 — content-addressed retrieval handle + pluggable store + TTL, lossy-on-wire/lossless-end-to-end, retrieval as a normal tool call). Linked to l1-cache-stable-context (compression is a live-zone-only transform, CSC-2). |
 | 1.0.0 | 2026-06-26 | Core Team | Initial spec — context compression as the third token-economy stage beside selection and summarization: reversible/fidelity-bounded dense re-encoding of high-volume content, recoverable originals, content-aware eligibility, model legibility, accounting, ordering-before-eviction, composable-safe stacking (CC-1…CC-8). |
