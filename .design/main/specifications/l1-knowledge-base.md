@@ -1,6 +1,6 @@
 # Knowledge Base
 
-**Version:** 1.1.0
+**Version:** 1.2.0
 **Status:** Stable
 **Layer:** concept
 
@@ -41,6 +41,7 @@ Rules every Layer 2 implementation MUST NOT violate:
 - **KB-8 (Soft deletion):** removing a document from a collection marks it deleted and removes it from retrieval immediately; physical cleanup (storage + index cleanup) is deferred.
 - **KB-9 (Authorship zones):** within a collection, documents carry an authorship origin that places them in a zone with a declared agent write-boundary — *human-authored* documents (uploaded sources, human-owned records) are agent-read-only, while *agent-synthesized* documents are agent-read-write. The boundary is enforced mechanically at the storage layer: a write to a read-only zone is refused unless an explicit override is supplied, never merely discouraged by guidance. This authorship boundary is orthogonal to KB-4 — KB-4 governs which *workers* may access a collection (resource-sharing), KB-9 governs whether the *agent* may rewrite human-authored material within a collection it can already access.
 - **KB-10 (Curation lifecycle):** every agent-synthesized document carries a curation status advancing `draft → reviewed → stable`. The agent may freely create and revise `draft` documents; advancing to `reviewed` or `stable` requires explicit human action. Downstream consumers MUST treat `draft` content as provisional, and retrieval MAY filter or down-weight by curation status. This editorial-trust lifecycle is distinct from the per-document indexing `status` (pending/indexing/ready/error/deleted), which tracks index state, not trust.
+- **KB-11 (Optional query preparation):** before retrieval, a raw query MAY be transformed into an optimized retrieval query — extracting or expanding search keywords (including multi-language terms where the collection is multilingual) and/or decomposing a compound query into sub-queries whose results are merged. Preparation is optional and, when applied, MUST be transparent (the prepared query is recorded alongside the raw one), MUST preserve the caller's original query as a fallback (a preparation yielding nothing usable degrades to the raw query, never to an empty search), and MUST NOT alter chunk attribution (KB-6) or bypass access control (KB-4). Query preparation improves recall; it never fabricates sources and never widens the accessible set.
 
 > L2 specs cannot reach RFC status until all invariants here are addressed in their "Invariant Compliance" section.
 
@@ -119,11 +120,12 @@ Errors at any stage leave the document in `error` status with a diagnostic messa
 Query flow for a semantic retrieval request:
 
 1. Caller provides: `{query_text, collection_ids[], top_k, min_score?}`.
-2. Embed `query_text` using the same embedding model used at ingestion.
-3. ANN (Approximate Nearest Neighbour) search across all `ready` chunks in the targeted collections.
-4. Optional keyword filter (BM25 or FTS) fused with the vector results (RRF fusion).
-5. Return `top_k` chunks ranked by relevance, each carrying `{text, source_ref, score, document_id, collection_id}`.
-6. The caller injects the chunks into the model context with attribution.
+2. Optional query preparation (KB-11): transform `query_text` into a prepared retrieval query — keyword extraction/expansion and/or compound-query decomposition — recording both and falling back to the raw query if preparation yields nothing usable.
+3. Embed the prepared (or raw) query using the same embedding model used at ingestion.
+4. ANN (Approximate Nearest Neighbour) search across all `ready` chunks in the targeted collections.
+5. Optional keyword filter (BM25 or FTS) fused with the vector results (RRF fusion).
+6. Return `top_k` chunks ranked by relevance, each carrying `{text, source_ref, score, document_id, collection_id}`.
+7. The caller injects the chunks into the model context with attribution.
 
 ### 4.6 Lifecycle Summary
 
@@ -162,6 +164,22 @@ graph LR
 
 The agent owns `draft`; only human action advances `reviewed`/`stable`. Retrieval may expose a `min_curation` filter so high-trust queries exclude provisional `draft` content. A new agent-synthesized document defaults to `draft`.
 
+### 4.8 Query Preparation (KB-11)
+
+Raw user queries are often poorly shaped for retrieval: conversational phrasing dilutes the signal, a single query bundles several distinct questions, and a multilingual corpus is under-matched by a monolingual query. An optional preparation step sits between the caller's request and the embedding/search, transforming the query without ever narrowing the caller's reach:
+
+```text
+[REFERENCE]
+prepare(query_text, collection_meta):
+    prepared := extract_or_expand_keywords(query_text, collection_meta.languages?)
+    subqueries := decompose_if_compound(query_text)        // optional; [] when atomic
+    if prepared is empty and subqueries is empty:
+        return { retrieval_query: query_text, raw: query_text }   // KB-11 fallback: never empty
+    return { retrieval_query: prepared, subqueries, raw: query_text }
+```
+
+Two properties keep it safe. First, **transparent and reversible**: the prepared query is recorded next to the raw one, so a reader can see exactly what was searched and a poor preparation is diagnosable rather than invisible. Second, **fallback-floored**: preparation that yields nothing usable degrades to the raw query — it can improve recall but never turn a real query into an empty search. When `decompose_if_compound` returns sub-queries, each is retrieved independently and the results are merged (the same RRF fusion of §4.5), with every chunk still carrying its own attribution (KB-6) and access already bounded by KB-4 — preparation reshapes the query, never the accessible set.
+
 ## 5. Implementation Notes
 
 1. Embedding model selection: use the same model for ingestion and query; a model change requires full re-indexing of the collection.
@@ -184,5 +202,6 @@ The agent owns `draft`; only human action advances `reviewed`/`stable`. Retrieva
 
 | Version | Date | Author | Notes |
 | --- | --- | --- | --- |
+| 1.2.0 | 2026-07-09 | Core Team | Added KB-11 (optional pre-retrieval query preparation) — a raw query MAY be transformed into an optimized retrieval query via keyword extraction/expansion (multi-language where the collection is multilingual) and/or compound-query decomposition with merged sub-query results; transparent (prepared query recorded), fallback-floored (degrades to the raw query, never an empty search), and attribution/access-preserving (never alters KB-6 attribution nor bypasses KB-4 access); §4.5 retrieval flow gains the prep step, new §4.8. Mined from a studied agent framework's pre-retrieval keyword-generation strategy; recall-improving, source-faithful. |
 | 1.1.0 | 2026-06-26 | Core Team | Added KB-9 (authorship zones — storage-enforced human/agent write boundary) and KB-10 (curation lifecycle draft→reviewed→stable); Document model gains `origin` + `curation` fields; new §4.7. |
 | 1.0.0 | 2026-06-25 | Core Team | Initial spec — collections, ingestion pipeline, retrieval, KB-1…KB-8. |
