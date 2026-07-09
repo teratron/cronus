@@ -155,3 +155,4 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Added specification `iterative-refinement` (main)
 - Added specification `extension-marketplace` (main)
 - Added specification `inference-cache` (main)
+- Added specification `progressive-disclosure` (main)
