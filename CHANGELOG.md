@@ -160,3 +160,4 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Added specification `deployment-neutrality` (main)
 - Added specification `data-lineage` (main)
 - Added specification `pattern-codification` (main)
+- Added specification `provenance-taint` (main)
