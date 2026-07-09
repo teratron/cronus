@@ -1,6 +1,6 @@
 # Nodus Human-in-the-Loop Dialog Contract
 
-**Version:** 1.2.0
+**Version:** 1.3.0
 **Status:** Stable
 **Layer:** concept
 
@@ -66,6 +66,8 @@ Rules that Layer 2 implementations MUST NOT violate:
 - **DG-7 Trace data-safety**: dialog prompts and answers emit execution events, but raw human text is never written verbatim to a trace — only typed/length-summarised descriptors cross the observability boundary (consistent with the observability data-safety contract).
 - **DG-8 Capability declaration**: a workflow that invokes `ASK`/`CONFIRM` requires the dialog extension role; the capability manifest (LP-8) surfaces this so a host that cannot satisfy it is rejected fail-fast before the run starts, not mid-dialog.
 - **DG-9 Memoizable approval (host-supplied, never widening)**: a dialog step MAY be declared memoize-eligible (`+remember`). A memoize-eligible `ASK`/`CONFIRM` MAY have its answer supplied by the host dialog provider from a *durable prior decision* keyed by a stable dialog identity (the resolved prompt / action signature), resolving without re-prompting. The durable-decision store, its scope, and its revocation are **host concerns** (LP-1) — the language names none of them; it only marks a dialog memoize-eligible. A memoized resolution emits an execution event with a distinct provenance (remembered vs freshly-answered) under the DG-7 data-safety boundary. Discipline: a dialog **not** carrying `+remember` always prompts; memoization MUST NOT change a decision's meaning — it never turns a rejection into an approval, never relaxes `+strict`, and never binds a remembered value that would fail the step's `+type`/`+validate`; and a host MAY decline to memoize (governance), in which case the dialog prompts normally (fail-safe to asking). This is the nodus realization of the main `l1-security` SEC-9 learnable-permission contract, kept host-neutral: nodus supplies the memoize-eligibility marker and trace provenance; the host owns the decision store, scope, and revocation.
+
+- **DG-10 Promotable remembered decision (host-ratified, never self-authored)**: a `+remember`-eligible `ASK`/`CONFIRM` (DG-9) whose remembered decision **recurs with a stable answer** across runs MAY be surfaced — carrying its **recurrence provenance** (that the same dialog identity resolved the same way on distinct occasions, extending the remembered-vs-answered trace of DG-7/DG-9) — as a **host-promotable candidate** for a standing `!PREF` preference rule, so a stably-repeated human decision can graduate from *remembered per-decision* to *a standing workflow preference*. Nodus contributes only the **eligibility + the recurrence provenance**; the **durability gate** (how long / how many distinct occasions before it counts), the **human ratification**, and the **actual promotion** to a `!PREF`/rule are entirely **host-supplied** (LP-2), and — per LP-10 — a workflow **never self-authors** the promotion: it surfaces a candidate, it does not mint a rule. A promoted preference enters as an ordinary `!PREF` **soft** rule (NL-3, `!OVERRIDE`-able), **never silently hardened to a `!!` hard rule**; demotion (a promoted `!PREF` later removed by the host) leaves the DG-9 memoization untouched. Purely additive: a host that promotes nothing keeps DG-9 behaviour exactly as today. This is the nodus realization of the main `l1-pattern-codification` contract — its earned-not-automatic promotion (PC-1, recurrence as the *candidate* signal, not the promotion), its propose-not-self-author discipline (PC-2/PC-8, the host ratifies and authors), and its auditable pathway (PC-7, the recurrence provenance) — the workflow-dialog channel by which a stably-repeated decision *proposes* a standing preference the host may ratify.
 
 ## 4. Detailed Design
 
@@ -185,6 +187,30 @@ a host that declines to memoize, the dialog prompts exactly as an ordinary
 whole store is host-side, a paused-run/resume host, an unattended test host, and an
 interactive host each apply their own (or no) memoization without any workflow edit.
 
+### 4.7 Promotable remembered decision [ADDED v1.3.0]
+
+DG-10 extends the DG-9 memoization seam with one read-only signal — a *recurrence
+descriptor* — and no new authoring power in the core:
+
+```text
+[REFERENCE]
+// on a memoized resolution event (DG-9), the host MAY observe:
+recurrence := { dialog_identity, answer, distinct_occasions }   // DG-7 provenance, no raw content
+
+// promotion is entirely host-side (LP-2), gated + ratified there (LP-10):
+host.consider_promotion(recurrence):
+    if recurrence.distinct_occasions < host.durability_floor:  return HOLD    // PC-1 durability gate
+    if not host.ask_human_ratify(recurrence):                  return HOLD    // PC-2 propose → ratify
+    host.install_pref_rule(recurrence.dialog_identity, recurrence.answer)      // a !PREF (NL-3), never !!
+```
+
+Nodus emits only the recurrence provenance; the durability floor, the ratification
+prompt, and the `!PREF` install are the host's. Because the promoted form is a soft
+`!PREF` (NL-3, `!OVERRIDE`-able) and never a `!!` hard rule, a wrongly-promoted
+preference is always overridable per-branch and removable by the host — codification
+stays reversible (PC-5) at the workflow layer too. A host that supplies no promotion
+policy runs DG-9 exactly as today.
+
 ## 5. Drawbacks & Alternatives
 
 - **Dialog as a host-only concern (no language construct)**: rejected — it reintroduces the cross-host inconsistency this spec exists to remove (DG-1/DG-2). Approval and input would become out-of-band side channels invisible to the workflow text.
@@ -210,6 +236,7 @@ interactive host each apply their own (or no) memoization without any workflow e
 
 | Version | Date | Change |
 | --- | --- | --- |
+| 1.3.0 | 2026-07-09 | Added DG-10 (promotable remembered decision, host-ratified never self-authored) — a `+remember`-eligible `ASK`/`CONFIRM` (DG-9) whose remembered decision recurs with a stable answer across runs MAY be surfaced, carrying its recurrence provenance (same dialog identity, same answer, on distinct occasions — extending the DG-7/DG-9 remembered-vs-answered trace), as a host-promotable candidate for a standing `!PREF` preference rule, so a stably-repeated human decision can graduate from remembered-per-decision to a standing workflow preference; nodus contributes only the eligibility + recurrence provenance, while the durability gate, the human ratification, and the actual promotion to a `!PREF`/rule are entirely host-supplied (LP-2) and — per LP-10 — a workflow never self-authors the promotion (it surfaces a candidate, it does not mint a rule); a promoted preference enters as an ordinary `!PREF` soft rule (NL-3, `!OVERRIDE`-able), never silently hardened to a `!!` hard rule, and demotion leaves DG-9 memoization untouched; purely additive (a host that promotes nothing keeps DG-9 as today). New §4.7. The nodus realization of the new main l1-pattern-codification contract (PC-1 earned-not-automatic / PC-2 & PC-8 propose-not-self-author / PC-7 auditable pathway) — the workflow-dialog channel by which a stably-repeated decision proposes a standing preference the host may ratify. L1 stays Stable (C9); l2-nodus-dialog carries DG-10 as a pending Invariant-Compliance obligation reconciled at magic.task (DG-9 precedent). |
 | 1.2.0 | 2026-07-02 | Added DG-9 (memoizable approval — a `+remember`-marked `ASK`/`CONFIRM` MAY be satisfied by the host `DialogProvider` from a durable prior decision keyed by a stable dialog identity, without re-prompting; store/scope/revocation are host concerns LP-1, nodus contributes only the marker + a remembered-vs-answered trace provenance DG-7; never turns reject→approve, never relaxes `+strict`, never binds a value failing `+type`/`+validate`, host MAY decline → prompts normally). New §4.6 + `+remember` modifier on `ASK`/`CONFIRM`. The host-neutral nodus realization of main `l1-security` SEC-9 learnable-permission promotion. |
 | 1.1.0 | 2026-06-27 | Resolved both open design questions and promoted Draft → Stable. §4.3: paused-run state = `Status::Paused` + a host-persisted resume descriptor; built-in host is synchronous (default-or-Paused). §4.4: the dialog backend is a distinct `ExtensionRole::Dialog` in the LP-8 taxonomy; workflows whose dialogs all carry `+default` need no Dialog role. |
 | 1.0.0 | 2026-06-27 | Initial Draft — dialog command class (`ASK`/`CONFIRM`), suspend/resume lifecycle (`Status::Paused`), DG-1…DG-8 invariants, dialog backend extension point, dialog error subset (`DIALOG_TIMEOUT`/`DIALOG_REJECTED`/`PAUSED`). Elevates `l1-nodus-language.md` §4.6 HITL sub-section. Open design questions marked TBD (paused-state representation; `ExtensionRole::Dialog` taxonomy placement). |
