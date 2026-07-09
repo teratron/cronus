@@ -1,6 +1,6 @@
 # Application UI/UX Frontend (Desktop / Web / Mobile)
 
-**Version:** 1.2.2
+**Version:** 1.3.0
 **Status:** Stable
 **Layer:** implementation
 **Implements:** l1-architecture.md
@@ -16,6 +16,7 @@ Architectural layer 4: the **full graphical application** — the premium UI/UX 
 - [l2-technology-stack.md](l2-technology-stack.md) - Frontend + shell technology choices.
 - [l2-cli.md](l2-cli.md) - Sibling frontend (parity).
 - [l2-tui.md](l2-tui.md) - Sibling frontend (parity).
+- [l1-design-identity.md](l1-design-identity.md) - Design-identity catalog; the built-in themes (§4.5) are its built-in layer, user/imported identities its user layer (DI-2, DI-8).
 
 ## 1. Motivation
 
@@ -87,7 +88,7 @@ The app ships three themes: **system** (default — follows the OS appearance), 
 | light | force light |
 | dark | force dark |
 
-<!-- TBD: whether to support user-defined custom themes beyond system/light/dark -->
+**User-defined and imported identities.** The three built-in themes are the *built-in layer* of the design-identity catalog ([l1-design-identity.md](l1-design-identity.md) DI-2): the app resolves the active look through that catalog, so user-defined and imported visual identities (project and personal layers, DI-8) extend theming beyond system/light/dark without a code change. Switching any identity stays instant and cosmetic-only (DI-2), exactly as theme switching is today; imported identities carry provenance + an integrity witness verified before activation (DI-4). This resolves the prior open question of whether to support custom themes: they are the catalog's user layer, not a bespoke second theming path.
 
 ### 4.6 Localization (i18n)
 
