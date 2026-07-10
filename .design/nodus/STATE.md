@@ -4,20 +4,20 @@
 <!-- Maximum 100 lines. Agent updates AFTER each completed action. -->
 
 **Workspace:** nodus
-**Updated:** 2026-07-10 05:16
-**Phase:** Build phases 1-11 Done
+**Updated:** 2026-07-10 09:36
+**Phase:** 12 — Environment & Evaluation
 **Status:** Active
 
 ## Current Position
 
-- **Task:** All build phases 1–11 Done. Authored **l2-nodus-environment v1.0.0 Stable** — the Rust realization of the l1-nodus-environment Environment/Evaluation contract (EnvironmentProvider + StubEnvironment, reset/step/evaluate lifecycle, Reward/Trajectory side-band projection, ExtensionRole::Environment, run_with_environment frozen boundary, GradingMode, Budget NE-13, CandidateResult NE-12); NE-1…NE-13 compliance table reconciles the standing pending obligation. Design-only spec ahead of code (dialog/control-flow precedent)
-- **Spec:** INDEX v1.0.47; 15 nodus specs Stable. l1-nodus-environment now realized (no longer concept-only). l2-nodus-environment is currently a plan orphan pending /magic.task; the PLAN.md "concept-only" note on l1-nodus-environment is stale until the next /magic.task reconciles it
-- **Next Action:** Run /magic.task nodus to open the l2-nodus-environment implementation phase (and reconcile the now-stale concept-only marker)
+- **Task:** Build phases 1–11 Done. **Phase 12 — Environment & Evaluation opened** (`/magic.task nodus`): l2-nodus-environment decomposed into 9 tasks / 5 tracks (A EnvironmentProvider+StubEnvironment+lifecycle · B Reward/EnvInteraction trajectory side-band · C ExtensionRole::Environment manifest · D run_with_environment frozen boundary + Profile/Budget/GradingMode + CandidateResult · T gates), Todo. Sequential; Track A first. Correctness risk in Track D (frozen ordering + always-run release drop guard)
+- **Spec:** PLAN v1.14.0 / TASKS v2.6.0 / INDEX v1.0.47; RULES v1.5.0. 15 nodus specs Stable. l1-nodus-environment realized+phased — concept-only marker cleared. All-additive phase: no new dep (LP-1 preserved), no new Status/command/error category
+- **Next Action:** Run /magic.run nodus to execute Phase 12 (start T-12A01 EnvironmentProvider + StubEnvironment)
 
 ## Progress
 
 ```
-Overall: [6/6] ██████████ 100%
+Build phases 1–11 Done | Phase 12 (Environment & Evaluation) Todo — 0/9 tasks, Sequential A→D→T | Gates target: cargo ≥265 + new env suite, clippy/fmt/doc clean, zero-dep preserved
 ```
 
 ## Recent Decisions

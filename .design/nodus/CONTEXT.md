@@ -98,3 +98,4 @@
 - T-10D: Added `ExtensionRole::Dialog`; `CapabilityManifest::from_workflow` requires it for an `ASK`/`CONFIRM` lacking `+default` (refactored the command walker to inspect modifiers); `HostCapabilities::builtin()` omits Dialog
 - T-10E: Added `run_with_dialog` / `run_with_dialog_and_audit` (workflows.rs) + `lib.rs` re-exports of `DialogProvider`/`DialogOutcome`/`DefaultDialogProvider`/`ResumeDescriptor`
 - T-10T: `tests/dialog.rs` — 7 DG-invariant integration tests (default resolution, pause+resume descriptor, typed binding, timeout/rejection errors, manifest Dialog derivation); `cargo test -p nodus` — 237 passed (was 228; +9); clippy `-D warnings` clean; fmt clean; doc only the pre-existing baseline; SDD §6 clean
+

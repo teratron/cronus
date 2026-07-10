@@ -1,8 +1,8 @@
 # Master Task Index (Registry)
 
-**Version:** 2.5.1
+**Version:** 2.6.0
 **Generated:** 2026-07-10
-**Based on:** .design/nodus/PLAN.md v1.13.1
+**Based on:** .design/nodus/PLAN.md v1.14.0
 **Based on RULES:** .design/RULES.md v1.5.0
 **Execution Mode:** Sequential
 **Status:** Active
@@ -62,10 +62,11 @@ Tactical registry of all phases. Atomic checklists live in `tasks/phase-{N}.md`.
 | Phase | Description | Status |
 | --- | --- | --- |
 | [Phase 11](archives/tasks/phase-11.md) | Control-Flow Constructs (l2-nodus-control-flow): ?SWITCH / ~MAP / ~RETRY:n / !HALT / !PAUSE — lexer tokens + SwitchBlock/MapBlock AST + action flags + retry; parser/executor/transpiler/validator; implemented as per-construct vertical slices | `Done (Archived)` |
+| [Phase 12](tasks/phase-12.md) | Environment & Evaluation (l2-nodus-environment): EnvironmentProvider + StubEnvironment + lifecycle, Reward/EnvInteraction trajectory side-band (no new ExecutionEvent variant), ExtensionRole::Environment manifest, run_with_environment frozen boundary + Profile/Budget/GradingMode + CandidateResult digest → 9 tasks / 5 tracks (A–D, T); all-additive, zero-dep preserved | `Todo` |
 
 ## Meta Information
 
-- **Last Updated**: 2026-07-10 (v2.5.1 plan sync: l1-nodus-environment concept absorbed into Phase 0 — Stable but concept-only, no L2 yet, so no new tasks; Phase 11 Control-Flow status reconciled to Done+Archived in the plan; RULES parity refreshed v1.4.0 → v1.5.0; PLAN v1.13.1 / INDEX v1.0.46. All build phases 1–11 Done.)
+- **Last Updated**: 2026-07-10 (v2.6.0: opened Phase 12 — Environment & Evaluation, decomposing l2-nodus-environment into 9 tasks / 5 tracks (A–D, T); l1-nodus-environment concept-only marker cleared (now phased). PLAN v1.14.0 / INDEX v1.0.47. Prior v2.5.1: absorbed l1-nodus-environment into Phase 0, reconciled Phase 11 → Done+Archived, RULES parity v1.4.0 → v1.5.0.)
 - **Phase 3 Planned**: 2026-06-24 (9 tasks, tracks A/B/C/D/T)
 - **Phase 4 Complete**: 2026-06-24 (9 tasks, tracks A/B/C/T; all archived)
 - **Phase 5 Complete**: 2026-06-24 (7 tasks, tracks A/B/C/T; all archived)
