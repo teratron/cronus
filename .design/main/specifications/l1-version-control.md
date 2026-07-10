@@ -1,6 +1,6 @@
 # Version Control
 
-**Version:** 1.0.0
+**Version:** 1.0.1
 **Status:** Stable
 **Layer:** concept
 
@@ -13,7 +13,7 @@ Version control covers two scopes: the office's internal staging area (a lightwe
 - [l1-office-model.md](l1-office-model.md) — roles whose responsibilities include git and remote operations
 - [l2-execution-workspace.md](l2-execution-workspace.md) — git worktrees used as isolated staging areas during execution
 - [l2-kanban-board.md](l2-kanban-board.md) — cards drive the task boundary at which a commit is produced
-- [l2-quality-standards.md](l2-quality-standards.md) — quality gate that must pass before a commit is permitted
+- [l1-quality-standards.md](l1-quality-standards.md) — quality gate that must pass before a commit is permitted
 
 ## 1. Motivation
 
@@ -130,3 +130,4 @@ Platform integrations are installed as office-scoped extensions. The core versio
 | Version | Date | Author | Notes |
 | --- | --- | --- | --- |
 | 1.0.0 | 2026-06-24 | Core Team | Initial spec — VC-1…VC-6, virtual staging area, trunk-based vs Git Flow, role authority table, commit convention, remote compatibility |
+| 1.0.1 | 2026-07-10 | Core Team | Fixed broken Related Specifications link — the quality gate is an L1 concept (l1-quality-standards.md), the l2- prefix pointed at a non-existent file |

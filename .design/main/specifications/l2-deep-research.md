@@ -1,9 +1,9 @@
 # Deep Research
 
-**Version:** 1.2.0
+**Version:** 1.3.0
 **Status:** Stable
 **Layer:** implementation
-**Implements:** l1-orchestration.md
+**Implements:** l1-deep-research.md, l1-orchestration.md
 
 ## Overview
 
@@ -11,7 +11,11 @@ An iterative Think→Plan→Search→Extract→Synthesize research engine. The a
 
 ## Related Specifications
 
+- [l1-deep-research.md](l1-deep-research.md) - The Layer-1 concept this realizes: autonomous investigation over open sources ending in a claim-verified, attributed report (DR-1…DR-11).
 - [l1-orchestration.md](l1-orchestration.md) - ORC-1 adaptive topology; research runs as a multi-step goal.
+- [l1-recursive-decomposition.md](l1-recursive-decomposition.md) - The map-then-reduce discipline for the sub-question tree and for oversized fetched pages (DR-2/DR-3).
+- [l1-claim-verification.md](l1-claim-verification.md) - The faithfulness gate the delivered report should pass (DR-4); the enhancement path beyond inline citations.
+- [l1-context-provenance.md](l1-context-provenance.md) - The untrusted-content neutralization the §4.6 wrapper realizes (DR-5).
 - [l2-orchestration.md](l2-orchestration.md) - Research is dispatched as a goal; judge evaluates completeness.
 - [l2-tool-security.md](l2-tool-security.md) - All fetched content goes through the untrusted-context wrapper (§4.6).
 - [l2-agent-session.md](l2-agent-session.md) - Research runs inside a session with its own TurnContext.
@@ -34,6 +38,24 @@ Single-shot web search is insufficient for complex research questions: one query
 - Low-quality results (too short, duplicate, error pages) are filtered before inclusion.
 
 ## 3. Invariant Compliance (Layer 2 only)
+
+Primary parent — l1-deep-research (DR-1…DR-11):
+
+| L1 Invariant | Implementation |
+| --- | --- |
+| DR-1 Open, discovered sources | The search backend discovers pages per round from model-generated queries (§4.4); the source set is not supplied up front. |
+| DR-2 Bounded investigation tree | The plan phase (§4.3) decomposes the question into 3–6 sub-questions with a success criterion; `max_rounds` (§4.8) bounds the tree depth by construction. |
+| DR-3 Gather→read→synthesize, no dump | Fetched pages are content-filtered (§4.5), extracted into a running report (§4.1), and synthesized (§4.7) — raw pages are never dumped into the answer; an oversized page is decomposed per l1-recursive-decomposition. |
+| DR-4 Grounded, claim-verified synthesis | **Partial.** The report carries inline citations and a `success_criteria_met`/`partial_reason` honesty flag (§4.7). A dedicated claim-verification gate (l1-claim-verification CV-9) over the synthesized report is the enhancement path — currently grounding is by cited extraction, not an independent per-claim verdict. |
+| DR-5 Untrusted-by-default content | Every fetched page and search result is wrapped via the untrusted-context protocol before injection (§4.6); progress events never carry page content (§4.10). |
+| DR-6 Fixed budget; question-measured progress | `max_rounds` circuit breaker (§4.8) plus per-task cost estimate and hard-threshold budget gating (§4.10, l2-budget-engine) bound effort; completion is judged against the plan's success criteria, not fetch count. |
+| DR-7 Monotonic findings, keep/discard | The running report accumulates extracted facts across rounds (§4.1); the content filter (§4.5) discards low-quality/duplicate results before inclusion; filtered results are logged, not blended in. |
+| DR-8 Frozen criteria + gated faithfulness | The `ResearchPlan.success_criteria` is fixed at the plan phase and reused every round (§4.3) — not moved mid-run; `max_rounds` is the frozen hard ceiling; output faithfulness rests on citations today, with the claim-verification gate as the independent-check path (see DR-4). |
+| DR-9 Autonomous, never-stall, ceilinged | The loop runs autonomously round-to-round without asking to continue; `max_rounds` is the hard ceiling; a detached job runs on the durable tier and survives frontend exit (§4.10). |
+| DR-10 Observable, cost-rolled-up, resumable | Streaming progress events at phase/round granularity (§4.10); token/cost accounting recorded on the finished job through the budget engine; a detached job is durable and addressable by id. |
+| DR-11 Attributed, coverage-honest deliverable | `ResearchReport` carries per-finding citations, `sub_questions_answered`, `success_criteria_met`, and `partial_reason` (§4.7); a partial report declares its gaps rather than hiding them (§4.8). |
+
+Secondary parent — l1-orchestration + security envelope:
 
 | L1 Invariant | Implementation |
 | --- | --- |
@@ -222,5 +244,6 @@ These facets compose cleanly with existing subsystems: the durability tier from 
 | Version | Date | Change |
 | --- | --- | --- |
 | 1.0.0 | 2026-06-22 | Initial specification: iterative Think→Plan→Search→Extract→Synthesize loop, date grounding, ResearchPlan (sub-questions + success criteria), content filtering, untrusted-content wrapping, ResearchReport with citations, `max_rounds` circuit breaker, async-job command surface. |
+| 1.3.0 | 2026-07-10 | Re-parented under the new l1-deep-research concept (Implements: l1-deep-research.md, l1-orchestration.md) — this engine is the Layer-2 realization of deep research, previously parented only under orchestration. Invariant Compliance extended to map DR-1…DR-11 (most fully satisfied by the existing design; DR-4 grounded/claim-verified synthesis marked Partial — inline citations today, an independent claim-verification gate is the enhancement path). Implementation design unchanged; this is a layer-integrity/traceability correction. |
 | 1.2.0 | 2026-07-04 | Bounded-concurrent fan-out within a round (§4.1): per-round searches and top-k page fetches run under one shared worker cap (default 4) with a join before extraction; per-result filtering/wrapping unchanged; failed fetches drop via the quality filter instead of failing the round. |
 | 1.1.0 | 2026-06-25 | Long-running operation lifecycle (§4.10): detached/attached start, streaming progress events, blocking wait, threaded continuation with `parent_job_id` lineage, caller-supplied output-format contract, and cost/time/token transparency with budget-engine gating. Command surface extended (stream/wait/continue, `--format`/`--detach`/`--json`/`--raw`). |

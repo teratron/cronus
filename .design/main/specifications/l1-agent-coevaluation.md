@@ -1,6 +1,6 @@
 # Agent Co-Evaluation
 
-**Version:** 1.0.0
+**Version:** 1.0.1
 **Status:** Stable
 **Layer:** concept
 
@@ -31,7 +31,7 @@ layer; `l1-evaluation-suites` supplies the grading machinery it runs, and
 - [l1-evaluation-suites.md](l1-evaluation-suites.md) — the grading machinery (golden tasks, typed grader taxonomy, metrics, judge trust) this methodology drives; ES-17 per-slice reporting is its suite-level companion.
 - [l1-harness-engineering.md](l1-harness-engineering.md) — HE-1 (harness≠model) is the premise; HE-3 frozen pipeline and HE-5 single-component change are composed by ACE-8 targeted-slice iteration.
 - [l1-dynamic-harness.md](l1-dynamic-harness.md) — DH-6 contract-preserving substitution; ACE-5 strengthens it into an evaluation-comparability contract, and the M×H matrix is the diagnostic complement to runtime substitution.
-- [l1-nodus-environment.md](l1-nodus-environment.md) — a graded run (reset/step/evaluate + reward + trajectory) is one matrix cell's execution; grading-mode + task-label slicing there feed the slices here.
+- [../../nodus/specifications/l1-nodus-environment.md](../../nodus/specifications/l1-nodus-environment.md) — a graded run (reset/step/evaluate + reward + trajectory) is one matrix cell's execution; grading-mode + task-label slicing there feed the slices here.
 - [l1-practice-analytics.md](l1-practice-analytics.md) — normalized traces a slice reads; the analytics surface the matrix renders onto.
 - [l1-quality-standards.md](l1-quality-standards.md) — a co-evaluation matrix is a definition-of-done signal for a harness change.
 
@@ -260,3 +260,4 @@ grader, a pipeline, or a run.
 | Version | Date | Author | Notes |
 | --- | --- | --- | --- |
 | 1.0.0 | 2026-07-02 | Core Team | Initial spec — agent co-evaluation methodology: performance as a function of both model and harness with the (model, harness) pair as the unit of evaluation (ACE-1); the independent-factor M×H matrix reading harness-gap and model-gap separately (ACE-2); orthogonal declared task taxonomy (ACE-3); per-slice macro-averaged reporting that localizes brittleness (ACE-4); harness comparability contract freezing prompt/workspace/timeout/transcript/result-schema (ACE-5); failure attribution across the model/harness/grader triad, grader-first (ACE-6); reuse-&-normalize external task import with provenance-as-slice (ACE-7); targeted-slice iteration crediting a harness change only when its targeted slice moves (ACE-8); diagnostic preservation of transcript/workspace/final-state per cell for replay (ACE-9). Drives l1-evaluation-suites, composes l1-harness-engineering / l1-dynamic-harness / l1-nodus-environment; public-leaderboard machinery rejected as out of scope. |
+| 1.0.1 | 2026-07-10 | Core Team | Fixed broken cross-workspace Related Specifications link to l1-nodus-environment — it lives in the nodus workspace, so the bare same-directory path resolved to nothing; corrected to the workspace-relative path (the Canonical References entry already used the correct full path). |

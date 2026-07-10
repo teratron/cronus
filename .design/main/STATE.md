@@ -4,7 +4,7 @@
 <!-- Maximum 100 lines. Agent updates AFTER each completed action. -->
 
 **Workspace:** main
-**Updated:** 2026-07-10 04:10
+**Updated:** 2026-07-10 05:02
 **Phase:** 12 — Skill System
 **Status:** Active
 
@@ -12,7 +12,7 @@
 
 - **Task:** Phases 1–11 Done. Phase 12 (Skill System, l2-skill-system) opened: 8 tasks / 5 tracks, Todo. Registry re-synced: 25 Stable L1 concepts → Phase 0 (concept-only, C28), dev-office RFC → Backlog
 - **Spec:** PLAN v2.13.0 / TASKS v1.17.0 / INDEX v1.0.93 in sync; new: l1-report-prompting 1.0.0 Stable (invitation layer + findings ledger), l1-issue-reporting → 1.1.0 Stable (prefilled entry point)
-- **Next Action:** Execute T-12A01 Two-tier skill stores + shadowing precedence via /magic.run main
+- **Next Action:** Run /magic.task main to update the plan
 
 ## Progress
 

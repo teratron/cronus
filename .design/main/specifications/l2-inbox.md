@@ -1,6 +1,6 @@
 # Inbox (Inter-Actor Messaging)
 
-**Version:** 1.0.0
+**Version:** 1.0.1
 **Status:** Stable
 **Layer:** implementation
 **Implements:** l1-office-model.md, l1-orchestration.md
@@ -15,7 +15,7 @@ The inbox is a lightweight SQLite-backed messaging channel between actors within
 - [l1-orchestration.md](l1-orchestration.md) - ORC-8 synchronization; briefings and hand-offs between agents.
 - [l2-agent-session.md](l2-agent-session.md) - Session turn loop that drains the inbox at the start of each iteration.
 - [l2-workflow-runtime.md](l2-workflow-runtime.md) - Workflow completion sends an inbox notification to the parent actor.
-- [l2-storage-model.md](l2-storage-model.md) - Inbox rows live in the workspace state-tier SQLite database.
+- [l1-storage-model.md](l1-storage-model.md) - Inbox rows live in the workspace state-tier SQLite database.
 
 ## 1. Motivation
 
@@ -163,3 +163,10 @@ The inbox is an implementation detail; it has no direct user-facing commands. Ob
 | `[ORC]` | `.design/main/specifications/l1-orchestration.md` | ORC-8 synchronization invariant |
 | `[SESSION]` | `.design/main/specifications/l2-agent-session.md` | Turn loop that calls drain() |
 | `[STORAGE]` | `.design/main/specifications/l1-storage-model.md` | Two-tier storage layout |
+
+## Document History
+
+| Version | Date | Author | Notes |
+| --- | --- | --- | --- |
+| 1.0.1 | 2026-07-10 | Core Team | Fixed broken Related Specifications link — the storage tier is an L1 concept (l1-storage-model.md); the l2- prefix pointed at a non-existent file (Canonical References already used the correct l1- path) |
+| 1.0.0 | 2026-06-24 | Core Team | Initial spec — SQLite-backed inter-actor inbox, ULID ordering, drain-on-turn, synthetic user messages |
