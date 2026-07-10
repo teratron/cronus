@@ -4,23 +4,26 @@
 <!-- Maximum 100 lines. Agent updates AFTER each completed action. -->
 
 **Workspace:** main
-**Updated:** 2026-07-10 16:35
-**Phase:** 12 — Skill System (Done)
+**Updated:** 2026-07-10 16:42
+**Phase:** — (all 12 build phases Done)
 **Status:** Active
 
 ## Current Position
 
-- **Task:** T-12D01 cronus skill command group
-- **Spec:** INDEX v1.0.96 (194 specs: 182 Stable, 11 RFC, 1 Draft). Phase 0 += l1-tokenization-boundary (concept-only), l1-office-archetype, l1-background-activation (latter two NOT concept-only — each has an authored Implements: L2, C28 §4). Backlog += l2-crate-topology, l2-service-activation, l2-archetype-catalog (all RFC) + the l2-source-layout 1.2.0 delta. l2-source-layout demoted Stable→RFC by the amendment rule; its Phase 1 [x] stands at delivered 1.1.0 scope
-- **Next Action:** Plan complete — author new scope via /magic.spec main (or /magic.status for a briefing)
+- **Task:** All 12 build phases Done. Plan re-synced to PLAN v2.14.1 / TASKS v1.18.1: milestone — no phase open, every currently-Stable spec is implemented
+- **Spec:** INDEX v1.0.96 (194 specs: 182 Stable, 11 RFC, 1 Draft). Backlog (8 items) is entirely RFC/Draft: memory-intelligence, memory-consolidation, spec-driven-governance, dynamic-harness, loop-governance, dev-office (RFC L1); knowledge-store, crate-topology, service-activation, archetype-catalog + source-layout 1.2.0 delta (RFC L2); loop-runner (Draft L2, RFC parent). None plannable by /magic.task — RFC→Stable needs /magic.spec review (RULES §2)
+- **Next Action:** Plan complete, no phase open. Deterministic next target (DA-3 dependency topology): the core-decomposition wave (l2-crate-topology + l2-source-layout 1.2.0) — the one Backlog item other Backlog items depend on. Run /magic.spec main to review it RFC→Stable, then re-run /magic.task main. (Override: pick any other Backlog RFC to promote instead)
 
 ## Progress
 
 ```
-Build phases: Done 1–11 (Seed → Advanced Office Features → Content/Sharing/Dev-Workflow) | Gates green: cargo 276 lib tests + clippy + fmt · vitest 39 (8 files) + biome | Remaining: Backlog RFC/Draft specs only
+Build phases: Done 1–12 (Seed → Advanced Office Features → Content/Sharing/Dev-Workflow → Skill System) | Gates green: cargo 314 lib + skill_system integration + clippy + fmt · cli 37 unit + 28 smoke · vitest 39 (8 files) + biome | Remaining: Backlog RFC/Draft specs only (needs /magic.spec)
 ```
 
 ## Recent Decisions
+
+- 2026-07-10 **Post-run replan (/magic.task main) → PLAN v2.14.1 / TASKS v1.18.1; milestone, no new tasks.** Pre-flight clean (ok:true, no orphans, no drift). All twelve build phases are Done and every currently-Stable spec is implemented — confirmed by grepping PLAN.md: every unchecked `[ ]` box sits in Backlog and is RFC or Draft, none is a Stable spec. **No new phase can be opened.** Pre-Planning Stabilization (Draft-only batch): the sole Draft `l2-loop-runner` stays Draft (RFC parent `l1-loop-governance`, layer constraint fails); the 11 RFCs are outside the Draft→Stable batch — RFC→Stable is a /magic.spec review act (RULES §2), not a mechanical promotion, so `/magic.task` cannot advance any of them. Only stale artifact was the PLAN/TASKS overview prose (still called Phase 12 "open") — corrected to a milestone note; patch bump, no structural change. **Deterministic next target (DA-3):** by dependency topology the core-decomposition wave (`l2-crate-topology` + `l2-source-layout` 1.2.0) wins — it is the one Backlog item other Backlog items depend on (`l2-service-activation` presumes its crate seam; it is the precondition for `l1-deployment-neutrality` DN-2/DN-3). Next action is therefore /magic.spec (RFC review), not /magic.run (nothing to execute). (Revert: git restore .design/main/PLAN.md .design/main/TASKS.md .design/main/STATE.md)
+
 - 2026-07-10 **Decision:** Phase 12 complete (8/8 tasks). Provides: skills::{store,package,commands,exec,convert,synthesize} (crates/core) + cronus ext skill import/create/status (crates/cli). Domain-logic-first per Phases 9-11 precedent: witness verification (EXT-11) and the nodus runtime (WorkflowRuntime trait) are documented seams, not real crypto/cross-crate wiring; core has zero Cargo dependency on nodus by design. Gates green: cargo 314 core lib + 10 invariant-compliance integration tests + cli 37 unit + 28 smoke, clippy -D warnings + fmt clean workspace-wide.
 
 - 2026-07-10 **Plan re-sync (/magic.task main) → PLAN v2.14.0 / TASKS v1.18.0; no new tasks.** Six orphaned specs absorbed. Three Stable L1 → Phase 0: `l1-tokenization-boundary` is `concept-only`; `l1-office-archetype` and `l1-background-activation` are **not** — each already has an authored `Implements:` L2, and C28 §4 drops the marker on authoring (not on promotion). Three RFC L2 → Backlog: `l2-crate-topology`, `l2-service-activation`, `l2-archetype-catalog`. **Registry arithmetic caught a hidden demotion**: the plan expected +3 Stable / +3 RFC from six new specs but the registry showed +2 / +4 — `l2-source-layout` had gone `Stable → RFC` at 1.2.0 under the RULES §2 amendment rule (its §4.4 crate-granularity TBD now delegates to `l2-crate-topology`). It and the topology spec form one **core-decomposition wave** and must promote together; Phase 1's `[x]` stands at the delivered 1.1.0 scope and only the delta is parked (KAN-8 precedent, one step further — this amendment also demoted status). Phase 10's KAN-8 checkbox corrected `[ ] → [x]`, verified against `crates/core/src/kanban/custom_boards.rs` rather than against the phase's own status line. Stabilization: `l2-loop-runner` (sole Draft) stays Draft — parent `l1-loop-governance` is RFC, layer constraint (c) fails. Hard-dep graph is a depth-1 L2→L1 forest (no L1 declares `Implements:`) → cycles impossible by construction; one soft cycle `l2-source-layout ↔ l2-crate-topology` logged, non-blocking. **Sequencing call:** Phase 12 runs before the decomposition — it is Stable + decomposed while the topology is RFC with open TBDs, and `skills` is pure-`std` domain logic that stays in the domain tier under either crate shape, so relocation would be mechanical. (Revert: git restore .design/main/PLAN.md .design/main/TASKS.md .design/main/STATE.md)

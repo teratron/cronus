@@ -1,15 +1,15 @@
 # Master Task Index (Registry)
 
-**Version:** 1.18.0
+**Version:** 1.18.1
 **Generated:** 2026-07-10
-**Based on:** .design/main/PLAN.md v2.14.0
+**Based on:** .design/main/PLAN.md v2.14.1
 **Based on RULES:** .design/RULES.md v1.5.0
 **Execution Mode:** Parallel
 **Status:** Active
 
 ## Overview
 
-Tactical registry of all phases and their statuses, ordered by the growth metaphor (seed → stem → leaf → flower). Atomic checklists live in `tasks/phase-{N}.md`. Phases 1–11 are Done; Phase 12 (Skill System) is next. The v2.14.0 plan sync added no tasks: its six absorbed specs are three Stable L1 concepts (Phase 0, no implementation tasks by definition) and three RFC L2s parked in Backlog until they reach Stable.
+Tactical registry of all phases and their statuses, ordered by the growth metaphor (seed → stem → leaf → flower). Atomic checklists live in `tasks/phase-{N}.md`. **All twelve build phases (1–12) are Done.** No phase is open: every currently-Stable spec is implemented, and the remaining Backlog is entirely RFC/Draft — advancing it requires a `/magic.spec` promotion pass, not `/magic.task`.
 
 ## Active Phases
 
