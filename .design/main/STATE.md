@@ -4,23 +4,25 @@
 <!-- Maximum 100 lines. Agent updates AFTER each completed action. -->
 
 **Workspace:** main
-**Updated:** 2026-07-10 19:26
-**Phase:** — (all 12 build phases Done)
+**Updated:** 2026-07-10 19:40
+**Phase:** 13 — Core Decomposition (Crate Topology)
 **Status:** Active
 
 ## Current Position
 
-- **Task:** All 12 build phases Done. Core-decomposition wave promoted RFC→Stable (/magic.spec main) — now the next implementable work, no longer Backlog
-- **Spec:** INDEX v1.0.97 (194 specs: 184 Stable, 9 RFC, 1 Draft). Promoted this pass: `l2-crate-topology` 1.0.0 + `l2-source-layout` 1.2.0 → Stable (the §2 TBD resolved against l2-technology-stack INV-1, no conflict; spec-critic + prompt-engineer PASS). Backlog now 6: memory-intelligence, memory-consolidation, spec-driven-governance, dynamic-harness, loop-governance, dev-office (RFC L1); knowledge-store, service-activation, archetype-catalog (RFC L2); loop-runner (Draft, RFC parent)
-- **Next Action:** Run /magic.task main to plan the now-Stable core-decomposition wave (l2-crate-topology + l2-source-layout) into a new phase — SYNC_GAP already flags PLAN based on INDEX 1.0.96 vs registry 1.0.97
+- **Task:** Phase 13 opened (/magic.task main) → PLAN v2.15.0 / TASKS v1.19.0. 8 tasks / 5 tracks (A–D, T) mapping the topology spec's ordered §5 migration + validation. Todo — ready for /magic.run
+- **Spec:** INDEX v1.0.97 (194 specs: 184 Stable, 9 RFC, 1 Draft). Phase 13 implements `l2-crate-topology` 1.0.0 (driver) + `l2-source-layout` 1.2.0 (documentary companion, realized-by the migration). Backlog now 6: memory-intelligence, memory-consolidation, spec-driven-governance, dynamic-harness, loop-governance, dev-office (RFC L1); knowledge-store, service-activation, archetype-catalog (RFC L2); loop-runner (Draft, RFC parent)
+- **Next Action:** Execute T-13A01 Mint `cronus-contract` (shared types + seam traits, zero external deps) via /magic.run main
 
 ## Progress
 
 ```
-Build phases: Done 1–12 (Seed → Advanced Office Features → Content/Sharing/Dev-Workflow → Skill System) | Gates green: cargo 314 lib + skill_system integration + clippy + fmt · cli 37 unit + 28 smoke · vitest 39 (8 files) + biome | Remaining: Backlog RFC/Draft specs only (needs /magic.spec)
+Build phases: Done 1–12 (Seed → Advanced Office Features → Content/Sharing/Dev-Workflow → Skill System) · Phase 13 (Core Decomposition) Todo | Gates green as of Phase 12: cargo 314 lib + skill_system integration + clippy + fmt · cli 37 unit + 28 smoke · vitest 39 (8 files) + biome | Remaining: Phase 13 (structural refactor, 8 tasks) + 6 Backlog RFC/Draft specs
 ```
 
 ## Recent Decisions
+
+- 2026-07-10 **Phase 13 — Core Decomposition opened (/magic.task main) → PLAN v2.15.0 / TASKS v1.19.0.** The now-Stable core-decomposition wave decomposed into 8 tasks / 5 tracks mapping the topology spec's ordered §5 migration one-to-one (mint contract → invert edge → extract store-local → extract auth-local → rename to domain + facade → repoint TUI/fix codegraph → CI guard) + a behavior-equivalence validation task. **Unlike Phases 9–12 this is not domain-logic-first — it moves working code and preserves behavior exactly.** Planner audit: effectively **sequential** despite Parallel mode (each §5 step must compile green before the next; B01/B02 serialized on shared manifest/facade); **cascade concentrated on T-13A02** (the one edge inversion — the only type-signature change, gates 3–7); **T-13D01 CI guard non-optional** (the spec: the layout drifted because no build failed when it drifted — Verify tests the guard's failure path, not just happy path); acceptance bar is behavior-equivalence (all pre-existing tests green unchanged + public contract preserved via facade re-exports), not new features. Measurement note recorded: spec's 47/53 module counts predate Phase 12's pure-`std` `skills` module (joins domain tier; partition shape unchanged). Wave removed from Backlog (now 6 items). (Revert: git restore .design/main/PLAN.md .design/main/TASKS.md .design/main/STATE.md && rm .design/main/tasks/phase-13.md)
 
 - 2026-07-10 **Core-decomposition wave promoted RFC→Stable (/magic.spec main) → INDEX v1.0.97.** `l2-crate-topology` 1.0.0 and `l2-source-layout` 1.2.0 both advanced to Stable after Post-Update Review (`@role:spec-critic` PASS + `@role:prompt-engineer` PASS-WITH-REWRITES). **The one blocker was a self-flagged TBD** in crate-topology §2 ("confirm this reading … before promoting to Stable") over whether the stack spec's "one crate → desktop + mobile" mandates exactly one Cargo crate. Resolved against `l2-technology-stack` INV-1 ("Core is a Rust library crate with a C-ABI/FFI surface; linkable into …"): the constraint is on the embeddable unit — preserved by the `cronus` facade (§3 INV-1) — not the crate count, and the workspace already ships five crates, so a literal one-crate reading is already false. No conflict; TBD cleared, confirming rationale recorded inline. source-layout's only RFC reason was "pending topology review," so it cleared in lockstep — the two promote together exactly as planned. Registry 182→184 Stable, 11→9 RFC. Header parity clean. Handoff: SYNC_GAP (PLAN based-on 1.0.96 vs registry 1.0.97) is the expected signal to /magic.task, which will move the wave from Backlog into a new phase (not fixed in spec.md by design). (Revert: git restore .design/main/INDEX.md .design/main/specifications/l2-crate-topology.md .design/main/specifications/l2-source-layout.md)
 
