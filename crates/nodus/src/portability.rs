@@ -130,6 +130,8 @@ pub enum ExtensionRole {
     Vocabulary,
     /// Human-in-the-loop dialog backend ([`crate::executor::DialogProvider`]).
     Dialog,
+    /// Graded-run task world ([`crate::environment::EnvironmentProvider`]).
+    Environment,
 }
 
 /// What a workflow declares it needs from its host to execute (LP-8).
@@ -197,6 +199,13 @@ impl CapabilityManifest {
     /// command name. Builtin non-model commands need nothing — they are always
     /// available. Explicit DSL declaration (an `@needs` section) is a later
     /// refinement; this derives the manifest from invoked commands alone.
+    ///
+    /// [`ExtensionRole::Storage`], [`ExtensionRole::Policy`], and
+    /// [`ExtensionRole::Environment`] have no corresponding command syntax, so
+    /// they are never derived here — a caller requires them explicitly via
+    /// [`CapabilityManifest::require_role`] (`run_with_environment` does this
+    /// for `Environment` on every call, since calling it is itself the need
+    /// declaration, NE-10).
     pub fn from_workflow(ast: &WorkflowFile) -> Self {
         let mut calls: Vec<&CommandCall> = Vec::new();
         for step in &ast.steps {
@@ -299,13 +308,19 @@ impl HostCapabilities {
 
     /// The built-in in-process host: it provides [`ExtensionRole::Model`] (the
     /// [`crate::executor::StubProvider`]), [`ExtensionRole::Audit`] (a sink is
-    /// always wired), and [`ExtensionRole::Vocabulary`] (the builtin schema). It
+    /// always wired), [`ExtensionRole::Vocabulary`] (the builtin schema), and
+    /// [`ExtensionRole::Environment`] (the [`crate::environment::StubEnvironment`]
+    /// — a complete, if trivial, graded world, so a manifest-declaring workflow
+    /// stays runnable in-process; this is a deliberate contrast with
+    /// [`ExtensionRole::Dialog`], which `builtin()` does **not** provide, since
+    /// the default dialog resolver only handles `+default`-marked dialogs). It
     /// declares no host-extension commands and no named capabilities.
     pub fn builtin() -> Self {
         let mut host = Self::new();
         host.roles.insert(ExtensionRole::Model);
         host.roles.insert(ExtensionRole::Audit);
         host.roles.insert(ExtensionRole::Vocabulary);
+        host.roles.insert(ExtensionRole::Environment);
         host
     }
 
@@ -440,6 +455,16 @@ mod tests {
         assert!(host.provides(ExtensionRole::Vocabulary));
         assert!(!host.provides(ExtensionRole::Storage));
         assert!(!host.provides(ExtensionRole::Policy));
+    }
+
+    #[test]
+    fn builtin_host_provides_environment_but_not_dialog() {
+        // Environment: StubEnvironment is a complete trivial world (NE-10).
+        // Dialog: the default resolver only handles `+default` dialogs, so
+        // builtin() deliberately does NOT provide it (l2-nodus-dialog DG-8).
+        let host = HostCapabilities::builtin();
+        assert!(host.provides(ExtensionRole::Environment));
+        assert!(!host.provides(ExtensionRole::Dialog));
     }
 
     #[test]

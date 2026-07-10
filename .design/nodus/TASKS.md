@@ -62,11 +62,11 @@ Tactical registry of all phases. Atomic checklists live in `tasks/phase-{N}.md`.
 | Phase | Description | Status |
 | --- | --- | --- |
 | [Phase 11](archives/tasks/phase-11.md) | Control-Flow Constructs (l2-nodus-control-flow): ?SWITCH / ~MAP / ~RETRY:n / !HALT / !PAUSE — lexer tokens + SwitchBlock/MapBlock AST + action flags + retry; parser/executor/transpiler/validator; implemented as per-construct vertical slices | `Done (Archived)` |
-| [Phase 12](tasks/phase-12.md) | Environment & Evaluation (l2-nodus-environment): EnvironmentProvider + StubEnvironment + lifecycle, Reward/EnvInteraction trajectory side-band (no new ExecutionEvent variant), ExtensionRole::Environment manifest, run_with_environment frozen boundary + Profile/Budget/GradingMode + CandidateResult digest → 9 tasks / 5 tracks (A–D, T); all-additive, zero-dep preserved | `Todo` |
+| [Phase 12](archives/tasks/phase-12.md) | Environment & Evaluation (l2-nodus-environment): EnvironmentProvider + StubEnvironment + lifecycle, Reward/EnvInteraction trajectory side-band (no new ExecutionEvent variant), ExtensionRole::Environment manifest, run_with_environment frozen boundary + Profile/Budget/GradingMode + CandidateResult digest → 9 tasks / 5 tracks (A–D, T); all-additive, zero-dep preserved | `Done (Archived)` |
 
 ## Meta Information
 
-- **Last Updated**: 2026-07-10 (v2.6.0: opened Phase 12 — Environment & Evaluation, decomposing l2-nodus-environment into 9 tasks / 5 tracks (A–D, T); l1-nodus-environment concept-only marker cleared (now phased). PLAN v1.14.0 / INDEX v1.0.47. Prior v2.5.1: absorbed l1-nodus-environment into Phase 0, reconciled Phase 11 → Done+Archived, RULES parity v1.4.0 → v1.5.0.)
+- **Last Updated**: 2026-07-10 (Phase 12 — Environment & Evaluation complete: all 9 tasks / 5 tracks (A–D, T) landed in `crates/nodus` — EnvironmentProvider + StubEnvironment, Reward/GradingMode/Budget/CandidateResult, ExtensionRole::Environment, run_with_environment public API, EnvInteraction trajectory side-band (no new ExecutionEvent variant). All-additive; zero new dependency (LP-1 preserved). Gates green: 292 tests (was 265) + clippy + fmt + doc; downstream cronus-cli unaffected. Prior v2.6.0: phase opened. Prior v2.5.1: l1-nodus-environment absorbed into Phase 0, Phase 11 reconciled → Done+Archived, RULES parity v1.4.0 → v1.5.0.)
 - **Phase 3 Planned**: 2026-06-24 (9 tasks, tracks A/B/C/D/T)
 - **Phase 4 Complete**: 2026-06-24 (9 tasks, tracks A/B/C/T; all archived)
 - **Phase 5 Complete**: 2026-06-24 (7 tasks, tracks A/B/C/T; all archived)
@@ -76,5 +76,6 @@ Tactical registry of all phases. Atomic checklists live in `tasks/phase-{N}.md`.
 - **Phase 9 Complete**: 2026-06-27 (tracks A/B/T; all archived; l2-nodus-registries — closed flag/validator/type registries + advisory W011/W012/W013; 228 tests pass)
 - **Phase 10 Complete**: 2026-06-27 (tracks A–E/T; all archived; l2-nodus-dialog — ASK/CONFIRM + Status::Paused + DialogProvider + ExtensionRole::Dialog; 237 tests pass)
 - **Phase 11 Complete**: 2026-06-28 (tracks A/B/C/D/T; all archived; l2-nodus-control-flow — !HALT/!PAUSE + ?SWITCH + ~MAP + ~RETRY:n; lexer/AST/parser/executor/validator; 265 tests pass)
+- **Phase 12 Complete**: 2026-07-10 (tracks A/B/C/D/T; all archived; l2-nodus-environment — EnvironmentProvider + StubEnvironment, Reward/GradingMode/Budget/CandidateResult, ExtensionRole::Environment, run_with_environment public API; 292 tests pass)
 - **Backlog**: operators [MATCHES/PCRE design fork], @needs (blocked), @ON priority, macro execution; Storage/Policy executor integration (LP-3)
 - **Maintainer**: Core Team

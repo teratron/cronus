@@ -4,24 +4,25 @@
 <!-- Maximum 100 lines. Agent updates AFTER each completed action. -->
 
 **Workspace:** nodus
-**Updated:** 2026-07-10 09:36
+**Updated:** 2026-07-10 10:00
 **Phase:** 12 — Environment & Evaluation
-**Status:** Active
+**Status:** Done
 
 ## Current Position
 
-- **Task:** Build phases 1–11 Done. **Phase 12 — Environment & Evaluation opened** (`/magic.task nodus`): l2-nodus-environment decomposed into 9 tasks / 5 tracks (A EnvironmentProvider+StubEnvironment+lifecycle · B Reward/EnvInteraction trajectory side-band · C ExtensionRole::Environment manifest · D run_with_environment frozen boundary + Profile/Budget/GradingMode + CandidateResult · T gates), Todo. Sequential; Track A first. Correctness risk in Track D (frozen ordering + always-run release drop guard)
+- **Task:** Phase 12 complete — Environment & Evaluation
 - **Spec:** PLAN v1.14.0 / TASKS v2.6.0 / INDEX v1.0.47; RULES v1.5.0. 15 nodus specs Stable. l1-nodus-environment realized+phased — concept-only marker cleared. All-additive phase: no new dep (LP-1 preserved), no new Status/command/error category
-- **Next Action:** Run /magic.run nodus to execute Phase 12 (start T-12A01 EnvironmentProvider + StubEnvironment)
+- **Next Action:** Phase complete; run /magic.task nodus to plan the next phase
 
 ## Progress
 
 ```
-Build phases 1–11 Done | Phase 12 (Environment & Evaluation) Todo — 0/9 tasks, Sequential A→D→T | Gates target: cargo ≥265 + new env suite, clippy/fmt/doc clean, zero-dep preserved
+Build phases 1–12 Done (Seed → Testing → Capability Manifest → Dialog → Control-Flow → Environment & Evaluation) | Phase 12: 9/9 tasks, Sequential A→D→T, all archived | Gates green: cargo 292 tests + clippy + fmt + doc; LP-1 zero-dep preserved
 ```
 
 ## Recent Decisions
 
+- 2026-07-10 **Decision:** Phase 12 complete. `l2-nodus-environment` implemented in `crates/nodus`: new `environment.rs` (EnvironmentProvider trait + StubEnvironment + Reward/GradingMode/Budget/CandidateResult), `run_with_environment`/`run_with_environment_and_audit` public API, `ExtensionRole::Environment` (builtin() provides it via the stub, unlike Dialog), `EnvInteraction` trajectory side-band on `RunManifest` (no new `ExecutionEvent` variant — HO-6 preserved). Two design refinements caught during implementation: `evaluate`'s reward is delivered directly via `EnvRunResult.reward` rather than duplicated into the trajectory (it occurs after `run_complete` already fired); `grade()` takes an explicit `checker_passed: bool` rather than inferring pass/fail from the score (NE-9 metric neutrality). `max_tokens` on `Budget` is declared but not enforced (no token-accounting seam on `ModelProvider` — documented gap, StorageProvider/PolicyProvider precedent). 292 tests pass (was 265; +27); clippy/fmt/doc clean; zero new dependency (LP-1 preserved); downstream `cronus-cli` unaffected. `l1-nodus-environment`'s concept-only marker cleared.
 - 2026-06-27 **Decision:** Phase 11 complete. Slice 4 `~RETRY:n` bounded step retry implemented in crates/nodus (lexer TildeRetry, Step.retry field, parser parse_retry_bound, executor run_step_with_retry with rollback-on-success/accumulate-on-exhaustion, validator E017 enforcing 1≤n≤10 per NL-5); 265 tests pass (+7). All four control-flow constructs (!HALT/!PAUSE, ?SWITCH, ~MAP, ~RETRY) now implemented.
 
 - 2026-06-27 **Decision:** Phase 11 Slice 3 landed. `~MAP` collection transform implemented in crates/nodus (lexer TildeMap, MapBlock AST, parser parse_map + routing, executor execute_map binding $it + collecting into a list, transpiler human form); 258 tests pass (+5). Slice 4 (~RETRY) remains.

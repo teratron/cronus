@@ -9,13 +9,14 @@
 
 use crate::Error;
 use crate::ast::{TestBlock, WorkflowFile};
+use crate::environment::{EnvRunResult, EnvironmentProvider, Observation, Reward, Seed, TaskId};
 use crate::executor::{
     DialogProvider, Executor, ModelProvider, RunResult, RuntimeError, Status, StubProvider, Value,
 };
-use crate::observability::AuditProvider;
+use crate::observability::{AuditProvider, EnvInteraction, EnvInteractionKind, FieldDescriptor};
 use crate::parser::Parser;
 use crate::portability::{
-    CapabilityManifest, HostCapabilities, Missing, SchemaProvider, validate_manifest,
+    CapabilityManifest, ExtensionRole, HostCapabilities, Missing, SchemaProvider, validate_manifest,
 };
 use crate::transpiler::Transpiler;
 use crate::validator::{Diagnostic, Severity, Validator};
@@ -643,6 +644,183 @@ pub fn run_with_dialog_and_audit(
 
     Ok(Executor::with_dialog_and_audit(dialog, audit)
         .execute_with_params(&ast, input, run_id, started_at))
+}
+
+/// Parse, validate, gate on the `Environment` capability, then run the whole
+/// workflow as one graded unit against `env` (`l1-nodus-environment`
+/// NE-1…NE-13).
+///
+/// Sequence: `env.open(task, seed)` → `env.reset` (its `Observation` seeds the
+/// workflow's `$in.observation`) → execute the workflow → **frozen** →
+/// `env.evaluate` → `env.release` (always, via a drop guard — NE-7). Calling
+/// this function is itself the workflow's declaration that it needs the
+/// `Environment` role (NE-10): the manifest is gated against `host` before
+/// `env.open` is ever called, so a host without the role never leaks an
+/// instance. On a satisfiable host, `HostCapabilities::builtin()` provides
+/// `Environment` via [`crate::environment::StubEnvironment`].
+///
+/// `env.step` is not called by this combinator — see the `crate::environment`
+/// module docs for the v1 scoping rationale.
+pub fn run_with_environment(
+    source: &str,
+    filename: &str,
+    input: Option<Value>,
+    env: &dyn EnvironmentProvider,
+    host: &HostCapabilities,
+    task: &TaskId,
+    seed: Seed,
+) -> Result<EnvRunResult, Vec<Diagnostic>> {
+    run_with_environment_impl(source, filename, input, env, host, task, seed, None, "", "")
+}
+
+/// Like [`run_with_environment`] but with a custom [`AuditProvider`]. `run_id`
+/// and `started_at` are forwarded to the run manifest, which carries the
+/// reset [`EnvInteraction`] in its `env_trajectory` (NE-3).
+#[allow(clippy::too_many_arguments)]
+pub fn run_with_environment_and_audit(
+    source: &str,
+    filename: &str,
+    input: Option<Value>,
+    env: &dyn EnvironmentProvider,
+    host: &HostCapabilities,
+    task: &TaskId,
+    seed: Seed,
+    audit: impl AuditProvider + 'static,
+    run_id: &str,
+    started_at: &str,
+) -> Result<EnvRunResult, Vec<Diagnostic>> {
+    run_with_environment_impl(
+        source,
+        filename,
+        input,
+        env,
+        host,
+        task,
+        seed,
+        Some(Box::new(audit)),
+        run_id,
+        started_at,
+    )
+}
+
+/// Shared implementation for [`run_with_environment`] /
+/// [`run_with_environment_and_audit`]. `audit: None` uses the built-in no-op
+/// sink (via [`Executor::with_stub`]-equivalent construction); `Some` wires
+/// the caller's provider.
+#[allow(clippy::too_many_arguments)]
+fn run_with_environment_impl(
+    source: &str,
+    filename: &str,
+    input: Option<Value>,
+    env: &dyn EnvironmentProvider,
+    host: &HostCapabilities,
+    task: &TaskId,
+    seed: Seed,
+    audit: Option<Box<dyn AuditProvider>>,
+    run_id: &str,
+    started_at: &str,
+) -> Result<EnvRunResult, Vec<Diagnostic>> {
+    let ast = Parser::parse(source).map_err(|e| {
+        vec![Diagnostic {
+            severity: Severity::Error,
+            code: "PARSE_ERROR".to_string(),
+            message: e.to_string(),
+            line: 0,
+            column: 0,
+            filename: filename.to_string(),
+        }]
+    })?;
+
+    let report = ValidationReport::new(Validator::validate(&ast, filename));
+    if report.has_errors {
+        return Err(report.diagnostics);
+    }
+
+    // NE-10: calling this function is the declaration; gate before env.open.
+    let manifest = CapabilityManifest::from_workflow(&ast).require_role(ExtensionRole::Environment);
+    let missing = validate_manifest(&manifest, host);
+    if !missing.is_empty() {
+        return Ok(EnvRunResult {
+            result: capability_rejection(&ast, &missing),
+            reward: Reward::no_op(),
+            budget_halted: false,
+        });
+    }
+
+    // NE-7: fresh isolated instance; the guard guarantees release on every
+    // exit path (including a panic inside env.evaluate).
+    let mut guard = crate::environment::InstanceGuard::new(env, env.open(task, seed));
+
+    // NE-2: reset — deterministic, produces the seed observation.
+    let observation = env.reset(guard.get_mut());
+    let reset_entry = EnvInteraction {
+        kind: EnvInteractionKind::Reset,
+        observation: Some(value_descriptor(&observation.0)),
+        action: None,
+    };
+
+    let profile = env.profile();
+    let exec_input = merge_observation(input, &observation);
+    let (max_steps, wall_clock_ms) = match &profile.budget {
+        Some(b) => (b.max_steps, b.wall_clock_ms),
+        None => (None, None),
+    };
+
+    let executor = match audit {
+        Some(a) => Executor::with_boxed_audit(StubProvider, a),
+        None => Executor::with_stub(),
+    };
+    let (result, budget_halted) = executor.execute_for_environment(
+        &ast,
+        exec_input,
+        run_id,
+        started_at,
+        max_steps,
+        wall_clock_ms,
+        vec![reset_entry],
+    );
+
+    // FROZEN — evaluate is strictly after execute returns, and is read-only
+    // over the completed run (NE-4).
+    let reward = env.evaluate(guard.get());
+
+    // `guard` drops here -> env.release(inst), unconditionally (NE-7).
+    Ok(EnvRunResult {
+        result,
+        reward,
+        budget_halted,
+    })
+}
+
+/// Overlay `obs` under a stable `"observation"` key onto `input` (if it is a
+/// `Value::Map`; a non-map or absent `input` starts from an empty map — the
+/// same graceful-ignore precedent as the boot-sequence `$in` overlay). The
+/// workflow reads it via `@in: { observation }` → `$in.observation`.
+fn merge_observation(input: Option<Value>, obs: &Observation) -> Option<Value> {
+    let mut entries: Vec<(String, Value)> = match input {
+        Some(Value::Map(m)) => m,
+        _ => Vec::new(),
+    };
+    if let Some(pos) = entries.iter().position(|(k, _)| k == "observation") {
+        entries[pos] = ("observation".to_string(), obs.0.clone());
+    } else {
+        entries.push(("observation".to_string(), obs.0.clone()));
+    }
+    Some(Value::Map(entries))
+}
+
+/// Structural descriptor for an environment observation/action — never the raw
+/// value (data-safety boundary, matching [`FieldDescriptor`] use elsewhere).
+fn value_descriptor(v: &Value) -> FieldDescriptor {
+    match v {
+        Value::Map(entries) => {
+            FieldDescriptor::map_like(entries.len() as u32, format!("{v:?}").len() as u32)
+        }
+        Value::List(items) => {
+            FieldDescriptor::map_like(items.len() as u32, format!("{v:?}").len() as u32)
+        }
+        other => FieldDescriptor::text(format!("{other:?}").len() as u32),
+    }
 }
 
 /// Build the fail-fast rejection result for an unsatisfiable manifest: status

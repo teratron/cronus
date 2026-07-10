@@ -18,8 +18,8 @@
 
 use crate::ast::{AbsoluteRule, CommandCall, RuleKind, Step, Stmt, WorkflowFile};
 use crate::observability::{
-    AuditProvider, ExecutionEvent, FieldDescriptor, LoopType, NoopAuditProvider, RunManifest,
-    RunStatus,
+    AuditProvider, EnvInteraction, ExecutionEvent, FieldDescriptor, LoopType, NoopAuditProvider,
+    RunManifest, RunStatus,
 };
 use crate::vocab;
 use std::collections::HashMap;
@@ -423,6 +423,20 @@ impl Executor {
         }
     }
 
+    /// Like [`Executor::with_audit`] but takes an already-boxed
+    /// [`AuditProvider`] — the shape `run_with_environment`'s two entry points
+    /// (plain vs. audited) share internally.
+    pub(crate) fn with_boxed_audit(
+        provider: impl ModelProvider + 'static,
+        audit: Box<dyn AuditProvider>,
+    ) -> Self {
+        Executor {
+            provider: Box::new(provider),
+            audit,
+            dialog: Box::new(DefaultDialogProvider),
+        }
+    }
+
     /// Create an executor with the built-in model/audit and a custom
     /// [`DialogProvider`].
     pub fn with_dialog(dialog: impl DialogProvider + 'static) -> Self {
@@ -448,7 +462,8 @@ impl Executor {
     /// Run a parsed workflow through the boot sequence, execute its steps, and
     /// return the structured [`RunResult`].
     pub fn execute(&self, ast: &WorkflowFile, input: Option<Value>) -> RunResult {
-        self.execute_inner(ast, input, "", "")
+        self.execute_inner(ast, input, "", "", None, None, Vec::new())
+            .0
     }
 
     /// Run a workflow with explicit run metadata forwarded to the audit provider.
@@ -459,16 +474,55 @@ impl Executor {
         run_id: &str,
         started_at: &str,
     ) -> RunResult {
-        self.execute_inner(ast, input, run_id, started_at)
+        self.execute_inner(ast, input, run_id, started_at, None, None, Vec::new())
+            .0
     }
 
+    /// Run a workflow under a step/wall-clock ceiling, embedding `env_trajectory`
+    /// (the environment's reset entry, NE-3) in the run manifest. Used by
+    /// `run_with_environment` (NE-2/NE-13); not part of the public API — the
+    /// environment combinators in `workflows.rs` are the sanctioned entry point.
+    ///
+    /// `max_tokens` on a `Budget` is intentionally not accepted here — no
+    /// token-accounting seam exists on [`ModelProvider`] today (documented gap,
+    /// same precedent as `StorageProvider`/`PolicyProvider`).
+    #[allow(clippy::too_many_arguments)]
+    pub(crate) fn execute_for_environment(
+        &self,
+        ast: &WorkflowFile,
+        input: Option<Value>,
+        run_id: &str,
+        started_at: &str,
+        max_steps: Option<u32>,
+        wall_clock_ms: Option<u64>,
+        env_trajectory: Vec<EnvInteraction>,
+    ) -> (RunResult, bool) {
+        self.execute_inner(
+            ast,
+            input,
+            run_id,
+            started_at,
+            max_steps,
+            wall_clock_ms,
+            env_trajectory,
+        )
+    }
+
+    /// Returns `(result, budget_halted)` — `budget_halted` is `true` only when
+    /// `max_steps`/`wall_clock_ms` cut the run short (NE-13); it is always
+    /// `false` for the plain `execute`/`execute_with_params` paths (`None`
+    /// budget parameters).
+    #[allow(clippy::too_many_arguments)]
     fn execute_inner(
         &self,
         ast: &WorkflowFile,
         input: Option<Value>,
         run_id: &str,
         started_at: &str,
-    ) -> RunResult {
+        max_steps: Option<u32>,
+        wall_clock_ms: Option<u64>,
+        env_trajectory: Vec<EnvInteraction>,
+    ) -> (RunResult, bool) {
         let mut ctx = ExecutionContext::new();
 
         // Boot step 1: identify workflow.
@@ -532,7 +586,17 @@ impl Executor {
         let mut abort = false;
         let mut paused = false;
         let mut halted = false;
-        for step in &ast.steps {
+        let mut budget_halted = false;
+        for (step_count, step) in ast.steps.iter().enumerate() {
+            // NE-13: a fixed step/wall-clock ceiling halts the run uniformly —
+            // a normal graded outcome (Status::Partial below), never an error.
+            let steps_exhausted = max_steps.is_some_and(|max| step_count as u32 >= max);
+            let time_exhausted = wall_clock_ms
+                .is_some_and(|ms| ctx.start_instant.elapsed().as_millis() as u64 >= ms);
+            if steps_exhausted || time_exhausted {
+                budget_halted = true;
+                break;
+            }
             match self.run_step_with_retry(&mut ctx, step) {
                 Some(Signal::Halt) => {
                     halted = true;
@@ -565,7 +629,9 @@ impl Executor {
             Status::Paused
         } else if abort {
             Status::Aborted
-        } else if !ctx.errors.is_empty() {
+        } else if !ctx.errors.is_empty() || budget_halted {
+            // A budget halt (NE-13) is a normal graded outcome, not an error —
+            // it reuses the existing Partial status rather than introducing one.
             Status::Partial
         } else {
             Status::Ok
@@ -595,18 +661,22 @@ impl Executor {
             error_code: ctx.errors.first().map(|e| e.code.clone()),
             total_steps: ctx.log.len() as u32,
             event_count: ctx.event_count,
+            env_trajectory,
         });
 
-        RunResult {
-            workflow: workflow_id,
-            status,
-            out,
-            log: ctx.log,
-            errors: ctx.errors,
-            flags: ctx.flags,
-            vars: ctx.variables,
-            resume,
-        }
+        (
+            RunResult {
+                workflow: workflow_id,
+                status,
+                out,
+                log: ctx.log,
+                errors: ctx.errors,
+                flags: ctx.flags,
+                vars: ctx.variables,
+                resume,
+            },
+            budget_halted,
+        )
     }
 
     // ─── Node dispatch ────────────────────────────────────────────────────────

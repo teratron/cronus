@@ -167,6 +167,35 @@ pub enum ExecutionEvent {
     },
 }
 
+// ─── Environment trajectory side-band (NE-3) ──────────────────────────────────
+
+/// Discriminant for an environment-lifecycle interaction recorded in the
+/// trajectory (NE-3). `Step` is reserved for a host that drives
+/// [`crate::environment::EnvironmentProvider::step`] directly; the built-in
+/// `run_with_environment` combinator emits `Reset` only (v1 scope — see
+/// `crate::environment` module docs). `evaluate`'s outcome is not represented
+/// here: it occurs after the run is frozen — after `run_complete` has already
+/// fired — and is delivered directly as the environment run's `Reward` instead
+/// (NE-4/NE-5), not duplicated into the trajectory.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum EnvInteractionKind {
+    Reset,
+    Step,
+}
+
+/// One environment-lifecycle interaction, carried through [`RunManifest`]
+/// rather than a parallel store (NE-3) — no new [`ExecutionEvent`] variant is
+/// added, so HO-6's closed taxonomy is preserved (the HO-8/HO-13 additive-field
+/// discipline). `observation`/`action` are structural descriptors only — never
+/// raw content, matching the [`FieldDescriptor`] data-safety boundary used
+/// elsewhere.
+#[derive(Debug, Clone)]
+pub struct EnvInteraction {
+    pub kind: EnvInteractionKind,
+    pub observation: Option<FieldDescriptor>,
+    pub action: Option<FieldDescriptor>,
+}
+
 // ─── Run manifest ─────────────────────────────────────────────────────────────
 
 /// Overall status reported in the run manifest.
@@ -202,6 +231,10 @@ pub struct RunManifest {
     pub total_steps: u32,
     /// Total events emitted to [`AuditProvider::record_event`] during this run.
     pub event_count: u32,
+    /// Environment-lifecycle interactions for this run (NE-3). Empty for every
+    /// run that did not go through [`crate::environment`]'s combinators —
+    /// additive field, HO-5 observer neutrality preserved for the common case.
+    pub env_trajectory: Vec<EnvInteraction>,
 }
 
 // ─── Tests ────────────────────────────────────────────────────────────────────
@@ -310,6 +343,7 @@ mod tests {
             error_code: None,
             total_steps: 5,
             event_count: 10,
+            env_trajectory: Vec::new(),
         });
         // All 10 event variants + run_complete accepted without panic.
     }
@@ -486,6 +520,7 @@ mod tests {
             error_code: None,
             total_steps: 3,
             event_count: 6,
+            env_trajectory: Vec::new(),
         };
         let recording = RecordingProvider::new();
         recording.run_complete(manifest);

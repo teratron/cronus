@@ -2,6 +2,18 @@
 
 Internal phase journal. Each entry corresponds to a completed phase.
 
+## Phase 12 — Environment & Evaluation (l2-nodus-environment) (2026-07-10)
+
+- T-12A01: Created `environment.rs` — `EnvironmentProvider` trait (task_ids/profile/open/reset/step/evaluate/release) + `TaskId`/`Seed`/`Observation`/`Action`/`Instance` types + built-in `StubEnvironment` (single stub task, empty profile, `step` echoes the action, `evaluate` returns the NE-9 no-op reward)
+- T-12A02: Verified lifecycle correctness — `reset`/`step` deterministic per `(task, seed, actions)`; `open` returns isolated instances; `release` idempotent (a second call is a no-op)
+- T-12B01: Added `EnvInteraction`/`EnvInteractionKind` to `observability.rs` and a new `RunManifest.env_trajectory` field — the reset interaction rides the existing `run_complete` delivery with no new `ExecutionEvent` variant (HO-6 preserved); `evaluate`'s outcome is delivered directly as `EnvRunResult.reward` instead of duplicated into the trajectory (it occurs after `run_complete` already fired — NE-4's frozen ordering)
+- T-12C01: Added `ExtensionRole::Environment` to `portability.rs`; `HostCapabilities::builtin()` now provides it via `StubEnvironment` (a deliberate contrast with `Dialog`, which `builtin()` does not provide)
+- T-12D01: Added `run_with_environment` / `run_with_environment_and_audit` to `workflows.rs` — `open → reset → execute → FREEZE → evaluate → release`, release guaranteed by a Drop-based `InstanceGuard`; `EnvRunResult { result, reward, budget_halted }`
+- T-12D02: Added `EnvironmentProfile`/`GradingMode`/public `grade()` composition function with the hybrid floor (checker-first, judge lowers-never-rescues); `grade()` takes an explicit `checker_passed: bool` rather than inferring pass/fail from the score (NE-9 metric neutrality)
+- T-12D03: Added `Budget` (wall_clock_ms/max_steps enforced in `execute_inner`'s step loop; max_tokens declared but not yet enforced — no token-accounting seam exists on `ModelProvider`); a budget halt reuses `Status::Partial` (normal outcome, not an error)
+- T-12D04: Added `CandidateResult` + `EnvRunResult::candidate()` — deterministic `std`-only digest (`DefaultHasher`) over the workflow source, zero-dep; carries the profile's budget so different-budget results are never silently compared
+- T-12T01: `crates/nodus/tests/environment.rs` — 10 integration tests (deterministic replay, frozen-boundary ordering, NE-10 fail-fast with zero `env.open` calls on rejection, hybrid floor, budget halt + control, candidate digest, guaranteed single release); `cargo test -p nodus` — 292 passed (was 265; +27), 0 failed; clippy `-D warnings` clean; fmt clean; doc clean; `Cargo.toml [dependencies]` still empty (LP-1 zero-dep preserved); downstream `cronus-cli` unaffected
+
 ## Phase 1 — Spec Completeness & Vocabulary Alignment (2026-06-23)
 
 - T-1A01: Defined `~PARALLEL` fail-fast error propagation semantics in l1-nodus-language.md §4.4 — first branch error bypasses `~JOIN`, forwards to `@err:`, `NODUS:RULE_VIOLATION` bypasses `@err:` per NL-2

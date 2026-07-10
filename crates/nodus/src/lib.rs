@@ -42,6 +42,7 @@
 mod error;
 
 pub mod ast;
+pub mod environment;
 pub mod lexer;
 pub mod observability;
 pub mod parser;
@@ -54,6 +55,10 @@ pub mod transpiler;
 pub mod validator;
 pub mod workflows;
 
+pub use environment::{
+    Action, Budget, CandidateResult, EnvRunResult, EnvironmentProfile, EnvironmentProvider,
+    GradingMode, Instance, Observation, Reward, Seed, StubEnvironment, TaskId, grade,
+};
 pub use error::{Error, Result, Span};
 pub use executor::{
     DefaultDialogProvider, DialogOutcome, DialogProvider, Executor, ModelProvider,
@@ -61,8 +66,8 @@ pub use executor::{
 };
 pub use lexer::{Lexer, Token, TokenType};
 pub use observability::{
-    AuditProvider, ExecutionEvent, FieldDescriptor, LoopType, NoopAuditProvider, RunManifest,
-    RunStatus,
+    AuditProvider, EnvInteraction, EnvInteractionKind, ExecutionEvent, FieldDescriptor, LoopType,
+    NoopAuditProvider, RunManifest, RunStatus,
 };
 pub use parser::Parser;
 pub use portability::{
@@ -75,9 +80,10 @@ pub use validator::{Diagnostic, Severity, Validator};
 pub use vocab::Schema;
 pub use workflows::{
     TestReport, TestResult, TranspileMode, ValidationReport, run, run_with_audit, run_with_dialog,
-    run_with_dialog_and_audit, run_with_manifest, run_with_manifest_and_audit, run_with_provider,
-    run_with_provider_and_audit, run_with_schema, run_with_schema_and_audit, scaffold, test,
-    test_with_tags, transpile, validate,
+    run_with_dialog_and_audit, run_with_environment, run_with_environment_and_audit,
+    run_with_manifest, run_with_manifest_and_audit, run_with_provider, run_with_provider_and_audit,
+    run_with_schema, run_with_schema_and_audit, scaffold, test, test_with_tags, transpile,
+    validate,
 };
 
 #[cfg(test)]
