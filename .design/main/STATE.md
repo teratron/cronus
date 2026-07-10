@@ -4,15 +4,15 @@
 <!-- Maximum 100 lines. Agent updates AFTER each completed action. -->
 
 **Workspace:** main
-**Updated:** 2026-07-10 15:23
+**Updated:** 2026-07-10 15:39
 **Phase:** 12 — Skill System
 **Status:** Active
 
 ## Current Position
 
-- **Task:** Phases 1–11 Done; Phase 12 (Skill System, l2-skill-system) Todo — 8 tasks / 5 tracks. Latest: l2-technology-stack §4.8 config-serialization-format policy added (RON-vs-JSON decision) — additive policy, no new tasks, no plan-structure change
-- **Spec:** INDEX v1.0.96; new l1-tokenization-boundary 1.0.0 Stable (TB-1…TB-10 — the text→model-symbol frontier: disjoint unreachable control sub-alphabet with refuse-by-default minting, non-composable encoding forcing cuts onto declared stable seams, measure-belongs-to-the-model with loud failure on an unidentifiable encoder). Refinements: l1-context-provenance → 1.1.0 (CP-9), l1-inference-cache → 1.1.0 (IC-10), l1-cache-stable-context → 1.1.0 (CSC-12); nodus l1-nodus-language → 1.10.0 (NL-19), l1-nodus-environment → 1.4.0 (NE-14). Prior: l2-technology-stack → 1.2.0 Stable (§4.8 JSON default, RON narrow opt-in, nodus exempt LP-1)
-- **Next Action:** Run /magic.task main to update the plan
+- **Task:** Phases 1–11 Done; Phase 12 (Skill System, l2-skill-system) Todo — 8 tasks / 5 tracks, workbook intact, unaffected by the v2.14.0 sync. Plan re-synced to PLAN v2.14.0 / TASKS v1.18.0: 6 orphans absorbed, 0 new tasks
+- **Spec:** INDEX v1.0.96 (194 specs: 182 Stable, 11 RFC, 1 Draft). Phase 0 += l1-tokenization-boundary (concept-only), l1-office-archetype, l1-background-activation (latter two NOT concept-only — each has an authored Implements: L2, C28 §4). Backlog += l2-crate-topology, l2-service-activation, l2-archetype-catalog (all RFC) + the l2-source-layout 1.2.0 delta. l2-source-layout demoted Stable→RFC by the amendment rule; its Phase 1 [x] stands at delivered 1.1.0 scope
+- **Next Action:** Execute T-12A01 Two-tier skill stores + shadowing precedence via /magic.run main
 
 ## Progress
 
@@ -21,6 +21,8 @@ Build phases: Done 1–11 (Seed → Advanced Office Features → Content/Sharing
 ```
 
 ## Recent Decisions
+
+- 2026-07-10 **Plan re-sync (/magic.task main) → PLAN v2.14.0 / TASKS v1.18.0; no new tasks.** Six orphaned specs absorbed. Three Stable L1 → Phase 0: `l1-tokenization-boundary` is `concept-only`; `l1-office-archetype` and `l1-background-activation` are **not** — each already has an authored `Implements:` L2, and C28 §4 drops the marker on authoring (not on promotion). Three RFC L2 → Backlog: `l2-crate-topology`, `l2-service-activation`, `l2-archetype-catalog`. **Registry arithmetic caught a hidden demotion**: the plan expected +3 Stable / +3 RFC from six new specs but the registry showed +2 / +4 — `l2-source-layout` had gone `Stable → RFC` at 1.2.0 under the RULES §2 amendment rule (its §4.4 crate-granularity TBD now delegates to `l2-crate-topology`). It and the topology spec form one **core-decomposition wave** and must promote together; Phase 1's `[x]` stands at the delivered 1.1.0 scope and only the delta is parked (KAN-8 precedent, one step further — this amendment also demoted status). Phase 10's KAN-8 checkbox corrected `[ ] → [x]`, verified against `crates/core/src/kanban/custom_boards.rs` rather than against the phase's own status line. Stabilization: `l2-loop-runner` (sole Draft) stays Draft — parent `l1-loop-governance` is RFC, layer constraint (c) fails. Hard-dep graph is a depth-1 L2→L1 forest (no L1 declares `Implements:`) → cycles impossible by construction; one soft cycle `l2-source-layout ↔ l2-crate-topology` logged, non-blocking. **Sequencing call:** Phase 12 runs before the decomposition — it is Stable + decomposed while the topology is RFC with open TBDs, and `skills` is pure-`std` domain logic that stays in the domain tier under either crate shape, so relocation would be mechanical. (Revert: git restore .design/main/PLAN.md .design/main/TASKS.md .design/main/STATE.md)
 
 - 2026-07-04 **Decision:** Phase 11 complete (8/8 tasks). Provides: resource_sharing (access foundation), file_store (content-addressed dedup+GC), notes (CRDT convergence+soft-delete), development_workflow (5-stage pipeline+2-stage gate+ledger). Domain-logic-first; SQLite/Yjs/StorageBackend/SHA-256 deferred as seams. Gates green: cargo 276 lib tests + clippy + fmt.
 

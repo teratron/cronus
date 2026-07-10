@@ -1,15 +1,15 @@
 # Master Task Index (Registry)
 
-**Version:** 1.17.1
+**Version:** 1.18.0
 **Generated:** 2026-07-10
-**Based on:** .design/main/PLAN.md v2.13.1
+**Based on:** .design/main/PLAN.md v2.14.0
 **Based on RULES:** .design/RULES.md v1.5.0
 **Execution Mode:** Parallel
 **Status:** Active
 
 ## Overview
 
-Tactical registry of all phases and their statuses, ordered by the growth metaphor (seed → stem → leaf → flower). Atomic checklists live in `tasks/phase-{N}.md`. Phases 1–11 are Done; Phase 12 (Skill System) is next.
+Tactical registry of all phases and their statuses, ordered by the growth metaphor (seed → stem → leaf → flower). Atomic checklists live in `tasks/phase-{N}.md`. Phases 1–11 are Done; Phase 12 (Skill System) is next. The v2.14.0 plan sync added no tasks: its six absorbed specs are three Stable L1 concepts (Phase 0, no implementation tasks by definition) and three RFC L2s parked in Backlog until they reach Stable.
 
 ## Active Phases
 
@@ -31,5 +31,5 @@ Tactical registry of all phases and their statuses, ordered by the growth metaph
 
 ## Meta Information
 
-- **Last Updated**: 2026-07-10 (v2.13.1 light sync: l1-deep-research concept absorbed into Phase 0 — Stable L1 whose L2 was already built in Phase 6, so a fully-realized concept, no new tasks; INDEX v1.0.94 / PLAN v2.13.1. Prior: v2.13.0 registry re-sync — 25 Stable L1 concepts → Phase 0 concept-only, dev-office RFC → Backlog, Phase 12 opened from l2-skill-system with 8 tasks / 5 tracks; INDEX v1.0.93 / PLAN v2.13.0)
+- **Last Updated**: 2026-07-10 (v2.14.0 registry sync, no new tasks: 3 Stable L1 concepts → Phase 0 — tokenization-boundary `concept-only`, office-archetype + background-activation not concept-only since each has an authored `Implements:` L2 (C28 §4); 3 RFC L2s → Backlog — crate-topology, service-activation, archetype-catalog; l2-source-layout demoted Stable→RFC at 1.2.0 by the amendment rule, its 1.2.0 delta parked while the Phase 1 `[x]` stands at delivered 1.1.0 scope; Phase 10 KAN-8 checkbox corrected to `[x]` against `crates/core/src/kanban/custom_boards.rs`; INDEX v1.0.96 / PLAN v2.14.0. Prior: v2.13.1 light sync — l1-deep-research absorbed into Phase 0; INDEX v1.0.94 / PLAN v2.13.1)
 - **Maintainer**: Core Team
