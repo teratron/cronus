@@ -83,19 +83,19 @@
 
 ## Recent Changes
 
-
-
-## Phase 9 — Operational Hardening — 2026-07-03
-
-- T-9A01: sandbox network policy — deny-by-default named entries with per-binary allowlisting, three access tiers (restricted/balanced/open), typed access-failure classification (blocked-by-policy/missing-approval/unsupported/unknown)
-- T-9A02: multi-user auth — bcrypt password hashing, 7-day `Instant`-based sessions with an orphan guard, RFC 6238 TOTP over HMAC-SHA1 with 8 single-use backup codes, admin promote/demote with privilege stashing + last-admin guard, reserved sentinel usernames rejected at creation
-- T-9B01: doctor — six-category check catalog (store index, stuck cards, dangling sessions, config validity, disk pressure, crash recovery) with a conservative safe-repair-vs-escalate split, panic-isolated extension registration, `cronus doctor [--fix]`
-- T-9B02: config hot-reload — flattened key-path diff, priority-ordered reload-rule table (first-match-wins, unmatched = safe restart default), skills-snapshot invalidation, bounded backoff -> polling -> disabled watcher recovery state machine
-- T-9C01: backup & restore — plain-`std::fs` restore-by-copy excluding `.env`/cache always and logs by default (opt-in), symlink-safe, `cronus backup create/list` + `cronus restore`
-- T-9C02: agent migration — schema-versioned manifest validation, two-layer split (archive/memory-candidates/skills/credentials-always-skipped), staged dry-run-first apply that backs up (via T-9C01) before any write, identity-based dedup
-- T-9D01: GitHub issue reporting — fail-closed consent gate, BLAKE3 cross-machine/cross-episode error fingerprinting (hex-address + home-dir normalization), in-memory dedup table with the documented Lookup API, previewable sanitized payload
-- T-9D02: self-improvement — calibration overconfidence/warning gate, mistake log with cross-project tagging, should-have-asked distinct-trigger recency lookup, at-most-one-pending-per-project ask-backs, upserted reasoning templates, a five-signal `build_brief` join
 - T-9D03: telemetry — opt-in gate (default off, no-op recording while opted out), closed metric-name allowlist, a payload enum with no free-text variant, opt-out drops the queue
 - T-9T01: cross-subsystem hardening integration — a seeded secret proven absent from a real backup archive, a real restored tier, and a scrubbed report preview; both consent gates (report, telemetry) proven to block by default; workspace-wide `cargo test`/`clippy -D warnings`/`fmt --check` all clean
 - Verify: `cargo test --workspace` green across all 5 crates; `cargo clippy --workspace --all-targets -- -D warnings` clean; `cargo fmt --all -- --check` clean
+
+## Phase 12 — Skill System (Two-Tier Stores & Canonical Stack) — 2026-07-10
+
+- T-12A01: `skills::store` — two-tier stores (`Preset`/`State`/`Workspace`) with shadowing precedence (`resolve`: workspace > state > preset, first match wins); `write` structurally rejects `SkillTier::Preset` (the program tier is seeded once via `with_presets`, never through `write`); an override identical to the shadowed preset returns `WriteOutcome::IdenticalToPreset`, not an error
+- T-12A02: `skills::package` — canonical package validation: required `SKILL.md`/`extension.json`, every other top-level entry checked against a closed allow-list (rejects `scripts/` and any other unknown material), `origin/` contents exempted from the allow-list entirely (never classified), manifest `kind` must be `Skill` (reuses `extensions::ExtensionManifest`/`validate_manifest`, EXT-9)
+- T-12B01: `skills::commands` — `CommandSpec` registry (id/category/input_schema/required_grants/surface_version, the last stamped only from a module constant); `CommandRegistry::check_dispatch` validates input against schema before checking `RequiredGrant::{Fs,Network,Secrets}` against the caller's manifest permissions
+- T-12B02: `skills::exec` — `WorkflowRuntime` trait seam; `activate()` short-circuits to `ActivationResult::InstructionOnly` before touching the runtime at all when degraded or workflow-less; otherwise validates, executes, then runs a per-call grant check on every dispatched `OperationStep`
+- T-12C01: `skills::convert` — the six-stage pipeline (verify → classify → retain → transpile → degrade → report) as one pure function; a missing/invalid witness denies before anything else is inspected; any unmapped script demotes the whole package to `Degradation::InstructionOnly`; every original is preserved under `origin/` regardless of outcome; the final `validate_package` call is the atomicity gate — nothing lands on `Err` because nothing is written until a caller lands the returned `Ok` value
+- T-12C02: `skills::synthesize` — lands already-authored content (the model call itself is a seam) as `source: generated`; the one genuine lint at this layer is workflow-pair completeness (`workflow.nd`/`workflow.md` must land together or not at all); `ActivationPolicy::RequiresReview` is the only variant — the spec's open TBD resolved conservatively, no auto-activate path exists
+- T-12D01: `cronus ext skill import|create|status` — nested under the existing `Ext` group (no new top-level command group); `import` reads one file and runs it through `convert()`; `create` runs an instruction-only `AuthoredSkill` through `synthesize()`; `status` reports store origin/degradation/pending-review via a separately-testable `compute_status()`; extended `SkillEntry` with `degraded`/`pending_review` fields through a backward-compatible `with_status()` builder
+- T-12T01: invariant-compliance sweep — 10 integration tests in `crates/core/tests/skill_system.rs`, one per Invariant Compliance row (EXT-1/2/3/4+6/5+STO-1/7/8/9/11, STO-3), exercising convert→store, convert→exec, and synthesize→store together; CLI/TUI/library parity confirmed structurally (TUI's `/ext` slash command already covers the nested `skill` group at its existing granularity — no TUI-crate change needed)
+- Verify: `cargo test --workspace` green across all crates (core 314 lib + 10 integration, cli 37 unit + 28 smoke, tui 198, nodus 34, codegraph, all others); `cargo clippy --workspace --all-targets -- -D warnings` clean; `cargo fmt --all` clean
 

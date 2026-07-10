@@ -48,6 +48,7 @@ pub mod scheduler;
 pub mod secrets;
 pub mod self_improvement;
 pub mod session;
+pub mod skills;
 pub mod state;
 pub mod store;
 pub mod telemetry;

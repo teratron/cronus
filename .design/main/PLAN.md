@@ -316,7 +316,7 @@ Execution mode: **Parallel** (C3); tracks grouped by file independence. Critical
 
 *First post-11 implementation phase: the skill extension kind gets its concrete two-tier realization on the canonical execution stack.*
 
-- [ ] **Skill System (Two-Tier Stores & Canonical Stack)** ([l2-skill-system.md](specifications/l2-skill-system.md)) [L2] — `Implements: l1-extensions.md, l1-storage-model.md` — preset store (program tier, read-only) + mutable store (state tier) with shadowing precedence; canonical package (no interpreted scripts); built-in command surface registered into the workflow-runtime vocabulary; conversion pipeline (verify → classify → retain → transpile → degrade → report, atomic); prompt synthesis; `cronus skill` import/create/status → 8 tasks / 5 tracks in [tasks/phase-12.md](tasks/phase-12.md)
+- [x] **Skill System (Two-Tier Stores & Canonical Stack)** ([l2-skill-system.md](specifications/l2-skill-system.md)) [L2] — `Implements: l1-extensions.md, l1-storage-model.md` — preset store (program tier, read-only) + mutable store (state tier) with shadowing precedence; canonical package (no interpreted scripts); built-in command surface registered into the workflow-runtime vocabulary; conversion pipeline (verify → classify → retain → transpile → degrade → report, atomic); prompt synthesis; `cronus skill` import/create/status → 8 tasks / 5 tracks in [tasks/phase-12.md](tasks/phase-12.md)
 
 ## Backlog
 

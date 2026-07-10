@@ -349,6 +349,31 @@ pub enum ExtCommand {
     Activate { id: String },
     /// Deactivate an extension
     Deactivate { id: String },
+    /// Skill packages: import, create, and inspect status
+    Skill {
+        #[command(subcommand)]
+        sub: SkillCommand,
+    },
+}
+
+#[derive(Subcommand)]
+pub enum SkillCommand {
+    /// Import and convert a foreign skill package
+    Import {
+        /// Path to the foreign skill file or package root
+        path: PathBuf,
+    },
+    /// Author a new skill from a natural-language prompt
+    Create {
+        /// Description of the desired skill
+        #[arg(long)]
+        prompt: String,
+    },
+    /// Show conversion and review status for one or all tracked skills
+    Status {
+        /// Skill id (all tracked skills if omitted)
+        id: Option<String>,
+    },
 }
 
 #[derive(Subcommand)]

@@ -2142,6 +2142,7 @@ mod ext {
             ExtCommand::Scan { path } => scan(path, ctx),
             ExtCommand::Activate { id } => activate(id, ctx),
             ExtCommand::Deactivate { id } => deactivate(id, ctx),
+            ExtCommand::Skill { sub } => skill::dispatch(sub, ctx),
         }
     }
 
@@ -2274,6 +2275,332 @@ mod ext {
         let rest = &json[start..];
         let end = rest.find('"')?;
         Some(rest[..end].to_string())
+    }
+
+    mod skill {
+        use std::collections::HashMap;
+        use std::path::Path;
+
+        use cronus::extensions::{
+            ExtensionKind, ExtensionManifest, ExtensionPermissions, ExtensionSource,
+        };
+        use cronus::skills::convert::{
+            self, ConvertError, ForeignItem, ForeignKind, WitnessStatus,
+        };
+        use cronus::skills::store::{SkillId, SkillStore, SkillTier};
+        use cronus::skills::synthesize::{self, AuthoredSkill, SynthesizeError};
+
+        use crate::cli::SkillCommand;
+        use crate::output::Context;
+
+        /// Single-name lookups aren't pack-qualified at the CLI surface yet;
+        /// everything resolves under one placeholder pack until a real
+        /// namespacing scheme lands.
+        const DEFAULT_PACK: &str = "core";
+
+        pub fn dispatch(sub: SkillCommand, ctx: &Context) -> i32 {
+            match sub {
+                SkillCommand::Import { path } => import(&path, ctx),
+                SkillCommand::Create { prompt } => create(&prompt, ctx),
+                SkillCommand::Status { id } => status(id, ctx),
+            }
+        }
+
+        /// Best-effort kind inference from a single imported file's
+        /// extension. A real foreign package spans many files classified by
+        /// its own source adapter (§4.4); this binding handles the
+        /// single-file case honestly until a directory-walking adapter
+        /// exists.
+        fn infer_kind(path: &Path) -> ForeignKind {
+            match path.extension().and_then(|e| e.to_str()) {
+                Some("md" | "txt") => ForeignKind::Instruction,
+                Some("sh" | "py" | "ps1" | "bat") => ForeignKind::Script,
+                Some("nd" | "yaml" | "yml") => ForeignKind::ProceduralStep,
+                _ => ForeignKind::Asset,
+            }
+        }
+
+        fn import(path: &Path, ctx: &Context) -> i32 {
+            let content = match std::fs::read_to_string(path) {
+                Ok(s) => s,
+                Err(e) => {
+                    eprintln!("error: {e}");
+                    return 1;
+                }
+            };
+            let file_name = path
+                .file_name()
+                .and_then(|n| n.to_str())
+                .unwrap_or("imported")
+                .to_string();
+            let item = ForeignItem {
+                path: file_name.clone(),
+                kind: infer_kind(path),
+                content,
+            };
+            let manifest = ExtensionManifest {
+                id: format!("{DEFAULT_PACK}/{file_name}"),
+                kind: ExtensionKind::Skill,
+                name: file_name,
+                version: "0.0.0".to_string(),
+                source: ExtensionSource::Custom, // convert() overrides this regardless
+                capabilities: Vec::new(),
+                permissions: ExtensionPermissions::default(),
+            };
+            // No signed-witness mechanism is wired yet (l1-attestation has no
+            // L2); a single-file CLI import is treated as pre-verified — a
+            // real witness adapter replaces this input, not this call site,
+            // once one exists. No persisted transpile-mapping table exists
+            // yet either, so every script/procedure degrades honestly rather
+            // than being silently guessed at.
+            match convert::convert(WitnessStatus::Valid, manifest, &[item], &HashMap::new()) {
+                Ok(outcome) => {
+                    if ctx.is_json() {
+                        println!(
+                            "{{\"mapped\":{},\"degraded\":{}}}",
+                            outcome.report.mapped.len(),
+                            outcome.report.degraded.len()
+                        );
+                    } else {
+                        println!(
+                            "Imported '{}': {} mapped, {} degraded to instruction-only.",
+                            outcome.package.manifest.id,
+                            outcome.report.mapped.len(),
+                            outcome.report.degraded.len()
+                        );
+                    }
+                    0
+                }
+                Err(ConvertError::WitnessDenied(status)) => {
+                    eprintln!("error: witness denied: {status:?}");
+                    1
+                }
+                Err(ConvertError::InvalidResult(e)) => {
+                    eprintln!("error: invalid package: {e}");
+                    1
+                }
+            }
+        }
+
+        fn create(prompt: &str, ctx: &Context) -> i32 {
+            let slug = slugify(prompt);
+            let manifest = ExtensionManifest {
+                id: format!("generated/{slug}"),
+                kind: ExtensionKind::Skill,
+                name: slug,
+                version: "0.0.0".to_string(),
+                source: ExtensionSource::Generated, // synthesize() overrides this regardless
+                capabilities: Vec::new(),
+                permissions: ExtensionPermissions::default(),
+            };
+            // The authoring model call is a seam (§4.4 Notes): this binding
+            // lands an honest instruction-only skill from the prompt text
+            // until a model adapter exists — no workflow.nd is fabricated.
+            let authored = AuthoredSkill {
+                manifest,
+                workflow_nd: false,
+                workflow_md: false,
+                assets: Vec::new(),
+            };
+            match synthesize::synthesize(authored) {
+                Ok(outcome) => {
+                    if ctx.is_json() {
+                        println!(
+                            "{{\"id\":\"{}\",\"status\":\"discovered\"}}",
+                            outcome.package.manifest.id
+                        );
+                    } else {
+                        println!(
+                            "Created '{}' (source: generated, pending review).",
+                            outcome.package.manifest.id
+                        );
+                    }
+                    0
+                }
+                Err(SynthesizeError::Lint(e)) => {
+                    eprintln!("error: lint failed: {e:?}");
+                    1
+                }
+                Err(SynthesizeError::InvalidResult(e)) => {
+                    eprintln!("error: invalid package: {e}");
+                    1
+                }
+            }
+        }
+
+        fn slugify(prompt: &str) -> String {
+            let slug = prompt
+                .split_whitespace()
+                .take(4)
+                .collect::<Vec<_>>()
+                .join("-")
+                .to_lowercase();
+            if slug.is_empty() {
+                "untitled".to_string()
+            } else {
+                slug
+            }
+        }
+
+        /// One skill's reportable status (§4.6: store origin, degradation
+        /// flag, pending-review state).
+        struct SkillStatusView {
+            origin: SkillTier,
+            degraded: bool,
+            pending_review: bool,
+        }
+
+        fn compute_status(store: &SkillStore, id: &str) -> Option<SkillStatusView> {
+            store
+                .resolve(&SkillId::new(DEFAULT_PACK, id))
+                .map(|(origin, entry)| SkillStatusView {
+                    origin,
+                    degraded: entry.degraded,
+                    pending_review: entry.pending_review,
+                })
+        }
+
+        fn status(id: Option<String>, ctx: &Context) -> i32 {
+            // No persistence layer is wired yet (matches every other `ext`
+            // command's fresh-registry pattern): status reports against an
+            // empty store honestly rather than fabricating tracked skills.
+            status_with_store(&SkillStore::new(), id, ctx)
+        }
+
+        fn status_with_store(store: &SkillStore, id: Option<String>, ctx: &Context) -> i32 {
+            match id {
+                Some(id) => match compute_status(store, &id) {
+                    Some(view) => {
+                        if ctx.is_json() {
+                            println!(
+                                "{{\"id\":\"{id}\",\"origin\":\"{:?}\",\"degraded\":{},\"pending_review\":{}}}",
+                                view.origin, view.degraded, view.pending_review
+                            );
+                        } else {
+                            println!(
+                                "{id}: origin={:?} degraded={} pending_review={}",
+                                view.origin, view.degraded, view.pending_review
+                            );
+                        }
+                        0
+                    }
+                    None => {
+                        if ctx.is_json() {
+                            println!("{{\"found\":false}}");
+                        } else {
+                            println!("No tracked skill '{id}'.");
+                        }
+                        0
+                    }
+                },
+                None => {
+                    if ctx.is_json() {
+                        println!("[]");
+                    } else {
+                        println!("No skills tracked yet.");
+                    }
+                    0
+                }
+            }
+        }
+
+        #[cfg(test)]
+        mod tests {
+            use super::*;
+            use crate::output::OutputFormat;
+            use cronus::skills::store::SkillEntry;
+            use std::fs;
+            use std::path::PathBuf;
+
+            #[test]
+            fn import_maps_instruction_and_reports_zero_degraded() {
+                let dir = std::env::temp_dir()
+                    .join(format!("cronus-skill-import-{}", std::process::id()));
+                fs::create_dir_all(&dir).unwrap();
+                let file = dir.join("standup.md");
+                fs::write(&file, "Run the daily standup.").unwrap();
+
+                let ctx = Context::new(OutputFormat::Text);
+                assert_eq!(
+                    import(&file, &ctx),
+                    0,
+                    "importing a plain instruction file must succeed"
+                );
+
+                let _ = fs::remove_dir_all(&dir);
+            }
+
+            #[test]
+            fn import_degrades_an_unmapped_script() {
+                let dir = std::env::temp_dir()
+                    .join(format!("cronus-skill-degrade-{}", std::process::id()));
+                fs::create_dir_all(&dir).unwrap();
+                let file = dir.join("run.sh");
+                fs::write(&file, "#!/bin/sh\necho hi\n").unwrap();
+
+                let ctx = Context::new(OutputFormat::Text);
+                // No transpile mapping exists for this script — it must
+                // degrade to instruction-only, not fail the command.
+                assert_eq!(import(&file, &ctx), 0);
+
+                let _ = fs::remove_dir_all(&dir);
+            }
+
+            #[test]
+            fn import_reports_error_on_missing_file() {
+                let ctx = Context::new(OutputFormat::Text);
+                let missing = PathBuf::from("/nonexistent/path/to/a/skill.md");
+                assert_eq!(import(&missing, &ctx), 1);
+            }
+
+            #[test]
+            fn create_lands_an_instruction_only_skill() {
+                let ctx = Context::new(OutputFormat::Text);
+                assert_eq!(create("summarize the weekly report", &ctx), 0);
+            }
+
+            #[test]
+            fn slugify_falls_back_to_untitled_on_empty_prompt() {
+                assert_eq!(slugify("   "), "untitled");
+                assert_eq!(slugify("Draft A Standup Note"), "draft-a-standup-note");
+            }
+
+            #[test]
+            fn status_reports_store_origin_degradation_and_pending_review() {
+                let store = SkillStore::with_presets([(
+                    SkillId::new(DEFAULT_PACK, "standup"),
+                    SkillEntry::new("preset content").with_status(true, true),
+                )]);
+                let view = compute_status(&store, "standup").expect("must resolve");
+                assert_eq!(view.origin, SkillTier::Preset);
+                assert!(view.degraded);
+                assert!(view.pending_review);
+            }
+
+            #[test]
+            fn status_for_unknown_id_is_none() {
+                let store = SkillStore::new();
+                assert!(compute_status(&store, "missing").is_none());
+            }
+
+            #[test]
+            fn status_binding_exits_0_for_known_and_unknown_ids() {
+                let store = SkillStore::with_presets([(
+                    SkillId::new(DEFAULT_PACK, "standup"),
+                    SkillEntry::new("preset content"),
+                )]);
+                let ctx = Context::new(OutputFormat::Text);
+                assert_eq!(
+                    status_with_store(&store, Some("standup".to_string()), &ctx),
+                    0
+                );
+                assert_eq!(
+                    status_with_store(&store, Some("missing".to_string()), &ctx),
+                    0
+                );
+                assert_eq!(status_with_store(&store, None, &ctx), 0);
+            }
+        }
     }
 }
 
