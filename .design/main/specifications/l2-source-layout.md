@@ -1,7 +1,7 @@
 # Source Layout (Monorepo)
 
-**Version:** 1.1.0
-**Status:** Stable
+**Version:** 1.2.0
+**Status:** RFC
 **Layer:** implementation
 **Implements:** l1-architecture.md
 
@@ -17,6 +17,7 @@ The development-time organization of the Cronus repository: a polyglot monorepo 
 - [l2-technology-stack.md](l2-technology-stack.md) - Monorepo tooling (moon/Nx) + Rust workspace + Tauri + React.
 - [l2-workflow-runtime.md](l2-workflow-runtime.md) - The workflow runtime is an external crate the core depends on.
 - [l2-filesystem-layout.md](l2-filesystem-layout.md) - The complementary user-install layout.
+- [l2-crate-topology.md](l2-crate-topology.md) - How `crates/core` is partitioned into crates; resolves the §4.4 granularity question.
 
 ## 1. Motivation
 
@@ -78,7 +79,15 @@ Cargo owns Rust builds/caching; pnpm + the polyglot runner (moon/Nx) own JS and 
 
 ### 4.4 Migration from the initial flat layout
 
-The initial placeholder `src/{app,cli,core,dashboard,kanban,office,tui}` mixed Rust modules with UI views. It is superseded by this layout: domain logic → `crates/core`; CLI/TUI → `crates/{cli,tui}`; shell → `apps/desktop`; `dashboard`/`office`/`kanban` were **UI views** → `packages/ui`. <!-- TBD: confirm crate granularity — single `core` crate vs split (engine/memory/scheduler) sub-crates -->
+The initial placeholder `src/{app,cli,core,dashboard,kanban,office,tui}` mixed Rust modules with UI views. It is superseded by this layout: domain logic → `crates/core`; CLI/TUI → `crates/{cli,tui}`; shell → `apps/desktop`; `dashboard`/`office`/`kanban` were **UI views** → `packages/ui`.
+
+### 4.5 Crate granularity [ADDED v1.2.0]
+
+The question this spec previously left open — a single `core` crate versus `engine`/`memory`/`scheduler` sub-crates — is **resolved in [l2-crate-topology.md](l2-crate-topology.md)**, and resolved *against* the domain-split proposal sketched above.
+
+Measurement showed domain-to-domain coupling is already near zero, so splitting `core` along domain lines would cut where there is no pain. The decomposition axis is instead **dependency weight and provider seams**: a module earns its own crate when it requires an infrastructure dependency the domain tier may not hold, when it backs one of the deployment-neutrality provider planes, or when it gains a consumer outside this workspace — never merely because it is large.
+
+`crates/core` therefore becomes a facade over `crates/{contract,domain,store-local,auth-local}`. The directory tree in §4.1 and the dependency graph in §4.2 describe the layout **before** that migration; see the topology spec for the target state and its ordered migration steps.
 
 ## 5. Drawbacks & Alternatives
 
@@ -93,3 +102,10 @@ The initial placeholder `src/{app,cli,core,dashboard,kanban,office,tui}` mixed R
 | `[ARCH]` | `.design/main/specifications/l1-architecture.md` | Layer model realized here |
 | `[STACK]` | `.design/main/specifications/l2-technology-stack.md` | Monorepo tooling + Rust workspace |
 | `[USER-LAYOUT]` | `.design/main/specifications/l2-filesystem-layout.md` | Complementary user-install layout |
+| `[TOPOLOGY]` | `.design/main/specifications/l2-crate-topology.md` | The crate decomposition of `crates/core` |
+
+## Document History
+
+| Version | Date | Notes |
+| --- | --- | --- |
+| 1.2.0 | 2026-07-10 | Resolved the §4.4 crate-granularity TBD by delegating to the new `l2-crate-topology.md`: decomposition follows the dependency/seam axis, not the domain axis. Added §4.5 recording the decision and marking §4.1/§4.2 as pre-migration state. Status → RFC pending review of the topology spec (amendment rule). History table added with this entry. |
