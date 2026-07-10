@@ -1,6 +1,6 @@
 # Cronus Architecture
 
-**Version:** 1.1.0
+**Version:** 1.1.1
 **Status:** Stable
 **Layer:** concept
 
@@ -24,6 +24,7 @@ The product is built from four architectural layers:
 - [l2-app-ui.md](l2-app-ui.md) - Implementation of layer 4 (application UI/UX).
 - [l1-execution-sandbox.md](l1-execution-sandbox.md) - The sanctioned out-of-process boundary for untrusted/agent-run code (INV-8); a security seam, not a service split.
 - [l1-multi-device-sync.md](l1-multi-device-sync.md) - Device-to-device replication converges instances of the same whole engine (INV-8), not a decomposition into services.
+- [l1-background-activation.md](l1-background-activation.md) - How a host *becomes* the always-on hub INV-4 presumes: the activation modes, and the authority boundary that keeps the agent from self-activating.
 
 ## 1. Motivation
 
@@ -146,4 +147,5 @@ Microservices are rejected for Cronus by construction: the product is single-use
 | Version | Date | Author | Notes |
 | --- | --- | --- | --- |
 | 1.0.0 | 2026-06-24 | Core Team | Initial spec — INV-1…INV-7; four-layer core+frontends model, inward dependency direction, hub-and-spoke deployment topology, command parity. |
+| 1.1.1 | 2026-07-10 | Core Team | Cross-reference only: linked `l1-background-activation.md`, which specifies how a host becomes the always-on hub INV-4 presumes. No invariant or design change. |
 | 1.1.0 | 2026-06-27 | Core Team | Added INV-8 (single-deployable modular monolith — not network-distributed microservices; sanctioned process boundaries limited to frontend↔core, security confinement of untrusted code, and hub↔spoke/device-replication of the same whole engine) and §4.5 (deployment shape rationale); §5 microservices-rejected alternative; clarified the phone-as-server case as another hub instance of one monolith. Additive; resolves the monolith-vs-microservices architecture decision. |
