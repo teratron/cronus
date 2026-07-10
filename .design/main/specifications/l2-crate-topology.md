@@ -1,7 +1,7 @@
 # Crate Topology (Core Decomposition)
 
 **Version:** 1.0.0
-**Status:** RFC
+**Status:** Stable
 **Layer:** implementation
 **Implements:** l1-architecture.md
 
@@ -47,7 +47,7 @@ This spec closes that gap. It is not a new architectural decision; it is the mis
 
 - **A crate boundary is a compilation boundary, never a process or network boundary.** All crates link into one deployable (INV-8). Nothing here introduces a service, an on-box network hop, or an orchestration dependency.
 - **The public contract does not change.** The facade crate re-exports the current module paths, so `cronus::memory::…` and every existing frontend call site keep working. This is a physical reorganization, not an API redesign.
-- **`l2-technology-stack.md` §"One crate → desktop + mobile is real"** is read as *one Rust codebase serves both targets*, not *exactly one Cargo crate*. Every crate defined here builds for desktop and mobile targets; the property is preserved. <!-- TBD: confirm this reading with the stack spec's author before promoting to Stable -->
+- **`l2-technology-stack.md` §"One crate → desktop + mobile is real"** is read as *one Rust codebase serves both targets*, not *exactly one Cargo crate*. Every crate defined here builds for desktop and mobile targets; the property is preserved. This reading is confirmed against the stack spec's INV-1 row — "Core is a **Rust** library crate with a C-ABI/FFI surface; linkable into Tauri, CLI/TUI binaries, and external host programs": the constraint is on the *embeddable unit*, which the `cronus` facade preserves (§3 INV-1), not on the Cargo-crate count. The workspace already ships five crates (`core`, `nodus`, `cli`, `tui`, `codegraph`), so a literal one-crate reading is already inconsistent with the shipped tree and was never the intended meaning.
 - **The domain tier performs no I/O and links no C toolchain, platform service, or cryptographic implementation.** It may depend on pure-computation, leaf, no-I/O crates (see §4.3 allowlist). This is a weaker rule than nodus's absolute LP-1 zero-dependency contract, and deliberately so: the core is a host, not a portable library.
 - **The async runtime, if adopted, is not a domain dependency.** `l2-core-library.md` §2 specifies Tokio; no async runtime is present in the tree today (§6.5). Whenever it lands, it belongs to the adapter and facade tiers, where I/O lives — never to the domain tier.
 - Crate count is a cost. This topology mints five crates, not fifty; the minting rule (§4.4) is what keeps it there.
@@ -278,3 +278,4 @@ Recorded here because each bears on the topology, and each is independently acti
 | Version | Date | Notes |
 | --- | --- | --- |
 | 1.0.0 | 2026-07-10 | Initial spec. Resolves the `l2-source-layout.md` §4.4 crate-granularity TBD: decompose on the dependency/seam axis (contract · domain · store-local · auth-local · facade), not the domain axis. Establishes the crate-minting rule (§4.4), realizes the DN-2 provider seams as crate boundaries (§4.5), identifies the single inverted `context_router → MemoryStore` edge as the migration pivot (§4.6), and distinguishes a crate boundary from a process boundary under INV-8 (§4.7). Records five analysis findings (§6), incl. an INV-2 violation in the CLI and the absent DN-2 seams. |
+| 1.0.0 | 2026-07-10 | `RFC → Stable`. Post-Update Review passed (`@role:spec-critic` + `@role:prompt-engineer`). The sole open question — the §2 reading of the stack spec's "one crate → desktop + mobile" — was resolved against `l2-technology-stack` INV-1 (the constraint is on the embeddable unit, preserved by the facade; the workspace already ships five crates) with no conflict; the TBD marker was cleared and the confirming rationale recorded inline. No design change; status advance only. |

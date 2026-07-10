@@ -4,15 +4,15 @@
 <!-- Maximum 100 lines. Agent updates AFTER each completed action. -->
 
 **Workspace:** main
-**Updated:** 2026-07-10 16:42
+**Updated:** 2026-07-10 19:26
 **Phase:** — (all 12 build phases Done)
 **Status:** Active
 
 ## Current Position
 
-- **Task:** All 12 build phases Done. Plan re-synced to PLAN v2.14.1 / TASKS v1.18.1: milestone — no phase open, every currently-Stable spec is implemented
-- **Spec:** INDEX v1.0.96 (194 specs: 182 Stable, 11 RFC, 1 Draft). Backlog (8 items) is entirely RFC/Draft: memory-intelligence, memory-consolidation, spec-driven-governance, dynamic-harness, loop-governance, dev-office (RFC L1); knowledge-store, crate-topology, service-activation, archetype-catalog + source-layout 1.2.0 delta (RFC L2); loop-runner (Draft L2, RFC parent). None plannable by /magic.task — RFC→Stable needs /magic.spec review (RULES §2)
-- **Next Action:** Plan complete, no phase open. Deterministic next target (DA-3 dependency topology): the core-decomposition wave (l2-crate-topology + l2-source-layout 1.2.0) — the one Backlog item other Backlog items depend on. Run /magic.spec main to review it RFC→Stable, then re-run /magic.task main. (Override: pick any other Backlog RFC to promote instead)
+- **Task:** All 12 build phases Done. Core-decomposition wave promoted RFC→Stable (/magic.spec main) — now the next implementable work, no longer Backlog
+- **Spec:** INDEX v1.0.97 (194 specs: 184 Stable, 9 RFC, 1 Draft). Promoted this pass: `l2-crate-topology` 1.0.0 + `l2-source-layout` 1.2.0 → Stable (the §2 TBD resolved against l2-technology-stack INV-1, no conflict; spec-critic + prompt-engineer PASS). Backlog now 6: memory-intelligence, memory-consolidation, spec-driven-governance, dynamic-harness, loop-governance, dev-office (RFC L1); knowledge-store, service-activation, archetype-catalog (RFC L2); loop-runner (Draft, RFC parent)
+- **Next Action:** Run /magic.task main to plan the now-Stable core-decomposition wave (l2-crate-topology + l2-source-layout) into a new phase — SYNC_GAP already flags PLAN based on INDEX 1.0.96 vs registry 1.0.97
 
 ## Progress
 
@@ -21,6 +21,8 @@ Build phases: Done 1–12 (Seed → Advanced Office Features → Content/Sharing
 ```
 
 ## Recent Decisions
+
+- 2026-07-10 **Core-decomposition wave promoted RFC→Stable (/magic.spec main) → INDEX v1.0.97.** `l2-crate-topology` 1.0.0 and `l2-source-layout` 1.2.0 both advanced to Stable after Post-Update Review (`@role:spec-critic` PASS + `@role:prompt-engineer` PASS-WITH-REWRITES). **The one blocker was a self-flagged TBD** in crate-topology §2 ("confirm this reading … before promoting to Stable") over whether the stack spec's "one crate → desktop + mobile" mandates exactly one Cargo crate. Resolved against `l2-technology-stack` INV-1 ("Core is a Rust library crate with a C-ABI/FFI surface; linkable into …"): the constraint is on the embeddable unit — preserved by the `cronus` facade (§3 INV-1) — not the crate count, and the workspace already ships five crates, so a literal one-crate reading is already false. No conflict; TBD cleared, confirming rationale recorded inline. source-layout's only RFC reason was "pending topology review," so it cleared in lockstep — the two promote together exactly as planned. Registry 182→184 Stable, 11→9 RFC. Header parity clean. Handoff: SYNC_GAP (PLAN based-on 1.0.96 vs registry 1.0.97) is the expected signal to /magic.task, which will move the wave from Backlog into a new phase (not fixed in spec.md by design). (Revert: git restore .design/main/INDEX.md .design/main/specifications/l2-crate-topology.md .design/main/specifications/l2-source-layout.md)
 
 - 2026-07-10 **Post-run replan (/magic.task main) → PLAN v2.14.1 / TASKS v1.18.1; milestone, no new tasks.** Pre-flight clean (ok:true, no orphans, no drift). All twelve build phases are Done and every currently-Stable spec is implemented — confirmed by grepping PLAN.md: every unchecked `[ ]` box sits in Backlog and is RFC or Draft, none is a Stable spec. **No new phase can be opened.** Pre-Planning Stabilization (Draft-only batch): the sole Draft `l2-loop-runner` stays Draft (RFC parent `l1-loop-governance`, layer constraint fails); the 11 RFCs are outside the Draft→Stable batch — RFC→Stable is a /magic.spec review act (RULES §2), not a mechanical promotion, so `/magic.task` cannot advance any of them. Only stale artifact was the PLAN/TASKS overview prose (still called Phase 12 "open") — corrected to a milestone note; patch bump, no structural change. **Deterministic next target (DA-3):** by dependency topology the core-decomposition wave (`l2-crate-topology` + `l2-source-layout` 1.2.0) wins — it is the one Backlog item other Backlog items depend on (`l2-service-activation` presumes its crate seam; it is the precondition for `l1-deployment-neutrality` DN-2/DN-3). Next action is therefore /magic.spec (RFC review), not /magic.run (nothing to execute). (Revert: git restore .design/main/PLAN.md .design/main/TASKS.md .design/main/STATE.md)
 

@@ -1,7 +1,7 @@
 # Source Layout (Monorepo)
 
 **Version:** 1.2.0
-**Status:** RFC
+**Status:** Stable
 **Layer:** implementation
 **Implements:** l1-architecture.md
 
@@ -109,3 +109,4 @@ Measurement showed domain-to-domain coupling is already near zero, so splitting 
 | Version | Date | Notes |
 | --- | --- | --- |
 | 1.2.0 | 2026-07-10 | Resolved the §4.4 crate-granularity TBD by delegating to the new `l2-crate-topology.md`: decomposition follows the dependency/seam axis, not the domain axis. Added §4.5 recording the decision and marking §4.1/§4.2 as pre-migration state. Status → RFC pending review of the topology spec (amendment rule). History table added with this entry. |
+| 1.2.0 | 2026-07-10 | `RFC → Stable`. The amendment rule's pending-review condition is satisfied: `l2-crate-topology` passed Post-Update Review and reached Stable in the same pass, so the delegated §4.5 decision is now backed by a Stable target. No content change; status advance only. |
