@@ -10,9 +10,9 @@
 
 ## Current Position
 
-- **Task:** All build phases 1–11 Done. Plan sync (v1.13.1): orphaned l1-nodus-environment concept absorbed into Phase 0 (Stable but concept-only — no L2 yet, no tasks generated); Phase 11 (Control-Flow) status reconciled to Done+Archived in the plan (was a stale `[ ]`)
-- **Spec:** PLAN v1.13.1 / TASKS v2.5.1 / INDEX v1.0.46; RULES parity refreshed v1.4.0 → v1.5.0. All 14 nodus specs Stable; l1-nodus-environment is the one concept-only L1 (EnvironmentProvider realization l2-nodus-environment not yet authored)
-- **Next Action:** Author l2-nodus-environment or a backlog upstream-parity cluster via /magic.spec nodus to open the next phase
+- **Task:** All build phases 1–11 Done. Authored **l2-nodus-environment v1.0.0 Stable** — the Rust realization of the l1-nodus-environment Environment/Evaluation contract (EnvironmentProvider + StubEnvironment, reset/step/evaluate lifecycle, Reward/Trajectory side-band projection, ExtensionRole::Environment, run_with_environment frozen boundary, GradingMode, Budget NE-13, CandidateResult NE-12); NE-1…NE-13 compliance table reconciles the standing pending obligation. Design-only spec ahead of code (dialog/control-flow precedent)
+- **Spec:** INDEX v1.0.47; 15 nodus specs Stable. l1-nodus-environment now realized (no longer concept-only). l2-nodus-environment is currently a plan orphan pending /magic.task; the PLAN.md "concept-only" note on l1-nodus-environment is stale until the next /magic.task reconciles it
+- **Next Action:** Run /magic.task nodus to open the l2-nodus-environment implementation phase (and reconcile the now-stale concept-only marker)
 
 ## Progress
 

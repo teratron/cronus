@@ -88,6 +88,7 @@
 - <https://github.com/tinyhumansai/tinyflows>
 - <https://github.com/snyk/agent-scan>
 - <https://github.com/karpathy/autoresearch>
+- <https://github.com/openai/tiktoken>
 
 ## Harness
 
