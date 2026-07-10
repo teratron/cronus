@@ -1,6 +1,6 @@
 # Technology Stack
 
-**Version:** 1.1.0
+**Version:** 1.2.0
 **Status:** Stable
 **Layer:** implementation
 **Implements:** l1-architecture.md
@@ -291,8 +291,28 @@ Nearly every subsystem persists through SQLite (state, memory scopes, knowledge 
 - **Timeouts, not spin-retries** — every connection sets `busy_timeout`; an `SQLITE_BUSY` that reaches a subsystem indicates a discipline violation to fix, never an error to retry in a loop.
 - **Short transactions on the hot path** — long-running work (consolidation sweeps, reindexing, vacuum, backup snapshots) runs on the background tier in bounded batches; a hot-path transaction never spans a model call or network I/O.
 
+### 4.8 Configuration Serialization Format
+
+<!-- [ADDED] v1.2.0 -->
+
+Config and small structured state serialize as **JSON by default**. JSON is the required format at every boundary; **RON** (Rusty Object Notation) is a narrow, opt-in choice for one specific class of file; **nodus never uses either as a core dependency**. A file's format is decided by where it lives and who edits it — not by preference:
+
+| Format | Use for | Why |
+| --- | --- | --- |
+| **JSON** (default) | (a) files mirroring an external convention — `hooks.json`, `.mcp.json`, `plugin.json`/`extension.json`, `package.json`, `devcontainer.json`; (b) anything crossing the Rust↔TS/IPC boundary the desktop UI reads — `app.json`, `settings.json`, dashboard `layout.json`, `board.json`; (c) machine-generated data/index/export — codegraph graphs, analytics snapshots, migration `manifest.json`/`conversations.json` | The external contract or the non-Rust reader dictates it; RON has no mature TS parser and adds nothing for machine-written data no human edits. |
+| **RON** (opt-in, justified dependency) | Rust-owned, human-hand-edited, **enum/variant-heavy** internal config that never crosses a language/interop boundary — e.g. routing rules (`routing.*`), model/gateway/channel bindings (`models.*`/`gateway.*`/`channels.*`), sandbox-policy presets (isolation tiers), automation node templates, quality-gate definitions | RON represents Rust tagged enums/tuples/structs faithfully and allows comments + trailing commas, so a hand-edited variant-config is legible and hard to mis-shape where JSON is error-prone. This — not general preference — is the "strictly necessary and justified" bar (project dependency policy) for adding the `ron` crate. |
+| **TOML** | Build/tooling manifests only — `Cargo.toml`, `pyproject.toml` | Ecosystem standard; not a runtime-config choice, unchanged here. |
+
+Discipline:
+
+- **JSON is the fallback, not a defect.** A file that does not clearly meet the RON criterion stays JSON. Two formats are a real cost (tooling, cognitive load); RON must earn its place *per file*, never by default.
+- **No big-bang migration.** Existing shipped JSON config (e.g. the Phase-4 model/router state) moves to RON only when a file is next substantially refactored *and* clears the criterion — never as a sweep. Changing a file's extension is a code migration, not a spec edit.
+- **Serde-uniform.** Both formats deserialize through the same `serde` derives; the format is a call-site choice (`serde_json` vs `ron`), so a config type is format-agnostic and a file can move between formats with no model change.
+- **nodus is exempt and stays format-neutral.** `crates/nodus` holds a zero-external-dependency contract (`l1-nodus-portability` LP-1) and MUST NOT take the `ron` crate. nodus core stores no config of its own — durable state is host-supplied through the `StorageProvider` seam (LP-15), and the host picks the format. RON is a `crates/core` (host) decision, never a nodus-core one.
+
 ## 5. Drawbacks & Alternatives
 
+- **Two config formats (RON + JSON):** a split is cognitive and tooling overhead. Mitigated by the strict per-file criterion (§4.8) — RON is confined to hand-edited enum-heavy Rust config, JSON stays the default and the only boundary format; the split never reaches the TS side. Rejected alternatives: JSON-everywhere (loses tagged-enum legibility + comments for variant config), JSON5/JSONC (comments but still no faithful Rust enum shape and another parser), TOML-for-all (weak for deeply-nested tagged unions).
 - **sqlite-vec is pre-1.0:** breaking changes possible; mitigate by pinning and isolating the vector access behind a core repository interface.
 - **Tailwind v4 on system WebViews:** old Linux WebKitGTK / old Android WebView can fail to style; mitigate with a min-OS/WebView floor or a PostCSS downgrade, else fall back to Tailwind v3.4.
 - **moon/Nx learning curve:** heavier than Turborepo; acceptable given Turborepo leaves the Rust half unmanaged. <!-- TBD: final monorepo tool decision (moon vs Nx) pending a thin spike -->
@@ -310,3 +330,4 @@ Nearly every subsystem persists through SQLite (state, memory scopes, knowledge 
 | Version | Date | Notes |
 | --- | --- | --- |
 | 1.1.0 | 2026-07-04 | Added §4.7 SQLite Concurrency Policy — uniform cross-subsystem discipline: WAL everywhere, single owning writer task per database file (write-behind queue), bounded read pool, busy_timeout instead of spin-retries, short hot-path transactions with heavy work on the background tier. History table added with this entry. |
+| 1.2.0 | 2026-07-10 | Added §4.8 Configuration Serialization Format — JSON is the default and the only boundary format (external-convention files, Rust↔TS/IPC files the UI reads, machine-generated data); RON is a narrow opt-in for Rust-owned, hand-edited, enum/variant-heavy internal config where tagged-enum fidelity + comments beat error-prone JSON (the justified-dependency bar for the `ron` crate); TOML stays for build manifests only; serde-uniform so format is a call-site choice and no big-bang migration; nodus exempt and format-neutral (LP-1 zero-dep forbids the `ron` crate, its durable state is host-supplied via the StorageProvider seam). §5 gains the two-format-overhead drawback + rejected alternatives (JSON-everywhere, JSON5/JSONC, TOML-for-all). Additive policy section — stays Stable (Trust Mode, no contradiction with §1–4). |

@@ -4,14 +4,14 @@
 <!-- Maximum 100 lines. Agent updates AFTER each completed action. -->
 
 **Workspace:** main
-**Updated:** 2026-07-10 09:12
+**Updated:** 2026-07-10 09:24
 **Phase:** 12 — Skill System
 **Status:** Active
 
 ## Current Position
 
-- **Task:** Phases 1–11 Done; Phase 12 (Skill System, l2-skill-system) Todo — 8 tasks / 5 tracks. Light plan sync (v2.13.1): new l1-deep-research concept absorbed into Phase 0 — a fully-realized concept (its L2, l2-deep-research, was already built Done in Phase 6), so no new tasks were generated
-- **Spec:** PLAN v2.13.1 / TASKS v1.17.1 / INDEX v1.0.94 in sync; new: l1-deep-research 1.0.0 Stable (concept parent for the Done l2-deep-research, DR-1…DR-11); l2-deep-research re-parented → 1.3.0; three broken-link patch fixes (l1-version-control, l2-inbox, l1-agent-coevaluation)
+- **Task:** Phases 1–11 Done; Phase 12 (Skill System, l2-skill-system) Todo — 8 tasks / 5 tracks. Latest: l2-technology-stack §4.8 config-serialization-format policy added (RON-vs-JSON decision) — additive policy, no new tasks, no plan-structure change
+- **Spec:** INDEX v1.0.95; l2-technology-stack → 1.2.0 Stable (§4.8: JSON default + only boundary format, RON narrow opt-in for Rust-owned hand-edited enum-heavy config, nodus exempt LP-1). Prior: l1-deep-research 1.0.0 Stable + l2-deep-research re-parented → 1.3.0; three broken-link patch fixes
 - **Next Action:** Execute T-12A01 Two-tier skill stores + shadowing precedence via /magic.run main
 
 ## Progress
