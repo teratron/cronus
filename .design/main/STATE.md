@@ -4,14 +4,14 @@
 <!-- Maximum 100 lines. Agent updates AFTER each completed action. -->
 
 **Workspace:** main
-**Updated:** 2026-07-10 10:05
+**Updated:** 2026-07-10 10:37
 **Phase:** 12 — Skill System
 **Status:** Active
 
 ## Current Position
 
 - **Task:** Phases 1–11 Done; Phase 12 (Skill System, l2-skill-system) Todo — 8 tasks / 5 tracks. Latest: l2-technology-stack §4.8 config-serialization-format policy added (RON-vs-JSON decision) — additive policy, no new tasks, no plan-structure change
-- **Spec:** INDEX v1.0.95; l2-technology-stack → 1.2.0 Stable (§4.8: JSON default + only boundary format, RON narrow opt-in for Rust-owned hand-edited enum-heavy config, nodus exempt LP-1). Prior: l1-deep-research 1.0.0 Stable + l2-deep-research re-parented → 1.3.0; three broken-link patch fixes
+- **Spec:** INDEX v1.0.96; new l1-tokenization-boundary 1.0.0 Stable (TB-1…TB-10 — the text→model-symbol frontier: disjoint unreachable control sub-alphabet with refuse-by-default minting, non-composable encoding forcing cuts onto declared stable seams, measure-belongs-to-the-model with loud failure on an unidentifiable encoder). Refinements: l1-context-provenance → 1.1.0 (CP-9), l1-inference-cache → 1.1.0 (IC-10), l1-cache-stable-context → 1.1.0 (CSC-12); nodus l1-nodus-language → 1.10.0 (NL-19), l1-nodus-environment → 1.4.0 (NE-14). Prior: l2-technology-stack → 1.2.0 Stable (§4.8 JSON default, RON narrow opt-in, nodus exempt LP-1)
 - **Next Action:** Execute T-12A01 Two-tier skill stores + shadowing precedence via /magic.run main
 
 ## Progress

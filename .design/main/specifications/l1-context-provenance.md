@@ -1,6 +1,6 @@
 # Context Provenance & Trusted Composition
 
-**Version:** 1.0.0
+**Version:** 1.1.0
 **Status:** Stable
 **Layer:** concept
 
@@ -34,6 +34,7 @@ realizations of this one contract.
 - [l1-claim-verification.md](l1-claim-verification.md) — verifies model output grounding; the output side of the trust boundary, complementary to this input-composition side.
 - [l1-memory-model.md](l1-memory-model.md) — retrieved memory is an untrusted fragment source when it contains externally-sourced content (CP-1).
 - [l1-workflow-language.md](l1-workflow-language.md) — a workflow interpolates variables into prompts; those interpolations are composition boundaries governed here.
+- [l1-tokenization-boundary.md](l1-tokenization-boundary.md) — TB-4/TB-5 supply the **structural floor** beneath CP-2/CP-6: where the model has a control sub-alphabet, no content can encode into it, so a frame cannot be forged rather than merely being hard to forge. CP-9 is the composing invariant.
 - [l1-nodus-language.md](../../nodus/specifications/l1-nodus-language.md) — the nodus realization: NL-11 provenance-safe `$var` interpolation.
 
 ## 1. Motivation
@@ -131,6 +132,22 @@ Rules every Layer 2 implementation MUST NOT violate:
   prompt-injection incident is attributable after the fact and a policy regression
   (an over-broad elevation) is detectable from telemetry, not only from an exploit.
 
+- **CP-9 Control-channel unforgeability at the encoding boundary**: [ADDED v1.1.0]
+  where the receiving model distinguishes a **control sub-alphabet** — frame, turn,
+  role, channel, and stop markers — neutralization is enforced at the point a fragment
+  enters that alphabet, **not only by escaping its text**. An untrusted fragment can
+  **never emit a control symbol**, by construction of the encoder rather than by a
+  sanitizer applied after it; content that merely *resembles* one is **refused by
+  default** and thereafter either encoded inertly or minted, per an explicit,
+  auditable, per-surface disposition (CP-3 kinship) — never silently promoted, never
+  silently inerted. This is the **structural floor beneath CP-6**: a delimiter built
+  from ordinary content is a *string* an adversary must fail to forge, whereas an
+  unreachable sub-alphabet removes the forgery **capability**. CP-6 remains the
+  defense-in-depth layer for surfaces whose model exposes no control alphabet (a flat
+  prompt surface), where it is the only structure available. Governed by
+  `l1-tokenization-boundary` TB-4/TB-5; a realization that relies solely on textual
+  delimiting where a control alphabet exists does not satisfy CP-2.
+
 > L2 specs cannot reach RFC status until all invariants here are addressed in their "Invariant Compliance" section.
 
 ## 4. Detailed Design
@@ -154,16 +171,23 @@ neutralize(f) := encode-as-data(f)  OR  delimit+preamble(sanitize(f))     // CP-
 The default branch is the *untrusted* branch. An author reaches the raw branch only by
 marking a fragment elevated (CP-3), which the trace records (CP-8).
 
-### 4.2 Two Neutralization Realizations
+### 4.2 Neutralization Realizations
 
-Both existing cronus mechanisms are valid neutralizations of CP-2 — this spec is the
-contract they satisfy, not a replacement:
+The existing cronus mechanisms are valid neutralizations of CP-2 — this spec is the
+contract they satisfy, not a replacement. They are ordered by the strength of the
+guarantee they give, strongest first:
 
-| Realization | How it neutralizes | Owner |
-| --- | --- | --- |
-| **Encode-as-data** | escape/encode the fragment so control characters and structure become inert literals | render-time encoder |
-| **Delimit + preamble** | wrap in sanitized delimiters + a "treat as data" instruction (CP-6) | `l2-tool-security §4.6` spotlighting |
-| **Detection (complementary)** | classify for known attack patterns — a *second* layer, never the primary guarantee (CP-5) | `l2-tool-security §4.4` classifier |
+| Realization | How it neutralizes | Guarantee | Owner |
+| --- | --- | --- | --- |
+| **Alphabet-level** | the fragment cannot encode into the model's control sub-alphabet at all (CP-9) | **structural** — forgery is impossible | the encoder, `l1-tokenization-boundary` TB-4/TB-5 |
+| **Encode-as-data** | escape/encode the fragment so control characters and structure become inert literals | structural | render-time encoder |
+| **Delimit + preamble** | wrap in sanitized delimiters + a "treat as data" instruction (CP-6) | structural, contingent on sanitization | `l2-tool-security §4.6` spotlighting |
+| **Detection (complementary)** | classify for known attack patterns — a *second* layer, never the primary guarantee (CP-5) | heuristic | `l2-tool-security §4.4` classifier |
+
+The first three are all valid CP-2 defaults; the first is the only one that does not
+depend on a transform being correctly applied at every surface. Where a control
+alphabet exists, it is not optional (CP-9) — the delimiter layer then guards *within*
+the data channel rather than guarding the channel boundary itself.
 
 ### 4.3 Provenance Stickiness (CP-4)
 
@@ -227,9 +251,11 @@ channel in the first place.
 | `[TOOL-SEC]` | `.design/main/specifications/l2-tool-security.md` | §4.6 spotlighting + §4.4 classifier — the two realizations of this contract. |
 | `[SECURITY]` | `.design/main/specifications/l1-security.md` | Client-safety boundary this concept applies at composition time. |
 | `[CLAIM-VERIFY]` | `.design/main/specifications/l1-claim-verification.md` | The complementary output-verification boundary. |
+| `[TOKEN-BOUNDARY]` | `.design/main/specifications/l1-tokenization-boundary.md` | TB-4/TB-5 — the structural floor beneath CP-2/CP-6 (CP-9). |
 
 ## Document History
 
 | Version | Date | Author | Notes |
 | --- | --- | --- | --- |
+| 1.1.0 | 2026-07-10 | Core Team | Added CP-9 control-channel unforgeability at the encoding boundary — where the receiving model distinguishes a control sub-alphabet (frame/turn/role/channel/stop markers), neutralization is enforced at the point a fragment enters that alphabet and not only by escaping its text: an untrusted fragment can never emit a control symbol by construction of the encoder rather than by a sanitizer applied after it, and content that merely resembles one is refused by default and thereafter either encoded inertly or minted per an explicit auditable per-surface disposition (CP-3 kinship), never silently promoted nor silently inerted. This is the structural floor beneath CP-6: a delimiter built from ordinary content is a string an adversary must fail to forge, whereas an unreachable sub-alphabet removes the forgery capability; CP-6 remains the defense-in-depth layer for flat prompt surfaces with no control alphabet, where it is the only structure available. §4.2 extended — the realization table gains the alphabet-level row and is reordered by guarantee strength. Governed by the new l1-tokenization-boundary TB-4/TB-5. Additive: no existing invariant weakened. |
 | 1.0.0 | 2026-07-02 | Core Team | Initial spec — content provenance & trusted composition: per-fragment provenance with unknown=untrusted (CP-1); untrusted-by-default neutralization at the composition boundary (CP-2); explicit auditable per-fragment trust elevation (CP-3); sticky monotonic provenance, trusted+untrusted=untrusted (CP-4); structural neutralization primary, detection complementary (CP-5); delimiter integrity, content can't escape its quarantine (CP-6); every model-facing surface guarded not only a wrapper (CP-7); trust decisions observable for attribution/regression (CP-8). Elevates the scattered l2-tool-security spotlighting + classifier into one L1 contract they realize; composes with l1-security / l1-claim-verification / l1-memory-model / l1-workflow-language; nodus realization = l1-nodus-language NL-11. |

@@ -1,6 +1,6 @@
 # Cache-Stable Context
 
-**Version:** 1.0.0
+**Version:** 1.1.0
 **Status:** Stable
 **Layer:** concept
 
@@ -31,6 +31,8 @@ the caller is billed. It is the *where you may touch at all* concept, orthogonal
 - [l1-routing.md](l1-routing.md) — cache-aware routing: keeping a session on the same upstream/credential lane keeps its cache warm (CSC-9 credential-lane discipline).
 - [l1-generation-budget.md](l1-generation-budget.md) — the output-side token-economy sibling; this concept governs the input/prefix side.
 - [l1-security.md](l1-security.md) — sacrosanct cryptographic/thinking fields (CSC-7) and credential-scope non-void (CSC-9).
+- [l1-tokenization-boundary.md](l1-tokenization-boundary.md) — TB-2/TB-3: the frozen/live partition point (CSC-2) must be a **stable seam**, not an arbitrary byte offset. Byte-identity (CSC-4/CSC-6) is necessary but not sufficient for a hit. CSC-12 is the composing invariant.
+- [l1-inference-cache.md](l1-inference-cache.md) — the storage-side sibling; IC-10 is the same seam rule stated from the cache's side.
 
 ## 1. Motivation
 
@@ -133,6 +135,19 @@ Rules every Layer 2 implementation MUST NOT violate:
   output tokens are accounted separately, so the saving of a hit — and the cost of a
   miss or a self-inflicted bust — is attributable per session and tunable. A cache
   regression MUST be detectable from telemetry, not only from the invoice.
+
+- **CSC-12 (The boundary is a stable seam, not a byte offset):** [ADDED v1.1.0] the
+  partition point CSC-2 computes is a position the **encoder declares stable** — one
+  no continuation can move — not an arbitrary offset into the bytes. Because encoding
+  is not composable (`l1-tokenization-boundary` TB-2), content appended in the live
+  zone can **retroactively re-encode the tail of the frozen prefix** while leaving
+  every one of its bytes untouched; the key is byte-identical and the symbol sequence
+  is not. **CSC-4 byte-faithful passthrough and CSC-6 position preservation are
+  therefore necessary but not sufficient conditions for a hit.** Anchoring the boundary
+  on a control symbol — a message or turn frame marker — satisfies this by
+  construction (TB-4), which is why the natural partition falls between whole messages
+  and never mid-message. A boundary whose stability the encoder does not assert is
+  **unstable**, and the prefix before it is not cacheable as a shared prefix (TB-3).
 
 > L2 specs cannot reach RFC status until all invariants here are addressed in their "Invariant Compliance" section.
 
@@ -255,9 +270,11 @@ for the invoice to reveal.
 | `[COMPRESS]` | `.design/main/specifications/l1-context-compression.md` | Live-zone-only compression transform bound by CSC-2. |
 | `[CHECKPOINT]` | `.design/main/specifications/l2-session-checkpoint.md` | Frozen byte-identical system blocks this concept generalizes. |
 | `[ROUTER]` | `.design/main/specifications/l2-model-router.md` | Cache-aware sticky routing that keeps a session's prefix warm. |
+| `[TOKEN-BOUNDARY]` | `.design/main/specifications/l1-tokenization-boundary.md` | TB-2/TB-3 — why the CSC-2 boundary must be a stable seam and not a byte offset (CSC-12). |
 
 ## Document History
 
 | Version | Date | Author | Notes |
 | --- | --- | --- | --- |
+| 1.1.0 | 2026-07-10 | Core Team | Added CSC-12 the boundary is a stable seam, not a byte offset — the partition point CSC-2 computes is a position the encoder declares stable (one no continuation can move), not an arbitrary offset into the bytes. Because encoding is not composable (l1-tokenization-boundary TB-2), content appended in the live zone can retroactively re-encode the tail of the frozen prefix while leaving every one of its bytes untouched: the key is byte-identical and the symbol sequence is not. CSC-4 byte-faithful passthrough and CSC-6 position preservation are therefore necessary but not sufficient conditions for a hit — a correction to the implicit assumption that byte-stability alone secures the key. Anchoring the boundary on a control symbol (a message or turn frame marker) satisfies the rule by construction (TB-4), which is why the natural partition falls between whole messages and never mid-message; a boundary whose stability the encoder does not assert is unstable and the prefix before it is not shareable (TB-3). The storage-side statement of the same rule is l1-inference-cache IC-10. Additive: no existing invariant weakened. |
 | 1.0.0 | 2026-07-02 | Core Team | Initial spec — cache-stable context discipline elevating scattered L2 prompt-cache precautions into one L1 concept: cache key as a first-class cost lever (CSC-1), frozen-prefix/live-zone partition with a computed boundary (CSC-2), append-only history (CSC-3), byte-faithful passthrough (CSC-4), deterministic edits (CSC-5), position preservation (CSC-6), sacrosanct crypto/thinking fields (CSC-7), schema parity across forks (CSC-8), billing-mode-gated aggressiveness (CSC-9), observe-and-confine never rewrite-to-align anti-pattern (CSC-10), separated cache-cost accounting (CSC-11). Orthogonal to l1-context-compression (what to shrink) — this governs where mutation is allowed at all. Unifies l2-agent-registry prompt-cache parity, l2-session-checkpoint frozen blocks, l2-learning-loop cache isolation, l2-dashboard cache_read accounting. |
