@@ -1,8 +1,14 @@
 //! Session checkpoint — three-file hierarchy, section-budgeted reads,
 //! fork-agent parity, and snapshot retention.
+//!
+//! `CheckpointPaths`, `CheckpointError`, and the `CheckpointWriter` trait
+//! moved to `cronus-contract` (§4.2); the file-backed
+//! implementations stay here, in the domain tier.
 
 use std::fs;
 use std::path::{Path, PathBuf};
+
+pub use cronus_contract::{CheckpointError, CheckpointPaths, CheckpointWriter};
 
 // ── Constants ─────────────────────────────────────────────────────────────────
 
@@ -12,45 +18,7 @@ pub const AUTO_MEMORY_THRESHOLD_BYTES: usize = 50_000;
 /// Maximum checkpoint snapshots retained per project.
 pub const MAX_SNAPSHOTS: usize = 50;
 
-// ── CheckpointPaths ───────────────────────────────────────────────────────────
-
-/// The three canonical checkpoint files for a session.
-#[derive(Debug, Clone)]
-pub struct CheckpointPaths {
-    /// Full session context JSON.
-    pub context: PathBuf,
-    /// Extracted memory facts (plain text).
-    pub memory: PathBuf,
-    /// Human-readable session notes.
-    pub notes: PathBuf,
-}
-
-impl CheckpointPaths {
-    pub fn new(state_dir: &Path) -> Self {
-        let base = state_dir.join("checkpoint");
-        CheckpointPaths {
-            context: base.clone(),
-            memory: base.join("memory"),
-            notes: base.join("notes.md"),
-        }
-    }
-
-    pub fn fork(state_dir: &Path, fork_id: &str) -> Self {
-        let base = state_dir.join(format!("checkpoint-fork-{fork_id}"));
-        CheckpointPaths {
-            context: base.clone(),
-            memory: base.join("memory"),
-            notes: base.join("notes.md"),
-        }
-    }
-}
-
-// ── CheckpointWriter ──────────────────────────────────────────────────────────
-
-/// Seam trait for writing checkpoints (wired by agent-registry later).
-pub trait CheckpointWriter: Send + Sync {
-    fn write(&self, paths: &CheckpointPaths, body: &str) -> Result<(), CheckpointError>;
-}
+// ── CheckpointWriter implementations ─────────────────────────────────────────
 
 /// File-based checkpoint writer.
 pub struct FileCheckpointWriter;
@@ -142,27 +110,4 @@ pub fn prune_snapshots(snapshots_dir: &Path) -> Result<usize, CheckpointError> {
         0
     };
     Ok(removed)
-}
-
-// ── CheckpointError ───────────────────────────────────────────────────────────
-
-#[derive(Debug)]
-pub enum CheckpointError {
-    Io(std::io::Error),
-}
-
-impl std::fmt::Display for CheckpointError {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        match self {
-            CheckpointError::Io(e) => write!(f, "checkpoint I/O error: {e}"),
-        }
-    }
-}
-
-impl std::error::Error for CheckpointError {}
-
-impl From<std::io::Error> for CheckpointError {
-    fn from(e: std::io::Error) -> Self {
-        CheckpointError::Io(e)
-    }
 }

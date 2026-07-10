@@ -1,0 +1,507 @@
+//! `cronus-contract` — the ports tier of the crate topology (§4.1/§4.2):
+//! shared types plus the seam traits domain code depends on and
+//! adapter crates implement. Zero external dependencies, by construction —
+//! nothing here may ever depend on I/O, a platform service, or a C library
+//! (§4.3).
+//!
+//! This crate holds no logic of its own beyond what a data type's own
+//! invariants require (id generation, display formatting, weight lookup). It
+//! exists so `cronus-domain` and the adapter crates (`cronus-store-local`,
+//! `cronus-auth-local`) can share a vocabulary without either depending on
+//! the other.
+
+// ── Memory types ─────────────────────────────────────────────────────────────
+//
+// Moved from `crates/core/src/memory/mod.rs`. `MemoryEntry` is the payload the
+// `MemorySearch` / `UserDataStore` seam traits below carry across the
+// domain/adapter boundary (§4.5); its field types travel with it.
+
+use std::sync::atomic::{AtomicU64, Ordering};
+use std::time::{Duration, SystemTime, UNIX_EPOCH};
+
+static ID_COUNTER: AtomicU64 = AtomicU64::new(0);
+
+pub fn now_secs() -> u64 {
+    SystemTime::now()
+        .duration_since(UNIX_EPOCH)
+        .unwrap_or(Duration::ZERO)
+        .as_secs()
+}
+
+fn generate_id() -> String {
+    let t = SystemTime::now()
+        .duration_since(UNIX_EPOCH)
+        .unwrap_or(Duration::ZERO)
+        .as_millis() as u64;
+    let c = ID_COUNTER.fetch_add(1, Ordering::Relaxed);
+    format!("mem_{t:016x}_{c:08x}")
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Hash)]
+pub struct MemoryId(String);
+
+impl MemoryId {
+    pub fn new() -> Self {
+        MemoryId(generate_id())
+    }
+
+    pub fn as_str(&self) -> &str {
+        &self.0
+    }
+}
+
+impl Default for MemoryId {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
+impl From<String> for MemoryId {
+    fn from(s: String) -> Self {
+        MemoryId(s)
+    }
+}
+
+impl std::fmt::Display for MemoryId {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        self.0.fmt(f)
+    }
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum MemoryKind {
+    ArchitecturalDecision,
+    DebugContext,
+    KnownIssue,
+    Convention,
+    ProjectContext,
+}
+
+impl MemoryKind {
+    pub fn as_str(self) -> &'static str {
+        match self {
+            MemoryKind::ArchitecturalDecision => "ArchitecturalDecision",
+            MemoryKind::DebugContext => "DebugContext",
+            MemoryKind::KnownIssue => "KnownIssue",
+            MemoryKind::Convention => "Convention",
+            MemoryKind::ProjectContext => "ProjectContext",
+        }
+    }
+
+    pub fn from_db_str(s: &str) -> Option<Self> {
+        match s {
+            "ArchitecturalDecision" => Some(MemoryKind::ArchitecturalDecision),
+            "DebugContext" => Some(MemoryKind::DebugContext),
+            "KnownIssue" => Some(MemoryKind::KnownIssue),
+            "Convention" => Some(MemoryKind::Convention),
+            "ProjectContext" => Some(MemoryKind::ProjectContext),
+            _ => None,
+        }
+    }
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum MemorySource {
+    Agent,
+    User,
+    Git,
+    System,
+    Import,
+}
+
+impl MemorySource {
+    pub fn as_str(self) -> &'static str {
+        match self {
+            MemorySource::Agent => "Agent",
+            MemorySource::User => "User",
+            MemorySource::Git => "Git",
+            MemorySource::System => "System",
+            MemorySource::Import => "Import",
+        }
+    }
+
+    pub fn from_db_str(s: &str) -> Option<Self> {
+        match s {
+            "Agent" => Some(MemorySource::Agent),
+            "User" => Some(MemorySource::User),
+            "Git" => Some(MemorySource::Git),
+            "System" => Some(MemorySource::System),
+            "Import" => Some(MemorySource::Import),
+            _ => None,
+        }
+    }
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum VerificationState {
+    Untested,
+    Claimed,
+    TestedInProject,
+    ValidatedCrossProject,
+}
+
+impl VerificationState {
+    pub fn weight(self) -> f64 {
+        match self {
+            VerificationState::Untested => 0.30,
+            VerificationState::Claimed => 0.50,
+            VerificationState::TestedInProject => 0.70,
+            VerificationState::ValidatedCrossProject => 1.00,
+        }
+    }
+
+    pub fn as_str(self) -> &'static str {
+        match self {
+            VerificationState::Untested => "Untested",
+            VerificationState::Claimed => "Claimed",
+            VerificationState::TestedInProject => "TestedInProject",
+            VerificationState::ValidatedCrossProject => "ValidatedCrossProject",
+        }
+    }
+
+    pub fn from_db_str(s: &str) -> Option<Self> {
+        match s {
+            "Untested" => Some(VerificationState::Untested),
+            "Claimed" => Some(VerificationState::Claimed),
+            "TestedInProject" => Some(VerificationState::TestedInProject),
+            "ValidatedCrossProject" => Some(VerificationState::ValidatedCrossProject),
+            _ => None,
+        }
+    }
+}
+
+#[derive(Debug, Clone)]
+pub struct MemoryEntry {
+    pub id: MemoryId,
+    pub kind: MemoryKind,
+    pub source: MemorySource,
+    pub title: String,
+    pub body: String,
+    pub confidence: f64,
+    pub trust_score: f64,
+    pub valid_at: u64,
+    pub created_at: u64,
+    pub superseded_at: Option<u64>,
+    pub workspace_id: Option<String>,
+    pub verification_state: VerificationState,
+}
+
+impl MemoryEntry {
+    pub fn new(
+        kind: MemoryKind,
+        source: MemorySource,
+        title: impl Into<String>,
+        body: impl Into<String>,
+    ) -> Self {
+        let now = now_secs();
+        MemoryEntry {
+            id: MemoryId::new(),
+            kind,
+            source,
+            title: title.into(),
+            body: body.into(),
+            confidence: 1.0,
+            trust_score: 0.5,
+            valid_at: now,
+            created_at: now,
+            superseded_at: None,
+            workspace_id: None,
+            verification_state: VerificationState::Untested,
+        }
+    }
+
+    pub fn with_workspace(mut self, id: impl Into<String>) -> Self {
+        self.workspace_id = Some(id.into());
+        self
+    }
+
+    /// Effective trust score after applying the verification state weight.
+    pub fn effective_trust(&self) -> f64 {
+        self.trust_score * self.verification_state.weight()
+    }
+}
+
+// ── StateStore seam ──────────────────────────────────────────────────────────
+//
+// Moved from `crates/core/src/store.rs`.
+
+/// A durable key-value store the engine resumes from after a restart.
+pub trait StateStore {
+    /// Persist a value; durable once this returns `Ok`.
+    fn put(&mut self, key: &str, value: &str) -> std::io::Result<()>;
+    /// Read a value previously stored, if present.
+    fn get(&self, key: &str) -> Option<String>;
+}
+
+// ── ModelProvider seam ───────────────────────────────────────────────────────
+//
+// Moved from `crates/core/src/router/provider.rs`. Only the types the trait
+// signature itself references travel with it — `ProviderError`,
+// `RoutingRequest`, and `RouteDecision` are router-internal and stay in
+// `cronus-domain`.
+
+/// Health state reported by a provider.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum ProviderHealth {
+    Healthy,
+    Degraded,
+    Unavailable,
+}
+
+/// Provider tier used for routing preference.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
+pub enum ProviderTier {
+    /// Locally-hosted model (lowest cost, highest privacy).
+    Local = 0,
+    /// Small, fast cloud model.
+    Economy = 1,
+    /// Standard cloud model.
+    Standard = 2,
+    /// Large, high-capability cloud model.
+    Premium = 3,
+}
+
+/// Category of task being routed.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum TaskType {
+    CodeGeneration,
+    Analysis,
+    Summarization,
+    QA,
+    Chat,
+}
+
+/// The `ModelProvider` trait — implemented by each backend.
+///
+/// All methods take `&self` — providers are stateless from the router's
+/// perspective; mutable circuit state lives in `RouterPool`.
+pub trait ModelProvider: Send + Sync {
+    /// Unique stable identifier (e.g. "openai-gpt4o", "local-llama3").
+    fn id(&self) -> &str;
+
+    /// Current health as reported by the provider's own health check.
+    fn health(&self) -> ProviderHealth;
+
+    /// Maximum tokens this provider accepts in context.
+    fn context_window(&self) -> u32;
+
+    /// Approximate cost per 1k tokens (output) in USD.
+    fn cost_per_1k_tokens(&self) -> f64;
+
+    /// Median observed latency in milliseconds.
+    fn latency_p50_ms(&self) -> u64;
+
+    /// Provider tier for routing priority.
+    fn tier(&self) -> ProviderTier;
+
+    /// Returns how well this provider handles the given task type (0.0–1.0).
+    fn task_fit(&self, task: TaskType) -> f64;
+}
+
+// ── CheckpointWriter seam ────────────────────────────────────────────────────
+//
+// Moved from `crates/core/src/checkpoint.rs`.
+
+/// The three canonical checkpoint files for a session.
+#[derive(Debug, Clone)]
+pub struct CheckpointPaths {
+    /// Full session context JSON.
+    pub context: std::path::PathBuf,
+    /// Extracted memory facts (plain text).
+    pub memory: std::path::PathBuf,
+    /// Human-readable session notes.
+    pub notes: std::path::PathBuf,
+}
+
+impl CheckpointPaths {
+    pub fn new(state_dir: &std::path::Path) -> Self {
+        let base = state_dir.join("checkpoint");
+        CheckpointPaths {
+            context: base.clone(),
+            memory: base.join("memory"),
+            notes: base.join("notes.md"),
+        }
+    }
+
+    pub fn fork(state_dir: &std::path::Path, fork_id: &str) -> Self {
+        let base = state_dir.join(format!("checkpoint-fork-{fork_id}"));
+        CheckpointPaths {
+            context: base.clone(),
+            memory: base.join("memory"),
+            notes: base.join("notes.md"),
+        }
+    }
+}
+
+#[derive(Debug)]
+pub enum CheckpointError {
+    Io(std::io::Error),
+}
+
+impl std::fmt::Display for CheckpointError {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            CheckpointError::Io(e) => write!(f, "checkpoint I/O error: {e}"),
+        }
+    }
+}
+
+impl std::error::Error for CheckpointError {}
+
+impl From<std::io::Error> for CheckpointError {
+    fn from(e: std::io::Error) -> Self {
+        CheckpointError::Io(e)
+    }
+}
+
+/// Seam trait for writing checkpoints (wired by agent-registry later).
+pub trait CheckpointWriter: Send + Sync {
+    fn write(&self, paths: &CheckpointPaths, body: &str) -> Result<(), CheckpointError>;
+}
+
+// ── Compactor seam ───────────────────────────────────────────────────────────
+//
+// Moved from `crates/core/src/context_mgmt.rs`.
+
+/// Where a context entry falls in the eviction order (least-important last).
+#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
+pub enum TrimPriority {
+    OrphanedToolResult,
+    ToolUsePair,
+    NonProtectedThinking,
+    NonProtectedAssistant,
+    NonProtectedUser,
+    CompactionMarker,
+    ModelChangeMarker,
+    Protected, // never trimmed — invariant
+}
+
+/// One turn's worth of context, with its trim priority and token cost.
+#[derive(Debug, Clone)]
+pub struct ContextEntry {
+    pub role: String,
+    pub body: String,
+    pub token_count: u64,
+    pub protected: bool,
+    pub priority: TrimPriority,
+}
+
+impl ContextEntry {
+    pub fn new(role: impl Into<String>, body: impl Into<String>, token_count: u64) -> Self {
+        ContextEntry {
+            role: role.into(),
+            body: body.into(),
+            token_count,
+            protected: false,
+            priority: TrimPriority::NonProtectedUser,
+        }
+    }
+
+    pub fn with_priority(mut self, p: TrimPriority) -> Self {
+        self.priority = p;
+        self
+    }
+
+    pub fn protect(mut self) -> Self {
+        self.protected = true;
+        self.priority = TrimPriority::Protected;
+        self
+    }
+}
+
+/// Seam trait for LLM-driven compaction (wiring deferred).
+pub trait Compactor: Send + Sync {
+    fn compact(&self, context: &[ContextEntry], keep_recent_tokens: u64) -> Result<String, String>;
+}
+
+// ── BusSender seam ───────────────────────────────────────────────────────────
+//
+// Moved from `crates/core/src/inbox.rs`.
+
+/// Bus events emitted by the inbox module.
+#[derive(Debug, Clone, PartialEq)]
+pub enum BusEvent {
+    InboxArrived { recipient_id: String, count: u32 },
+}
+
+/// Seam trait for bus event delivery (real bus wiring deferred).
+pub trait BusSender: Send + Sync {
+    fn send(&self, event: BusEvent);
+}
+
+/// No-op bus sender (stub). Lives beside the trait it implements — both
+/// `cronus-domain` and `cronus-store-local` need a bus sender, and neither
+/// may depend on the other, so a null-object default belongs in the ports
+/// tier both already depend on.
+pub struct NoOpBusSender;
+
+impl BusSender for NoOpBusSender {
+    fn send(&self, _: BusEvent) {}
+}
+
+/// Capturing bus sender for tests.
+pub struct CaptureBusSender {
+    pub events: std::sync::Mutex<Vec<BusEvent>>,
+}
+
+impl Default for CaptureBusSender {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
+impl CaptureBusSender {
+    pub fn new() -> Self {
+        CaptureBusSender {
+            events: std::sync::Mutex::new(Vec::new()),
+        }
+    }
+
+    pub fn captured(&self) -> Vec<BusEvent> {
+        self.events.lock().unwrap().clone()
+    }
+}
+
+impl BusSender for CaptureBusSender {
+    fn send(&self, event: BusEvent) {
+        self.events.lock().unwrap().push(event);
+    }
+}
+
+// ── DN-2 provider-plane seams ────────────────────────────────────────────────
+//
+// New trait declarations (§4.5). Illustrative shape, not
+// a final signature — no implementation exists yet; `cronus-store-local`
+// (`UserDataStore`) and `cronus-auth-local` (`AuthProvider`/`IdentityProvider`)
+// implement these in a later phase task. The plain `String` error is
+// deliberately minimal for the same reason: these are net-new APIs, not an
+// existing one being redesigned, so committing to a richer error type now
+// would be speculative.
+
+/// The read half of the user-data plane: full-text search over stored
+/// memories, independent of where they are persisted.
+pub trait MemorySearch {
+    fn search_fts(&self, query: &str, limit: usize) -> Result<Vec<MemoryEntry>, String>;
+}
+
+/// The DN-2 user-data plane (§4.5). `MemorySearch` is one facet; a full
+/// implementation also covers write, prune, and export (DN-7 portability).
+///
+/// No `Send + Sync` bound: the on-device default wraps a `rusqlite::Connection`,
+/// which is not `Sync` (SQLite connections are not shared across threads
+/// without external synchronization). The illustrative sketch this trait
+/// started from assumed it; the concrete implementation proved it wrong.
+pub trait UserDataStore: MemorySearch {
+    fn put(&self, entry: &MemoryEntry) -> Result<(), String>;
+    fn export(&self) -> Result<Vec<MemoryEntry>, String>; // DN-7: always able to come home
+}
+
+/// The DN-2 authentication plane (§4.5).
+pub trait AuthProvider: Send + Sync {
+    fn authenticate(&self, principal: &str, credential: &str) -> Result<bool, String>;
+}
+
+/// The DN-2 principal-identity plane (§4.5).
+pub trait IdentityProvider: Send + Sync {
+    fn current_principal(&self) -> Option<String>;
+}

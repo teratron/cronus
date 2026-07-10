@@ -1,5 +1,11 @@
 //! Context management — adaptive token budget, 8-step trim cascade,
 //! LLM-compaction seam, and tool-output truncation.
+//!
+//! `TrimPriority`, `ContextEntry`, and the `Compactor` trait moved to
+//! `cronus-contract` (§4.2); the trim cascade and the
+//! no-op default stay here, in the domain tier.
+
+pub use cronus_contract::{Compactor, ContextEntry, TrimPriority};
 
 // ── Constants ─────────────────────────────────────────────────────────────────
 
@@ -33,54 +39,6 @@ pub fn adaptive_budget(context_window: u64) -> u64 {
 /// Fires when `context_tokens > context_window - CONTEXT_RESERVE_TOKENS`.
 pub fn should_compact(context_tokens: u64, context_window: u64) -> bool {
     context_tokens > context_window.saturating_sub(CONTEXT_RESERVE_TOKENS)
-}
-
-// ── Context entry ─────────────────────────────────────────────────────────────
-
-/// Priority determines which entries are trimmed first (lower = removed first).
-#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
-pub enum TrimPriority {
-    OrphanedToolResult,
-    ToolUsePair,
-    NonProtectedThinking,
-    NonProtectedAssistant,
-    NonProtectedUser,
-    CompactionMarker,
-    ModelChangeMarker,
-    Protected, // never trimmed — invariant
-}
-
-/// A single entry in the context window.
-#[derive(Debug, Clone)]
-pub struct ContextEntry {
-    pub role: String,
-    pub body: String,
-    pub token_count: u64,
-    pub protected: bool,
-    pub priority: TrimPriority,
-}
-
-impl ContextEntry {
-    pub fn new(role: impl Into<String>, body: impl Into<String>, token_count: u64) -> Self {
-        ContextEntry {
-            role: role.into(),
-            body: body.into(),
-            token_count,
-            protected: false,
-            priority: TrimPriority::NonProtectedUser,
-        }
-    }
-
-    pub fn with_priority(mut self, p: TrimPriority) -> Self {
-        self.priority = p;
-        self
-    }
-
-    pub fn protect(mut self) -> Self {
-        self.protected = true;
-        self.priority = TrimPriority::Protected;
-        self
-    }
 }
 
 // ── 8-step trim cascade ───────────────────────────────────────────────────────
@@ -119,12 +77,7 @@ pub fn total_tokens(entries: &[ContextEntry]) -> u64 {
     entries.iter().map(|e| e.token_count).sum()
 }
 
-// ── Compactor seam ────────────────────────────────────────────────────────────
-
-/// Seam trait for LLM-driven compaction (wiring deferred).
-pub trait Compactor: Send + Sync {
-    fn compact(&self, context: &[ContextEntry], keep_recent_tokens: u64) -> Result<String, String>;
-}
+// ── Compactor implementations ─────────────────────────────────────────────────
 
 /// No-op compactor — returns a fixed placeholder string (stub).
 pub struct NoOpCompactor;

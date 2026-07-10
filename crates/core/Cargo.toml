@@ -6,16 +6,14 @@ license.workspace = true
 repository.workspace = true
 
 [dependencies]
-aes-gcm = { workspace = true }
-argon2 = { workspace = true }
 bcrypt = { workspace = true }
 blake3 = { workspace = true }
 chrono = { workspace = true }
 cron = { workspace = true }
+cronus-contract = { workspace = true }
+cronus-store-local = { workspace = true }
 getrandom = { workspace = true }
 hmac = { workspace = true }
-keyring = { workspace = true }
-rusqlite = { workspace = true }
 sha1 = { workspace = true }
 
 # Benchmarks use a std-only timing harness (no external bench crate — see the

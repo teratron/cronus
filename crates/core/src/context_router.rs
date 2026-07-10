@@ -1,9 +1,14 @@
 //! Context router — most-specific-first routing across memory, rules,
 //! and active session context.
+//!
+//! The pivot of the crate-topology migration (§4.6): this module depends on
+//! the `MemorySearch` seam, never on a concrete persistence type. Before this
+//! change it held a `&MemoryStore` (SQLite-backed) and called one method on
+//! it — the single edge that chained the entire domain tier to `rusqlite`.
 
 use std::path::{Path, PathBuf};
 
-use crate::memory::{MemoryEntry, MemoryStore, Result as MemResult};
+use cronus_contract::{MemoryEntry, MemorySearch};
 
 // ── RuleEntry ─────────────────────────────────────────────────────────────────
 
@@ -58,14 +63,14 @@ impl ContextBundle {
 // ── ContextRouter ─────────────────────────────────────────────────────────────
 
 pub struct ContextRouter<'a> {
-    memory_store: &'a MemoryStore,
+    memory_store: &'a dyn MemorySearch,
     workspace_dir: PathBuf,
     project_dir: PathBuf,
 }
 
 impl<'a> ContextRouter<'a> {
     pub fn new(
-        memory_store: &'a MemoryStore,
+        memory_store: &'a dyn MemorySearch,
         workspace_dir: impl Into<PathBuf>,
         project_dir: impl Into<PathBuf>,
     ) -> Self {
@@ -81,7 +86,7 @@ impl<'a> ContextRouter<'a> {
     /// Memory entries come from FTS search (trust-filtered by the store).
     /// Rules are loaded most-specific-first (workspace > project > global).
     /// Session context is threaded through externally via `with_session`.
-    pub fn assemble(&self, query: &str, limit: usize) -> MemResult<ContextBundle> {
+    pub fn assemble(&self, query: &str, limit: usize) -> Result<ContextBundle, String> {
         let memories = self.memory_store.search_fts(query, limit)?;
         let rules = self.load_rules();
         Ok(ContextBundle {

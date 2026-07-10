@@ -2,6 +2,8 @@
 resolver = "2"
 members = [
     "crates/core",
+    "crates/contract",
+    "crates/store-local",
     "crates/codegraph",
     "crates/nodus",
     "crates/cli",
@@ -21,6 +23,8 @@ readme = "README.md"
 [workspace.dependencies]
 codegraph = { path = "crates/codegraph" }
 cronus = { path = "crates/core" }
+cronus-contract = { path = "crates/contract" }
+cronus-store-local = { path = "crates/store-local" }
 nodus = { path = "crates/nodus" }
 aes-gcm = "0.11.0"
 argon2 = "0.5.3"

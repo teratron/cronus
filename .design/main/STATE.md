@@ -4,15 +4,15 @@
 <!-- Maximum 100 lines. Agent updates AFTER each completed action. -->
 
 **Workspace:** main
-**Updated:** 2026-07-10 19:40
+**Updated:** 2026-07-10 20:45
 **Phase:** 13 — Core Decomposition (Crate Topology)
-**Status:** Active
+**Status:** Done
 
 ## Current Position
 
-- **Task:** Phase 13 opened (/magic.task main) → PLAN v2.15.0 / TASKS v1.19.0. 8 tasks / 5 tracks (A–D, T) mapping the topology spec's ordered §5 migration + validation. Todo — ready for /magic.run
+- **Task:** T-13B01 Extract cronus-store-local
 - **Spec:** INDEX v1.0.97 (194 specs: 184 Stable, 9 RFC, 1 Draft). Phase 13 implements `l2-crate-topology` 1.0.0 (driver) + `l2-source-layout` 1.2.0 (documentary companion, realized-by the migration). Backlog now 6: memory-intelligence, memory-consolidation, spec-driven-governance, dynamic-harness, loop-governance, dev-office (RFC L1); knowledge-store, service-activation, archetype-catalog (RFC L2); loop-runner (Draft, RFC parent)
-- **Next Action:** Execute T-13A01 Mint `cronus-contract` (shared types + seam traits, zero external deps) via /magic.run main
+- **Next Action:** Execute T-13B02 Extract cronus-auth-local via /magic.run main
 
 ## Progress
 

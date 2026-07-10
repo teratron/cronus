@@ -658,16 +658,14 @@ dependencies = [
 name = "cronus"
 version = "0.1.0"
 dependencies = [
- "aes-gcm",
- "argon2",
  "bcrypt",
  "blake3",
  "chrono",
  "cron",
+ "cronus-contract",
+ "cronus-store-local",
  "getrandom 0.4.3",
  "hmac 0.13.0",
- "keyring",
- "rusqlite",
  "sha1",
 ]
 
@@ -681,6 +679,21 @@ dependencies = [
  "nodus",
  "rusqlite",
  "serde_json",
+]
+
+[[package]]
+name = "cronus-contract"
+version = "0.1.0"
+
+[[package]]
+name = "cronus-store-local"
+version = "0.1.0"
+dependencies = [
+ "aes-gcm",
+ "argon2",
+ "cronus-contract",
+ "keyring",
+ "rusqlite",
 ]
 
 [[package]]

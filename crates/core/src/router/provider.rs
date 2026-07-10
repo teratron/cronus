@@ -1,25 +1,12 @@
 //! ModelProvider trait and supporting types.
+//!
+//! `ModelProvider`, `ProviderHealth`, `ProviderTier`, and `TaskType` moved to
+//! `cronus-contract` (§4.2) — the trait signature they
+//! form is the seam concrete provider backends implement. `ProviderError`,
+//! `RoutingRequest`, and `RouteDecision` stay here: they are router-internal,
+//! never part of the `ModelProvider` trait itself.
 
-/// Health state reported by a provider.
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub enum ProviderHealth {
-    Healthy,
-    Degraded,
-    Unavailable,
-}
-
-/// Provider tier used for routing preference.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
-pub enum ProviderTier {
-    /// Locally-hosted model (lowest cost, highest privacy).
-    Local = 0,
-    /// Small, fast cloud model.
-    Economy = 1,
-    /// Standard cloud model.
-    Standard = 2,
-    /// Large, high-capability cloud model.
-    Premium = 3,
-}
+pub use cronus_contract::{ModelProvider, ProviderHealth, ProviderTier, TaskType};
 
 /// Error returned by a provider when routing fails.
 #[derive(Debug)]
@@ -59,16 +46,6 @@ pub struct RoutingRequest {
     pub task_type: TaskType,
 }
 
-/// Category of task being routed.
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub enum TaskType {
-    CodeGeneration,
-    Analysis,
-    Summarization,
-    QA,
-    Chat,
-}
-
 /// The selected provider and routing metadata.
 #[derive(Debug, Clone)]
 pub struct RouteDecision {
@@ -76,33 +53,6 @@ pub struct RouteDecision {
     pub score: f64,
     pub via_lkgp: bool,
     pub via_bandit: bool,
-}
-
-/// The `ModelProvider` trait — implemented by each backend.
-///
-/// All methods take `&self` — providers are stateless from the router's
-/// perspective; mutable circuit state lives in `RouterPool`.
-pub trait ModelProvider: Send + Sync {
-    /// Unique stable identifier (e.g. "openai-gpt4o", "local-llama3").
-    fn id(&self) -> &str;
-
-    /// Current health as reported by the provider's own health check.
-    fn health(&self) -> ProviderHealth;
-
-    /// Maximum tokens this provider accepts in context.
-    fn context_window(&self) -> u32;
-
-    /// Approximate cost per 1k tokens (output) in USD.
-    fn cost_per_1k_tokens(&self) -> f64;
-
-    /// Median observed latency in milliseconds.
-    fn latency_p50_ms(&self) -> u64;
-
-    /// Provider tier for routing priority.
-    fn tier(&self) -> ProviderTier;
-
-    /// Returns how well this provider handles the given task type (0.0–1.0).
-    fn task_fit(&self, task: TaskType) -> f64;
 }
 
 #[cfg(test)]

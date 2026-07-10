@@ -3,19 +3,16 @@
 //! This defines the `StateStore` contract plus a std-only file-backed default,
 //! enough to prove durability and restartable load (STO-2 / INV-5). The
 //! SQLite + sqlite-vec backend is provided by the memory store in a later phase.
+//!
+//! `StateStore` moved to `cronus-contract` (§4.2); the
+//! implementation (`FileStore`) stays here, in the domain tier.
 
 use std::collections::BTreeMap;
 use std::fs;
 use std::io;
 use std::path::PathBuf;
 
-/// A durable key-value store the engine resumes from after a restart.
-pub trait StateStore {
-    /// Persist a value; durable once this returns `Ok`.
-    fn put(&mut self, key: &str, value: &str) -> io::Result<()>;
-    /// Read a value previously stored, if present.
-    fn get(&self, key: &str) -> Option<String>;
-}
+pub use cronus_contract::StateStore;
 
 /// File-backed store (foundation). Persists `key\tvalue` lines and loads them on
 /// open. Keys and values must not contain a tab or newline (provisional format;
