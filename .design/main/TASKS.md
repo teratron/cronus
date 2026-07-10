@@ -1,15 +1,15 @@
 # Master Task Index (Registry)
 
-**Version:** 1.16.0
-**Generated:** 2026-07-03
-**Based on:** .design/main/PLAN.md v2.12.0
+**Version:** 1.17.0
+**Generated:** 2026-07-09
+**Based on:** .design/main/PLAN.md v2.13.0
 **Based on RULES:** .design/RULES.md v1.5.0
 **Execution Mode:** Parallel
 **Status:** Active
 
 ## Overview
 
-Tactical registry of all phases and their statuses, ordered by the growth metaphor (seed → stem → leaf → flower). Atomic checklists live in `tasks/phase-{N}.md`. Phases 2-9 are Done; Phase 10 is next and is decomposed on entry, like all later phases.
+Tactical registry of all phases and their statuses, ordered by the growth metaphor (seed → stem → leaf → flower). Atomic checklists live in `tasks/phase-{N}.md`. Phases 1–11 are Done; Phase 12 (Skill System) is next.
 
 ## Active Phases
 
@@ -27,8 +27,9 @@ Tactical registry of all phases and their statuses, ordered by the growth metaph
 | [Phase 10a](archives/tasks/phase-10.md) | Advanced Office Features (L2) — Foundational Wave: office-control, acp, navigation, automation-pipeline + kanban KAN-8 delta → 15 tasks / 5 tracks (A–E) | `Done (Archived)` |
 | [Phase 10b](tasks/phase-10b.md) | Advanced Office Features (L2) — Dependent Wave: automation-canvas, voice-input, deliberation, version-control, inner-monologue, lookahead-planning, global-orchestration → 18 tasks / 7 tracks (F–L) | `Done` |
 | [Phase 11](archives/tasks/phase-11.md) | Content, Sharing & Dev-Workflow Subsystems: resource-sharing, file-store, notes, development-workflow → 8 tasks / 4 tracks; +26 tests | `Done (Archived)` |
+| [Phase 12](tasks/phase-12.md) | Skill System (L2): two-tier stores, canonical package, built-in command surface, conversion pipeline, prompt synthesis, `cronus skill` verbs → 8 tasks / 5 tracks (A–D, T) | `Todo` |
 
 ## Meta Information
 
-- **Last Updated**: 2026-07-03 (Phase 10 fully decomposed: all 11 L2 specs authored & Stable → foundational wave 15 tasks (phase-10.md, tracks A–E) + dependent wave 18 tasks (phase-10b.md, tracks F–L); INDEX v1.0.64 / PLAN v2.12.0. Prior: foundational wave opened (INDEX v1.0.63 / PLAN v2.11.0). Prior: registry re-sync + KAN-8 reconciled. Prior: Phase 9 complete, archived)
+- **Last Updated**: 2026-07-09 (v2.13.0 registry re-sync: 25 Stable L1 concepts → Phase 0 concept-only; dev-office RFC → Backlog; Phase 12 opened from l2-skill-system with 8 tasks / 5 tracks; INDEX v1.0.93 / PLAN v2.13.0. Prior: Phase 10 fully decomposed — foundational wave 15 tasks + dependent wave 18 tasks; INDEX v1.0.64 / PLAN v2.12.0)
 - **Maintainer**: Core Team

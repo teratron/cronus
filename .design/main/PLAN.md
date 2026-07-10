@@ -1,13 +1,13 @@
 # Implementation Plan
 
-**Version:** 2.12.0
-**Generated:** 2026-07-03
-**Based on:** .design/main/INDEX.md v1.0.64
+**Version:** 2.13.0
+**Generated:** 2026-07-09
+**Based on:** .design/main/INDEX.md v1.0.93
 **Status:** Active
 
 ## Overview
 
-Implementation plan for Cronus from the project registry (160 registered specs: 153 Stable, 6 RFC, 1 Draft). Phases follow a **growth order**: the agent grows like a sprout from a seed. This revision completes **all 11 Phase-10 L2 specs (Stable)** — the foundational wave (office-control, acp, navigation, automation-pipeline) plus the dependent wave (automation-canvas, voice-input, deliberation, version-control, inner-monologue, lookahead-planning, global-orchestration) — so the full Advanced Office Features phase is ready to decompose and execute. Phases 1–9 are complete (Seed through Hardening). Prior revisions absorbed 3 orphaned L1 concepts (v2.10.0) and opened Phase 10's foundational wave (v2.11.0).
+Implementation plan for Cronus from the project registry (187 registered specs: 179 Stable, 7 RFC, 1 Draft). Phases follow a **growth order**: the agent grows like a sprout from a seed. This revision (v2.13.0) re-syncs the registry after a spec-authoring wave: **25 orphaned Stable L1 concepts** absorbed into Phase 0 (concept-only, C28), **1 RFC L1** (dev-office) parked in Backlog, and the **first post-11 implementation phase opened — Phase 12 (Skill System, l2-skill-system)** with 8 tasks / 5 tracks. Phases 1–11 are complete (Seed through Content/Sharing/Dev-Workflow). Prior revision (v2.12.0) completed all 11 Phase-10 L2 specs.
 
 - **Seed = the library** (`crates/core` + `crates/nodus` runtime) — Phases 1–2.
 - **Stem = the CLI** — Phase 3, the first usable surface, emerging straight from the seed.
@@ -127,6 +127,34 @@ Execution mode: **Parallel** (C3); tracks grouped by file independence. Critical
 - [x] **Specialty Exemplars** ([l1-specialty-exemplars.md](specifications/l1-specialty-exemplars.md)) [L1] — per-specialty competency instrument, sibling to model-benchmarking pointed at staffing competency: one small concentrated exemplar suite per specialty
 - [x] **Project Priority** ([l1-project-priority.md](specifications/l1-project-priority.md)) [L1] — cross-office resource arbitration: explicit user/board-set ordered priority per office/project governing how finite shared resources (building-level token/budget pool) are distributed under scarcity
 - [x] **Project Support** ([l1-project-support.md](specifications/l1-project-support.md)) [L1] — the office's operational posture for a delivered/live project: ongoing upkeep (content updates, issue-driven fixes, product improvement) beginning where the build ends
+
+*Concepts authored since plan v2.12.0 (registry sync INDEX v1.0.64 → v1.0.93). All Stable, concept-only until an `Implements:` L2 lands (C28).*
+
+- [x] **Report Prompting & Diagnostic Findings** ([l1-report-prompting.md](specifications/l1-report-prompting.md)) [L1] — system-suggested, user-completed reporting bridging error-reporting and issue-reporting: invitation-never-transmission, closed trigger taxonomy, off/passive/active modes, local findings ledger for user invitations + developer triage (RP-1…RP-8)
+- [x] **Work Import** ([l1-work-import.md](specifications/l1-work-import.md)) [L1] — bounded one-directional onboarding migration of an external tracker's backlog into the canonical office model
+- [x] **Interception Model** ([l1-interception-model.md](specifications/l1-interception-model.md)) [L1] — interception discipline for cross-cutting behaviour: observe/decide/transform taxonomy, fixed fail-direction per class, transitive guard enforcement (INT-1…INT-8)
+- [x] **Diagnostic Log Plane** ([l1-diagnostic-log.md](specifications/l1-diagnostic-log.md)) [L1] — forensic observation plane of last resort: survives native crashes, pre-init boot failures, dependency output; bounded rotating retention, consent-gated egress (DL-1…DL-8)
+- [x] **Log Legibility & Economy** ([l1-log-legibility.md](specifications/l1-log-legibility.md)) [L1] — dual-audience (human + AI) contract over every observation channel: one canonical event, faithful projections, overload bounded by construction (LL-1…LL-9)
+- [x] **System Readout & Refresh** ([l1-system-readout.md](specifications/l1-system-readout.md)) [L1] — one unified refresh mechanism for every live readout: closed trigger taxonomy, coalescing, honest staleness, visibility-gated economy (SR-1…SR-8)
+- [x] **Search** ([l1-search.md](specifications/l1-search.md)) [L1] — application-wide capability to find anything the user can see through one query surface
+- [x] **Usage Allowance** ([l1-usage-allowance.md](specifications/l1-usage-allowance.md)) [L1] — external-allowance member of the token economy: quota windows distinct from input-context and output-generation budgets
+- [x] **Conversational Control** ([l1-conversational-control.md](specifications/l1-conversational-control.md)) [L1] — the natural-language chat/prompt surface as a first-class control plane over the application's own management operations
+- [x] **Simulation** ([l1-simulation.md](specifications/l1-simulation.md)) [L1] — playing out a generated mechanism (workflow / pipeline / role interaction / task graph / schedule) to see how it behaves before it acts
+- [x] **Tool-Call Transport** ([l1-tool-call-transport.md](specifications/l1-tool-call-transport.md)) [L1] — the wire seam by which a logical tool invocation crosses the agent↔model boundary and the reply is decoded back
+- [x] **Design Identity** ([l1-design-identity.md](specifications/l1-design-identity.md)) [L1] — the office's swappable visual language + craft bar for user-facing visual output
+- [x] **Competitive Execution** ([l1-competitive-execution.md](specifications/l1-competitive-execution.md)) [L1] — best-of-N quality-selection fan-out, the third coordination-family mode beside parallel-staffing and deliberation
+- [x] **Component Scanning** ([l1-component-scanning.md](specifications/l1-component-scanning.md)) [L1] — admission vetting / threat scanning of third-party components (skill / tool-server / plugin) before trust
+- [x] **Iterative Refinement** ([l1-iterative-refinement.md](specifications/l1-iterative-refinement.md)) [L1] — generate–evaluate–refine, the temporal member of the coordination family trading depth for quality
+- [x] **Extension Marketplace** ([l1-extension-marketplace.md](specifications/l1-extension-marketplace.md)) [L1] — curated catalog / origin-and-discovery dimension for addressable extensions
+- [x] **Inference Cache** ([l1-inference-cache.md](specifications/l1-inference-cache.md)) [L1] — durable tiered prefix-addressed cache of computed inference state, the storage-side companion to cache-stable authoring
+- [x] **Progressive Disclosure** ([l1-progressive-disclosure.md](specifications/l1-progressive-disclosure.md)) [L1] — tiered on-demand context loading, the lazy-loading member of the context-economy family
+- [x] **Agent Federation** ([l1-agent-federation.md](specifications/l1-agent-federation.md)) [L1] — interoperation with independent external agents as verifiable peers
+- [x] **Deployment Neutrality** ([l1-deployment-neutrality.md](specifications/l1-deployment-neutrality.md)) [L1] — local-first server-free default as the whole product, with a pluggable door for auth + remote user-data backend
+- [x] **Data Lineage** ([l1-data-lineage.md](specifications/l1-data-lineage.md)) [L1] — derivation traceability across a dataflow: what produced this datum, through which transformations
+- [x] **Pattern Codification** ([l1-pattern-codification.md](specifications/l1-pattern-codification.md)) [L1] — the disciplined memory-to-governance pathway by which a stable behavioral pattern becomes an enforceable rule
+- [x] **Provenance Taint** ([l1-provenance-taint.md](specifications/l1-provenance-taint.md)) [L1] — at-rest, persistent, propagating origin-trust taint on stored data
+- [x] **Action Gating** ([l1-action-gating.md](specifications/l1-action-gating.md)) [L1] — authorization friction proportional to an action's consequence
+- [x] **Recursive Decomposition** ([l1-recursive-decomposition.md](specifications/l1-recursive-decomposition.md)) [L1] — the third stance on an over-window input beside compression and progressive disclosure: process it in bounded parts
 
 ## Phase 1 — Seed I: Foundation
 
@@ -274,6 +302,12 @@ Execution mode: **Parallel** (C3); tracks grouped by file independence. Critical
 - [x] **File Store** ([l2-file-store.md](specifications/l2-file-store.md)) [L2] — content-addressed dedup, reference-tracking GC, immutable blobs, metadata decoupled from bytes; `Implements: l1-file-management.md`; depends on resource-sharing
 - [x] **Development Workflow** ([l2-development-workflow.md](specifications/l2-development-workflow.md)) [L2] — five-stage pipeline (Design→Plan→Execute→Review→Deliver), two-stage quality gate, human checkpoint, append-only progress ledger; `Implements: l1-development-workflow.md`; depends on extension-registry + agent-session
 
+## Phase 12 — Skill System (L2)
+
+*First post-11 implementation phase: the skill extension kind gets its concrete two-tier realization on the canonical execution stack.*
+
+- [ ] **Skill System (Two-Tier Stores & Canonical Stack)** ([l2-skill-system.md](specifications/l2-skill-system.md)) [L2] — `Implements: l1-extensions.md, l1-storage-model.md` — preset store (program tier, read-only) + mutable store (state tier) with shadowing precedence; canonical package (no interpreted scripts); built-in command surface registered into the workflow-runtime vocabulary; conversion pipeline (verify → classify → retain → transpile → degrade → report, atomic); prompt synthesis; `cronus skill` import/create/status → 8 tasks / 5 tracks in [tasks/phase-12.md](tasks/phase-12.md)
+
 ## Backlog
 
 *Non-Stable specs parked until they reach `Stable` (C6). Promoted into an active phase by a later `/magic.task` run once their status and any parent dependency clear.*
@@ -285,6 +319,7 @@ Execution mode: **Parallel** (C3); tracks grouped by file independence. Critical
 - [ ] **Loop Governance** ([l1-loop-governance.md](specifications/l1-loop-governance.md)) [L1] — `RFC` — loop-governance keystone (LG-1…LG-9); backlog until reviewed to Stable
 - [ ] **Knowledge Store** ([l2-knowledge-store.md](specifications/l2-knowledge-store.md)) [L2] — `RFC` — `Implements: l1-knowledge-base.md`; pending KB-9/KB-10 compliance before promotion
 - [ ] **Loop Runner** ([l2-loop-runner.md](specifications/l2-loop-runner.md)) [L2] — `Draft` — `Implements: l1-loop-governance.md`; blocked: L1 parent is `RFC` (cannot plan until parent reaches Stable)
+- [ ] **Dev Office** ([l1-dev-office.md](specifications/l1-dev-office.md)) [L1] — `RFC` — developer (self-hosting) office: a system workspace for maintaining Cronus itself; backlog until reviewed to Stable
 
 ## Risks (Planning Audit)
 
@@ -293,6 +328,7 @@ Execution mode: **Parallel** (C3); tracks grouped by file independence. Critical
 - **nodus port size**: ~5k lines across six modules; Phase 2 builds it as a vertical slice (parse → transpile → minimal execute) before completing validator/lint and the full command set. Track parity against the reference test corpus.
 - **Mobile/Tauri scaffold**: iOS/Android Tauri setup is toolchain-fragile (stack §5) — smoke-test the build/sign pipeline in Phase 1, not at Phase 8.
 - **Concept-only growth (v2.9.0 sync)**: 17 more specs absorbed (15 Stable L1 concept-only into Phase 0, 2 RFC into Backlog). The concept-only count keeps rising while Phase 8 implementation is in flight — a C28 health signal worth watching: the concept caul is far ahead of code, and several new concepts (crash-recovery, employee-availability, parallel-staffing, model-benchmarking, process-monitor, issue-reporting) are natural L2 candidates for Phases 9–10 when authored.
+- **Concept-caul growth continues (v2.13.0 sync)**: 27 more orphans absorbed — 25 Stable L1 concept-only into Phase 0 (the observability/diagnostics family diagnostic-log / log-legibility / system-readout / report-prompting, plus coordination, context-economy, and provenance families), 1 RFC (dev-office) to Backlog, and Phase 12 (skill-system) opened. The Stable-L1-without-L2 delta keeps widening (C28 health signal); the reporting/diagnostics cluster (issue-reporting v1.1.0 + report-prompting) is a natural candidate for the next L2 wave.
 - **Registry sync debt (resolved in v2.8.0)**: 48 specs had accumulated outside the plan (INDEX raced ahead to v1.0.36). That revision absorbed them — but the new Phase 0 concept additions (e.g. execution-graph, code-intelligence, model-runtime, knowledge-base) imply future L2 implementation work not yet phased. Most have no authored L2 yet; they will surface as new phases via `/magic.spec` → `/magic.task` when promoted.
 - **Amendment deltas over Done phases (v2.10.0)**: the kanban 1.1.0 amendment (KAN-8 custom boards) is the first spec change landing after its implementation phase closed. Pattern: the delta becomes an explicit item in the next open phase (here Phase 10) rather than being silently absorbed or reopening the Done phase — keeps Done phases immutable and the spec-vs-code gap visible.
 - **TUI event-seam dependency (Phase 7)**: the render loop assumes a core event/subscribe seam. If the core exposes no pub/sub observer, the TUI must fall back to polling durable-state snapshots (INV-5 view-only). The Phase 7 tasks carry this fallback so the view panels are not hard-blocked on the subscription mechanism. Verify the seam first (T-7A02).

@@ -1,6 +1,6 @@
 # Project Context
 
-**Generated:** 2026-07-03
+**Generated:** 2026-07-10
 
 ## Active Technologies
 
@@ -41,7 +41,8 @@
 │   ├── project-names.md
 │   ├── references.md
 │   ├── release.drawio.svg
-│   └── technology-stack-research.md
+│   ├── technology-stack-research.md
+│   └── ui-ux.md
 ├── .env
 ├── .env.example
 ├── .github/
@@ -70,6 +71,7 @@
 │   └── tui/
 ├── docs/
 │   └── README.md
+├── firebase-debug.log
 ├── installer/
 ├── package.json
 ├── packages/

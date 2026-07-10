@@ -1,6 +1,6 @@
 # Issue Reporting
 
-**Version:** 1.0.0
+**Version:** 1.1.0
 **Status:** Stable
 **Layer:** concept
 
@@ -19,6 +19,7 @@ Issue reporting owns the distinct concerns of a user-authored report — the tri
 - [l1-application-shell.md](l1-application-shell.md) - The "Report Issue" button is a named shell action / render-from-state dialog (AS command system, AS-9 panel).
 - [l1-architecture.md](l1-architecture.md) - Command parity (INV-3): the same capability from a graphical button, a CLI verb, or a TUI slash command.
 - [l1-operational-health.md](l1-operational-health.md) - The inspectable, exportable health snapshot (OH-8) is one opt-in diagnostic a user may attach to a report.
+- [l1-report-prompting.md](l1-report-prompting.md) - The system-prompted invitation layer that MAY open this flow with a prefilled draft (RP-1/RP-5); composing, previewing, and sending remain the user's acts under ISS-3. [ADDED v1.1.0]
 
 ## 1. Motivation
 
@@ -28,7 +29,7 @@ A first-class "Report Issue" action closes that gap: one button, always reachabl
 
 ## 2. Constraints & Assumptions
 
-- The action is user-initiated; it is not raised by an error or by the system autonomously (that is error reporting's job).
+- The *send* is user-initiated; the system never files a user report on its own. Error-triggered auto-reporting remains error reporting's job, and a system-generated *invitation* to report (per l1-report-prompting.md) MAY precede and prefill the action — but composing, previewing, and sending remain the user's explicit acts. [MODIFIED v1.1.0]
 - Sending a report off the device is an outbound egress and MUST be authorized and previewed (consistent with SEC-3, OFF-6).
 - A user report is free-form narrative plus a category; usefulness comes from the narrative and any attached diagnostics, not from a stack trace.
 - Diagnostics are attached only when the user opts in, and are sanitized like any other report content.
@@ -81,6 +82,8 @@ graph TD
 
 The optional diagnostic bundle draws from existing surfaces — the app version, recent sanitized logs, the operational-health snapshot (OH-8), and the process-monitor state — each included only if the user opts in (ISS-4) and each shown in the preview (ISS-3).
 
+The compose step MAY open prefilled when the flow is entered from a report-prompting invitation (RP-5): category preselected, a short system-authored summary, and evidence references. Prefill is fully editable and never bypasses the preview — the entry point changes convenience, not consent (ISS-3). [ADDED v1.1.0]
+
 ### 4.3 Cross-frontend surface
 
 Issue reporting **extends the existing `report` command group** rather than adding a new one — the group already carries error reporting's `report` (last error) and `report consent`. The library method is the source of truth; the CLI and TUI are thin bindings, the graphical dialog a render-from-state surface (INV-3, ISS-7).
@@ -115,6 +118,7 @@ This keeps a single audited egress path (ISS-6) — there is never a second, unv
 
 | Version | Date | Change |
 | --- | --- | --- |
+| 1.1.0 | 2026-07-09 | Reconciled with the new report-prompting layer: the user-initiated constraint now scopes to the *send* (a system invitation MAY precede and prefill the flow, per l1-report-prompting.md RP-1/RP-5); added the prefilled compose entry point (§4.2) and the Related Specifications link. Preview-before-send (ISS-3) unchanged and mandatory on every path. |
 | 1.0.0 | 2026-07-02 | Initial concept: user-initiated "Report Issue" action (ISS-1…7) — user-authored bug/feedback/idea with opt-in sanitized diagnostics, mandatory preview-before-send, cross-frontend parity; reuses the error-reporting pipeline and tracker channel rather than a parallel egress path. |
 
 ## Canonical References
