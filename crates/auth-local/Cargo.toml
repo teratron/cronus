@@ -1,0 +1,13 @@
+[package]
+name = "cronus-auth-local"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+repository.workspace = true
+
+[dependencies]
+bcrypt = { workspace = true }
+cronus-contract = { workspace = true }
+getrandom = { workspace = true }
+hmac = { workspace = true }
+sha1 = { workspace = true }

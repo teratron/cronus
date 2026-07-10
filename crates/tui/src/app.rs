@@ -21,7 +21,7 @@ use ratatui::widgets::{Paragraph, Widget};
 use crate::command::{self, CommandOutcome, SlashCommand};
 use crate::terminal::{CrosstermBackend, Key, TermEvent, TerminalBackend, Tui};
 use crate::view::{self, BoardView, Focus, OfficeView, SessionsView};
-use cronus::{Capabilities, Engine};
+use cronus_domain::{Capabilities, Engine};
 
 /// How long the loop blocks for input before ticking again. Bounds redraw
 /// latency for state changes that arrive without a terminal event.
@@ -305,7 +305,7 @@ impl<C: Capabilities> Dispatcher for CapabilityDispatcher<C> {
     fn dispatch(&mut self, command: &SlashCommand) -> String {
         let raw = self.route(command);
         let secret_refs: Vec<&str> = self.secrets.iter().map(String::as_str).collect();
-        cronus::redact::redact(&raw, &secret_refs)
+        cronus_domain::redact::redact(&raw, &secret_refs)
     }
 }
 

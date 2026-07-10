@@ -658,12 +658,18 @@ dependencies = [
 name = "cronus"
 version = "0.1.0"
 dependencies = [
- "bcrypt",
- "blake3",
- "chrono",
- "cron",
+ "cronus-auth-local",
  "cronus-contract",
+ "cronus-domain",
  "cronus-store-local",
+]
+
+[[package]]
+name = "cronus-auth-local"
+version = "0.1.0"
+dependencies = [
+ "bcrypt",
+ "cronus-contract",
  "getrandom 0.4.3",
  "hmac 0.13.0",
  "sha1",
@@ -677,13 +683,22 @@ dependencies = [
  "codegraph",
  "cronus",
  "nodus",
- "rusqlite",
  "serde_json",
 ]
 
 [[package]]
 name = "cronus-contract"
 version = "0.1.0"
+
+[[package]]
+name = "cronus-domain"
+version = "0.1.0"
+dependencies = [
+ "blake3",
+ "chrono",
+ "cron",
+ "cronus-contract",
+]
 
 [[package]]
 name = "cronus-store-local"
@@ -700,7 +715,7 @@ dependencies = [
 name = "cronus-tui"
 version = "0.1.0"
 dependencies = [
- "cronus",
+ "cronus-domain",
  "crossterm",
  "ratatui",
 ]

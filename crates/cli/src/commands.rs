@@ -1322,18 +1322,15 @@ mod memory {
 mod codegraph_cmd {
     use codegraph::{
         extractor::{Extractor, RegexExtractor},
-        index::{fts_search, migrate, store_symbols},
+        index::CodeIndex,
     };
-    use rusqlite::Connection;
     use std::path::PathBuf;
 
     use crate::cli::CodegraphCommand;
     use crate::output::Context;
 
-    fn open_db() -> Result<Connection, String> {
-        let conn = Connection::open_in_memory().map_err(|e| e.to_string())?;
-        migrate(&conn).map_err(|e| e.to_string())?;
-        Ok(conn)
+    fn open_index() -> Result<CodeIndex, String> {
+        CodeIndex::open_in_memory().map_err(|e| e.to_string())
     }
 
     pub fn dispatch(sub: CodegraphCommand, ctx: &Context) -> i32 {
@@ -1344,8 +1341,8 @@ mod codegraph_cmd {
     }
 
     fn index_path(path: PathBuf, ctx: &Context) -> i32 {
-        let conn = match open_db() {
-            Ok(c) => c,
+        let index = match open_index() {
+            Ok(idx) => idx,
             Err(e) => {
                 eprintln!("error: {e}");
                 return 1;
@@ -1355,14 +1352,14 @@ mod codegraph_cmd {
         let mut total = 0usize;
 
         if path.is_file() {
-            total += index_file(&conn, &path, &extractor);
+            total += index_file(&index, &path, &extractor);
         } else if path.is_dir()
             && let Ok(entries) = std::fs::read_dir(&path)
         {
             for entry in entries.filter_map(|e| e.ok()) {
                 let p = entry.path();
                 if p.extension().and_then(|e| e.to_str()) == Some("rs") {
-                    total += index_file(&conn, &p, &extractor);
+                    total += index_file(&index, &p, &extractor);
                 }
             }
         }
@@ -1375,23 +1372,23 @@ mod codegraph_cmd {
         0
     }
 
-    fn index_file(conn: &Connection, path: &PathBuf, extractor: &RegexExtractor) -> usize {
+    fn index_file(index: &CodeIndex, path: &PathBuf, extractor: &RegexExtractor) -> usize {
         let source = std::fs::read_to_string(path).unwrap_or_default();
         let syms = extractor.extract(&source);
         let n = syms.len();
-        let _ = store_symbols(conn, &path.display().to_string(), &syms);
+        let _ = index.index_symbols(&path.display().to_string(), &syms);
         n
     }
 
     fn search_graph(query: String, ctx: &Context) -> i32 {
-        let conn = match open_db() {
-            Ok(c) => c,
+        let index = match open_index() {
+            Ok(idx) => idx,
             Err(e) => {
                 eprintln!("error: {e}");
                 return 1;
             }
         };
-        match fts_search(&conn, &query, 10) {
+        match index.search(&query, 10) {
             Ok(results) => {
                 if ctx.is_json() {
                     let items: Vec<String> = results

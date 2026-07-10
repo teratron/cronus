@@ -4,15 +4,15 @@
 <!-- Maximum 100 lines. Agent updates AFTER each completed action. -->
 
 **Workspace:** main
-**Updated:** 2026-07-10 20:45
+**Updated:** 2026-07-10 21:18
 **Phase:** 13 — Core Decomposition (Crate Topology)
 **Status:** Done
 
 ## Current Position
 
-- **Task:** T-13B01 Extract cronus-store-local
+- **Task:** T-13C01 Rename remainder to cronus-domain
 - **Spec:** INDEX v1.0.97 (194 specs: 184 Stable, 9 RFC, 1 Draft). Phase 13 implements `l2-crate-topology` 1.0.0 (driver) + `l2-source-layout` 1.2.0 (documentary companion, realized-by the migration). Backlog now 6: memory-intelligence, memory-consolidation, spec-driven-governance, dynamic-harness, loop-governance, dev-office (RFC L1); knowledge-store, service-activation, archetype-catalog (RFC L2); loop-runner (Draft, RFC parent)
-- **Next Action:** Execute T-13B02 Extract cronus-auth-local via /magic.run main
+- **Next Action:** Execute T-13C02 Repoint TUI and fix codegraph via /magic.run main
 
 ## Progress
 

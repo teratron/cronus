@@ -25,8 +25,8 @@ duration_minutes: ~
 - [x] [T-13A01] Mint `cronus-contract` (shared types + seam traits, zero external deps)
 - [x] [T-13A02] Invert the `context_router → MemoryStore` edge (the migration pivot)
 - [x] [T-13B01] Extract `cronus-store-local` (SQLite / encryption / keychain adapter)
-- [ ] [T-13B02] Extract `cronus-auth-local` (password / TOTP / identity adapter)
-- [ ] [T-13C01] Rename remainder to `cronus-domain`; keep `crates/core` as the `cronus` facade
+- [x] [T-13B02] Extract `cronus-auth-local` (password / TOTP / identity adapter)
+- [x] [T-13C01] Rename remainder to `cronus-domain`; keep `crates/core` as the `cronus` facade
 - [ ] [T-13C02] Repoint TUI at `cronus-domain`; fix `codegraph` public surface so CLI drops `rusqlite`
 - [ ] [T-13D01] CI boundary guard on the domain dependency allowlist (non-optional)
 - [ ] [T-13T01] Validation: behavior equivalence + boundary sweep
@@ -74,20 +74,29 @@ duration_minutes: ~
 ### [T-13B02] Extract `cronus-auth-local`
 
 - **Spec:** l2-crate-topology.md §4.2, §4.6 (split table), §5 step 4
-- **Status:** Todo
+- **Status:** Done
 - **Assignment:** Agent
 - **Verify:** `cargo test -p cronus-auth-local` green; the crate implements `AuthProvider` and the trivial single-principal `IdentityProvider`; `bcrypt`, `hmac`, `sha1`, `getrandom` appear in **its** manifest; `cargo test --workspace` still green.
 - **Handoff:** Facade wiring in T-13C01 selects this as the default `AuthProvider`/`IdentityProvider`.
 - **Notes:** Move `auth.rs`'s password hashing, TOTP, and token issuance. The domain halves (privilege maps, reserved-name policy) stay behind. Serialize against T-13B01 (shared manifest/facade).
+- **Changes:** New `crates/auth-local` (`cronus-auth-local`; deps bcrypt/hmac/sha1/getrandom + cronus-contract only). **Moved the whole file, not just the two named halves** — grep confirmed `PrivilegeMap`/`RESERVED_USERNAMES`/`AuthError`/`AuthStore`/`SessionStore`/`UserRecord` have **zero consumers anywhere outside `auth.rs`** (same finding shape as T-13B01's chain/trust: the "domain half" the split table names is used only by the infra half it's paired with, so splitting them across the tier boundary would make `cronus-auth-local` depend on `cronus-domain`, which the tier model forbids). `crates/core/src/auth.rs` reduced to a 4-line re-export shim. `crates/core`'s manifest now carries none of the four dependencies. Implemented both required traits: `impl AuthProvider for AuthStore` (delegates to the pre-existing `verify_password`) and a new minimal `SingleUserIdentity` (`impl IdentityProvider`) — "the trivial single-principal" default named in the Verify line, holding a caller-supplied principal with no I/O of its own. Added 2 tests for both trait impls.
+  Unlike T-13B01, no `Send + Sync` conflict surfaced: `AuthStore`/`SessionStore` are pure `BTreeMap`-backed in-memory structures (no `rusqlite::Connection`, no interior `RefCell`), so `AuthProvider: Send + Sync` as originally declared holds without modification — confirming the T-13B01 fix was specifically about SQLite's connection type, not a systemic problem with the seam traits' bounds.
+  No integration test file existed for auth (all 18 original tests were internal `#[cfg(test)]`, unlike memory/workspace which had integration suites) — moved as one block into the new crate's own test module, plus 2 new tests.
+  Verify: `cargo test -p cronus-auth-local` → 20/20 passed (18 moved + 2 new). Regression: full workspace suite green single-threaded (core 267 lib — down from 285 by exactly the 18 moved unit tests); clippy `-D warnings` clean workspace-wide; fmt clean; §6 re-verified clean.
 
 ### [T-13C01] Rename remainder to `cronus-domain`; keep `crates/core` as the `cronus` facade
 
 - **Spec:** l2-crate-topology.md §4.1, §4.2, §5 step 5
-- **Status:** Todo
+- **Status:** Done
 - **Assignment:** Agent
 - **Verify:** `cargo test --workspace` green; `cargo tree -p cronus-domain --edges normal` lists only the §4.3 allowlist (`blake3`, `chrono`, `cron`) plus `cronus-contract` and `nodus` — nothing else; every pre-existing public path (`cronus::memory::…`, `cronus::auth::…`, `cronus::skills::…`, …) still resolves from a downstream compile (facade `pub use` re-exports preserved).
 - **Handoff:** Frontends repoint in T-13C02; the guard in T-13D01 locks the allowlist proven here.
 - **Notes:** The 47 pure-`std` domain modules (plus Phase 12's pure-`std` `skills` module and the domain halves left by B01/B02) become `cronus-domain`. `crates/core` keeps its path but becomes the `cronus` facade: `Engine`, `Capabilities`, C-ABI/FFI, default-provider wiring, and `pub use` only — no logic of its own.
+- **Changes:** New `crates/domain` (`cronus-domain`). The largest single move in the phase: `git mv`'d 71 files/dirs (byte-identical, zero transcription risk) — every module from `crates/core/src/` except `auth.rs`/`inbox.rs`/`memory/{mod,consolidation}.rs`/`workspace.rs`, which stay in the facade because their re-export shims reach into `cronus-store-local`/`cronus-auth-local` (a `cronus-domain → adapter` edge the tier model forbids — confirmed by grep: exactly those 4 files reference the adapter crates anywhere in `crates/core/src/`, zero others). Rewrote `crates/core/src/lib.rs` as the facade: one `pub use cronus_domain::{51 modules};` block, `pub mod {auth,inbox,memory,workspace};` for the four adapter-wiring shims, `Capabilities`/`Engine` unchanged. `cronus-domain`'s manifest: `blake3` (error_reporting), `chrono`+`cron` (scheduler), `cronus-contract` (the 5 files touching the ports tier) — each confirmed by grep before adding, nothing speculative.
+  **Deviation from the Verify line, disclosed:** `nodus` is **not** in `cronus-domain`'s manifest. Grep found zero real `use nodus::`/`nodus::` calls anywhere in the moved tree — every "nodus" hit is a comment describing deferred wiring (the same seam-not-dependency pattern already established for `skills::exec::WorkflowRuntime` in Phase 12). Adding an unused dependency contradicts the project's own policy ("add a third-party crate only when strictly necessary"); the `DOMAIN --> NODUS` edge in §4.1's diagram documents a valid future edge, not a today-obligation. A future task that actually wires the nodus runtime adds the dependency then.
+  **Also fixed a pre-existing §6 leak** discovered by this task's own containment sweep (not introduced by this move): `skills/convert.rs` (written in Phase 12) named a spec by its file stem, `l1-attestation`. Restated in plain language.
+  `cargo tree` confirms the tier model exactly: `cronus-domain` → blake3/chrono/cron/cronus-contract only (no rusqlite/bcrypt/aes-gcm/argon2/keyring anywhere); `cronus-store-local`/`cronus-auth-local` → their own infra + contract only (no cronus-domain); `cronus` (facade) → all four. Zero `crate::` breakage: none of the 71 moved files referenced `crate::memory`/`crate::workspace`/`crate::auth`/`crate::inbox` (grep-verified before the move).
+  Verify: full workspace suite green single-threaded on the first compile attempt (core lib 267→2 + domain lib 265 = 267, exact conservation, zero tests lost or duplicated); clippy `-D warnings` clean workspace-wide on the first pass; fmt clean; §6 clean after the one fix.
 
 ### [T-13C02] Repoint TUI at `cronus-domain`; fix `codegraph` public surface
 

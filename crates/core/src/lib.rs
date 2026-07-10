@@ -1,94 +1,29 @@
-//! Cronus core engine library.
+//! Cronus core engine library — the facade and composition root (§4.1, §4.2).
 //!
-//! All domain logic lives here; frontends (CLI, TUI, app) are thin and call the
-//! capability contract below. The core has no presentation dependencies.
+//! Domain logic lives in `cronus-domain` (no I/O); the SQLite-backed default
+//! for the user-data plane lives in `cronus-store-local`; the default for
+//! the auth/identity planes lives in `cronus-auth-local`. This crate wires
+//! them together and re-exports every module under its historical path, so
+//! `cronus::memory::MemoryEntry`, `cronus::orchestration::…`, and every other
+//! existing call site are unaffected by the split. Frontends (CLI, TUI, app)
+//! depend on this crate; it has no presentation dependencies of its own.
 
-pub mod acp;
-pub mod agent_migration;
-pub mod agent_registry;
+pub use cronus_domain::{
+    Capabilities, Engine, acp, agent_migration, agent_registry, automation, autonomy, backup,
+    budget, checkpoint, config_hotreload, constitution, context_mgmt, context_router,
+    deliberation, development_workflow, doctor, egress, error_reporting, exec_workspace,
+    extensions, file_store, global_orch, hooks, inner_monologue, kanban, learning, lookahead,
+    mission, notes, office_control, orchestration, paths, quality, redact, research,
+    resource_sharing, roles, router, sandbox_policy, scheduler, secrets, self_improvement,
+    session, skills, state, store, telemetry, tool_security, trigger_triage, version_control,
+    voice,
+};
+
+// The four modules whose default implementation reaches into an adapter
+// crate (`cronus-store-local` / `cronus-auth-local`) stay defined here — the
+// tier model has no edge from `cronus-domain` to either adapter, so these
+// facade-wiring shims cannot live there.
 pub mod auth;
-pub mod automation;
-pub mod autonomy;
-pub mod backup;
-pub mod budget;
-pub mod checkpoint;
-pub mod config_hotreload;
-pub mod constitution;
-pub mod context_mgmt;
-pub mod context_router;
-pub mod deliberation;
-pub mod development_workflow;
-pub mod doctor;
-pub mod egress;
-pub mod error_reporting;
-pub mod exec_workspace;
-pub mod extensions;
-pub mod file_store;
-pub mod global_orch;
-pub mod hooks;
 pub mod inbox;
-pub mod inner_monologue;
-pub mod kanban;
-pub mod learning;
-pub mod lookahead;
 pub mod memory;
-pub mod mission;
-pub mod notes;
-pub mod office_control;
-pub mod orchestration;
-pub mod paths;
-pub mod quality;
-pub mod redact;
-pub mod research;
-pub mod resource_sharing;
-pub mod roles;
-pub mod router;
-pub mod sandbox_policy;
-pub mod scheduler;
-pub mod secrets;
-pub mod self_improvement;
-pub mod session;
-pub mod skills;
-pub mod state;
-pub mod store;
-pub mod telemetry;
-pub mod tool_security;
-pub mod trigger_triage;
-pub mod version_control;
-pub mod voice;
 pub mod workspace;
-
-/// The public capability contract that frontends invoke.
-///
-/// Frontends hold no domain logic — they map input to these calls and render
-/// the results.
-pub trait Capabilities {
-    /// Engine/product version string.
-    fn version(&self) -> &str;
-
-    /// A human-readable status line (placeholder until subsystems land).
-    fn status(&self) -> String;
-}
-
-/// The Cronus engine. Embeddable: links into a host without pulling any frontend.
-#[derive(Debug, Default)]
-pub struct Engine {
-    _private: (),
-}
-
-impl Engine {
-    /// Construct an engine instance.
-    pub fn new() -> Self {
-        Engine { _private: () }
-    }
-}
-
-impl Capabilities for Engine {
-    fn version(&self) -> &str {
-        env!("CARGO_PKG_VERSION")
-    }
-
-    fn status(&self) -> String {
-        format!("Cronus core {} — no subsystems loaded yet", self.version())
-    }
-}

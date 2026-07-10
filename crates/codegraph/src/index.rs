@@ -1,13 +1,51 @@
 //! SQLite + FTS5 code symbol index.
+//!
+//! The storage engine is confined to this module: [`CodeIndex`] is the only
+//! public entry point, and it never exposes the underlying `rusqlite`
+//! connection — a caller has no way to open a `Connection` of its own,
+//! which is what keeps persistence from leaking into a frontend (a frontend
+//! that could name `rusqlite::Connection` could also open one directly).
 
 use rusqlite::{Connection, params};
 
 use crate::extractor::Symbol;
 
+// ── CodeIndex ─────────────────────────────────────────────────────────────────
+
+/// A SQLite + FTS5-backed code symbol index. Owns its connection privately —
+/// callers never see the storage engine, only this API.
+pub struct CodeIndex {
+    conn: Connection,
+}
+
+impl CodeIndex {
+    /// Open a fresh in-memory index with the schema already migrated.
+    pub fn open_in_memory() -> IndexResult<Self> {
+        let conn = Connection::open_in_memory()?;
+        migrate(&conn)?;
+        Ok(Self { conn })
+    }
+
+    /// Insert a batch of symbols extracted from `file` into the index.
+    pub fn index_symbols(&self, file: &str, symbols: &[Symbol]) -> IndexResult<usize> {
+        store_symbols(&self.conn, file, symbols)
+    }
+
+    /// Retrieve a symbol by exact name.
+    pub fn get_by_name(&self, name: &str) -> IndexResult<Option<IndexedSymbol>> {
+        get_by_name(&self.conn, name)
+    }
+
+    /// FTS5 keyword search — returns up to `limit` symbols ranked by relevance.
+    pub fn search(&self, query: &str, limit: usize) -> IndexResult<Vec<IndexedSymbol>> {
+        fts_search(&self.conn, query, limit)
+    }
+}
+
 // ── Schema ────────────────────────────────────────────────────────────────────
 
 /// Create the `symbols` and `symbols_fts` tables.
-pub fn migrate(conn: &Connection) -> IndexResult<()> {
+fn migrate(conn: &Connection) -> IndexResult<()> {
     conn.execute_batch(
         "
         CREATE TABLE IF NOT EXISTS symbols (
@@ -55,7 +93,7 @@ pub struct IndexedSymbol {
 // ── Store ─────────────────────────────────────────────────────────────────────
 
 /// Insert a batch of symbols from `file` into the index.
-pub fn store_symbols(conn: &Connection, file: &str, symbols: &[Symbol]) -> IndexResult<usize> {
+fn store_symbols(conn: &Connection, file: &str, symbols: &[Symbol]) -> IndexResult<usize> {
     let mut count = 0;
     for sym in symbols {
         conn.execute(
@@ -68,7 +106,7 @@ pub fn store_symbols(conn: &Connection, file: &str, symbols: &[Symbol]) -> Index
 }
 
 /// Retrieve a symbol by exact name.
-pub fn get_by_name(conn: &Connection, name: &str) -> IndexResult<Option<IndexedSymbol>> {
+fn get_by_name(conn: &Connection, name: &str) -> IndexResult<Option<IndexedSymbol>> {
     let mut stmt = conn
         .prepare("SELECT id, name, kind, file, line, doc FROM symbols WHERE name = ?1 LIMIT 1")?;
     let mut rows = stmt.query_map(params![name], map_row)?;
@@ -76,7 +114,7 @@ pub fn get_by_name(conn: &Connection, name: &str) -> IndexResult<Option<IndexedS
 }
 
 /// FTS5 keyword search — returns up to `limit` symbols ranked by relevance.
-pub fn fts_search(conn: &Connection, query: &str, limit: usize) -> IndexResult<Vec<IndexedSymbol>> {
+fn fts_search(conn: &Connection, query: &str, limit: usize) -> IndexResult<Vec<IndexedSymbol>> {
     let mut stmt = conn.prepare(
         "SELECT s.id, s.name, s.kind, s.file, s.line, s.doc
          FROM symbols s

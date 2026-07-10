@@ -1,15 +1,12 @@
 use codegraph::community::{CommunityDetector, Edge, UnionFindDetector};
 use codegraph::dedup::{DEFAULT_SIMILARITY_THRESHOLD, is_low_entropy, jaro_winkler, should_merge};
 use codegraph::extractor::{Confidence, Extractor, RegexExtractor, SymbolKind};
-use codegraph::index::{fts_search, get_by_name, migrate, store_symbols};
+use codegraph::index::CodeIndex;
 use codegraph::search::{fuse, rrf_merge};
-use rusqlite::Connection;
 use std::collections::HashMap;
 
-fn open() -> Connection {
-    let conn = Connection::open_in_memory().unwrap();
-    migrate(&conn).unwrap();
-    conn
+fn open() -> CodeIndex {
+    CodeIndex::open_in_memory().unwrap()
 }
 
 // ── Extractor ─────────────────────────────────────────────────────────────────
@@ -70,10 +67,10 @@ fn extractor_records_line_number() {
 
 #[test]
 fn index_store_and_get_by_name() {
-    let conn = open();
+    let idx = open();
     let syms = RegexExtractor.extract("fn alpha() {}");
-    store_symbols(&conn, "src/lib.rs", &syms).unwrap();
-    let result = get_by_name(&conn, "alpha").unwrap();
+    idx.index_symbols("src/lib.rs", &syms).unwrap();
+    let result = idx.get_by_name("alpha").unwrap();
     assert!(
         result.is_some(),
         "stored symbol must be retrievable by name"
@@ -83,15 +80,15 @@ fn index_store_and_get_by_name() {
 
 #[test]
 fn index_get_by_name_returns_none_for_unknown() {
-    let conn = open();
-    assert!(get_by_name(&conn, "ghost").unwrap().is_none());
+    let idx = open();
+    assert!(idx.get_by_name("ghost").unwrap().is_none());
 }
 
 #[test]
 fn index_store_returns_count() {
-    let conn = open();
+    let idx = open();
     let syms = RegexExtractor.extract("fn a() {}\nfn b() {}");
-    let n = store_symbols(&conn, "f.rs", &syms).unwrap();
+    let n = idx.index_symbols("f.rs", &syms).unwrap();
     assert_eq!(n, 2);
 }
 
@@ -99,18 +96,18 @@ fn index_store_returns_count() {
 
 #[test]
 fn fts_search_finds_matching_symbol() {
-    let conn = open();
+    let idx = open();
     let syms = RegexExtractor.extract("fn my_special_function() {}");
-    store_symbols(&conn, "src/a.rs", &syms).unwrap();
-    let results = fts_search(&conn, "my_special_function", 10).unwrap();
+    idx.index_symbols("src/a.rs", &syms).unwrap();
+    let results = idx.search("my_special_function", 10).unwrap();
     assert!(!results.is_empty(), "FTS5 must find the symbol by name");
     assert_eq!(results[0].name, "my_special_function");
 }
 
 #[test]
 fn fts_search_returns_empty_for_no_match() {
-    let conn = open();
-    let results = fts_search(&conn, "xyz_nonexistent", 10).unwrap();
+    let idx = open();
+    let results = idx.search("xyz_nonexistent", 10).unwrap();
     assert!(results.is_empty());
 }
 
@@ -147,11 +144,11 @@ fn rrf_merge_deduplicates_results() {
 
 #[test]
 fn fuse_returns_results_ordered_by_score() {
-    let conn = open();
+    let idx = open();
     let syms = RegexExtractor.extract("fn alpha() {}\nfn beta() {}");
-    store_symbols(&conn, "f.rs", &syms).unwrap();
-    let alpha = get_by_name(&conn, "alpha").unwrap().unwrap();
-    let beta = get_by_name(&conn, "beta").unwrap().unwrap();
+    idx.index_symbols("f.rs", &syms).unwrap();
+    let alpha = idx.get_by_name("alpha").unwrap().unwrap();
+    let beta = idx.get_by_name("beta").unwrap().unwrap();
     let mut candidates = HashMap::new();
     candidates.insert(alpha.id, alpha.clone());
     candidates.insert(beta.id, beta.clone());

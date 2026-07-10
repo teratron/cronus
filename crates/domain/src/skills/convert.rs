@@ -15,8 +15,9 @@ use crate::skills::package::{PackageError, PackageListing, SkillPackage, validat
 use std::collections::HashMap;
 
 /// EXT-11: an imported package's signed witness, verified before conversion
-/// begins. The signature mechanism itself is `l1-attestation`'s concern (no
-/// L2 yet); this pipeline only branches on the outcome.
+/// begins. The signature mechanism itself is a separate attestation
+/// concept's concern (no implementation yet); this pipeline only branches
+/// on the outcome.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum WitnessStatus {
     Valid,
