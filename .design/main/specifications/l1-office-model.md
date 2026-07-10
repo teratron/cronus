@@ -1,6 +1,6 @@
 # Agent Office Model
 
-**Version:** 1.0.0
+**Version:** 1.0.1
 **Status:** Stable
 **Layer:** concept
 
@@ -14,6 +14,7 @@ This specification is technology-agnostic. Its concepts are realized by the core
 
 - [l1-architecture.md](l1-architecture.md) - Layering and hub-and-spoke topology that hosts this office model.
 - [l2-core-library.md](l2-core-library.md) - Where the orchestrator, roles, memory, and board are implemented.
+- [l1-office-archetype.md](l1-office-archetype.md) - Domain-scoped staffing **priors** (candidate pool, org shape, bounded seed, norms). Refines OFF-4 without weakening it: an archetype informs what the manager expects, never what it hires — the fixed org chart §5 rejects stays rejected.
 
 ## 1. Motivation
 
@@ -103,3 +104,11 @@ Specialties an office may staff (not exhaustive; staffing is adaptive per OFF-4)
 | --- | --- | --- |
 | `[ARCH]` | `.design/main/specifications/l1-architecture.md` | Architecture that hosts this office model |
 | `[CORE]` | `.design/main/specifications/l2-core-library.md` | Implementation of orchestrator, roles, memory, board |
+| `[ARCHETYPE]` | `.design/main/specifications/l1-office-archetype.md` | Domain staffing priors that refine OFF-4 |
+
+## Document History
+
+| Version | Date | Notes |
+| --- | --- | --- |
+| 1.0.1 | 2026-07-10 | Cross-reference only: linked `l1-office-archetype.md`, which supplies domain-scoped staffing priors while preserving OFF-4 and the §5 rejection of the fixed org chart. No invariant or design change. History table added with this entry. |
+| 1.0.0 | 2026-06-24 | Initial stable spec — OFF-1…OFF-9: office-per-project isolation, single delegating orchestrator, role specialization, adaptive staffing, client-as-client, managed work lifecycle, autonomous operation, compounding capability. |
