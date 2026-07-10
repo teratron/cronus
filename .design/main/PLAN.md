@@ -1,13 +1,13 @@
 # Implementation Plan
 
-**Version:** 2.13.0
-**Generated:** 2026-07-09
-**Based on:** .design/main/INDEX.md v1.0.93
+**Version:** 2.13.1
+**Generated:** 2026-07-10
+**Based on:** .design/main/INDEX.md v1.0.94
 **Status:** Active
 
 ## Overview
 
-Implementation plan for Cronus from the project registry (187 registered specs: 179 Stable, 7 RFC, 1 Draft). Phases follow a **growth order**: the agent grows like a sprout from a seed. This revision (v2.13.0) re-syncs the registry after a spec-authoring wave: **25 orphaned Stable L1 concepts** absorbed into Phase 0 (concept-only, C28), **1 RFC L1** (dev-office) parked in Backlog, and the **first post-11 implementation phase opened — Phase 12 (Skill System, l2-skill-system)** with 8 tasks / 5 tracks. Phases 1–11 are complete (Seed through Content/Sharing/Dev-Workflow). Prior revision (v2.12.0) completed all 11 Phase-10 L2 specs.
+Implementation plan for Cronus from the project registry (188 registered specs: 180 Stable, 7 RFC, 1 Draft). Phases follow a **growth order**: the agent grows like a sprout from a seed. This revision (v2.13.1) is a light sync absorbing the newly-authored **l1-deep-research** concept into Phase 0 — it is a Stable L1 whose implementing L2 (l2-deep-research) was already built in Phase 6, so it is a fully-realized concept, not concept-only. Prior revision (v2.13.0) re-synced the registry after a spec-authoring wave: 25 orphaned Stable L1 concepts absorbed into Phase 0 (concept-only, C28), 1 RFC L1 (dev-office) parked in Backlog, and the first post-11 implementation phase opened — Phase 12 (Skill System, l2-skill-system) with 8 tasks / 5 tracks. Phases 1–11 are complete (Seed through Content/Sharing/Dev-Workflow).
 
 - **Seed = the library** (`crates/core` + `crates/nodus` runtime) — Phases 1–2.
 - **Stem = the CLI** — Phase 3, the first usable surface, emerging straight from the seed.
@@ -156,6 +156,10 @@ Execution mode: **Parallel** (C3); tracks grouped by file independence. Critical
 - [x] **Action Gating** ([l1-action-gating.md](specifications/l1-action-gating.md)) [L1] — authorization friction proportional to an action's consequence
 - [x] **Recursive Decomposition** ([l1-recursive-decomposition.md](specifications/l1-recursive-decomposition.md)) [L1] — the third stance on an over-window input beside compression and progressive disclosure: process it in bounded parts
 
+*Concept authored since plan v2.13.0 (registry sync INDEX v1.0.93 → v1.0.94). Stable with an already-implemented L2 (Phase 6) — a fully-realized concept, not concept-only.*
+
+- [x] **Deep Research** ([l1-deep-research.md](specifications/l1-deep-research.md)) [L1] — autonomous investigation of an open-ended question over external, open, *discovered* sources ending in a claim-verified, source-attributed, coverage-honest report (DR-1…DR-11); the retro-authored concept parent of the already-Done `l2-deep-research` engine (Phase 6), giving that L2 a proper L1 concept; composes recursive-decomposition (sub-question tree) / claim-verification (delivery gate) / context-provenance (untrusted-fetch) / loop-governance (frozen criteria + ceiling); the disciplined iterate-evaluate-keep/discard loop it shares with the harness family is composed, not duplicated — same discipline, different subject (an external question vs. the agent's own harness)
+
 ## Phase 1 — Seed I: Foundation
 
 *Buildable monorepo + engine skeleton + state + security. The soil and the seed coat.*
@@ -231,7 +235,7 @@ Execution mode: **Parallel** (C3); tracks grouped by file independence. Critical
 - [x] **Orchestration** ([l2-orchestration.md](specifications/l2-orchestration.md)) [L2] — delegation, /goal+judge+budget, briefings, adaptive topology, agent tier hierarchy (Chat/Reasoning/Worker), MAX_SPAWN_DEPTH=3, toolkit action ranking
 - [x] **Trigger Triage** ([l2-trigger-triage.md](specifications/l2-trigger-triage.md)) [L2] — TriggerEnvelope intake pipeline, 4-outcome classifier (local CPU + cloud + rule fallback), dedup cache (depends on orchestration + scheduler + agent-session)
 - [x] **Mission Mode** ([l2-mission-mode.md](specifications/l2-mission-mode.md)) [L2] — two-phase autonomous goal execution: PRD generation → user checkpoint → story-verified loop with max-iterations circuit-breaker (depends on orchestration + kanban + tool-security)
-- [x] **Deep Research** ([l2-deep-research.md](specifications/l2-deep-research.md)) [L2] — iterative Think→Plan→Search→Extract→Synthesize engine, date-grounding, untrusted content wrapping, max_rounds circuit breaker (depends on orchestration + tool-security + context-management)
+- [x] **Deep Research** ([l2-deep-research.md](specifications/l2-deep-research.md)) [L2] — iterative Think→Plan→Search→Extract→Synthesize engine, date-grounding, untrusted content wrapping, max_rounds circuit breaker (depends on orchestration + tool-security + context-management); `Implements: l1-deep-research.md, l1-orchestration.md` — re-parented (2026-07-10) under the retro-authored l1-deep-research concept, DR-1…DR-11 compliance mapped (DR-4 claim-verification gate noted as the enhancement path); implementation unchanged
 
 ## Phase 7 — Leaf: TUI
 

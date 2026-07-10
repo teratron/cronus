@@ -4,15 +4,15 @@
 <!-- Maximum 100 lines. Agent updates AFTER each completed action. -->
 
 **Workspace:** main
-**Updated:** 2026-07-10 05:02
+**Updated:** 2026-07-10 05:09
 **Phase:** 12 — Skill System
 **Status:** Active
 
 ## Current Position
 
-- **Task:** Phases 1–11 Done. Phase 12 (Skill System, l2-skill-system) opened: 8 tasks / 5 tracks, Todo. Registry re-synced: 25 Stable L1 concepts → Phase 0 (concept-only, C28), dev-office RFC → Backlog
-- **Spec:** PLAN v2.13.0 / TASKS v1.17.0 / INDEX v1.0.93 in sync; new: l1-report-prompting 1.0.0 Stable (invitation layer + findings ledger), l1-issue-reporting → 1.1.0 Stable (prefilled entry point)
-- **Next Action:** Run /magic.task main to update the plan
+- **Task:** Phases 1–11 Done; Phase 12 (Skill System, l2-skill-system) Todo — 8 tasks / 5 tracks. Light plan sync (v2.13.1): new l1-deep-research concept absorbed into Phase 0 — a fully-realized concept (its L2, l2-deep-research, was already built Done in Phase 6), so no new tasks were generated
+- **Spec:** PLAN v2.13.1 / TASKS v1.17.1 / INDEX v1.0.94 in sync; new: l1-deep-research 1.0.0 Stable (concept parent for the Done l2-deep-research, DR-1…DR-11); l2-deep-research re-parented → 1.3.0; three broken-link patch fixes (l1-version-control, l2-inbox, l1-agent-coevaluation)
+- **Next Action:** Execute T-12A01 Two-tier skill stores + shadowing precedence via /magic.run main
 
 ## Progress
 

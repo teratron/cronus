@@ -1,8 +1,8 @@
 # Master Task Index (Registry)
 
-**Version:** 1.17.0
-**Generated:** 2026-07-09
-**Based on:** .design/main/PLAN.md v2.13.0
+**Version:** 1.17.1
+**Generated:** 2026-07-10
+**Based on:** .design/main/PLAN.md v2.13.1
 **Based on RULES:** .design/RULES.md v1.5.0
 **Execution Mode:** Parallel
 **Status:** Active
@@ -31,5 +31,5 @@ Tactical registry of all phases and their statuses, ordered by the growth metaph
 
 ## Meta Information
 
-- **Last Updated**: 2026-07-09 (v2.13.0 registry re-sync: 25 Stable L1 concepts → Phase 0 concept-only; dev-office RFC → Backlog; Phase 12 opened from l2-skill-system with 8 tasks / 5 tracks; INDEX v1.0.93 / PLAN v2.13.0. Prior: Phase 10 fully decomposed — foundational wave 15 tasks + dependent wave 18 tasks; INDEX v1.0.64 / PLAN v2.12.0)
+- **Last Updated**: 2026-07-10 (v2.13.1 light sync: l1-deep-research concept absorbed into Phase 0 — Stable L1 whose L2 was already built in Phase 6, so a fully-realized concept, no new tasks; INDEX v1.0.94 / PLAN v2.13.1. Prior: v2.13.0 registry re-sync — 25 Stable L1 concepts → Phase 0 concept-only, dev-office RFC → Backlog, Phase 12 opened from l2-skill-system with 8 tasks / 5 tracks; INDEX v1.0.93 / PLAN v2.13.0)
 - **Maintainer**: Core Team
