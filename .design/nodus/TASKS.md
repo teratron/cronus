@@ -1,9 +1,9 @@
 # Master Task Index (Registry)
 
-**Version:** 2.5.0
-**Generated:** 2026-06-24
-**Based on:** .design/nodus/PLAN.md v1.13.0
-**Based on RULES:** .design/RULES.md v1.4.0
+**Version:** 2.5.1
+**Generated:** 2026-07-10
+**Based on:** .design/nodus/PLAN.md v1.13.1
+**Based on RULES:** .design/RULES.md v1.5.0
 **Execution Mode:** Sequential
 **Status:** Active
 
@@ -65,7 +65,7 @@ Tactical registry of all phases. Atomic checklists live in `tasks/phase-{N}.md`.
 
 ## Meta Information
 
-- **Last Updated**: 2026-06-27
+- **Last Updated**: 2026-07-10 (v2.5.1 plan sync: l1-nodus-environment concept absorbed into Phase 0 — Stable but concept-only, no L2 yet, so no new tasks; Phase 11 Control-Flow status reconciled to Done+Archived in the plan; RULES parity refreshed v1.4.0 → v1.5.0; PLAN v1.13.1 / INDEX v1.0.46. All build phases 1–11 Done.)
 - **Phase 3 Planned**: 2026-06-24 (9 tasks, tracks A/B/C/D/T)
 - **Phase 4 Complete**: 2026-06-24 (9 tasks, tracks A/B/C/T; all archived)
 - **Phase 5 Complete**: 2026-06-24 (7 tasks, tracks A/B/C/T; all archived)

@@ -1,8 +1,8 @@
 # Implementation Plan
 
-**Version:** 1.13.0
-**Generated:** 2026-06-24
-**Based on:** .design/nodus/INDEX.md v1.0.19
+**Version:** 1.13.1
+**Generated:** 2026-07-10
+**Based on:** .design/nodus/INDEX.md v1.0.46
 **Status:** Active
 
 ## Overview
@@ -11,6 +11,8 @@ Strategic plan for maturing nodus from an in-tree vendored crate to an independe
 
 Execution mode: **Sequential** (spec correctness must precede hardening; hardening must precede extraction).
 
+> **Sync (v1.13.1, 2026-07-10):** two reconciliations. (1) Absorbed the orphaned **l1-nodus-environment** concept into Phase 0 — a Stable L1 (Environment & Evaluation contract, NE-1…NE-13) with **no authored L2 yet**, so it is concept-only; its EnvironmentProvider realization (`l2-nodus-environment`) is a future authoring candidate, not a plannable phase until the spec exists. (2) Reconciled Phase 11 (Control-Flow) status: it is **Done + archived** (TASKS.md, STATE.md, and l2-nodus-control-flow Stable all confirm completion), so its stale `[ ]` marker in the plan is corrected to `[x]`. Registry raced ahead to INDEX v1.0.46 through many additive refinement passes (NL-11…NL-18, LP-9…LP-16, HO-8…HO-13, NE-11…NE-13, DG-9/DG-10) — all additive invariants on already-planned Stable specs, carried as pending L2 Invariant-Compliance obligations, not new phases.
+
 ## Phase 0 — Requirements (Layer 1: Concept)
 
 *Technology-agnostic language contracts. Must be Stable before Phase 1 begins.*
@@ -18,6 +20,7 @@ Execution mode: **Sequential** (spec correctness must precede hardening; hardeni
 - [x] **Nodus DSL Language** ([l1-nodus-language.md](specifications/l1-nodus-language.md)) [L1] — Stable
 - [x] **Nodus Portability Contract** ([l1-nodus-portability.md](specifications/l1-nodus-portability.md)) [L1] — host neutrality + extension interface contract; LP-1…LP-7; ModelProvider + AuditProvider + future StorageProvider/PolicyProvider taxonomy; feedback distillation protocol; vocabulary layering model
 - [x] **Nodus Observability Contract** ([l1-nodus-observability.md](specifications/l1-nodus-observability.md)) [L1] — execution observability protocol; HO-1…HO-6; AuditProvider role; 10-type event taxonomy (step_start/step_end/step_error/constraint_hit/branch_taken/loop_iteration/macro_enter/macro_exit/model_call/model_response); run manifest; data-safety boundary (no raw user text in traces)
+- [x] **Nodus Environment & Evaluation Contract** ([l1-nodus-environment.md](specifications/l1-nodus-environment.md)) [L1] — **concept-only (no authored L2 yet)** — the executable substrate an evaluation-driven improvement loop grades a workflow against: `EnvironmentProvider` as a 5th extension role beside Model/Audit/Schema/Dialog (NE-1); closed reset/step/evaluate lifecycle, deterministic per (task, seed, actions) (NE-2); trajectory as a projection onto the AuditProvider stream (NE-3); frozen-evaluation boundary (NE-4); typed reward-is-data (NE-5); addressable task catalog + profile (NE-6); instance isolation + idempotent release (NE-7); function-scoped auxiliary roles (NE-8); host-supplied metric neutrality (NE-9); capability-manifest `ExtensionRole::Environment` fail-fast (NE-10, LP-8); declared grading mode automated/judge/hybrid (NE-11); archivable content-addressable candidate tuple feeding a host outer-loop optimizer (NE-12, the l1-harness-optimization feed); budget-normalized graded runs — a profile MAY declare a fixed wall-clock/step/token budget uniformly halting every candidate, budget-hit a normal graded outcome, rewards partitioned by (profile, budget) (NE-13, the HX-11 realization). L2 realization `l2-nodus-environment` is a future authoring candidate → `/magic.spec`
 
 ## Phase 1 — Spec Completeness & Vocabulary Alignment
 
@@ -159,9 +162,11 @@ stub-level runner to an assertion-evaluating test facility (NT-1…NT-10).*
 
 ## Phase 11 — Control-Flow Constructs (l2-nodus-control-flow)
 
-*Implement the v0.7 control constructs from `l1-nodus-language.md` §4.6 in `crates/nodus`, per `l2-nodus-control-flow.md`: `?SWITCH` multi-branch dispatch, `~MAP` collection transform, `~RETRY:n` bounded step retry, `!HALT` fatal stop, `!PAUSE` suspension. Implemented as vertical slices (each = lexer + AST + parser + executor + transpiler + validator + tests); reuses the existing `Status::Failed`/`Status::Paused`/`Signal::Pause` and `SWITCH_NO_MATCH`/`PAUSED` codes. Atomic tasks (by construct) in `tasks/phase-11.md`.*
+*Implement the v0.7 control constructs from `l1-nodus-language.md` §4.6 in `crates/nodus`, per `l2-nodus-control-flow.md`: `?SWITCH` multi-branch dispatch, `~MAP` collection transform, `~RETRY:n` bounded step retry, `!HALT` fatal stop, `!PAUSE` suspension. Implemented as vertical slices (each = lexer + AST + parser + executor + transpiler + validator + tests); reuses the existing `Status::Failed`/`Status::Paused`/`Signal::Pause` and `SWITCH_NO_MATCH`/`PAUSED` codes.*
 
-- [ ] **L2 Nodus Control-Flow** ([l2-nodus-control-flow.md](specifications/l2-nodus-control-flow.md)) [L2] — Slice 1: `!HALT`/`!PAUSE` action flags (reuse Signal/Status). Slice 2: `?SWITCH` (+`*` default, `SWITCH_NO_MATCH`). Slice 3: `~MAP` (implicit `$it`). Slice 4: `~RETRY:n` (bounded, NL-5). Each slice carries lexer/AST/parser/executor/transpiler/validator + tests
+> **Status:** Done (2026-06-27) — all four slices delivered across `crates/nodus`: `!HALT`/`!PAUSE` action flags (Signal::Halt, E016 halt-requires-escalate), `?SWITCH` first-match dispatch (+`*` default, SWITCH_NO_MATCH, W014 empty-arms), `~MAP` transform (implicit `$it`), `~RETRY:n` bounded retry (E017 enforcing 1≤n≤10, NL-5). 265 tests pass; clippy/fmt clean. l2-nodus-control-flow Stable at 1.0.0. See [archives/tasks/phase-11.md](archives/tasks/phase-11.md).
+
+- [x] **L2 Nodus Control-Flow** ([l2-nodus-control-flow.md](specifications/l2-nodus-control-flow.md)) [L2] — Slice 1: `!HALT`/`!PAUSE` action flags (reuse Signal/Status). Slice 2: `?SWITCH` (+`*` default, `SWITCH_NO_MATCH`). Slice 3: `~MAP` (implicit `$it`). Slice 4: `~RETRY:n` (bounded, NL-5). Each slice carries lexer/AST/parser/executor/transpiler/validator + tests
 
 ## Backlog
 

@@ -1,9 +1,10 @@
 # Project Context
 
-**Generated:** 2026-06-27
+**Generated:** 2026-07-10
 
 ## Active Technologies
 
+- Node.js
 - Rust
 
 ## Core Project Structure
@@ -17,6 +18,7 @@
 ├── .claude/
 │   ├── commands/
 │   ├── rules/
+│   ├── scheduled_tasks.lock
 │   └── skills/
 ├── .codex/
 │   ├── prompts/
@@ -39,9 +41,13 @@
 │   ├── project-names.md
 │   ├── references.md
 │   ├── release.drawio.svg
-│   └── technology-stack-research.md
+│   ├── technology-stack-research.md
+│   └── ui-ux.md
 ├── .env
 ├── .env.example
+├── .github/
+│   ├── dependabot.yml
+│   └── workflows/
 ├── .gitignore
 ├── .markdownlint.json
 ├── .release/
@@ -56,6 +62,7 @@
 ├── README.md
 ├── apps/
 │   └── desktop/
+├── biome.json
 ├── crates/
 │   ├── cli/
 │   ├── codegraph/
@@ -63,9 +70,14 @@
 │   ├── nodus/
 │   └── tui/
 ├── docs/
+│   └── README.md
+├── firebase-debug.log
 ├── installer/
+├── package.json
 ├── packages/
 │   └── ui/
+├── pnpm-lock.yaml
+├── pnpm-workspace.yaml
 └── rust-toolchain.toml
 ```
 
@@ -86,4 +98,3 @@
 - T-10D: Added `ExtensionRole::Dialog`; `CapabilityManifest::from_workflow` requires it for an `ASK`/`CONFIRM` lacking `+default` (refactored the command walker to inspect modifiers); `HostCapabilities::builtin()` omits Dialog
 - T-10E: Added `run_with_dialog` / `run_with_dialog_and_audit` (workflows.rs) + `lib.rs` re-exports of `DialogProvider`/`DialogOutcome`/`DefaultDialogProvider`/`ResumeDescriptor`
 - T-10T: `tests/dialog.rs` — 7 DG-invariant integration tests (default resolution, pause+resume descriptor, typed binding, timeout/rejection errors, manifest Dialog derivation); `cargo test -p nodus` — 237 passed (was 228; +9); clippy `-D warnings` clean; fmt clean; doc only the pre-existing baseline; SDD §6 clean
-

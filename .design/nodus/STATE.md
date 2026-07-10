@@ -4,15 +4,15 @@
 <!-- Maximum 100 lines. Agent updates AFTER each completed action. -->
 
 **Workspace:** nodus
-**Updated:** 2026-07-06 09:32
-**Phase:** 11 — Control-Flow Constructs (complete)
+**Updated:** 2026-07-10 05:16
+**Phase:** Build phases 1-11 Done
 **Status:** Active
 
 ## Current Position
 
-- **Task:** Phase 11 complete — all control-flow constructs (`!HALT`/`!PAUSE`, `?SWITCH`, `~MAP`, `~RETRY:n`) implemented in crates/nodus
-- **Spec:** l2-nodus-control-flow.md v1.0.0 (Stable); all 13 specs Stable
-- **Next Action:** Run /magic.task nodus to update the plan
+- **Task:** All build phases 1–11 Done. Plan sync (v1.13.1): orphaned l1-nodus-environment concept absorbed into Phase 0 (Stable but concept-only — no L2 yet, no tasks generated); Phase 11 (Control-Flow) status reconciled to Done+Archived in the plan (was a stale `[ ]`)
+- **Spec:** PLAN v1.13.1 / TASKS v2.5.1 / INDEX v1.0.46; RULES parity refreshed v1.4.0 → v1.5.0. All 14 nodus specs Stable; l1-nodus-environment is the one concept-only L1 (EnvironmentProvider realization l2-nodus-environment not yet authored)
+- **Next Action:** Author l2-nodus-environment or a backlog upstream-parity cluster via /magic.spec nodus to open the next phase
 
 ## Progress
 
