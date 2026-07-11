@@ -731,3 +731,82 @@ fn subject_round_trips_both_variants() {
         Some(MemorySubject::AgentSelf)
     );
 }
+
+#[test]
+fn an_expired_item_is_excluded_from_search_fts_and_search_ranked() {
+    let s = store();
+    let expired = entry("expired note", "findable expiring text").with_expiry(1);
+    let fresh = entry("fresh note", "findable expiring text").with_expiry(9_999_999_999);
+    s.add(expired).unwrap();
+    let fresh_id = s.add(fresh).unwrap();
+
+    let fts = s.search_fts("findable expiring", 10).unwrap();
+    assert_eq!(fts.len(), 1, "the expired item must not surface");
+    assert_eq!(fts[0].id, fresh_id);
+
+    let ranked = s.search_ranked("findable expiring", 10).unwrap();
+    assert_eq!(ranked.len(), 1, "the expired item must not surface ranked");
+    assert_eq!(ranked[0].0.id, fresh_id);
+}
+
+#[test]
+fn an_expired_item_is_excluded_from_recall_temporal() {
+    let s = store();
+    s.add(entry("expired", "body").with_expiry(1)).unwrap();
+    let fresh_id = s
+        .add(entry("fresh", "body").with_expiry(9_999_999_999))
+        .unwrap();
+
+    let recent = s.recall_temporal(TemporalMode::Recent, 10).unwrap();
+    assert_eq!(recent.len(), 1, "the expired item must not appear");
+    assert_eq!(recent[0].id, fresh_id);
+}
+
+#[test]
+fn an_expired_item_is_excluded_from_recall_structured() {
+    let s = store();
+    s.add(
+        entry("expired", "body")
+            .with_expiry(1)
+            .with_subject(MemorySubject::User),
+    )
+    .unwrap();
+    let fresh_id = s
+        .add(
+            entry("fresh", "body")
+                .with_expiry(9_999_999_999)
+                .with_subject(MemorySubject::User),
+        )
+        .unwrap();
+
+    let predicate = FieldPredicate::Eq(
+        PredicateField::Kind,
+        PredicateValue::Text("Convention".to_string()),
+    );
+    let results = s.recall_structured(&predicate, 10).unwrap();
+    assert_eq!(results.len(), 1, "the expired item must not appear");
+    assert_eq!(results[0].id, fresh_id);
+}
+
+#[test]
+fn an_item_with_no_expiry_recalls_normally_everywhere() {
+    let s = store();
+    let id = s.add(entry("no expiry", "body")).unwrap();
+
+    assert!(
+        s.recall_temporal(TemporalMode::Recent, 10)
+            .unwrap()
+            .iter()
+            .any(|e| e.id == id)
+    );
+    let predicate = FieldPredicate::Eq(
+        PredicateField::Kind,
+        PredicateValue::Text("Convention".to_string()),
+    );
+    assert!(
+        s.recall_structured(&predicate, 10)
+            .unwrap()
+            .iter()
+            .any(|e| e.id == id)
+    );
+}

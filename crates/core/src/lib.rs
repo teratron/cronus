@@ -13,10 +13,10 @@ pub use cronus_domain::{
     budget, checkpoint, config_hotreload, constitution, context_mgmt, context_router, deliberation,
     development_workflow, doctor, egress, error_reporting, exec_workspace, extensions, file_store,
     global_orch, hooks, inner_monologue, kanban, learning, lookahead, memory_capture,
-    memory_intelligence, mission,
-    notes, office_control, orchestration, paths, quality, redact, research, resource_sharing,
-    roles, router, sandbox_policy, scheduler, secrets, self_improvement, session, skills, state,
-    store, telemetry, tool_security, trigger_triage, version_control, voice,
+    memory_intelligence, mission, notes, office_control, orchestration, paths, quality, redact,
+    research, resource_sharing, roles, router, sandbox_policy, scheduler, secrets,
+    self_improvement, session, skills, state, store, telemetry, tool_security, trigger_triage,
+    version_control, voice,
 };
 
 // The four modules whose default implementation reaches into an adapter

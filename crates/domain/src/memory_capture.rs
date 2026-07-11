@@ -64,9 +64,7 @@ pub fn prepare_capture_body(
             let normalized = generator
                 .normalize_temporal(content, observation_instant)
                 .unwrap_or_else(|| content.to_string());
-            generator
-                .extract_salient(&normalized)
-                .unwrap_or(normalized)
+            generator.extract_salient(&normalized).unwrap_or(normalized)
         }
     }
 }
@@ -88,7 +86,12 @@ pub struct CaptureDirectives {
 /// keyword-pattern-matching shape `autonomy::classify_command` already uses
 /// for command-risk classification, applied here to captured content.
 const SAFETY_KEYWORDS: &[&str] = &[
-    "danger", "warning", "critical", "vulnerability", "unsafe", "hazard",
+    "danger",
+    "warning",
+    "critical",
+    "vulnerability",
+    "unsafe",
+    "hazard",
 ];
 
 fn is_safety_relevant(sentence: &str) -> bool {
@@ -193,8 +196,12 @@ mod tests {
 
     #[test]
     fn inferred_mode_with_no_generator_degrades_to_verbatim_never_fabricating() {
-        let body =
-            prepare_capture_body(&NoGenerator, "meet next Tuesday", CaptureMode::Inferred, 1000);
+        let body = prepare_capture_body(
+            &NoGenerator,
+            "meet next Tuesday",
+            CaptureMode::Inferred,
+            1000,
+        );
         assert_eq!(
             body, "meet next Tuesday",
             "no generator bound must never fabricate a normalized date or extracted summary"
@@ -220,15 +227,20 @@ mod tests {
 
     #[test]
     fn a_bound_generator_normalizes_relative_dates_in_inferred_mode() {
-        let body =
-            prepare_capture_body(&StubGenerator, "meet next Tuesday", CaptureMode::Inferred, 1000);
+        let body = prepare_capture_body(
+            &StubGenerator,
+            "meet next Tuesday",
+            CaptureMode::Inferred,
+            1000,
+        );
         assert_eq!(body, "meet 2026-07-14");
     }
 
     #[test]
     fn a_bound_generator_is_never_consulted_in_raw_mode() {
         // StubGenerator would rewrite the date; raw must not call it at all.
-        let body = prepare_capture_body(&StubGenerator, "meet next Tuesday", CaptureMode::Raw, 1000);
+        let body =
+            prepare_capture_body(&StubGenerator, "meet next Tuesday", CaptureMode::Raw, 1000);
         assert_eq!(body, "meet next Tuesday");
     }
 
@@ -262,7 +274,8 @@ mod tests {
             &directives,
         );
         assert!(
-            out.content.contains("warning: deploy without the flag is unsafe"),
+            out.content
+                .contains("warning: deploy without the flag is unsafe"),
             "a safety-relevant sentence must survive an exclude directive naming it"
         );
         assert!(out.provenance.contains("safety-relevant"));

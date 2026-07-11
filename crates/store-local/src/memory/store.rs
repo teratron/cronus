@@ -162,10 +162,12 @@ impl MemoryStore {
                     depth, lifecycle_state, experience_outcome, actor, expiry, subject
              FROM memories
              WHERE id = ?1 AND trust_score >= ?2 AND superseded_at IS NULL
-               AND lifecycle_state = 'Active'",
+               AND lifecycle_state = 'Active'
+               AND (expiry IS NULL OR expiry > ?3)",
         )?;
+        let now = now_secs() as i64;
         for id in &ids {
-            let mut rows = mem_stmt.query_map(params![id, TRUST_MIN_SEARCH], map_row)?;
+            let mut rows = mem_stmt.query_map(params![id, TRUST_MIN_SEARCH, now], map_row)?;
             if let Some(entry) = rows.next() {
                 out.push(entry?);
             }
@@ -202,6 +204,7 @@ impl MemoryStore {
             })?
             .collect::<std::result::Result<_, _>>()?;
 
+        let now = now_secs();
         let mut out = Vec::with_capacity(hits.len());
         for (id_str, base_text_relevance) in hits {
             let id = MemoryId::from(id_str);
@@ -211,6 +214,7 @@ impl MemoryStore {
             if entry.trust_score < TRUST_MIN_SEARCH
                 || entry.superseded_at.is_some()
                 || entry.lifecycle_state != LifecycleState::Active
+                || entry.expiry.is_some_and(|e| e <= now)
             {
                 continue;
             }
@@ -256,6 +260,7 @@ impl MemoryStore {
                     depth, lifecycle_state, experience_outcome, actor, expiry, subject
              FROM memories
              WHERE lifecycle_state = ?1 AND trust_score >= ?2 AND {where_clause}
+               AND (expiry IS NULL OR expiry > ?5)
              ORDER BY {order} LIMIT ?4"
         );
         let mut stmt = self.conn.prepare(&sql)?;
@@ -265,7 +270,8 @@ impl MemoryStore {
                     LifecycleState::Active.as_str(),
                     TRUST_MIN_SEARCH,
                     bound,
-                    limit as i64
+                    limit as i64,
+                    now_secs() as i64
                 ],
                 map_row,
             )?
@@ -287,6 +293,7 @@ impl MemoryStore {
         let mut binds: Vec<Box<dyn rusqlite::types::ToSql>> = vec![
             Box::new(LifecycleState::Active.as_str().to_string()),
             Box::new(TRUST_MIN_SEARCH),
+            Box::new(now_secs() as i64),
         ];
         let clause = super::predicate::compile(predicate, &mut binds);
         binds.push(Box::new(limit as i64));
@@ -296,7 +303,8 @@ impl MemoryStore {
                     valid_at, created_at, superseded_at, workspace_id, verification_state,
                     depth, lifecycle_state, experience_outcome, actor, expiry, subject
              FROM memories
-             WHERE lifecycle_state = ? AND trust_score >= ? AND ({clause})
+             WHERE lifecycle_state = ? AND trust_score >= ?
+               AND (expiry IS NULL OR expiry > ?) AND ({clause})
              ORDER BY created_at DESC LIMIT ?"
         );
         let mut stmt = self.conn.prepare(&sql)?;
@@ -383,7 +391,7 @@ impl MemoryStore {
     /// MI-6: the salience-gated capture policy — a confidence-honest gate in
     /// front of the same create/corroborate decision `consolidate` makes,
     /// plus MI-6 cross-reference edges to `related`. `entry.actor`/
-    /// `.expiry`/`.subject` (set via the T-15A01 builders) flow through
+    /// `.expiry`/`.subject` (set via the existing builders) flow through
     /// untouched; `audit_actor` is the MC-4 action-algebra's own audit-trail
     /// actor, independent of `entry.actor`.
     pub fn capture(

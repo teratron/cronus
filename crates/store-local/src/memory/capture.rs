@@ -5,7 +5,8 @@
 //! exact same same-abstraction check. `capture()`'s own job is the
 //! confidence-honest gate and the MI-6 cross-reference edges; attribution
 //! (`actor`/`subject`) and expiry are already ordinary `MemoryEntry` fields
-//! by the time a caller reaches this function, set via the T-15A01 builders.
+//! by the time a caller reaches this function, set via the existing
+//! `with_actor`/`with_expiry`/`with_subject` builders.
 
 use rusqlite::Connection;
 
@@ -127,8 +128,14 @@ mod tests {
             panic!("expected Stored");
         };
 
-        let with_ref = capture(&c, entry("t", "a related fact"), &[hub_id.clone()], "test", 200)
-            .unwrap();
+        let with_ref = capture(
+            &c,
+            entry("t", "a related fact"),
+            std::slice::from_ref(&hub_id),
+            "test",
+            200,
+        )
+        .unwrap();
         let CaptureOutcome::Stored(new_id) = with_ref else {
             panic!("expected Stored");
         };

@@ -1,18 +1,19 @@
 //! Cross-layer validation for the memory L2 pair: proves the consolidation
-//! (MC-1..10) and intelligence (MI-1/2/3/4/5/7/8/9/13) invariants hold
-//! together on the built tier — through the real facade and the real
-//! SQLite adapter, not each task's own isolated stub/unit tests.
-//!
-//! MI-6/10/11/12 are out of scope here: they need capture-metadata fields
-//! (actor/expiry/cross-ref/subject-lens/capture-mode) that were deliberately
-//! deferred rather than rushed through a fourth schema round in one task —
-//! there is nothing built yet for a sweep to exercise.
+//! (MC-1..10) and intelligence — both query-surface (MI-1/2/3/4/5/7/8/9/13,
+//! Phase 14) and capture-path (MI-6/10/11/12, Phase 15) — invariants hold
+//! together on the built tier, through the real facade and the real SQLite
+//! adapter, not each task's own isolated stub/unit tests.
 
-use cronus_contract::{ExperienceOutcome, MemoryDepth, MemoryEntry, MemoryKind, MemorySource};
+use cronus_contract::{
+    ExperienceOutcome, MemoryDepth, MemoryEntry, MemoryKind, MemorySource, MemorySubject,
+};
 use cronus_core::autonomy::AutonomyLevel;
 use cronus_core::memory::MemoryStore;
+use cronus_core::memory_capture::{
+    CaptureDirectives, CaptureMode, NoGenerator, apply_directives, prepare_capture_body,
+};
 use cronus_core::memory_intelligence::{self, AnswerVerdict, ExperienceDecision, RunTrace};
-use cronus_store_local::memory::{ConsolidationAction, SignalKind};
+use cronus_store_local::memory::{CaptureOutcome, ConsolidationAction, SignalKind};
 
 // ── MC-1/MC-2/MC-4 + MI-1: capture consolidates and becomes answerable ──────
 
@@ -212,4 +213,132 @@ fn distilled_experience_round_trips_through_the_real_store_and_is_reused() {
             "expected the distilled success to be reused through the real adapter, got {other:?}"
         ),
     }
+}
+
+// ── MI-6: capture policy with full metadata, through the real adapter ──────
+
+#[test]
+fn a_fully_attributed_capture_persists_metadata_and_cross_ref_edges_for_real() {
+    let store = MemoryStore::open_in_memory().unwrap();
+    let hub_id = store
+        .add(MemoryEntry::new(
+            MemoryKind::Convention,
+            MemorySource::Agent,
+            "hub",
+            "a hub fact",
+        ))
+        .unwrap();
+
+    let entry = MemoryEntry::new(
+        MemoryKind::Convention,
+        MemorySource::Agent,
+        "attributed",
+        "a fully attributed capture",
+    )
+    .with_actor("user:alice")
+    .with_subject(MemorySubject::User)
+    .with_expiry(9_999_999_999);
+
+    let outcome = store
+        .capture(entry, std::slice::from_ref(&hub_id), "test")
+        .unwrap();
+    let CaptureOutcome::Stored(id) = outcome else {
+        panic!("expected Stored, got {outcome:?}");
+    };
+
+    let got = store.get(&id).unwrap().unwrap();
+    assert_eq!(got.actor, Some("user:alice".to_string()));
+    assert_eq!(got.subject, Some(MemorySubject::User));
+    assert_eq!(got.expiry, Some(9_999_999_999));
+
+    let edges = store.edges_from(&id).unwrap();
+    assert!(
+        edges.iter().any(|(target, _)| *target == hub_id),
+        "the cross-ref edge must be readable through the real MC-3 graph"
+    );
+}
+
+#[test]
+fn a_below_floor_capture_is_refused_through_the_real_adapter_and_writes_nothing() {
+    let store = MemoryStore::open_in_memory().unwrap();
+    let mut entry = MemoryEntry::new(
+        MemoryKind::Convention,
+        MemorySource::Agent,
+        "unreliable",
+        "an unreliable guess",
+    );
+    entry.confidence = 0.05;
+
+    let outcome = store.capture(entry, &[], "test").unwrap();
+    assert!(matches!(outcome, CaptureOutcome::Refused { .. }));
+
+    let hits = store.search_fts("unreliable guess", 10).unwrap();
+    assert!(hits.is_empty(), "a refused capture must not be recallable");
+}
+
+// ── MI-10/MI-12: a raw capture with no generator is immediately recallable ──
+
+#[test]
+fn a_raw_capture_with_no_generator_bound_flows_through_to_real_recall() {
+    let store = MemoryStore::open_in_memory().unwrap();
+    let body = prepare_capture_body(
+        &NoGenerator,
+        "meet next Tuesday about the launch",
+        CaptureMode::Raw,
+        cronus_contract::now_secs(),
+    );
+    // Raw never touches the generator, so the relative date is untouched —
+    // proving the no-generator degrade holds all the way to a real,
+    // immediately-recallable stored item, not just the pure function.
+    assert!(body.contains("next Tuesday"));
+
+    let entry = MemoryEntry::new(
+        MemoryKind::Convention,
+        MemorySource::Agent,
+        "raw note",
+        &body,
+    );
+    let outcome = store.capture(entry, &[], "test").unwrap();
+    assert!(matches!(outcome, CaptureOutcome::Stored(_)));
+
+    let hits = store.search_fts("launch", 10).unwrap();
+    assert_eq!(
+        hits.len(),
+        1,
+        "a raw capture must be immediately recallable"
+    );
+}
+
+// ── MI-11: directives shape what actually lands in the real store ──────────
+
+#[test]
+fn directive_shaped_content_lands_in_the_real_store_with_the_safety_guard_intact() {
+    let store = MemoryStore::open_in_memory().unwrap();
+    let directives = CaptureDirectives {
+        exclude: vec!["irrelevant".to_string()],
+        ..Default::default()
+    };
+    let out = apply_directives(
+        "the useful fact. warning: an irrelevant but unsafe aside.",
+        &directives,
+    );
+    // The safety guard must survive even though "irrelevant" matched the
+    // exclude term — real end-to-end proof, not just the pure-function test.
+    assert!(out.content.contains("unsafe aside"));
+
+    let entry = MemoryEntry::new(
+        MemoryKind::Convention,
+        MemorySource::Agent,
+        "directed capture",
+        &out.content,
+    );
+    let outcome = store.capture(entry, &[], "test").unwrap();
+    let CaptureOutcome::Stored(id) = outcome else {
+        panic!("expected Stored, got {outcome:?}");
+    };
+    let got = store.get(&id).unwrap().unwrap();
+    assert!(
+        got.body.contains("unsafe aside"),
+        "the safety-relevant sentence directives retained must actually reach storage"
+    );
 }

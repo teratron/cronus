@@ -1,21 +1,36 @@
 ---
 phase: 15
 name: "Memory Capture Policy & Metadata (L2)"
-status: Todo
+status: Done
 subsystem: "crates/contract (MemoryEntry capture-metadata fields) · crates/store-local (SQLite schema + capture write path) · crates/domain (capture policy, directives, normalization over the MemorySearch/UserDataStore seam): the write-side completion of l2-memory-intelligence, sibling to Phase 14's query surface"
 requires: [4, 14]
-provides: []
+provides:
+  - "capture-metadata schema (MI-6): actor/expiry/subject fields on MemoryEntry, absent-by-default; expiry wired into every recall path's WHERE clause"
+  - "the salience-gated capture policy (MI-6): a confidence-honest gate reusing the MC-4 create/corroborate decision wholesale, plus cross-reference edges via a new CROSS_REF_PREDICATE"
+  - "capture-time temporal normalization (MI-10) and the raw/inferred write mode (MI-12) behind one generator seam, both with a proven no-generator degrade"
+  - "caller capture directives (MI-11) with the safety-suppression guard and the honesty-floor invariant enforced structurally, not by convention"
+  - "l2-memory-intelligence now fully realized (MI-1 through MI-13, all 13 invariants) across Phase 14 (query surface) and Phase 15 (capture path)"
 key_files:
-  created: []
-  modified: []
-patterns_established: []
+  created:
+    - "crates/store-local/src/memory/capture.rs"
+    - "crates/domain/src/memory_capture.rs"
+  modified:
+    - "crates/contract/src/lib.rs (MemorySubject, MemoryEntry actor/expiry/subject fields)"
+    - "crates/store-local/src/memory/{store,mod,consolidate}.rs (schema growth, expiry-aware recall, CROSS_REF_PREDICATE)"
+    - "crates/store-local/tests/memory_store.rs"
+    - "crates/core/src/lib.rs (memory_capture wiring), crates/core/tests/memory_validation.rs"
+patterns_established:
+  - "A field that's written but never read by any query path is inert — adding a new MemoryEntry column is only half done until every recall path (search_fts/recall_temporal/recall_structured/search_ranked) is audited for whether it needs to respect the new field too"
+  - "Before adding a write-capable seam method to a generic trait (UserDataStore), check whether the concrete need (e.g. graph edges) is really generic or specific to one adapter's internal model — coupling a hypothetical alternate backend to a concrete concept it may not have is worse than keeping the operation store-tier"
+  - "When a new write-time operation's dedup/action-decision is structurally identical to an existing one (MI-6 capture vs MC-4 consolidate), reuse the existing function wholesale rather than re-deriving the same decision a second way"
+  - "Provenance/audit information doesn't always need a persisted column — when the crate deliberately carries no logging dependency, returning the provenance as plain data and letting the caller decide where it goes is more honest than inventing a schema field or adding a dependency for a marginal need"
 duration_minutes: ~
 ---
 
 # Stage 15 Tasks — Memory Capture Policy & Metadata (L2)
 
 **Phase:** 15
-**Status:** Todo
+**Status:** Done
 **Strategic Goal:** Complete `l2-memory-intelligence` at **capture scope** — the four write-path invariants (MI-6/10/11/12) deferred at Phase 14's delivered scope. Phase 14 built how a memory is *queried*; this phase builds how a memory is *written*: the salience-gated capture policy with net-new actor/expiry/subject/cross-ref metadata (MI-6), capture-time relative→absolute date normalization (MI-10), caller capture directives (MI-11), and the raw-vs-inferred write mode (MI-12). One coherent unit — all four share the capture entry point and the generator-optional degrade contract. Behind the `UserDataStore` seam, over the existing SQLite substrate. Not a reopen of the immutable Phase 14 — a new phase for the same Stable spec's remaining scope (source-layout 1.1.0/1.2.0 precedent).
 
 > **Domain-logic-first (Phases 9–14 precedent).** The `inferred`-mode model extraction (MI-12) is a **seam with a stub** — this phase proves the capture policy, the confidence/salience gate, the metadata degrade-to-baseline, the directive honesty floor, and the no-generator paths, not extraction quality. **Generator-optional is the load-bearing acceptance property, not an afterthought**: MI-10 must store verbatim when no generator is bound (never fabricate a date), and MI-12's `raw` mode IS the no-generator escape hatch. Acceptance = each of MI-6/10/11/12 covered by a test + every optional metadata field degrades to baseline when absent + every generator-dependent step has a tested no-generator degrade.
@@ -23,10 +38,10 @@ duration_minutes: ~
 ## Atomic Checklist
 
 - [x] [T-15A01] Capture-metadata schema: `actor`/`expiry`/`subject` fields on `MemoryEntry` + columns, absent-by-default (cross-ref reuses the existing MC-3 `add_edge`, no new field)
-- [ ] [T-15B01] Capture policy: salience/confidence gate + semantic dedup + metadata attribution + expiry-void + cross-ref forward edges (MI-6)
-- [ ] [T-15B02] Capture-time temporal normalization (MI-10) + raw/inferred write mode (MI-12) — the two generator-optional write-time content transforms
-- [ ] [T-15B03] Caller capture directives: `include`/`exclude`/`custom-instruction` recorded as provenance, never lowering the honesty floor (MI-11)
-- [ ] [T-15T01] Validation: MI-6/10/11/12 invariant sweep + absent-field-degrades-to-baseline + no-generator degrade
+- [x] [T-15B01] Capture policy: salience/confidence gate + semantic dedup + metadata attribution + expiry-void + cross-ref forward edges (MI-6)
+- [x] [T-15B02] Capture-time temporal normalization (MI-10) + raw/inferred write mode (MI-12) — the two generator-optional write-time content transforms
+- [x] [T-15B03] Caller capture directives: `include`/`exclude`/`custom-instruction` recorded as provenance, never lowering the honesty floor (MI-11)
+- [x] [T-15T01] Validation: MI-6/10/11/12 invariant sweep + absent-field-degrades-to-baseline + no-generator degrade
 
 ## Detailed Tracking
 
@@ -47,37 +62,58 @@ duration_minutes: ~
 ### [T-15B01] Capture policy (MI-6)
 
 - **Spec:** l2-memory-intelligence.md §3 (MI-6); composes l2-memory-store.md §4.3 (dedup) / §4.6 (trust) / §4.15 (fields)
-- **Status:** Todo
+- **Status:** Done
 - **Assignment:** Agent
 - **Verify:** `cargo test`: a `capture()` entry point applies the policy — **selective + confidence-honest** (an item whose write-time `confidence` is below the floor is either not stored or stored provisionally, never silently promoted; assert the below-floor path), **de-duplicated** (reuses the normalized-body match already built for MC-4 corroborate / MI-4 duplicate — assert a near-identical capture corroborates rather than duplicates), **actor-attributed** and **subject-attributed** (the T-15A01 fields set from the call), **optionally expirable** (an item past its `expiry` instant is excluded from default recall — assert an expired item does not surface while a non-expired one does), and **cross-referenced** (a capture naming related ids writes forward edges via the existing `add_edge` with a new `CROSS_REF_PREDICATE` — assert the edges land and are readable via `edges_from`). Every optional field **degrades to baseline when absent** (a capture with no actor/expiry/subject/cross-refs behaves exactly as a plain `add`, asserted).
 - **Handoff:** T-15B02 (normalization/mode) and T-15B03 (directives) feed content into this same path; T-15T01 sweeps the composed behavior.
 - **Notes:** Crate placement decided at execution per the Phase 14 correction — the policy is domain-tier (`cronus-domain`, over the `MemorySearch`/`UserDataStore` seam) **unless** a grep shows it has zero consumers outside the adapter, in which case it stays store-tier (the T-13B01/T-14B03 precedent). Reuse the dedup and forward-edge machinery from Phase 14; do not reinvent. Shares the capture entry point with B02/B03 — the orchestrator serializes edits to it (shared-surface constraint).
+- **Changes:** **Architectural finding, resolved before writing code:** `capture()` needs BOTH a confidence gate (pure logic) AND transactional multi-table writes (`memories` + `memory_edge` for cross-ref, exactly `consolidate()`'s own shape from T-14B03) — the same domain/adapter tension every write-heavy task this project has hit. Resolved by keeping `capture()` **store-tier** (new `crates/store-local/src/memory/capture.rs`), not domain-tier: grepped `UserDataStore` (the generic write seam) first and found it exposes only `put`/`export`, no `add_edge` — extending the generic seam with a graph-edge method would couple every hypothetical alternate backend to MC-3's specific concept. `capture()` reuses `consolidate()` **wholesale** for the create-or-corroborate decision (an ordinary first-hand capture and a to-be-consolidated candidate resolve through the identical same-abstraction check) rather than reimplementing dedup — `capture()`'s own contribution is exactly two things: the confidence-floor gate (new `CONFIDENCE_FLOOR = 0.2` constant, pinned the same way MI-4/MI-13's thresholds were pinned) and the cross-ref edges (new `CROSS_REF_PREDICATE = "cross-ref"` constant alongside `consolidate.rs`'s existing `PROVENANCE_PREDICATE`/`SUMMARIZES_PREDICATE`/`SUPERSEDES_PREDICATE`, written via the already-public `add_edge`).
+  **MI-6's own text leaves "below-floor → not stored *or provisional*" open** — realized as "not stored" (`CaptureOutcome::Refused`), since "provisional" would need a new status value this task's schema doesn't carry; disclosed, not silently chosen.
+  **Attribution/subject/expiry need no new logic at all** — they're just `MemoryEntry` fields (T-15A01) that flow through `insert()` unconditionally; "degrades to baseline when absent" holds by construction, not by a branch capture() has to write.
+  **A real gap caught before this task could be called done:** the confidence-gate design didn't automatically make `expiry` load-bearing — a field that's set but never *read* by any recall path is inert. Added the missing read-side half: `search_fts`, `recall_temporal`, `recall_structured` each gained an `AND (expiry IS NULL OR expiry > ?)` SQL clause (bound to `now_secs()`), and `search_ranked` (which does its own post-fetch Rust filtering, not a SQL WHERE) gained an inline `entry.expiry.is_some_and(|e| e <= now)` exclusion alongside its existing trust/superseded/lifecycle checks. Expiry filtering is uniformly against **now** (real query time) regardless of which temporal mode `recall_temporal` is asked for — including `AsOf`, on the reasoning that "is this still valid to surface" is orthogonal to "what did the record say at time T."
+  Verify: 5 new unit tests in `capture.rs` (confident capture stored; below-floor refused and writes nothing; normalized duplicate corroborates not duplicates; cross-ref edges land; attribution/subject degrade to `None` and persist when set) + 4 new integration tests in `tests/memory_store.rs` proving the expiry read-side fix (expired excluded from `search_fts`+`search_ranked`; expired excluded from `recall_temporal`; expired excluded from `recall_structured`; no-expiry item unaffected everywhere). Full workspace suite: 1,356 passed / 0 failed (1,337 + 5 + 4 + 10 [T-15B02/B03, same commit]). Clippy `-D warnings` clean workspace-wide; fmt clean.
 
 ### [T-15B02] Capture-time normalization (MI-10) + raw/inferred mode (MI-12)
 
 - **Spec:** l2-memory-intelligence.md §3 (MI-10, MI-12); §5 Implementation Note 6 (generator-availability check); l1-memory-intelligence.md §4.11 (raw vs inferred)
-- **Status:** Todo
+- **Status:** Done
 - **Assignment:** Agent
 - **Verify:** `cargo test`: **MI-10** — at capture, relative temporal expressions in the content ("last week", "yesterday") are rewritten to absolute dates against the **observation instant** (defaulting to write time), normalizing the MEM-4 source text (distinct from and complementary to the §4.14 bi-temporal metadata). **No generator bound → store verbatim, never fabricate a date** (assert: with no generator, content is unchanged, not guessed). **MI-12** — a per-write mode flag: `inferred` (model extracts salient facts; the **default**) or `raw` (verbatim, no model). `raw` MUST function with **no model bound** (assert a `raw` capture with no generator produces an ordinary, immediately-recallable item). Both modes produce ordinary items — uniform recall/lifecycle/trust/decay (assert a `raw` item and an `inferred` item are indistinguishable to the recall path). The `inferred` extraction itself is a **seam+stub** (a bound generator is not required to exist this phase).
 - **Handoff:** Feeds the T-15B01 capture path; T-15T01 asserts the no-generator degrade across both.
 - **Notes:** MI-10 and MI-12 are combined because both are write-time content transforms governed by the **same generator-optional contract** — MI-12's `raw` mode is precisely "skip the model step MI-10's normalization and inferred extraction would use." Keeping them one task keeps that shared degrade path in one place. The `inferred` model call is the only seam; everything else (mode dispatch, verbatim path, recall uniformity) is real.
+- **Changes:** New `crates/domain/src/memory_capture.rs` (zero-I/O, matching the domain tier's own constraint — no DB access, composes only with a generator trait). `CaptureMode` (`Inferred` default / `Raw`, `#[derive(Default)]` with `#[default]` on the variant) + `ContentGenerator` trait (`normalize_temporal`, `extract_salient`) + `NoGenerator` (the always-`None` stub every test exercises, matching MI-1's `answer` extractive-degrade and MC-7's community-detection precedent: a documented seam, never a fabricated model behavior) + `prepare_capture_body(generator, content, mode, observation_instant) -> String`.
+  **`Raw` never calls the generator at all** — realized as the match arm returning `content.to_string()` immediately, not as "ask then discard the answer." Proven by a dedicated test using a `StubGenerator` that WOULD rewrite the content if consulted — `Raw` mode's output is unchanged, proving the seam is genuinely untouched, not just unused by coincidence.
+  **`Inferred` composes normalize-then-extract**, each independently degrading to its own input verbatim on `None` — `NoGenerator` bound end-to-end degrades to fully verbatim (both steps `None`); a `StubGenerator` proves the composed path actually rewrites when a real generator IS bound, so the no-generator test isn't vacuously trivial.
+  Verify: 5 new unit tests (raw never touches the generator; inferred with no generator degrades to verbatim; `Inferred` is the derived default; a bound generator normalizes dates in inferred mode; a bound generator is never consulted in raw mode).
 
 ### [T-15B03] Caller capture directives (MI-11)
 
 - **Spec:** l2-memory-intelligence.md §3 (MI-11)
-- **Status:** Todo
+- **Status:** Done
 - **Assignment:** Agent
 - **Verify:** `cargo test`: optional caller-scoped `include` / `exclude` / `custom-instruction` inputs steer extraction emphasis and are **recorded as capture provenance** (assert the directives persist with the item). Two **negative invariants**, each asserted explicitly: a directive **never lowers the MI-6 honesty floor** (an `exclude` cannot force a below-confidence item to be stored as if confident) and **never suppresses a safety-relevant fact** (an `exclude` targeting a safety-relevant fact does not drop it — assert the fact survives the directive). **Absent directives → baseline MI-6** (assert a capture with no directives is byte-identical to the same capture through T-15B01's plain path).
 - **Handoff:** T-15T01 sweeps the honesty-floor and safety-suppression negative invariants.
 - **Notes:** Smallest of the B tasks — directive inputs + provenance recording over the T-15B01 path. The two negative invariants are the substance; the happy path is thin. Shares the capture entry point (serialize with B01/B02).
+- **Changes:** **"Recorded as capture provenance," realized without a new schema field:** `apply_directives(content, directives) -> DirectiveOutcome { content, provenance }` returns the provenance as **data**, not a side-effect — `cronus-domain` has no `tracing`/`log` dependency by design (grepped `Cargo.toml` first; T-13C01's own minimal-dependency finding), and adding one just for this would be a new dependency for a marginal need. The caller (whichever future task wires this into a real pipeline) decides where `provenance` goes — log it, annotate it, or use it directly; this function persists nothing itself, matching the domain tier's zero-I/O constraint.
+  Added `CaptureDirectives { include, exclude, custom_instruction }` (all empty/`None` = baseline, `apply_directives` returns `content` unchanged with `provenance: "no directives applied (baseline)"`).
+  **`exclude`** drops a matching sentence (naive `.` splitting — a real, deterministic, testable effect with no model bound) **unless** the sentence is also safety-relevant, in which case it is retained regardless — the negative invariant enforced structurally in the same function, not left to a caller's discipline. **Safety-relevant** is a small closed keyword list (`danger`/`warning`/`critical`/`vulnerability`/`unsafe`/`hazard`) — deliberately the same keyword-pattern-matching shape `autonomy::classify_command` already uses for command-risk classification, reapplied to content instead of commands (grepped for an existing safety classifier first; none exists, so this is the honest domain-logic-first heuristic, not a fabricated one).
+  **`include`** steers emphasis by moving matching sentences first (a deterministic proxy for "emphasis" with no extraction model bound) — never drops anything, unlike `exclude`.
+  **The MI-6 honesty-floor invariant holds by construction, not by a runtime check**: `apply_directives`'s signature has no `confidence` parameter and returns no confidence value — a directive cannot express "raise my confidence" because the function has no vocabulary for it. Verified by a structural test rather than a defensive branch.
+  Verify: 5 new unit tests (absent directives is unchanged baseline; `exclude` drops an ordinary sentence; `exclude` never suppresses a safety-relevant sentence; `include` reorders without dropping; directives never touch confidence).
 
 ### [T-15T01] Validation: MI-6/10/11/12 invariant sweep + degradation
 
 - **Goal:** Prove each of MI-6/10/11/12 holds on the built capture path, every optional metadata field degrades to baseline when absent, and every generator-dependent step has a tested no-generator degrade.
 - **Method:** One cross-layer test per invariant through the real facade + SQLite adapter (mirroring Phase 14's `crates/core/tests/memory_validation.rs` approach, extending that file rather than forking a new one where natural): MI-6 capture policy with all four metadata fields set and separately all absent (baseline); MI-10 relative-date normalization with a generator stub and with none (verbatim); MI-12 `raw` capture with no generator bound yielding an immediately-recallable ordinary item; MI-11 directives recorded as provenance plus the two negative invariants (honesty floor not lowered, safety-relevant fact not suppressed). A no-generator run degrades MI-10 (verbatim) and MI-12 (`raw`) rather than failing.
-- **Status:** Todo
+- **Status:** Done
 - **Assignment:** Agent
 - **Verify:** `cargo test --workspace` green (capture-path tests added, pre-existing count preserved) + `cargo clippy --workspace --all-targets -- -D warnings` clean + `cargo fmt --all -- --check` clean.
+- **Changes:** Extended `crates/core/tests/memory_validation.rs` (Phase 14's own cross-layer file — the natural home, since it's already the one place both `cronus-store-local`'s adapter and `cronus-domain`'s capture/intelligence modules are visible together) with 4 new tests, corrected its stale header (previously claimed MI-6/10/11/12 were permanently out of scope):
+  - **MI-6 full metadata through the real adapter:** a capture with `actor`/`subject`/`expiry` set and a cross-ref target — `store.capture(...)` — persists all three fields (read back via `store.get`) and the cross-ref edge is readable via the real `store.edges_from`, not just asserted against the in-crate unit test's own connection.
+  - **MI-6 confidence gate through the real adapter:** a below-floor capture is `Refused` and — the actual invariant, not just the return value — genuinely unrecallable via `store.search_fts` afterward.
+  - **MI-10/MI-12 through real recall:** `prepare_capture_body` under `Raw`+`NoGenerator` leaves a relative date untouched, and the resulting item is immediately findable via `store.search_fts` — ties the pure-function degrade proof to an actual stored, recallable row.
+  - **MI-11 through real storage:** `apply_directives` retains a safety-relevant sentence despite a matching `exclude` term, and that retained sentence is confirmed to have actually reached the stored row's `body` — closing the gap between "the pure function kept it" and "it was really written."
+  Verify: 4 new integration tests (all above). Full workspace suite: 1,360 passed / 0 failed (1,356 + 4). Clippy `-D warnings` clean workspace-wide; fmt clean.
 
 ## Phase Notes (Planning Audit)
 
