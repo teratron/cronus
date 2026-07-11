@@ -1,15 +1,15 @@
 # Master Task Index (Registry)
 
-**Version:** 1.19.0
-**Generated:** 2026-07-10
-**Based on:** .design/main/PLAN.md v2.15.0
+**Version:** 1.19.1
+**Generated:** 2026-07-11
+**Based on:** .design/main/PLAN.md v2.15.1
 **Based on RULES:** .design/RULES.md v1.5.0
 **Execution Mode:** Parallel
 **Status:** Active
 
 ## Overview
 
-Tactical registry of all phases and their statuses, ordered by the growth metaphor (seed → stem → leaf → flower). Atomic checklists live in `tasks/phase-{N}.md`. Build phases 1–12 are Done. **Phase 13 (Core Decomposition) is open** — a structural, behavior-preserving crate-topology refactor decomposed from the now-Stable core-decomposition wave; effectively sequential despite Parallel mode.
+Tactical registry of all phases and their statuses, ordered by the growth metaphor (seed → stem → leaf → flower). Atomic checklists live in `tasks/phase-{N}.md`. Build phases 1–13 are Done. **No phase is currently open** — every currently-Stable spec is implemented; the ten Backlog items are all RFC (9) or Draft (1) and cannot be planned until reviewed to Stable via `/magic.spec` (RULES §2). Deterministic next target (DA-3): `l2-service-activation`, unblocked by Phase 13's crate seam.
 
 ## Active Phases
 
@@ -32,5 +32,5 @@ Tactical registry of all phases and their statuses, ordered by the growth metaph
 
 ## Meta Information
 
-- **Last Updated**: 2026-07-10 (v2.15.0: opened **Phase 13 — Core Decomposition** from the now-Stable core-decomposition wave (`l2-crate-topology` 1.0.0 + `l2-source-layout` 1.2.0, promoted RFC→Stable via `/magic.spec`, INDEX v1.0.97). 8 tasks / 5 tracks (A–D, T) mapping the topology spec's ordered §5 migration + validation; a structural behavior-preserving refactor, effectively sequential, pivot at T-13A02 (edge inversion), non-optional CI boundary guard at T-13D01. Wave removed from Backlog; PLAN v2.15.0. Prior: v2.14.1 milestone sync — all 12 build phases Done, no phase open; INDEX v1.0.96 / PLAN v2.14.1)
+- **Last Updated**: 2026-07-11 (v1.19.1 milestone sync: **Phase 13 — Core Decomposition complete and archived** (8/8 tasks Done; `l2-crate-topology` + `l2-source-layout` 1.2.0 realized — five-crate topology, INV-8 compiler-enforced, CI boundary guard live). All thirteen phases Done; every Stable spec implemented; no phase open. Pre-flight clean (ok:true, no drift). Pre-Planning Stabilization: 0 promoted — sole Draft `l2-loop-runner` stays Draft (RFC parent `l1-loop-governance`, layer constraint). Ten Backlog items all RFC/Draft — advance only via `/magic.spec`. DA-3 next target: `l2-service-activation` (direct downstream of Phase 13's crate seam). PLAN v2.15.1. Prior: v2.15.0 opened Phase 13 from the core-decomposition wave; v2.14.1 milestone — all 12 build phases Done)
 - **Maintainer**: Core Team

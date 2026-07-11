@@ -1,6 +1,6 @@
 # Project Context
 
-**Generated:** 2026-07-10
+**Generated:** 2026-07-11
 
 ## Active Technologies
 
@@ -30,6 +30,7 @@
 │   ├── .version
 │   ├── INDEX.md
 │   ├── RULES.md
+│   ├── graph-before.json
 │   ├── main/
 │   ├── nodus/
 │   ├── wiki/
@@ -64,10 +65,14 @@
 │   └── desktop/
 ├── biome.json
 ├── crates/
+│   ├── auth-local/
 │   ├── cli/
 │   ├── codegraph/
+│   ├── contract/
 │   ├── core/
+│   ├── domain/
 │   ├── nodus/
+│   ├── store-local/
 │   └── tui/
 ├── docs/
 │   └── README.md
@@ -78,24 +83,26 @@
 │   └── ui/
 ├── pnpm-lock.yaml
 ├── pnpm-workspace.yaml
-└── rust-toolchain.toml
+├── rust-toolchain.toml
+└── scripts/
+    └── check-domain-boundary.mjs
 ```
 
 ## Recent Changes
 
-- T-9D03: telemetry — opt-in gate (default off, no-op recording while opted out), closed metric-name allowlist, a payload enum with no free-text variant, opt-out drops the queue
-- T-9T01: cross-subsystem hardening integration — a seeded secret proven absent from a real backup archive, a real restored tier, and a scrubbed report preview; both consent gates (report, telemetry) proven to block by default; workspace-wide `cargo test`/`clippy -D warnings`/`fmt --check` all clean
-- Verify: `cargo test --workspace` green across all 5 crates; `cargo clippy --workspace --all-targets -- -D warnings` clean; `cargo fmt --all -- --check` clean
-
-## Phase 12 — Skill System (Two-Tier Stores & Canonical Stack) — 2026-07-10
-
-- T-12A01: `skills::store` — two-tier stores (`Preset`/`State`/`Workspace`) with shadowing precedence (`resolve`: workspace > state > preset, first match wins); `write` structurally rejects `SkillTier::Preset` (the program tier is seeded once via `with_presets`, never through `write`); an override identical to the shadowed preset returns `WriteOutcome::IdenticalToPreset`, not an error
-- T-12A02: `skills::package` — canonical package validation: required `SKILL.md`/`extension.json`, every other top-level entry checked against a closed allow-list (rejects `scripts/` and any other unknown material), `origin/` contents exempted from the allow-list entirely (never classified), manifest `kind` must be `Skill` (reuses `extensions::ExtensionManifest`/`validate_manifest`, EXT-9)
-- T-12B01: `skills::commands` — `CommandSpec` registry (id/category/input_schema/required_grants/surface_version, the last stamped only from a module constant); `CommandRegistry::check_dispatch` validates input against schema before checking `RequiredGrant::{Fs,Network,Secrets}` against the caller's manifest permissions
-- T-12B02: `skills::exec` — `WorkflowRuntime` trait seam; `activate()` short-circuits to `ActivationResult::InstructionOnly` before touching the runtime at all when degraded or workflow-less; otherwise validates, executes, then runs a per-call grant check on every dispatched `OperationStep`
-- T-12C01: `skills::convert` — the six-stage pipeline (verify → classify → retain → transpile → degrade → report) as one pure function; a missing/invalid witness denies before anything else is inspected; any unmapped script demotes the whole package to `Degradation::InstructionOnly`; every original is preserved under `origin/` regardless of outcome; the final `validate_package` call is the atomicity gate — nothing lands on `Err` because nothing is written until a caller lands the returned `Ok` value
-- T-12C02: `skills::synthesize` — lands already-authored content (the model call itself is a seam) as `source: generated`; the one genuine lint at this layer is workflow-pair completeness (`workflow.nd`/`workflow.md` must land together or not at all); `ActivationPolicy::RequiresReview` is the only variant — the spec's open TBD resolved conservatively, no auto-activate path exists
 - T-12D01: `cronus ext skill import|create|status` — nested under the existing `Ext` group (no new top-level command group); `import` reads one file and runs it through `convert()`; `create` runs an instruction-only `AuthoredSkill` through `synthesize()`; `status` reports store origin/degradation/pending-review via a separately-testable `compute_status()`; extended `SkillEntry` with `degraded`/`pending_review` fields through a backward-compatible `with_status()` builder
 - T-12T01: invariant-compliance sweep — 10 integration tests in `crates/core/tests/skill_system.rs`, one per Invariant Compliance row (EXT-1/2/3/4+6/5+STO-1/7/8/9/11, STO-3), exercising convert→store, convert→exec, and synthesize→store together; CLI/TUI/library parity confirmed structurally (TUI's `/ext` slash command already covers the nested `skill` group at its existing granularity — no TUI-crate change needed)
 - Verify: `cargo test --workspace` green across all crates (core 314 lib + 10 integration, cli 37 unit + 28 smoke, tui 198, nodus 34, codegraph, all others); `cargo clippy --workspace --all-targets -- -D warnings` clean; `cargo fmt --all` clean
+
+## Phase 13 — Core Decomposition (Crate Topology) — 2026-07-11
+
+- T-13A01: minted `cronus-contract` (zero-dep types + seam traits) — moved `MemoryEntry`/`StateStore`/`ModelProvider`/`CheckpointWriter`/`Compactor`/`BusSender` and their supporting types out of the single core crate; declared the three new DN-2 seam traits (`UserDataStore`, `AuthProvider`, `IdentityProvider`) plus `MemorySearch`; `ArchiveSink` deliberately stayed with its domain-owned `MigrationItem` rather than contaminating the ports crate
+- T-13A02: inverted the one domain→infra edge — `ContextRouter` now holds `&dyn MemorySearch` instead of the concrete `MemoryStore`; `MemoryStore` implements the new trait in place. The migration's sole type-signature change and its critical-path pivot
+- T-13B01: extracted `cronus-store-local` (SQLite/encryption/keychain adapter) — `memory::{store,chain,trust,encryption}`, the SQLite half of `inbox`, and `workspace` moved wholesale (chain/trust travel with their sole caller, `store.rs`, since the tier model forbids an adapter→domain edge); implements `UserDataStore` + `MemorySearch`; fixed a real `Send + Sync` conflict from `rusqlite::Connection`'s interior `RefCell`
+- T-13B02: extracted `cronus-auth-local` (password/TOTP/identity adapter) — `auth.rs` moved whole (its "domain half" — privilege maps, reserved names — had zero consumers outside the file); implements `AuthProvider` + a new minimal `SingleUserIdentity` (`IdentityProvider`)
+- T-13C01: renamed the remainder to `cronus-domain`; `crates/core` becomes the `cronus` facade — 71 files moved via `git mv`; `cronus-domain` links only `blake3`/`chrono`/`cron`/`cronus-contract` (deliberately omits `nodus`: zero real usage found, a seam not a dependency); facade re-exports every module under its historical path, so no downstream call site changed
+- T-13C02: repointed the TUI at `cronus-domain`; fixed `codegraph`'s public surface (§6.4) — moved `Capabilities`/`Engine` into `cronus-domain` (both are pure, no I/O) so the TUI could drop the facade entirely per the topology spec's frontend table; `codegraph` now exposes a `CodeIndex` wrapper instead of a public `rusqlite::Connection`; the CLI dropped its direct `rusqlite` dependency
+- T-13D01: non-optional CI boundary guard — `scripts/check-domain-boundary.mjs` resolves `cargo metadata` and fails naming any `cronus-domain` normal dependency outside the five-crate allowlist; wired into `.github/workflows/deps-gate.yml`; proved both the pass and fail paths locally (temporarily added `rusqlite`, confirmed the named failure, reverted cleanly)
+- T-13T01: final validation — full boundary sweep via `cargo tree` confirms the tier diagram exactly (domain carries zero infra deps; neither adapter depends on domain); the §6.4 INV-2 violation (a frontend opening a DB connection) is gone
+- Verify: `cargo test --workspace` green, 1,252 passed / 0 failed (the original 314 core-lib tests redistributed as 2 + 265 + 29 + 18 = 314, exactly conserved); `cargo clippy --workspace --all-targets -- -D warnings` clean; `cargo fmt --all -- --check` clean
 

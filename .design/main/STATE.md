@@ -4,20 +4,20 @@
 <!-- Maximum 100 lines. Agent updates AFTER each completed action. -->
 
 **Workspace:** main
-**Updated:** 2026-07-11 05:46
-**Phase:** 13 — Core Decomposition (Crate Topology)
-**Status:** Done
+**Updated:** 2026-07-11 07:04
+**Phase:** 13 — Core Decomposition (Done); no phase open
+**Status:** Active
 
 ## Current Position
 
 - **Task:** T-13T01 Validation: behavior equivalence + boundary sweep — Done. Phase 13 complete (8/8 tasks), archived.
-- **Spec:** INDEX v1.0.97 (194 specs: 184 Stable, 9 RFC, 1 Draft). Phase 13 implemented `l2-crate-topology` 1.0.0 (driver) + `l2-source-layout` 1.2.0 (documentary companion, realized-by the migration). Backlog now 6: memory-intelligence, memory-consolidation, spec-driven-governance, dynamic-harness, loop-governance, dev-office (RFC L1); knowledge-store, service-activation, archetype-catalog (RFC L2); loop-runner (Draft, RFC parent)
-- **Next Action:** [DR] Run /magic.task main — a full phase just completed, and rules/MAGIC.md §5 (Post-Task Replan) mandates this as the one user-visible next step after any phase completion, never /magic.spec directly. (Override: /magic.status main for a read-only briefing instead.)
+- **Spec:** INDEX v1.0.97 (194 specs: 184 Stable, 9 RFC, 1 Draft). Phase 13 implemented `l2-crate-topology` 1.0.0 (driver) + `l2-source-layout` 1.2.0 (documentary companion, realized-by the migration). Backlog: 10 items (9 RFC + 1 Draft) — memory-intelligence, memory-consolidation, spec-driven-governance, dynamic-harness, loop-governance, dev-office (RFC L1); knowledge-store, service-activation, archetype-catalog (RFC L2); loop-runner (Draft, RFC parent l1-loop-governance)
+- **Next Action:** [DR] RFC review via /magic.spec main — no phase can open until a Backlog spec reaches Stable (RFC→Stable is a spec-review act, not a task promotion). DA-3 deterministic target: `l2-service-activation` (direct downstream of Phase 13's just-delivered crate seam; only Backlog L2 whose structural blocker this phase cleared, Stable L1 parent). (Override: /magic.spec main "{other-backlog-spec}", or /magic.status main for a briefing.)
 
 ## Progress
 
 ```
-Build phases: Done 1–12 (Seed → Advanced Office Features → Content/Sharing/Dev-Workflow → Skill System) · Phase 13 (Core Decomposition) Todo | Gates green as of Phase 12: cargo 314 lib + skill_system integration + clippy + fmt · cli 37 unit + 28 smoke · vitest 39 (8 files) + biome | Remaining: Phase 13 (structural refactor, 8 tasks) + 6 Backlog RFC/Draft specs
+Build phases: Done 1–13 (Seed → Advanced Office Features → Content/Sharing/Dev-Workflow → Skill System → Core Decomposition) — ALL phases complete, every Stable spec implemented, no phase open | Gates green (Phase 13): cargo workspace 1,252 tests + clippy -D warnings + fmt; domain-boundary CI guard live | Remaining: 10 Backlog specs (9 RFC + 1 Draft), each awaiting /magic.spec RFC→Stable review before any new phase can open
 ```
 
 ## Recent Decisions
