@@ -4,15 +4,15 @@
 <!-- Maximum 100 lines. Agent updates AFTER each completed action. -->
 
 **Workspace:** main
-**Updated:** 2026-07-10 21:18
+**Updated:** 2026-07-11 05:46
 **Phase:** 13 — Core Decomposition (Crate Topology)
 **Status:** Done
 
 ## Current Position
 
-- **Task:** T-13C01 Rename remainder to cronus-domain
-- **Spec:** INDEX v1.0.97 (194 specs: 184 Stable, 9 RFC, 1 Draft). Phase 13 implements `l2-crate-topology` 1.0.0 (driver) + `l2-source-layout` 1.2.0 (documentary companion, realized-by the migration). Backlog now 6: memory-intelligence, memory-consolidation, spec-driven-governance, dynamic-harness, loop-governance, dev-office (RFC L1); knowledge-store, service-activation, archetype-catalog (RFC L2); loop-runner (Draft, RFC parent)
-- **Next Action:** Execute T-13C02 Repoint TUI and fix codegraph via /magic.run main
+- **Task:** T-13T01 Validation: behavior equivalence + boundary sweep — Done. Phase 13 complete (8/8 tasks), archived.
+- **Spec:** INDEX v1.0.97 (194 specs: 184 Stable, 9 RFC, 1 Draft). Phase 13 implemented `l2-crate-topology` 1.0.0 (driver) + `l2-source-layout` 1.2.0 (documentary companion, realized-by the migration). Backlog now 6: memory-intelligence, memory-consolidation, spec-driven-governance, dynamic-harness, loop-governance, dev-office (RFC L1); knowledge-store, service-activation, archetype-catalog (RFC L2); loop-runner (Draft, RFC parent)
+- **Next Action:** [DR] Run /magic.task main — a full phase just completed, and rules/MAGIC.md §5 (Post-Task Replan) mandates this as the one user-visible next step after any phase completion, never /magic.spec directly. (Override: /magic.status main for a read-only briefing instead.)
 
 ## Progress
 
@@ -21,6 +21,7 @@ Build phases: Done 1–12 (Seed → Advanced Office Features → Content/Sharing
 ```
 
 ## Recent Decisions
+- 2026-07-11 **Decision:** Phase 13 complete. Provides: cronus-contract, cronus-domain, cronus-store-local, cronus-auth-local, cronus facade, codegraph CodeIndex encapsulation, CI domain-boundary guard.
 
 - 2026-07-10 **Phase 13 — Core Decomposition opened (/magic.task main) → PLAN v2.15.0 / TASKS v1.19.0.** The now-Stable core-decomposition wave decomposed into 8 tasks / 5 tracks mapping the topology spec's ordered §5 migration one-to-one (mint contract → invert edge → extract store-local → extract auth-local → rename to domain + facade → repoint TUI/fix codegraph → CI guard) + a behavior-equivalence validation task. **Unlike Phases 9–12 this is not domain-logic-first — it moves working code and preserves behavior exactly.** Planner audit: effectively **sequential** despite Parallel mode (each §5 step must compile green before the next; B01/B02 serialized on shared manifest/facade); **cascade concentrated on T-13A02** (the one edge inversion — the only type-signature change, gates 3–7); **T-13D01 CI guard non-optional** (the spec: the layout drifted because no build failed when it drifted — Verify tests the guard's failure path, not just happy path); acceptance bar is behavior-equivalence (all pre-existing tests green unchanged + public contract preserved via facade re-exports), not new features. Measurement note recorded: spec's 47/53 module counts predate Phase 12's pure-`std` `skills` module (joins domain tier; partition shape unchanged). Wave removed from Backlog (now 6 items). (Revert: git restore .design/main/PLAN.md .design/main/TASKS.md .design/main/STATE.md && rm .design/main/tasks/phase-13.md)
 
@@ -56,7 +57,6 @@ Build phases: Done 1–12 (Seed → Advanced Office Features → Content/Sharing
 
 - 2026-06-28 **T-7B01 delivered (panel layout + focus):** adopted **ratatui 0.30** (feature `crossterm_0_29` → single crossterm version shared with the `Tui` guard; ratatui owns frame diffing, the guard owns raw-mode lifecycle). New `view` module: `layout()` (2×2 panels + 1-row command bar, clamps at tiny sizes), `Focus` enum + `next`/`prev` tab-cycling. `RatatuiRenderer` (replaced the `PlainRenderer` stopgap) draws bordered/titled panels with focus highlight. `ViewModel.focus` (view-only) + `Tab`/`BackTab` handling in `tick`; `Key::BackTab` added. 14 crate tests pass; clippy/fmt clean. (Revert: git restore crates/tui Cargo.toml Cargo.lock .design/main)
 
-- 2026-06-28 **Track A delivered (T-7A01, T-7A02):** `crates/tui` converted to lib+bin; `crossterm` added. `terminal` module — `TerminalBackend` DI trait + `CrosstermBackend` + panic-safe/idempotent `Tui` RAII guard. `app` module — `App::tick` pure step-fn (input-first → non-blocking on slow snapshot → exactly one redraw), view-only `ViewModel`/`CoreSnapshot`, `SnapshotSource` poll seam + `CapabilitySource`, `Renderer` seam + `PlainRenderer`, `run`/`run_with`. **Event-seam resolved:** core has no pub/sub → poll-snapshot fallback taken (INV-5 preserved). 9 unit tests pass; clippy/fmt clean. Note: `update-state` script mislabeled STATE Status as Done/"Plan complete" — corrected manually (phase is In Progress). (Revert: git restore crates/tui Cargo.toml Cargo.lock .design/main)
 
 
 ## Blockers

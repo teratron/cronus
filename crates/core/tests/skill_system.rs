@@ -1,5 +1,5 @@
-//! Invariant-compliance sweep for the skill system (l2-skill-system.md §3):
-//! one test per row of the Invariant Compliance table, exercising the
+//! Invariant-compliance sweep for the skill system (§3): one test per row
+//! of the Invariant Compliance table, exercising the
 //! modules in `cronus::skills` together rather than in isolation, so the
 //! cross-module story (convert → store, convert → exec, synthesize →
 //! store) is proven, not just each module's own unit-level behavior.

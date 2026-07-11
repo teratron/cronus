@@ -436,8 +436,8 @@ impl SessionStore {
 // ── AuthProvider / IdentityProvider (ports tier) ─────────────────────────────
 //
 // `AuthStore` is the concrete, bcrypt-backed implementation of the DN-2 auth
-// plane (§4.5). Unlike `MemoryStore` (T-13B01), it is pure in-memory data
-// (`BTreeMap`) with no non-`Sync` interior — the `Send + Sync` bound on
+// plane (§4.5). Unlike the SQLite-backed memory store, it is pure in-memory
+// data (`BTreeMap`) with no non-`Sync` interior — the `Send + Sync` bound on
 // `AuthProvider` holds here without needing to be relaxed.
 
 impl cronus_contract::AuthProvider for AuthStore {

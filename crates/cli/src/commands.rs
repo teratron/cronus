@@ -2344,12 +2344,12 @@ mod ext {
                 capabilities: Vec::new(),
                 permissions: ExtensionPermissions::default(),
             };
-            // No signed-witness mechanism is wired yet (l1-attestation has no
-            // L2); a single-file CLI import is treated as pre-verified — a
-            // real witness adapter replaces this input, not this call site,
-            // once one exists. No persisted transpile-mapping table exists
-            // yet either, so every script/procedure degrades honestly rather
-            // than being silently guessed at.
+            // No signed-witness mechanism is wired yet; a single-file CLI
+            // import is treated as pre-verified — a real witness adapter
+            // replaces this input, not this call site, once one exists. No
+            // persisted transpile-mapping table exists yet either, so every
+            // script/procedure degrades honestly rather than being silently
+            // guessed at.
             match convert::convert(WitnessStatus::Valid, manifest, &[item], &HashMap::new()) {
                 Ok(outcome) => {
                     if ctx.is_json() {

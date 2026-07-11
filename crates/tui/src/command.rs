@@ -306,11 +306,13 @@ mod tests {
 
     #[test]
     fn parity_matrix_crate_depends_on_core_not_the_cli() {
-        // Structural INV-2 guard: the manifest links the core, never the CLI.
+        // Structural INV-2 guard: the manifest links the engine tier it
+        // actually needs (here, `cronus-domain` — the TUI uses no adapter
+        // functionality), never the CLI.
         let manifest = include_str!(concat!(env!("CARGO_MANIFEST_DIR"), "/Cargo.toml"));
         assert!(
-            manifest.contains("cronus = { workspace = true }"),
-            "the TUI must link the core crate (cronus)"
+            manifest.contains("cronus-domain = { workspace = true }"),
+            "the TUI must link the domain crate (cronus-domain)"
         );
         assert!(
             !manifest.contains("cronus-cli"),

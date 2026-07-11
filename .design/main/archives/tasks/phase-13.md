@@ -1,21 +1,43 @@
 ---
 phase: 13
 name: "Core Decomposition (Crate Topology)"
-status: Todo
+status: Done
 subsystem: "crates/ workspace repartition: contract · domain · store-local · auth-local · facade; frontends (tui, cli) + codegraph public surface"
 requires: [1, 4, 9, 12]
-provides: []
+provides:
+  - "cronus-contract (zero-dep ports crate: shared types + seam traits, incl. new DN-2 UserDataStore/AuthProvider/IdentityProvider)"
+  - "cronus-domain (no-I/O tier, 82% of the engine; carries Capabilities/Engine)"
+  - "cronus-store-local (SQLite/encryption/keychain adapter, implements UserDataStore/MemorySearch)"
+  - "cronus-auth-local (password/TOTP/identity adapter, implements AuthProvider/IdentityProvider)"
+  - "cronus facade preserving every historical public path via pub use"
+  - "codegraph CodeIndex — encapsulated storage engine, no public rusqlite::Connection"
+  - "non-optional CI boundary guard (scripts/check-domain-boundary.mjs) on cronus-domain's dependency allowlist"
 key_files:
-  created: []
-  modified: []
-patterns_established: []
+  created:
+    - "crates/contract/src/lib.rs"
+    - "crates/domain/src/lib.rs"
+    - "crates/store-local/src/**"
+    - "crates/auth-local/src/lib.rs"
+    - "scripts/check-domain-boundary.mjs"
+  modified:
+    - "crates/core/src/lib.rs (facade rewrite)"
+    - "crates/core/src/{auth,inbox,memory,workspace}.rs (re-export shims)"
+    - "crates/codegraph/src/index.rs (CodeIndex encapsulation)"
+    - "crates/cli/src/commands.rs, crates/cli/Cargo.toml"
+    - "crates/tui/Cargo.toml, crates/tui/src/{app,command}.rs"
+    - "Cargo.toml (workspace members/deps)"
+    - ".github/workflows/deps-gate.yml"
+patterns_established:
+  - "Grep-verified consumer graph before every module move — never trusted the spec's illustrative split table over actual cross-references"
+  - "When a spec-named domain half has zero consumers besides the infra half being extracted, move both together into the adapter rather than stranding the domain half (chain/trust, auth.rs's privilege maps)"
+  - "Pure, no-I/O composition-root types (Capabilities/Engine) belong in the domain tier even when originally drafted as facade-only, when a frontend's dependency-surface requirement (§4.8) demands it"
 duration_minutes: ~
 ---
 
 # Stage 13 Tasks — Core Decomposition (Crate Topology)
 
 **Phase:** 13
-**Status:** Todo
+**Status:** Done
 **Strategic Goal:** Repartition the single `crates/core` into five crates on the dependency/seam axis — `cronus-contract` (zero-dep types + seam traits), `cronus-domain` (the no-I/O 82%), `cronus-store-local` + `cronus-auth-local` (the DN-2 adapters), and `cronus` (the facade + composition root). Behavior is preserved exactly (public module paths kept via `pub use` re-exports); the win is compiler-enforced INV-8 boundaries and realized DN-2/DN-3 provider seams.
 
 > **This phase moves working code; it does not add domain logic.** Every step must leave the workspace compiling and every test green before the next begins — that is why the tasks mirror the spec's ordered §5 migration one-to-one. Execution is effectively sequential (see Phase Notes).
@@ -27,9 +49,9 @@ duration_minutes: ~
 - [x] [T-13B01] Extract `cronus-store-local` (SQLite / encryption / keychain adapter)
 - [x] [T-13B02] Extract `cronus-auth-local` (password / TOTP / identity adapter)
 - [x] [T-13C01] Rename remainder to `cronus-domain`; keep `crates/core` as the `cronus` facade
-- [ ] [T-13C02] Repoint TUI at `cronus-domain`; fix `codegraph` public surface so CLI drops `rusqlite`
-- [ ] [T-13D01] CI boundary guard on the domain dependency allowlist (non-optional)
-- [ ] [T-13T01] Validation: behavior equivalence + boundary sweep
+- [x] [T-13C02] Repoint TUI at `cronus-domain`; fix `codegraph` public surface so CLI drops `rusqlite`
+- [x] [T-13D01] CI boundary guard on the domain dependency allowlist (non-optional)
+- [x] [T-13T01] Validation: behavior equivalence + boundary sweep
 
 ## Detailed Tracking
 
@@ -101,28 +123,43 @@ duration_minutes: ~
 ### [T-13C02] Repoint TUI at `cronus-domain`; fix `codegraph` public surface
 
 - **Spec:** l2-crate-topology.md §4.8, §6.4, §5 step 6
-- **Status:** Todo
+- **Status:** Done
 - **Assignment:** Agent
 - **Verify:** `cargo tree -p cronus-tui` no longer includes `rusqlite`, `keyring`, `bcrypt`, or `argon2`; `crates/cli/Cargo.toml` no longer lists `rusqlite`; a grep of `codegraph`'s public API shows no exported `rusqlite::Connection`; `cargo test --workspace` green.
 - **Handoff:** Resolves the §6.4 INV-2 violation (a frontend performing persistence); verified end-to-end in T-13T01.
 - **Notes:** The TUI uses one module (`redact`) today, so it links `cronus-domain` directly. `codegraph` must hide its storage engine behind its own API; the CLI then drops its direct `rusqlite` dependency and reaches persistence only through the core contract.
+- **Changes:** `crates/tui/Cargo.toml`: `cronus = { workspace = true }` → `cronus-domain = { workspace = true }` (§4.8's table names this exact swap). `crates/tui/src/app.rs`: `use cronus::{Capabilities, Engine}` → `use cronus_domain::{Capabilities, Engine}`; `cronus::redact::redact(...)` → `cronus_domain::redact::redact(...)`.
+  **Decision Record** (evidence-based deviation from T-13C01's own Notes, which had said `Engine`/`Capabilities` stay facade-only): the TUI's production `run()` path constructs a real `Engine::new()` (`crates/tui/src/app.rs:415-423`, not test-gated), so the TUI cannot link `cronus-domain` alone unless `Engine`/`Capabilities` are reachable from there too — and §4.8's table is unambiguous that the TUI links `cronus-domain` only, while §7 explicitly rejects Cargo features as an alternative to the crate split (a feature-gated facade would re-enable adapters workspace-wide on any `--workspace` build, so it wasn't an option here either). Both types are pure — no I/O, `env!("CARGO_PKG_VERSION")` and a format string — so nothing about the DOMAIN tier's no-I/O contract is violated by hosting them. Moved both from `crates/core/src/lib.rs` into `crates/domain/src/lib.rs` verbatim; the facade's `pub use cronus_domain::{...}` block gained `Capabilities, Engine` alongside the existing 51 modules, so `cronus::Capabilities`/`cronus::Engine` still resolve unchanged for the CLI (`crates/cli`) and the app shell (`apps/desktop/tauri/src/bridge.rs`), both of which keep linking the facade per §4.8's table and needed zero edits.
+  `crates/codegraph/src/index.rs`: added `pub struct CodeIndex { conn: Connection }` (private field) with `open_in_memory()`, `index_symbols()`, `get_by_name()`, `search()` methods, and demoted the four former `pub fn migrate/store_symbols/get_by_name/fts_search` to module-private helpers the new methods delegate to — `rusqlite::Connection` is no longer nameable from outside the crate (§6.4's INV-2 finding). `crates/codegraph/tests/codegraph.rs`: rewritten against `CodeIndex` (dropped its own `use rusqlite::Connection`), dogfooding the same encapsulated surface external callers now get.
+  `crates/cli/src/commands.rs` (`codegraph_cmd` module): dropped `use rusqlite::Connection`; `open_db() -> Result<Connection, String>` → `open_index() -> Result<CodeIndex, String>`; `index_file`/`search_graph` now take/use `&CodeIndex` and call `.index_symbols()`/`.search()` instead of the old free functions. `crates/cli/Cargo.toml`: removed the direct `rusqlite = { workspace = true }` line — the crate now reaches SQLite only indirectly, through `codegraph`'s own encapsulated dependency (§4.8: CLI's transitive tree is otherwise unchanged, only the *direct* dependency drops, matching the spec's own wording).
+  **Test fixed, not weakened:** `crates/tui/src/command.rs`'s `parity_matrix_crate_depends_on_core_not_the_cli` asserted the manifest contains `cronus = { workspace = true }` — a structural INV-2 guard encoding the pre-Phase-13 single-crate topology. Updated the assertion to `cronus-domain = { workspace = true }` (the guard's *intent* — link the engine tier, never the CLI — is unchanged; only the crate name the new topology prescribes for this specific frontend changed, per §4.8's table). This is the one test whose content changed in this task, and it changed because the structural rule itself moved, not to paper over a broken behavior.
+  **§6 sweep (mandatory, this task's own):** found and fixed two more pre-existing leaks while grepping the crates this task touches — `crates/auth-local/src/lib.rs` cited a task ID in a comment (restated as "the SQLite-backed memory store"), and `crates/core/tests/skill_system.rs`'s module doc named a spec by filename (dropped the filename, kept the bare `§3` section symbol, the established convention). Left further pre-existing leaks in files outside this task's working set untouched (`crates/nodus/tests/{portability,observability}.rs`, `crates/nodus/src/environment.rs`, `crates/core/tests/hardening_integration.rs`, a `T-4C01` comment in `context_router.rs`) — out of scope for a topology task; flagged for `/magic.analyze`'s ventilation pass, not a phase blocker. (The three `RULES.md`/`PROJECT_RULES.md` hits in `context_router.rs` are the product's own runtime rules-file lookup, not SDD artifacts — confirmed by reading the surrounding `load_rules` code — not a violation.)
+  Verify: `cargo tree -p cronus-tui --edges normal` → `cronus-domain` (blake3/chrono/cron/cronus-contract), `crossterm`, `ratatui` only — zero rusqlite/keyring/bcrypt/argon2. `cargo tree -p cronus-cli --edges normal` → `codegraph`'s own `rusqlite` is the only SQLite edge; CLI's direct dependency list no longer includes it. Grep of `codegraph/src` confirms no `pub fn` signature or public item names `Connection`. Full workspace suite green single-threaded after the one intentional assertion fix (tui lib 38/38, unchanged total — the fix corrected an assertion, added/removed no test); clippy `-D warnings` clean workspace-wide; fmt clean; §6 clean for this task's working set.
 
 ### [T-13D01] CI boundary guard on the domain dependency allowlist
 
 - **Spec:** l2-crate-topology.md §5 step 7 (explicitly non-optional), §4.3
-- **Status:** Todo
+- **Status:** Done
 - **Assignment:** Agent
 - **Verify:** With a forbidden dependency (e.g. `rusqlite`) **temporarily** added to `cronus-domain`'s manifest, the guard command exits non-zero and names the offending crate; with the clean tree it exits zero. (Prove both directions, then revert the temporary edit.)
 - **Handoff:** Closes the phase's structural contract — without it the split silently decays.
 - **Notes:** A `cargo`-metadata check (or `fallow`-style boundary rule) asserting `cronus-domain`'s normal dependencies are a subset of {`cronus-contract`, `nodus`, `blake3`, `chrono`, `cron`}. Wire it where the project's other structural gates run. The spec is explicit: the current layout drifted because nothing failed a build when it drifted — a guard that is never exercised is worthless, so the Verify tests the failure path, not just the happy path.
+- **Changes:** New `scripts/check-domain-boundary.mjs` — resolves `cargo metadata --format-version=1`, finds the `cronus-domain` package node, filters its `resolve.nodes[].deps` to normal-kind edges only (`dep_kinds[].kind === null`, excluding dev/build deps), maps each dependency's package id back to its name, and fails naming every name outside the five-crate allowlist. Node was chosen over a `jq`-based shell script (the first draft) because `jq` is not guaranteed present on a contributor's machine — this repo already depends on Node for `.magic/scripts/executor.js`, so it introduces no new tooling requirement, whereas `jq` would have needed a separate install to reproduce the Verify line locally as opposed to only in CI (GitHub's `ubuntu-latest` ships `jq`, but that would have made the guard's failure path unprovable on this machine). No new Rust dependency was added (`cargo-metadata`-crate would have worked too, but the std `cargo metadata` CLI plus the JSON already in Node's stdlib needed nothing extra).
+  Wired into `.github/workflows/deps-gate.yml` — the project's only existing structural gate — as a new step ("Domain dependency boundary guard") right after the toolchain check and before the build, since it is the cheapest possible check (Cargo manifest resolution only, no compilation) and should fail fast. Added `scripts/check-domain-boundary.mjs` to the workflow's `paths` trigger list alongside the existing manifest/lockfile globs, so an edit to the guard itself re-runs the gate.
+  **Verify, both directions, proved locally and reverted:** clean tree → `node scripts/check-domain-boundary.mjs` printed `ok: cronus-domain's normal dependencies are within the allowlist (...)` and exited 0. Snapshotted `crates/domain/Cargo.toml` and `Cargo.lock` (the pre-existing session-modified versions, not `git checkout`'d — the lockfile already carried this phase's legitimate additions and reverting to HEAD would have discarded them), added `rusqlite = { workspace = true }` to `cronus-domain`'s `[dependencies]`, re-ran the guard → `error: cronus-domain has forbidden normal dependencies: rusqlite` / exit 1, confirming the guard names the exact offender. Restored both files byte-for-byte from the snapshots and re-ran the guard a third time → clean pass again, confirming no residual trace of the temporary edit (`git diff`/`git status` show neither file touched by this test afterward).
 
 ### [T-13T01] Validation: behavior equivalence + boundary sweep
 
 - **Goal:** Prove the refactor changed structure, not behavior, and that every §3 Invariant Compliance claim holds on the new tree (INV-1 embeddable facade, INV-2 no frontend persistence, INV-3 contract-on-facade parity, INV-7 secret confinement, INV-8 acyclic crate graph).
 - **Method:** Full `cargo test --workspace` green (every pre-existing test passes unchanged — behavior equivalence); a downstream smoke that the public contract resolves from the facade exactly as before (INV-1/INV-3); confirm the §6.4 INV-2 violation is gone (no frontend opens a DB `Connection`); confirm the crate graph is acyclic and the domain tier links no infra (cross-check with T-13D01's guard). Structural gates: `cargo clippy --workspace --all-targets -- -D warnings`, `cargo fmt --all -- --check`.
-- **Status:** Todo
+- **Status:** Done
 - **Assignment:** Agent
 - **Verify:** `cargo test --workspace` green + `cargo clippy --workspace --all-targets -- -D warnings` clean + `cargo fmt --all -- --check` clean, with the pre-migration test count preserved (no test deleted to make the move pass).
+- **Changes:** Pure validation task — no source changes. `cargo test --workspace -- --test-threads=1`: every suite green, 1,252 tests passed / 0 failed across the workspace (core, contract, domain, store-local, auth-local, codegraph, cli, tui, nodus), identical to the count immediately after T-13D01 (which touched no Rust code) — confirming behavior equivalence held through the CI-guard step too. `cargo clippy --workspace --all-targets -- -D warnings`: clean. `cargo fmt --all -- --check`: clean.
+  **INV-1/INV-3 (facade parity) smoke:** every pre-existing call site (`cronus::memory::…`, `cronus::auth::…`, `cronus::skills::…`, `cronus::Capabilities`/`cronus::Engine`, and the 51 re-exported domain modules) still resolves unchanged through the facade — proven by the fact that `crates/cli`, `apps/desktop/tauri`, and `crates/core`'s own integration tests (including `crates/core/tests/engine.rs`, which calls `cronus::Engine::new()` and asserts on `cronus::Capabilities::status()`) all compiled and passed with zero call-site edits, even though `Engine`/`Capabilities` physically moved crates in T-13C02.
+  **INV-2 (no frontend persistence) — confirmed gone:** grep of `crates/cli/src` and `crates/tui/src` for `rusqlite` returns nothing; neither manifest lists it directly; `codegraph`'s public API has no `pub fn` naming `Connection` (only the private `CodeIndex.conn` field holds one). The original §6.4 finding (CLI opening a `Connection` and calling `migrate`/`store_symbols`/`fts_search` in production code) no longer exists in any form.
+  **INV-8 (acyclic graph, domain infra-free) — confirmed via `cargo tree`:** `cronus-domain` → `blake3`, `chrono`, `cron`, `cronus-contract` only (zero rusqlite/keyring/bcrypt/argon2, matching T-13D01's guard exactly); `cronus-store-local` → its own crypto/SQLite/keychain deps + `cronus-contract` only (no `cronus-domain`); `cronus-auth-local` → its own hashing deps + `cronus-contract` only (no `cronus-domain`); `cronus-contract` → zero deps. No crate depends back on a tier above it, so the graph is acyclic by construction (Cargo itself would have refused to resolve a cycle) — the tier diagram in §4.1 is realized exactly, not approximately.
+  **Test count, full accounting (314 → conserved, never reduced):** the original 314 core-lib unit tests redistributed as 2 (facade, `memory::consolidation`) + 265 (`cronus-domain`) + 29 (`cronus-store-local` lib, T-13B01) + 18 (`cronus-auth-local` lib, T-13B02) = 314, exactly. Every integration suite (cli, tui, nodus, codegraph, and the four new adapter/contract test directories) is unchanged in count from before the phase except by the tests explicitly *added* to cover new seam implementations (documented per-task above), and the one tui assertion corrected in T-13C02 to match the new topology — no test was deleted or skipped to make any step pass.
 
 ## Phase Notes (Planning Audit)
 
