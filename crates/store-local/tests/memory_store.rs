@@ -1,8 +1,8 @@
 use cronus_contract::{MemorySearch, UserDataStore};
 use cronus_store_local::memory::{
     CodeChangeType, FieldPredicate, LifecycleState, MemoryDepth, MemoryEntry, MemoryKind,
-    MemorySource, MemoryStore, PredicateField, PredicateValue, SignalKind, SuggestedAction,
-    TemporalMode, TrustUpdate, VerificationState,
+    MemorySource, MemoryStore, MemorySubject, PredicateField, PredicateValue, SignalKind,
+    SuggestedAction, TemporalMode, TrustUpdate, VerificationState,
     chain::ChainKind,
     trust::{TRUST_MIN_SEARCH, TRUST_NEGATIVE_DELTA, TRUST_POSITIVE_DELTA},
 };
@@ -680,4 +680,54 @@ fn memory_store_signal_roundtrip_and_neutral_default() {
 
     s.clear_signals(&id).unwrap();
     assert_eq!(s.signal_factor(&id, SignalKind::Centrality).unwrap(), 1.0);
+}
+
+// ── MI-6: capture metadata (actor/expiry/subject) ───────────────────────────
+
+#[test]
+fn capture_metadata_defaults_to_absent() {
+    let s = store();
+    let id = s.add(entry("plain capture", "body")).unwrap();
+    let got = s.get(&id).unwrap().unwrap();
+    assert_eq!(got.actor, None);
+    assert_eq!(got.expiry, None);
+    assert_eq!(got.subject, None);
+}
+
+#[test]
+fn actor_round_trips() {
+    let s = store();
+    let e = entry("attributed", "body").with_actor("user:alice");
+    let id = s.add(e).unwrap();
+    let got = s.get(&id).unwrap().unwrap();
+    assert_eq!(got.actor, Some("user:alice".to_string()));
+}
+
+#[test]
+fn expiry_round_trips() {
+    let s = store();
+    let e = entry("expirable", "body").with_expiry(1_800_000_000);
+    let id = s.add(e).unwrap();
+    let got = s.get(&id).unwrap().unwrap();
+    assert_eq!(got.expiry, Some(1_800_000_000));
+}
+
+#[test]
+fn subject_round_trips_both_variants() {
+    let s = store();
+    let user_id = s
+        .add(entry("about user", "body").with_subject(MemorySubject::User))
+        .unwrap();
+    let self_id = s
+        .add(entry("about self", "body").with_subject(MemorySubject::AgentSelf))
+        .unwrap();
+
+    assert_eq!(
+        s.get(&user_id).unwrap().unwrap().subject,
+        Some(MemorySubject::User)
+    );
+    assert_eq!(
+        s.get(&self_id).unwrap().unwrap().subject,
+        Some(MemorySubject::AgentSelf)
+    );
 }

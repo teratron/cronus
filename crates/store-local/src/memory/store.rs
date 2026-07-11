@@ -5,13 +5,14 @@ use rusqlite::{Connection, OptionalExtension, params};
 use super::{
     CodeChangeType, MemoryEntry, MemoryError, MemoryId, MemoryKind, MemorySource, Result,
     SuggestedAction, TrustUpdate, VerificationState,
+    capture::{self, CaptureOutcome},
     chain::{BELLMAN_MAX_DEPTH, ChainKind, SESSION_CHAIN_WINDOW_SECS, propagated_delta},
     consolidate::{self, ConsolidationAction, InterestTopic},
     maintenance, now_secs,
     signal::{self, SignalKind},
     trust::{TRUST_MIN_SEARCH, apply_delta},
 };
-use cronus_contract::{ExperienceOutcome, LifecycleState, MemoryDepth};
+use cronus_contract::{ExperienceOutcome, LifecycleState, MemoryDepth, MemorySubject};
 
 pub struct MemoryStore {
     conn: Connection,
@@ -123,7 +124,7 @@ impl MemoryStore {
         let mut stmt = self.conn.prepare(
             "SELECT id, kind, source, title, body, confidence, trust_score,
                     valid_at, created_at, superseded_at, workspace_id, verification_state,
-                    depth, lifecycle_state, experience_outcome
+                    depth, lifecycle_state, experience_outcome, actor, expiry, subject
              FROM memories WHERE id = ?1",
         )?;
         let mut rows = stmt.query_map(params![id.as_str()], map_row)?;
@@ -158,7 +159,7 @@ impl MemoryStore {
         let mut mem_stmt = self.conn.prepare(
             "SELECT id, kind, source, title, body, confidence, trust_score,
                     valid_at, created_at, superseded_at, workspace_id, verification_state,
-                    depth, lifecycle_state, experience_outcome
+                    depth, lifecycle_state, experience_outcome, actor, expiry, subject
              FROM memories
              WHERE id = ?1 AND trust_score >= ?2 AND superseded_at IS NULL
                AND lifecycle_state = 'Active'",
@@ -252,7 +253,7 @@ impl MemoryStore {
         let sql = format!(
             "SELECT id, kind, source, title, body, confidence, trust_score,
                     valid_at, created_at, superseded_at, workspace_id, verification_state,
-                    depth, lifecycle_state, experience_outcome
+                    depth, lifecycle_state, experience_outcome, actor, expiry, subject
              FROM memories
              WHERE lifecycle_state = ?1 AND trust_score >= ?2 AND {where_clause}
              ORDER BY {order} LIMIT ?4"
@@ -293,7 +294,7 @@ impl MemoryStore {
         let sql = format!(
             "SELECT id, kind, source, title, body, confidence, trust_score,
                     valid_at, created_at, superseded_at, workspace_id, verification_state,
-                    depth, lifecycle_state, experience_outcome
+                    depth, lifecycle_state, experience_outcome, actor, expiry, subject
              FROM memories
              WHERE lifecycle_state = ? AND trust_score >= ? AND ({clause})
              ORDER BY created_at DESC LIMIT ?"
@@ -377,6 +378,21 @@ impl MemoryStore {
         actor: &str,
     ) -> Result<(MemoryId, ConsolidationAction)> {
         consolidate::consolidate(&self.conn, candidate, provenance, actor, now_secs())
+    }
+
+    /// MI-6: the salience-gated capture policy — a confidence-honest gate in
+    /// front of the same create/corroborate decision `consolidate` makes,
+    /// plus MI-6 cross-reference edges to `related`. `entry.actor`/
+    /// `.expiry`/`.subject` (set via the T-15A01 builders) flow through
+    /// untouched; `audit_actor` is the MC-4 action-algebra's own audit-trail
+    /// actor, independent of `entry.actor`.
+    pub fn capture(
+        &self,
+        entry: MemoryEntry,
+        related: &[MemoryId],
+        audit_actor: &str,
+    ) -> Result<CaptureOutcome> {
+        capture::capture(&self.conn, entry, related, audit_actor, now_secs())
     }
 
     /// Explicit refine (MC-4): append `addition` to `target`'s body
@@ -527,7 +543,7 @@ impl MemoryStore {
         let mut stmt = self.conn.prepare(
             "SELECT id, kind, source, title, body, confidence, trust_score,
                     valid_at, created_at, superseded_at, workspace_id, verification_state,
-                    depth, lifecycle_state, experience_outcome
+                    depth, lifecycle_state, experience_outcome, actor, expiry, subject
              FROM memories",
         )?;
         let entries = stmt
@@ -686,7 +702,10 @@ pub(crate) fn setup(conn: &Connection) -> Result<()> {
             verification_state TEXT NOT NULL DEFAULT 'Untested',
             depth              TEXT NOT NULL DEFAULT 'Consolidated',
             lifecycle_state    TEXT NOT NULL DEFAULT 'Active',
-            experience_outcome TEXT
+            experience_outcome TEXT,
+            actor              TEXT,
+            expiry             INTEGER,
+            subject            TEXT
         )",
     )?;
     // Standalone FTS5 table — synced manually in add().
@@ -733,8 +752,8 @@ pub(crate) fn insert(conn: &Connection, entry: MemoryEntry) -> Result<MemoryId> 
         "INSERT INTO memories
          (id, kind, source, title, body, confidence, trust_score,
           valid_at, created_at, superseded_at, workspace_id, verification_state,
-          depth, lifecycle_state, experience_outcome)
-         VALUES (?1,?2,?3,?4,?5,?6,?7,?8,?9,?10,?11,?12,?13,?14,?15)",
+          depth, lifecycle_state, experience_outcome, actor, expiry, subject)
+         VALUES (?1,?2,?3,?4,?5,?6,?7,?8,?9,?10,?11,?12,?13,?14,?15,?16,?17,?18)",
         params![
             id.as_str(),
             entry.kind.as_str(),
@@ -751,6 +770,9 @@ pub(crate) fn insert(conn: &Connection, entry: MemoryEntry) -> Result<MemoryId> 
             entry.depth.as_str(),
             entry.lifecycle_state.as_str(),
             entry.experience_outcome.map(|o| o.as_str()),
+            entry.actor.as_deref(),
+            entry.expiry.map(|v| v as i64),
+            entry.subject.map(|s| s.as_str()),
         ],
     )?;
     conn.execute(
@@ -773,6 +795,9 @@ pub(crate) fn map_row(row: &rusqlite::Row<'_>) -> rusqlite::Result<MemoryEntry> 
     let depth_str: String = row.get(12)?;
     let lifecycle_str: String = row.get(13)?;
     let experience_outcome_str: Option<String> = row.get(14)?;
+    let actor: Option<String> = row.get(15)?;
+    let expiry: Option<i64> = row.get(16)?;
+    let subject_str: Option<String> = row.get(17)?;
 
     Ok(MemoryEntry {
         id: MemoryId::from(id),
@@ -792,5 +817,8 @@ pub(crate) fn map_row(row: &rusqlite::Row<'_>) -> rusqlite::Result<MemoryEntry> 
         lifecycle_state: LifecycleState::from_db_str(&lifecycle_str)
             .unwrap_or(LifecycleState::Active),
         experience_outcome: experience_outcome_str.and_then(|s| ExperienceOutcome::from_db_str(&s)),
+        actor,
+        expiry: expiry.map(|v| v as u64),
+        subject: subject_str.and_then(|s| MemorySubject::from_db_str(&s)),
     })
 }

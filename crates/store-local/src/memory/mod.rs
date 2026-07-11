@@ -8,6 +8,7 @@
 //! their only consumer is `store`'s Bellman-propagation logic, so they travel
 //! with it rather than sitting stranded in the domain tier with no caller.
 
+pub mod capture;
 pub mod chain;
 pub mod consolidate;
 pub mod encryption;
@@ -17,6 +18,7 @@ pub mod signal;
 pub mod store;
 pub mod trust;
 
+pub use capture::CaptureOutcome;
 pub use consolidate::{ConsolidationAction, InterestTopic};
 pub use signal::SignalKind;
 pub use store::MemoryStore;
@@ -24,7 +26,8 @@ pub use store::MemoryStore;
 pub(crate) use cronus_contract::now_secs;
 pub use cronus_contract::{
     ExperienceOutcome, FieldPredicate, LifecycleState, MemoryDepth, MemoryEntry, MemoryId,
-    MemoryKind, MemorySource, PredicateField, PredicateValue, TemporalMode, VerificationState,
+    MemoryKind, MemorySource, MemorySubject, PredicateField, PredicateValue, TemporalMode,
+    VerificationState,
 };
 
 // ── Error ─────────────────────────────────────────────────────────────────────

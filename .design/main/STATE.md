@@ -4,15 +4,15 @@
 <!-- Maximum 100 lines. Agent updates AFTER each completed action. -->
 
 **Workspace:** main
-**Updated:** 2026-07-11 17:00
+**Updated:** 2026-07-11 17:18
 **Phase:** 15 — Memory Capture Policy & Metadata
 **Status:** Active
 
 ## Current Position
 
-- **Task:** Phase 15 opened (post-run replan); first task T-15A01 (capture-metadata schema) — Todo, not started
+- **Task:** T-15A01 Capture-metadata schema (actor/expiry/subject; cross-ref via existing add_edge)
 - **Spec:** INDEX v1.0.101 (196 specs: 188 Stable, 7 RFC, 1 Draft) · PLAN v2.18.0 · TASKS v1.21.0. `l2-memory-intelligence` 1.0.0 Stable — delivered at query-surface scope in Phase 14 (MI-1/2/3/4/5/7/8/9/13); **Phase 15** completes it at capture scope (MI-6/10/11/12). Backlog stays 6: spec-driven-governance/dynamic-harness/loop-governance/dev-office (RFC L1); knowledge-store/archetype-catalog/service-activation (RFC L2); loop-runner (Draft). `l2-service-activation` still RFC (blocked on the Windows S4U spike).
-- **Next Action:** Execute T-15A01 Capture-metadata schema: `actor`/`expiry`/`subject`/`cross_ref` fields on `MemoryEntry` + columns, absent-by-default (MI-6 net-new fields) via /magic.run main
+- **Next Action:** Execute T-15B01 capture policy (MI-6) via /magic.run main
 
 ## Progress
 

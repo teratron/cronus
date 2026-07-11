@@ -54,6 +54,12 @@ pub const SUMMARIZES_PREDICATE: &str = "summarizes";
 /// A correction's forward pointer to the item it superseded (MC-4 `correct`).
 pub const SUPERSEDES_PREDICATE: &str = "supersedes";
 
+/// A capture-time forward pointer to a related item the caller named
+/// (MI-6's "cheap forward MC-3 edges") — distinct from `derived-from`
+/// (provenance) and `supersedes` (correction): a cross-reference asserts no
+/// lineage or replacement, only relatedness.
+pub const CROSS_REF_PREDICATE: &str = "cross-ref";
+
 /// Add a relationship edge. **Additive-only by construction**: this is an
 /// insert-or-ignore — there is no `delete_edge`/`update_edge` in this module,
 /// so the only way the edge set changes is by growing (MC-3). A duplicate
@@ -383,7 +389,7 @@ pub(crate) fn run_incremental_pass(
     let mut stmt = conn.prepare(
         "SELECT id, kind, source, title, body, confidence, trust_score,
                 valid_at, created_at, superseded_at, workspace_id, verification_state,
-                depth, lifecycle_state, experience_outcome
+                depth, lifecycle_state, experience_outcome, actor, expiry, subject
          FROM memories
          WHERE depth != ?1 AND created_at > ?2
          ORDER BY created_at ASC",

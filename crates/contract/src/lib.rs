@@ -274,6 +274,33 @@ impl ExperienceOutcome {
     }
 }
 
+/// The subject-of-memory lens (MI-6 ext): who the memory is *about*,
+/// orthogonal to `actor` (who said it) and to `source` (how it entered the
+/// system). A closed 2-variant vocabulary — no third-party subject exists
+/// in this single-tenant model.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum MemorySubject {
+    User,
+    AgentSelf,
+}
+
+impl MemorySubject {
+    pub fn as_str(self) -> &'static str {
+        match self {
+            MemorySubject::User => "User",
+            MemorySubject::AgentSelf => "AgentSelf",
+        }
+    }
+
+    pub fn from_db_str(s: &str) -> Option<Self> {
+        match s {
+            "User" => Some(MemorySubject::User),
+            "AgentSelf" => Some(MemorySubject::AgentSelf),
+            _ => None,
+        }
+    }
+}
+
 #[derive(Debug, Clone)]
 pub struct MemoryEntry {
     pub id: MemoryId,
@@ -291,6 +318,15 @@ pub struct MemoryEntry {
     pub depth: MemoryDepth,
     pub lifecycle_state: LifecycleState,
     pub experience_outcome: Option<ExperienceOutcome>,
+    /// Who said this (MI-6) — distinct from `workspace_id` (scope
+    /// ownership) and `source` (how it entered the system).
+    pub actor: Option<String>,
+    /// A hard void-after instant (MI-6) — complements MEM-5 decay rather
+    /// than replacing it; decay lowers ranking, `expiry` removes the item
+    /// from default recall outright once passed.
+    pub expiry: Option<u64>,
+    /// The subject-of-memory lens (MI-6 ext).
+    pub subject: Option<MemorySubject>,
 }
 
 impl MemoryEntry {
@@ -323,6 +359,9 @@ impl MemoryEntry {
             depth: MemoryDepth::Consolidated,
             lifecycle_state: LifecycleState::Active,
             experience_outcome: None,
+            actor: None,
+            expiry: None,
+            subject: None,
         }
     }
 
@@ -341,6 +380,24 @@ impl MemoryEntry {
     /// call this — `experience_outcome` stays `None`.
     pub fn with_experience_outcome(mut self, outcome: ExperienceOutcome) -> Self {
         self.experience_outcome = Some(outcome);
+        self
+    }
+
+    /// MI-6: attribute this capture to who said it.
+    pub fn with_actor(mut self, actor: impl Into<String>) -> Self {
+        self.actor = Some(actor.into());
+        self
+    }
+
+    /// MI-6: a hard void-after instant, distinct from MEM-5 decay.
+    pub fn with_expiry(mut self, expiry: u64) -> Self {
+        self.expiry = Some(expiry);
+        self
+    }
+
+    /// MI-6 ext: the subject-of-memory lens.
+    pub fn with_subject(mut self, subject: MemorySubject) -> Self {
+        self.subject = Some(subject);
         self
     }
 

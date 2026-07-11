@@ -36,6 +36,7 @@ pub mod inner_monologue;
 pub mod kanban;
 pub mod learning;
 pub mod lookahead;
+pub mod memory_capture;
 pub mod memory_intelligence;
 pub mod mission;
 pub mod notes;
