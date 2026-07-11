@@ -11,7 +11,7 @@ use super::{
     signal::{self, SignalKind},
     trust::{TRUST_MIN_SEARCH, apply_delta},
 };
-use cronus_contract::{LifecycleState, MemoryDepth};
+use cronus_contract::{ExperienceOutcome, LifecycleState, MemoryDepth};
 
 pub struct MemoryStore {
     conn: Connection,
@@ -123,7 +123,7 @@ impl MemoryStore {
         let mut stmt = self.conn.prepare(
             "SELECT id, kind, source, title, body, confidence, trust_score,
                     valid_at, created_at, superseded_at, workspace_id, verification_state,
-                    depth, lifecycle_state
+                    depth, lifecycle_state, experience_outcome
              FROM memories WHERE id = ?1",
         )?;
         let mut rows = stmt.query_map(params![id.as_str()], map_row)?;
@@ -158,7 +158,7 @@ impl MemoryStore {
         let mut mem_stmt = self.conn.prepare(
             "SELECT id, kind, source, title, body, confidence, trust_score,
                     valid_at, created_at, superseded_at, workspace_id, verification_state,
-                    depth, lifecycle_state
+                    depth, lifecycle_state, experience_outcome
              FROM memories
              WHERE id = ?1 AND trust_score >= ?2 AND superseded_at IS NULL
                AND lifecycle_state = 'Active'",
@@ -183,9 +183,8 @@ impl MemoryStore {
     /// seam implementation, unchanged) — this is the richer surface MC-8
     /// consumers (the intelligence layer's `answer`/temporal recall) call.
     /// Multi-script lexical robustness (a MATCH-miss substring fallback) is
-    /// `l2-memory-store` §4.2.1's own concern — unrealized there too — and
-    /// out of this phase's `Implements:` scope; this method inherits
-    /// whatever `memories_fts` finds, nothing more.
+    /// a separate, unrealized concern — this method inherits whatever
+    /// `memories_fts` finds, nothing more.
     pub fn search_ranked(&self, query: &str, limit: usize) -> Result<Vec<(MemoryEntry, f64)>> {
         // FTS5's own BM25 score (negative; a larger magnitude is a stronger
         // match). Map to a bounded, monotonically increasing (0, 1) score.
@@ -225,6 +224,87 @@ impl MemoryStore {
 
         out.sort_by(|a, b| b.1.partial_cmp(&a.1).unwrap_or(std::cmp::Ordering::Equal));
         Ok(out)
+    }
+
+    /// MI-2: temporal recall modes over the bi-temporal record. Composes
+    /// with the same active/trusted defaults as `search_fts`, except
+    /// `as-of` deliberately does **not** exclude since-superseded records —
+    /// the question is "what was true then," not "what is true now."
+    pub fn recall_temporal(
+        &self,
+        mode: cronus_contract::TemporalMode,
+        limit: usize,
+    ) -> Result<Vec<MemoryEntry>> {
+        use cronus_contract::TemporalMode;
+        let (where_clause, order, bound): (&str, &str, i64) = match mode {
+            TemporalMode::AsOf(t) => (
+                "valid_at <= ?3 AND (superseded_at IS NULL OR superseded_at > ?3)",
+                "valid_at DESC",
+                t as i64,
+            ),
+            TemporalMode::ChangedSince(c) => (
+                "(created_at > ?3 OR superseded_at > ?3)",
+                "created_at DESC",
+                c as i64,
+            ),
+            TemporalMode::Recent => ("1 = 1", "created_at DESC", 0),
+        };
+        let sql = format!(
+            "SELECT id, kind, source, title, body, confidence, trust_score,
+                    valid_at, created_at, superseded_at, workspace_id, verification_state,
+                    depth, lifecycle_state, experience_outcome
+             FROM memories
+             WHERE lifecycle_state = ?1 AND trust_score >= ?2 AND {where_clause}
+             ORDER BY {order} LIMIT ?4"
+        );
+        let mut stmt = self.conn.prepare(&sql)?;
+        let rows = stmt
+            .query_map(
+                params![
+                    LifecycleState::Active.as_str(),
+                    TRUST_MIN_SEARCH,
+                    bound,
+                    limit as i64
+                ],
+                map_row,
+            )?
+            .collect::<std::result::Result<Vec<_>, _>>()?;
+        Ok(rows)
+    }
+
+    /// MI-8: the closed structured-predicate vocabulary, compiled to a
+    /// parameterized SQL `WHERE` fragment (the `predicate` module).
+    pub fn recall_structured(
+        &self,
+        predicate: &cronus_contract::FieldPredicate,
+        limit: usize,
+    ) -> Result<Vec<MemoryEntry>> {
+        // One owned-value bind list carries everything — the two leading
+        // defaults, then whatever the predicate compiler appends, then the
+        // limit — so the bind order always matches the `?` order in `sql`
+        // textually, with no separate reference-lifetime bookkeeping.
+        let mut binds: Vec<Box<dyn rusqlite::types::ToSql>> = vec![
+            Box::new(LifecycleState::Active.as_str().to_string()),
+            Box::new(TRUST_MIN_SEARCH),
+        ];
+        let clause = super::predicate::compile(predicate, &mut binds);
+        binds.push(Box::new(limit as i64));
+
+        let sql = format!(
+            "SELECT id, kind, source, title, body, confidence, trust_score,
+                    valid_at, created_at, superseded_at, workspace_id, verification_state,
+                    depth, lifecycle_state, experience_outcome
+             FROM memories
+             WHERE lifecycle_state = ? AND trust_score >= ? AND ({clause})
+             ORDER BY created_at DESC LIMIT ?"
+        );
+        let mut stmt = self.conn.prepare(&sql)?;
+        let param_refs: Vec<&dyn rusqlite::types::ToSql> =
+            binds.iter().map(|b| b.as_ref()).collect();
+        let rows = stmt
+            .query_map(rusqlite::params_from_iter(param_refs), map_row)?
+            .collect::<std::result::Result<Vec<_>, _>>()?;
+        Ok(rows)
     }
 
     /// Hard-delete a memory entry by raw ID string.
@@ -372,7 +452,7 @@ impl MemoryStore {
 
     /// Recompute the `Recency` derived signal for every active item
     /// (step 1 of the maintenance pass; centrality/cluster need the MC-3
-    /// edge graph and land with T-14B03). Returns the count updated.
+    /// edge graph, computed separately). Returns the count updated.
     pub fn recompute_recency(&self) -> Result<usize> {
         maintenance::recompute_recency(&self.conn, now_secs())
     }
@@ -447,7 +527,7 @@ impl MemoryStore {
         let mut stmt = self.conn.prepare(
             "SELECT id, kind, source, title, body, confidence, trust_score,
                     valid_at, created_at, superseded_at, workspace_id, verification_state,
-                    depth, lifecycle_state
+                    depth, lifecycle_state, experience_outcome
              FROM memories",
         )?;
         let entries = stmt
@@ -555,6 +635,22 @@ impl cronus_contract::MemorySearch for MemoryStore {
     ) -> std::result::Result<Vec<MemoryEntry>, String> {
         MemoryStore::search_fts(self, query, limit).map_err(|e| e.to_string())
     }
+
+    fn recall_temporal(
+        &self,
+        mode: cronus_contract::TemporalMode,
+        limit: usize,
+    ) -> std::result::Result<Vec<MemoryEntry>, String> {
+        MemoryStore::recall_temporal(self, mode, limit).map_err(|e| e.to_string())
+    }
+
+    fn recall_structured(
+        &self,
+        predicate: &cronus_contract::FieldPredicate,
+        limit: usize,
+    ) -> std::result::Result<Vec<MemoryEntry>, String> {
+        MemoryStore::recall_structured(self, predicate, limit).map_err(|e| e.to_string())
+    }
 }
 
 impl cronus_contract::UserDataStore for MemoryStore {
@@ -589,7 +685,8 @@ pub(crate) fn setup(conn: &Connection) -> Result<()> {
             workspace_id       TEXT,
             verification_state TEXT NOT NULL DEFAULT 'Untested',
             depth              TEXT NOT NULL DEFAULT 'Consolidated',
-            lifecycle_state    TEXT NOT NULL DEFAULT 'Active'
+            lifecycle_state    TEXT NOT NULL DEFAULT 'Active',
+            experience_outcome TEXT
         )",
     )?;
     // Standalone FTS5 table — synced manually in add().
@@ -629,15 +726,15 @@ pub(crate) fn setup(conn: &Connection) -> Result<()> {
 
 /// Raw insert: writes `memories` + syncs the FTS index. No auto-chain — that
 /// is a session-continuation concept `MemoryStore::add` layers on top;
-/// consolidation-authored items (T-14B03) are not session activity.
+/// consolidation-authored items are not session activity.
 pub(crate) fn insert(conn: &Connection, entry: MemoryEntry) -> Result<MemoryId> {
     let id = entry.id.clone();
     conn.execute(
         "INSERT INTO memories
          (id, kind, source, title, body, confidence, trust_score,
           valid_at, created_at, superseded_at, workspace_id, verification_state,
-          depth, lifecycle_state)
-         VALUES (?1,?2,?3,?4,?5,?6,?7,?8,?9,?10,?11,?12,?13,?14)",
+          depth, lifecycle_state, experience_outcome)
+         VALUES (?1,?2,?3,?4,?5,?6,?7,?8,?9,?10,?11,?12,?13,?14,?15)",
         params![
             id.as_str(),
             entry.kind.as_str(),
@@ -653,6 +750,7 @@ pub(crate) fn insert(conn: &Connection, entry: MemoryEntry) -> Result<MemoryId> 
             entry.verification_state.as_str(),
             entry.depth.as_str(),
             entry.lifecycle_state.as_str(),
+            entry.experience_outcome.map(|o| o.as_str()),
         ],
     )?;
     conn.execute(
@@ -674,6 +772,7 @@ pub(crate) fn map_row(row: &rusqlite::Row<'_>) -> rusqlite::Result<MemoryEntry> 
     let vs_str: String = row.get(11)?;
     let depth_str: String = row.get(12)?;
     let lifecycle_str: String = row.get(13)?;
+    let experience_outcome_str: Option<String> = row.get(14)?;
 
     Ok(MemoryEntry {
         id: MemoryId::from(id),
@@ -692,5 +791,6 @@ pub(crate) fn map_row(row: &rusqlite::Row<'_>) -> rusqlite::Result<MemoryEntry> 
         depth: MemoryDepth::from_db_str(&depth_str).unwrap_or(MemoryDepth::Consolidated),
         lifecycle_state: LifecycleState::from_db_str(&lifecycle_str)
             .unwrap_or(LifecycleState::Active),
+        experience_outcome: experience_outcome_str.and_then(|s| ExperienceOutcome::from_db_str(&s)),
     })
 }

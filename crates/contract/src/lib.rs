@@ -238,6 +238,42 @@ impl LifecycleState {
     }
 }
 
+/// The typed outcome of a captured experience (MI-13's read side over MI-7's
+/// write side) — `None` on every ordinary memory (the honest default for the
+/// entire pre-existing corpus), `Some(_)` only for an item `distill_run`
+/// produced. Orthogonal to `kind`: a distilled run is still classified by
+/// `kind` for what it's *about* (`ProjectContext`, typically), while this
+/// says how the attempt *went* — the axis `act_with_experience`'s reuse gate
+/// actually needs.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum ExperienceOutcome {
+    /// Reusable directly when the gate passes.
+    Success,
+    /// Never reused as a solution — injected as an avoid signal.
+    Failure,
+    /// Injected as guidance, never reused as a solution.
+    Insight,
+}
+
+impl ExperienceOutcome {
+    pub fn as_str(self) -> &'static str {
+        match self {
+            ExperienceOutcome::Success => "Success",
+            ExperienceOutcome::Failure => "Failure",
+            ExperienceOutcome::Insight => "Insight",
+        }
+    }
+
+    pub fn from_db_str(s: &str) -> Option<Self> {
+        match s {
+            "Success" => Some(ExperienceOutcome::Success),
+            "Failure" => Some(ExperienceOutcome::Failure),
+            "Insight" => Some(ExperienceOutcome::Insight),
+            _ => None,
+        }
+    }
+}
+
 #[derive(Debug, Clone)]
 pub struct MemoryEntry {
     pub id: MemoryId,
@@ -254,6 +290,7 @@ pub struct MemoryEntry {
     pub verification_state: VerificationState,
     pub depth: MemoryDepth,
     pub lifecycle_state: LifecycleState,
+    pub experience_outcome: Option<ExperienceOutcome>,
 }
 
 impl MemoryEntry {
@@ -285,6 +322,7 @@ impl MemoryEntry {
             // and are opted into via `with_depth`.
             depth: MemoryDepth::Consolidated,
             lifecycle_state: LifecycleState::Active,
+            experience_outcome: None,
         }
     }
 
@@ -295,6 +333,14 @@ impl MemoryEntry {
 
     pub fn with_depth(mut self, depth: MemoryDepth) -> Self {
         self.depth = depth;
+        self
+    }
+
+    /// Marks this entry as a captured experience (MI-7 write side) so
+    /// MI-13's reuse gate can later recall it typed. Ordinary memories never
+    /// call this — `experience_outcome` stays `None`.
+    pub fn with_experience_outcome(mut self, outcome: ExperienceOutcome) -> Self {
+        self.experience_outcome = Some(outcome);
         self
     }
 
@@ -561,10 +607,82 @@ impl BusSender for CaptureBusSender {
 // existing one being redesigned, so committing to a richer error type now
 // would be speculative.
 
+/// MI-2: first-class temporal recall modes over the bi-temporal record —
+/// resolved against valid-time (`AsOf`) or transaction-time (`ChangedSince`,
+/// `Recent`), never conflating the two.
+#[derive(Debug, Clone, Copy)]
+pub enum TemporalMode {
+    /// "What did we hold true at instant T?" — valid-time window containing T.
+    AsOf(u64),
+    /// "What is new or changed since checkpoint C?" — transaction-time > C.
+    ChangedSince(u64),
+    /// "What are the newest N, regardless of age?" — transaction-time desc.
+    Recent,
+}
+
+/// MI-8: the field a structured predicate compares — closed to the columns
+/// `MemoryEntry` actually has. The vocabulary is backend-agnostic; this enum
+/// names *which* field, the backend decides how to index or compare it.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum PredicateField {
+    Kind,
+    Source,
+    WorkspaceId,
+    TrustScore,
+    Confidence,
+    CreatedAt,
+    ValidAt,
+    ExperienceOutcome,
+}
+
+/// A comparison operand (MI-8).
+#[derive(Debug, Clone)]
+pub enum PredicateValue {
+    Text(String),
+    Number(f64),
+}
+
+/// MI-8: a small, closed structured-comparison vocabulary — equals/
+/// not-equals, ordering, set membership, text containment — combinable via
+/// AND/OR/NOT, composable with (never replacing) the fuzzy multi-signal
+/// fusion and the temporal modes. Fixed at this layer precisely so it stays
+/// backend-agnostic: a backend that cannot express a combinator natively
+/// falls back to post-fetch evaluation rather than silently dropping the
+/// constraint (SQLite, the only backend today, expresses every variant here
+/// natively — the fallback contract is honored vacuously, not exercised).
+#[derive(Debug, Clone)]
+pub enum FieldPredicate {
+    Eq(PredicateField, PredicateValue),
+    Ne(PredicateField, PredicateValue),
+    Gt(PredicateField, PredicateValue),
+    Ge(PredicateField, PredicateValue),
+    Lt(PredicateField, PredicateValue),
+    Le(PredicateField, PredicateValue),
+    In(PredicateField, Vec<PredicateValue>),
+    NotIn(PredicateField, Vec<PredicateValue>),
+    Contains(PredicateField, String),
+    ContainsCi(PredicateField, String),
+    And(Vec<FieldPredicate>),
+    Or(Vec<FieldPredicate>),
+    Not(Box<FieldPredicate>),
+}
+
 /// The read half of the user-data plane: full-text search over stored
 /// memories, independent of where they are persisted.
 pub trait MemorySearch {
     fn search_fts(&self, query: &str, limit: usize) -> Result<Vec<MemoryEntry>, String>;
+
+    /// MI-2: temporal recall modes over the bi-temporal record, composing
+    /// with the same trust/lifecycle defaults as `search_fts`.
+    fn recall_temporal(&self, mode: TemporalMode, limit: usize)
+    -> Result<Vec<MemoryEntry>, String>;
+
+    /// MI-8: the closed structured-comparison vocabulary.
+    fn recall_structured(
+        &self,
+        predicate: &FieldPredicate,
+        limit: usize,
+    ) -> Result<Vec<MemoryEntry>, String>;
 }
 
 /// The DN-2 user-data plane (§4.5). `MemorySearch` is one facet; a full

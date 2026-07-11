@@ -3,10 +3,10 @@
 //! radius sets its own gate — additive/reversible actions (`archive`) apply
 //! automatically; a lossy action (`merge`) requires an unambiguous signal.
 //!
-//! `summarize` (MC-7, edge-graph community detection) ships once the MC-3
-//! edge graph exists — see T-14B03's Changes for the sequencing note; this
-//! module only covers the three actions buildable against what T-14A01/A02
-//! already store (no edges needed).
+//! `summarize` (MC-7, edge-graph community detection) needs the MC-3 edge
+//! graph, which the consolidation-write module owns; this module only
+//! covers the three actions buildable against the signal/lifecycle schema
+//! already in place (no edges needed).
 
 use rusqlite::{Connection, params};
 
@@ -95,7 +95,8 @@ fn record_audit(
 /// Recompute the `Recency` derived signal for every active item: an
 /// exponential decay of age-since-`created_at`, half-life `HALFLIFE_SECS`.
 /// This is "step 1: recompute derived signals" for recency only — centrality
-/// and cluster recomputation need the MC-3 edge graph (T-14B03).
+/// and cluster recomputation need the MC-3 edge graph, owned by the
+/// consolidation-write module.
 const RECENCY_HALFLIFE_SECS: f64 = 30.0 * 24.0 * 3600.0; // 30 days, stub default
 
 pub(crate) fn recompute_recency(conn: &Connection, now: u64) -> Result<usize> {
@@ -293,7 +294,7 @@ pub(crate) fn merge_pair(
         )?;
         // A self-chain can result from re-pointing both ends onto `keep`.
         conn.execute("DELETE FROM memory_chains WHERE source_id = target_id", [])?;
-        // Same re-pointing for the MC-3 edge table (T-14B03). `OR IGNORE`:
+        // Same re-pointing for the MC-3 edge table. `OR IGNORE`:
         // re-pointing could collide with an edge `keep` already has (the
         // table's UNIQUE constraint), which is fine — the edge already
         // exists on `keep`, so the discard's copy is redundant, not lost.

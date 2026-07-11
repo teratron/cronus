@@ -1,7 +1,8 @@
 use cronus_contract::{MemorySearch, UserDataStore};
 use cronus_store_local::memory::{
-    CodeChangeType, LifecycleState, MemoryDepth, MemoryEntry, MemoryKind, MemorySource,
-    MemoryStore, SignalKind, SuggestedAction, TrustUpdate, VerificationState,
+    CodeChangeType, FieldPredicate, LifecycleState, MemoryDepth, MemoryEntry, MemoryKind,
+    MemorySource, MemoryStore, PredicateField, PredicateValue, SignalKind, SuggestedAction,
+    TemporalMode, TrustUpdate, VerificationState,
     chain::ChainKind,
     trust::{TRUST_MIN_SEARCH, TRUST_NEGATIVE_DELTA, TRUST_POSITIVE_DELTA},
 };
@@ -334,8 +335,9 @@ fn lifecycle_transition_is_audited() {
     s.set_lifecycle_state(&id, LifecycleState::Active, "user:alice")
         .unwrap();
 
-    // No public audit-read API yet (T-14A02 is schema + transitions only;
-    // a query surface is a later task) — assert indirectly: two transitions
+    // No public audit-read API yet (this covers the schema and the
+    // transitions only; a query surface is a separate concern) — assert
+    // indirectly: two transitions
     // must have landed without error, and the final state reflects the
     // second one, proving both audit inserts succeeded (a failed insert on
     // the append-only table would have propagated as an Err).
@@ -509,6 +511,159 @@ fn memory_store_flag_split_candidates_wires_through() {
 
     let candidates = s.flag_split_candidates().unwrap();
     assert_eq!(candidates.len(), 1);
+}
+
+// ── MI-2: temporal recall modes ─────────────────────────────────────────────
+
+#[test]
+fn recall_as_of_still_sees_a_since_superseded_record() {
+    let s = store();
+    let mut e = entry("policy", "old policy text");
+    e.valid_at = 100;
+    e.created_at = 100;
+    let id = s.add(e).unwrap();
+
+    // Correct it at a later instant — the old record becomes superseded.
+    let corrected = entry("policy v2", "new policy text");
+    s.correct(&id, corrected, "test").unwrap();
+
+    // "As of 100" (when the old record was current) must still see it —
+    // the question is what was true then, not what is true now.
+    let as_of = s.recall_temporal(TemporalMode::AsOf(100), 10).unwrap();
+    assert!(
+        as_of.iter().any(|entry| entry.id == id),
+        "as-of must see a record that was current at that instant, even if later superseded"
+    );
+}
+
+#[test]
+fn recall_as_of_excludes_a_record_not_yet_valid() {
+    let s = store();
+    let mut e = entry("future policy", "text");
+    e.valid_at = 1_000_000;
+    e.created_at = 1_000_000;
+    let id = s.add(e).unwrap();
+
+    let as_of_early = s.recall_temporal(TemporalMode::AsOf(100), 10).unwrap();
+    assert!(!as_of_early.iter().any(|entry| entry.id == id));
+}
+
+#[test]
+fn recall_changed_since_finds_only_items_after_the_checkpoint() {
+    let s = store();
+    let mut old = entry("old item", "text");
+    old.created_at = 100;
+    s.add(old).unwrap();
+
+    let mut newer = entry("newer item", "text");
+    newer.created_at = 500;
+    let newer_id = s.add(newer).unwrap();
+
+    let changed = s
+        .recall_temporal(TemporalMode::ChangedSince(300), 10)
+        .unwrap();
+    let ids: Vec<_> = changed.iter().map(|e| e.id.clone()).collect();
+    assert!(ids.contains(&newer_id));
+    assert_eq!(
+        changed.len(),
+        1,
+        "only the item created after the checkpoint qualifies"
+    );
+}
+
+#[test]
+fn recall_recent_orders_newest_first() {
+    let s = store();
+    let mut e1 = entry("first", "text");
+    e1.created_at = 100;
+    s.add(e1).unwrap();
+    let mut e2 = entry("second", "text");
+    e2.created_at = 200;
+    let second_id = s.add(e2).unwrap();
+
+    let recent = s.recall_temporal(TemporalMode::Recent, 10).unwrap();
+    assert_eq!(recent[0].id, second_id, "the newest item must come first");
+}
+
+// ── MI-8: structured predicate ──────────────────────────────────────────────
+
+#[test]
+fn recall_structured_filters_by_kind_equality() {
+    let s = store();
+    let mut conv = entry("a convention", "text");
+    conv.kind = MemoryKind::Convention;
+    s.add(conv).unwrap();
+    let mut issue = entry("a known issue", "text");
+    issue.kind = MemoryKind::KnownIssue;
+    let issue_id = s.add(issue).unwrap();
+
+    let pred = FieldPredicate::Eq(
+        PredicateField::Kind,
+        PredicateValue::Text("KnownIssue".into()),
+    );
+    let results = s.recall_structured(&pred, 10).unwrap();
+    assert_eq!(results.len(), 1);
+    assert_eq!(results[0].id, issue_id);
+}
+
+#[test]
+fn recall_structured_composes_and_or_not() {
+    let s = store();
+    let mut e1 = entry("high trust convention", "text");
+    e1.kind = MemoryKind::Convention;
+    e1.trust_score = 0.9;
+    let e1_id = s.add(e1).unwrap();
+
+    let mut e2 = entry("low trust convention", "text");
+    e2.kind = MemoryKind::Convention;
+    e2.trust_score = 0.35; // still above TRUST_MIN_SEARCH
+    s.add(e2).unwrap();
+
+    let mut e3 = entry("high trust issue", "text");
+    e3.kind = MemoryKind::KnownIssue;
+    e3.trust_score = 0.9;
+    s.add(e3).unwrap();
+
+    // Convention AND trust_score >= 0.5 AND NOT (source = Import)
+    let pred = FieldPredicate::And(vec![
+        FieldPredicate::Eq(
+            PredicateField::Kind,
+            PredicateValue::Text("Convention".into()),
+        ),
+        FieldPredicate::Ge(PredicateField::TrustScore, PredicateValue::Number(0.5)),
+        FieldPredicate::Not(Box::new(FieldPredicate::Eq(
+            PredicateField::Source,
+            PredicateValue::Text("Import".into()),
+        ))),
+    ]);
+    let results = s.recall_structured(&pred, 10).unwrap();
+    assert_eq!(results.len(), 1);
+    assert_eq!(results[0].id, e1_id);
+}
+
+// ── MI-3: immediate recall-visibility ───────────────────────────────────────
+
+#[test]
+fn a_written_item_is_recall_visible_immediately_with_no_enrichment_delay() {
+    let s = store();
+    // No signal has been computed for this item (no enrichment pass has
+    // run) — MI-3 requires the write to still be findable right away;
+    // missing enrichment must degrade ranking quality, never availability.
+    let id = s
+        .add(entry("just written", "findable the instant it lands"))
+        .unwrap();
+
+    let found = s.search_fts("findable the instant", 10).unwrap();
+    assert!(
+        found.iter().any(|e| e.id == id),
+        "a write must be recall-visible with zero delay"
+    );
+
+    let ranked = s.search_ranked("findable the instant", 10).unwrap();
+    assert!(
+        ranked.iter().any(|(e, _)| e.id == id),
+        "ranked recall must also see it immediately, even with no derived signals computed yet"
+    );
 }
 
 // ── MC-5: derived-signal store, exercised through MemoryStore ──────────────

@@ -91,7 +91,8 @@ pub(crate) fn edges_from(conn: &Connection, id: &MemoryId) -> Result<Vec<(Memory
 /// over. Nodes with zero in-edges are absent (degrade to the signal store's
 /// own neutral default, MC-5).
 fn in_degrees(conn: &Connection) -> Result<std::collections::HashMap<String, usize>> {
-    let mut stmt = conn.prepare("SELECT target_id, COUNT(*) FROM memory_edge GROUP BY target_id")?;
+    let mut stmt =
+        conn.prepare("SELECT target_id, COUNT(*) FROM memory_edge GROUP BY target_id")?;
     let rows: Vec<(String, i64)> = stmt
         .query_map([], |row| Ok((row.get(0)?, row.get(1)?)))?
         .collect::<std::result::Result<_, _>>()?;
@@ -111,7 +112,13 @@ pub(crate) fn recompute_centrality(conn: &Connection, now: u64) -> Result<usize>
     let mut updated = 0;
     for (id_str, degree) in degrees {
         let factor = degree as f64 / max_degree as f64;
-        signal::write(conn, &MemoryId::from(id_str), SignalKind::Centrality, factor, now)?;
+        signal::write(
+            conn,
+            &MemoryId::from(id_str),
+            SignalKind::Centrality,
+            factor,
+            now,
+        )?;
         updated += 1;
     }
     Ok(updated)
@@ -145,8 +152,9 @@ fn normalize(s: &str) -> String {
 /// Find an existing **active, consolidated** item whose body matches
 /// `candidate_body` after normalization — the same-abstraction detection
 /// this domain-logic-first pass uses in place of semantic recall-for-linking
-/// (a model-dependent operation with no safe non-model substitute; see
-/// T-14B02's identical merge-candidate heuristic).
+/// (a model-dependent operation with no safe non-model substitute; the same
+/// normalized-body heuristic the maintenance pass's merge-candidate
+/// detection also uses).
 fn find_same_abstraction(conn: &Connection, candidate_body: &str) -> Result<Option<MemoryId>> {
     let mut stmt = conn.prepare(
         "SELECT id, body FROM memories
@@ -154,7 +162,10 @@ fn find_same_abstraction(conn: &Connection, candidate_body: &str) -> Result<Opti
     )?;
     let rows: Vec<(String, String)> = stmt
         .query_map(
-            params![LifecycleState::Active.as_str(), MemoryDepth::Consolidated.as_str()],
+            params![
+                LifecycleState::Active.as_str(),
+                MemoryDepth::Consolidated.as_str()
+            ],
             |row| Ok((row.get(0)?, row.get(1)?)),
         )?
         .collect::<std::result::Result<_, _>>()?;
@@ -201,17 +212,37 @@ pub(crate) fn consolidate(
             "UPDATE memories SET trust_score = ?1 WHERE id = ?2",
             params![bumped, existing.as_str()],
         )?;
-        record_action(conn, &existing, ConsolidationAction::Corroborate, provenance, actor, now)?;
+        record_action(
+            conn,
+            &existing,
+            ConsolidationAction::Corroborate,
+            provenance,
+            actor,
+            now,
+        )?;
         return Ok((existing, ConsolidationAction::Corroborate));
     }
 
     let mut item = candidate;
+    // A newly-consolidated node is a distinct identity from whatever `id`
+    // the caller's `candidate` happened to carry — critically, from the raw
+    // source's own id when driven by `run_incremental_pass`, which reads
+    // `candidate` straight off the raw row it is about to cite as
+    // provenance. Reusing that id would collide on `memories`' PRIMARY KEY.
+    item.id = MemoryId::new();
     item.depth = MemoryDepth::Consolidated;
     let id = super::store::insert(conn, item)?;
     if let Some(src) = provenance {
         add_edge(conn, &id, src, PROVENANCE_PREDICATE, now)?;
     }
-    record_action(conn, &id, ConsolidationAction::Create, provenance, actor, now)?;
+    record_action(
+        conn,
+        &id,
+        ConsolidationAction::Create,
+        provenance,
+        actor,
+        now,
+    )?;
     Ok((id, ConsolidationAction::Create))
 }
 
@@ -240,12 +271,21 @@ pub(crate) fn refine(
         params![new_body, target.as_str(), expected_body],
     )?;
     if affected == 0 {
-        return Err(super::MemoryError::Database(rusqlite::Error::QueryReturnedNoRows));
+        return Err(super::MemoryError::Database(
+            rusqlite::Error::QueryReturnedNoRows,
+        ));
     }
     if let Some(src) = provenance {
         add_edge(conn, target, src, PROVENANCE_PREDICATE, now)?;
     }
-    record_action(conn, target, ConsolidationAction::Refine, provenance, actor, now)?;
+    record_action(
+        conn,
+        target,
+        ConsolidationAction::Refine,
+        provenance,
+        actor,
+        now,
+    )?;
     Ok(())
 }
 
@@ -269,12 +309,21 @@ pub(crate) fn correct(
         )?;
         if affected == 0 {
             // Already superseded (or missing) — refuse rather than double-supersede.
-            return Err(super::MemoryError::Database(rusqlite::Error::QueryReturnedNoRows));
+            return Err(super::MemoryError::Database(
+                rusqlite::Error::QueryReturnedNoRows,
+            ));
         }
         corrected.depth = MemoryDepth::Consolidated;
         let new_id = super::store::insert(conn, corrected)?;
         add_edge(conn, &new_id, target, SUPERSEDES_PREDICATE, now)?;
-        record_action(conn, &new_id, ConsolidationAction::Correct, Some(target), actor, now)?;
+        record_action(
+            conn,
+            &new_id,
+            ConsolidationAction::Correct,
+            Some(target),
+            actor,
+            now,
+        )?;
         Ok(new_id)
     })();
 
@@ -334,7 +383,7 @@ pub(crate) fn run_incremental_pass(
     let mut stmt = conn.prepare(
         "SELECT id, kind, source, title, body, confidence, trust_score,
                 valid_at, created_at, superseded_at, workspace_id, verification_state,
-                depth, lifecycle_state
+                depth, lifecycle_state, experience_outcome
          FROM memories
          WHERE depth != ?1 AND created_at > ?2
          ORDER BY created_at ASC",
@@ -428,10 +477,7 @@ fn connected_components(conn: &Connection) -> Result<Vec<Vec<MemoryId>>> {
     let nodes: Vec<String> = parent.keys().cloned().collect();
     for node in nodes {
         let root = find(&mut parent, &node);
-        clusters
-            .entry(root)
-            .or_default()
-            .push(MemoryId::from(node));
+        clusters.entry(root).or_default().push(MemoryId::from(node));
     }
     Ok(clusters.into_values().collect())
 }
@@ -441,7 +487,11 @@ fn connected_components(conn: &Connection) -> Result<Vec<Vec<MemoryId>>> {
 /// no node in the cluster already has a `summarizes` edge pointing into it
 /// from outside the cluster), synthesize a grounded, size-bounded summary
 /// node. Returns the new summary ids.
-pub(crate) fn synthesize_summaries(conn: &Connection, actor: &str, now: u64) -> Result<Vec<MemoryId>> {
+pub(crate) fn synthesize_summaries(
+    conn: &Connection,
+    actor: &str,
+    now: u64,
+) -> Result<Vec<MemoryId>> {
     let clusters = connected_components(conn)?;
     let mut created = Vec::new();
 
@@ -493,7 +543,14 @@ pub(crate) fn synthesize_summaries(conn: &Connection, actor: &str, now: u64) -> 
         for member in &members {
             add_edge(conn, &summary_id, member, SUMMARIZES_PREDICATE, now)?;
         }
-        record_action(conn, &summary_id, ConsolidationAction::Create, None, actor, now)?;
+        record_action(
+            conn,
+            &summary_id,
+            ConsolidationAction::Create,
+            None,
+            actor,
+            now,
+        )?;
         created.push(summary_id);
     }
     Ok(created)
@@ -501,8 +558,9 @@ pub(crate) fn synthesize_summaries(conn: &Connection, actor: &str, now: u64) -> 
 
 // ── MC-10: advisory interest extraction (read-only, generator-free) ────────
 
-/// One advisory interest topic — memory decides *what*; the caller (e.g.
-/// `l1-inner-monologue`) decides *whether/when/how* to surface it.
+/// One advisory interest topic — memory decides *what*; the caller (e.g. an
+/// inner-monologue-style background reviewer) decides *whether/when/how* to
+/// surface it.
 #[derive(Debug, Clone)]
 pub struct InterestTopic {
     pub title: String,
@@ -514,7 +572,10 @@ pub struct InterestTopic {
 /// active items, deduplicated by normalized title against the window
 /// itself (never the same title twice in one call) — bounded, read-only,
 /// generator-free (MC-10).
-pub(crate) fn extract_interest_topics(conn: &Connection, limit: usize) -> Result<Vec<InterestTopic>> {
+pub(crate) fn extract_interest_topics(
+    conn: &Connection,
+    limit: usize,
+) -> Result<Vec<InterestTopic>> {
     let mut stmt = conn.prepare(
         "SELECT id, title FROM memories
          WHERE lifecycle_state = ?1
@@ -573,7 +634,10 @@ mod tests {
         let count: i64 = c
             .query_row("SELECT COUNT(*) FROM memory_edge", [], |r| r.get(0))
             .unwrap();
-        assert_eq!(count, 1, "a duplicate (source, target, predicate) must not accrete");
+        assert_eq!(
+            count, 1,
+            "a duplicate (source, target, predicate) must not accrete"
+        );
     }
 
     #[test]
@@ -587,10 +651,13 @@ mod tests {
 
         let mut edges = edges_from(&c, &a).unwrap();
         edges.sort_by(|x, y| x.1.cmp(&y.1));
-        assert_eq!(edges, vec![
-            (d, "derived-from".to_string()),
-            (b, "relates-to".to_string()),
-        ]);
+        assert_eq!(
+            edges,
+            vec![
+                (d, "derived-from".to_string()),
+                (b, "relates-to".to_string()),
+            ]
+        );
     }
 
     #[test]
@@ -606,7 +673,10 @@ mod tests {
         recompute_centrality(&c, 100).unwrap();
 
         let hub_factor = signal::factor(&c, &hub, SignalKind::Centrality).unwrap();
-        assert!((hub_factor - 1.0).abs() < 1e-9, "the max in-degree node normalizes to 1.0");
+        assert!(
+            (hub_factor - 1.0).abs() < 1e-9,
+            "the max in-degree node normalizes to 1.0"
+        );
         // `lonely` has zero in-edges — no row written, degrades to the
         // signal store's own neutral default (MC-5).
         let lonely_factor = signal::factor(&c, &lonely, SignalKind::Centrality).unwrap();
@@ -650,9 +720,11 @@ mod tests {
         )
         .unwrap();
         let before_trust: f64 = c
-            .query_row("SELECT trust_score FROM memories WHERE id = 'existing'", [], |r| {
-                r.get(0)
-            })
+            .query_row(
+                "SELECT trust_score FROM memories WHERE id = 'existing'",
+                [],
+                |r| r.get(0),
+            )
             .unwrap();
 
         let raw2 = seed(&c, "raw-2", "dark mode preference"); // same after normalize
@@ -665,19 +737,30 @@ mod tests {
 
         let (id, action) = consolidate(&c, candidate, Some(&raw2), "test", 200).unwrap();
         assert_eq!(action, ConsolidationAction::Corroborate);
-        assert_eq!(id, existing, "corroborate must return the EXISTING id, not a new one");
+        assert_eq!(
+            id, existing,
+            "corroborate must return the EXISTING id, not a new one"
+        );
 
         let after_trust: f64 = c
-            .query_row("SELECT trust_score FROM memories WHERE id = 'existing'", [], |r| {
-                r.get(0)
-            })
+            .query_row(
+                "SELECT trust_score FROM memories WHERE id = 'existing'",
+                [],
+                |r| r.get(0),
+            )
             .unwrap();
-        assert!(after_trust > before_trust, "corroboration must bump trust upward");
+        assert!(
+            after_trust > before_trust,
+            "corroboration must bump trust upward"
+        );
 
         let count: i64 = c
             .query_row("SELECT COUNT(*) FROM memories", [], |r| r.get(0))
             .unwrap();
-        assert_eq!(count, 2, "no new memories row — only `existing` and `raw-2`");
+        assert_eq!(
+            count, 2,
+            "no new memories row — only `existing` and `raw-2`"
+        );
     }
 
     #[test]
@@ -686,16 +769,32 @@ mod tests {
         let target = seed(&c, "target", "original scope");
         let src = seed(&c, "src", "new boundary condition");
 
-        refine(&c, &target, "original scope", "plus a new boundary condition", Some(&src), "test", 100)
-            .unwrap();
+        refine(
+            &c,
+            &target,
+            "original scope",
+            "plus a new boundary condition",
+            Some(&src),
+            "test",
+            100,
+        )
+        .unwrap();
 
         let body: String = c
-            .query_row("SELECT body FROM memories WHERE id = 'target'", [], |r| r.get(0))
+            .query_row("SELECT body FROM memories WHERE id = 'target'", [], |r| {
+                r.get(0)
+            })
             .unwrap();
-        assert!(body.contains("original scope"), "refine must never drop existing content");
+        assert!(
+            body.contains("original scope"),
+            "refine must never drop existing content"
+        );
         assert!(body.contains("plus a new boundary condition"));
 
-        assert_eq!(edges_from(&c, &target).unwrap(), vec![(src, PROVENANCE_PREDICATE.to_string())]);
+        assert_eq!(
+            edges_from(&c, &target).unwrap(),
+            vec![(src, PROVENANCE_PREDICATE.to_string())]
+        );
     }
 
     #[test]
@@ -703,16 +802,35 @@ mod tests {
         let c = conn();
         let target = seed(&c, "target", "original scope");
         // Simulate a concurrent writer landing a change after the caller's read.
-        c.execute("UPDATE memories SET body = 'someone else edited this' WHERE id = 'target'", [])
-            .unwrap();
+        c.execute(
+            "UPDATE memories SET body = 'someone else edited this' WHERE id = 'target'",
+            [],
+        )
+        .unwrap();
 
-        let result = refine(&c, &target, "original scope", "my addition", None, "test", 100);
-        assert!(result.is_err(), "a stale expected_body must be refused, never silently clobbered");
+        let result = refine(
+            &c,
+            &target,
+            "original scope",
+            "my addition",
+            None,
+            "test",
+            100,
+        );
+        assert!(
+            result.is_err(),
+            "a stale expected_body must be refused, never silently clobbered"
+        );
 
         let body: String = c
-            .query_row("SELECT body FROM memories WHERE id = 'target'", [], |r| r.get(0))
+            .query_row("SELECT body FROM memories WHERE id = 'target'", [], |r| {
+                r.get(0)
+            })
             .unwrap();
-        assert_eq!(body, "someone else edited this", "the concurrent write must survive untouched");
+        assert_eq!(
+            body, "someone else edited this",
+            "the concurrent write must survive untouched"
+        );
     }
 
     #[test]
@@ -729,16 +847,32 @@ mod tests {
         let new_id = correct(&c, &target, corrected, "test", 100).unwrap();
 
         let superseded_at: Option<i64> = c
-            .query_row("SELECT superseded_at FROM memories WHERE id = 'target'", [], |r| r.get(0))
+            .query_row(
+                "SELECT superseded_at FROM memories WHERE id = 'target'",
+                [],
+                |r| r.get(0),
+            )
             .unwrap();
-        assert_eq!(superseded_at, Some(100), "target must be superseded, never deleted or rewritten");
+        assert_eq!(
+            superseded_at,
+            Some(100),
+            "target must be superseded, never deleted or rewritten"
+        );
 
         let still_there: String = c
-            .query_row("SELECT body FROM memories WHERE id = 'target'", [], |r| r.get(0))
+            .query_row("SELECT body FROM memories WHERE id = 'target'", [], |r| {
+                r.get(0)
+            })
             .unwrap();
-        assert_eq!(still_there, "the API returns null on error", "the old body is untouched");
+        assert_eq!(
+            still_there, "the API returns null on error",
+            "the old body is untouched"
+        );
 
-        assert_eq!(edges_from(&c, &new_id).unwrap(), vec![(target, SUPERSEDES_PREDICATE.to_string())]);
+        assert_eq!(
+            edges_from(&c, &new_id).unwrap(),
+            vec![(target, SUPERSEDES_PREDICATE.to_string())]
+        );
     }
 
     #[test]
@@ -750,7 +884,10 @@ mod tests {
 
         let second = MemoryEntry::new(MemoryKind::KnownIssue, MemorySource::Agent, "t", "fix 2");
         let result = correct(&c, &target, second, "test", 200);
-        assert!(result.is_err(), "correcting an already-superseded target must refuse");
+        assert!(
+            result.is_err(),
+            "correcting an already-superseded target must refuse"
+        );
     }
 
     #[test]
@@ -773,7 +910,12 @@ mod tests {
     #[test]
     fn run_incremental_pass_never_rewrites_the_raw_source_row() {
         let c = conn();
-        let mut raw = MemoryEntry::new(MemoryKind::Convention, MemorySource::Agent, "t", "verbatim evidence");
+        let mut raw = MemoryEntry::new(
+            MemoryKind::Convention,
+            MemorySource::Agent,
+            "t",
+            "verbatim evidence",
+        );
         raw.id = MemoryId::from("raw-source".to_string());
         raw.depth = MemoryDepth::Raw;
         raw.created_at = 500;
@@ -789,7 +931,10 @@ mod tests {
             )
             .unwrap();
         assert_eq!(depth, "Raw", "the raw row's depth must never change");
-        assert_eq!(body, "verbatim evidence", "the raw row's content must never be rewritten");
+        assert_eq!(
+            body, "verbatim evidence",
+            "the raw row's content must never be rewritten"
+        );
     }
 
     #[test]
@@ -805,8 +950,7 @@ mod tests {
         assert_eq!(summaries.len(), 1);
 
         let edges = edges_from(&c, &summaries[0]).unwrap();
-        let members: std::collections::HashSet<_> =
-            edges.into_iter().map(|(id, _)| id).collect();
+        let members: std::collections::HashSet<_> = edges.into_iter().map(|(id, _)| id).collect();
         assert_eq!(members, [a, b, d].into_iter().collect());
     }
 
@@ -833,20 +977,43 @@ mod tests {
         let first = synthesize_summaries(&c, "test", 200).unwrap();
         assert_eq!(first.len(), 1);
         let second = synthesize_summaries(&c, "test", 300).unwrap();
-        assert!(second.is_empty(), "a structurally-hubbed cluster must not gain a second summary");
+        assert!(
+            second.is_empty(),
+            "a structurally-hubbed cluster must not gain a second summary"
+        );
     }
 
     #[test]
     fn extract_interest_topics_is_bounded_and_deduplicated() {
         let c = conn();
-        let mut e1 = MemoryEntry::new(MemoryKind::Convention, MemorySource::Agent, "topic one", "body 1");
+        let mut e1 = MemoryEntry::new(
+            MemoryKind::Convention,
+            MemorySource::Agent,
+            "topic one",
+            "body 1",
+        );
         e1.id = MemoryId::from("1".to_string());
-        let mut e2 = MemoryEntry::new(MemoryKind::Convention, MemorySource::Agent, "topic two", "body 2");
+        let mut e2 = MemoryEntry::new(
+            MemoryKind::Convention,
+            MemorySource::Agent,
+            "topic two",
+            "body 2",
+        );
         e2.id = MemoryId::from("2".to_string());
-        let mut e3 = MemoryEntry::new(MemoryKind::Convention, MemorySource::Agent, "topic three", "body 3");
+        let mut e3 = MemoryEntry::new(
+            MemoryKind::Convention,
+            MemorySource::Agent,
+            "topic three",
+            "body 3",
+        );
         e3.id = MemoryId::from("3".to_string());
         // A duplicate normalized title — the window-dedup must collapse it.
-        let mut dup = MemoryEntry::new(MemoryKind::Convention, MemorySource::Agent, "Topic One", "dup body");
+        let mut dup = MemoryEntry::new(
+            MemoryKind::Convention,
+            MemorySource::Agent,
+            "Topic One",
+            "dup body",
+        );
         dup.id = MemoryId::from("4".to_string());
         for e in [e1, e2, e3, dup] {
             super::super::store::insert(&c, e).unwrap();
@@ -856,9 +1023,17 @@ mod tests {
         assert_eq!(topics.len(), 2, "bounded by `limit`");
 
         let all = extract_interest_topics(&c, 100).unwrap();
-        assert_eq!(all.len(), 3, "the duplicate-titled item must be deduplicated out of the window");
+        assert_eq!(
+            all.len(),
+            3,
+            "the duplicate-titled item must be deduplicated out of the window"
+        );
         let titles: std::collections::HashSet<_> =
             all.iter().map(|t| t.title.to_lowercase()).collect();
-        assert_eq!(titles.len(), all.len(), "no duplicate normalized title within the window");
+        assert_eq!(
+            titles.len(),
+            all.len(),
+            "no duplicate normalized title within the window"
+        );
     }
 }

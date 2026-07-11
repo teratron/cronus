@@ -12,6 +12,7 @@ pub mod chain;
 pub mod consolidate;
 pub mod encryption;
 pub mod maintenance;
+pub(crate) mod predicate;
 pub mod signal;
 pub mod store;
 pub mod trust;
@@ -22,7 +23,8 @@ pub use store::MemoryStore;
 
 pub(crate) use cronus_contract::now_secs;
 pub use cronus_contract::{
-    LifecycleState, MemoryDepth, MemoryEntry, MemoryId, MemoryKind, MemorySource, VerificationState,
+    ExperienceOutcome, FieldPredicate, LifecycleState, MemoryDepth, MemoryEntry, MemoryId,
+    MemoryKind, MemorySource, PredicateField, PredicateValue, TemporalMode, VerificationState,
 };
 
 // ── Error ─────────────────────────────────────────────────────────────────────
