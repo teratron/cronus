@@ -1,4 +1,4 @@
-use cronus::router::recovery::{
+use cronus_core::router::recovery::{
     CredentialPool, FailoverKind, HealthProbe, NoOpProbe, RecoveryAction, classify, recovery_action,
 };
 
@@ -156,11 +156,11 @@ fn noop_probe_reports_healthy() {
 fn unhealthy_primary_falls_back_to_fallback() {
     struct AlwaysUnhealthyProbe;
     impl HealthProbe for AlwaysUnhealthyProbe {
-        fn probe_primary(&self) -> cronus::router::recovery::ProbeOutcome {
-            cronus::router::recovery::ProbeOutcome::Unhealthy
+        fn probe_primary(&self) -> cronus_core::router::recovery::ProbeOutcome {
+            cronus_core::router::recovery::ProbeOutcome::Unhealthy
         }
-        fn probe_fallback(&self) -> cronus::router::recovery::ProbeOutcome {
-            cronus::router::recovery::ProbeOutcome::Healthy
+        fn probe_fallback(&self) -> cronus_core::router::recovery::ProbeOutcome {
+            cronus_core::router::recovery::ProbeOutcome::Healthy
         }
     }
     let status = AlwaysUnhealthyProbe.probe();
@@ -174,11 +174,11 @@ fn unhealthy_primary_falls_back_to_fallback() {
 fn both_probes_fail_yields_unhealthy() {
     struct BothFailProbe;
     impl HealthProbe for BothFailProbe {
-        fn probe_primary(&self) -> cronus::router::recovery::ProbeOutcome {
-            cronus::router::recovery::ProbeOutcome::Unhealthy
+        fn probe_primary(&self) -> cronus_core::router::recovery::ProbeOutcome {
+            cronus_core::router::recovery::ProbeOutcome::Unhealthy
         }
-        fn probe_fallback(&self) -> cronus::router::recovery::ProbeOutcome {
-            cronus::router::recovery::ProbeOutcome::Unhealthy
+        fn probe_fallback(&self) -> cronus_core::router::recovery::ProbeOutcome {
+            cronus_core::router::recovery::ProbeOutcome::Unhealthy
         }
     }
     let status = BothFailProbe.probe();

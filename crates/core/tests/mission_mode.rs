@@ -1,4 +1,4 @@
-use cronus::mission::{
+use cronus_core::mission::{
     ClarificationItem, Mission, MissionMode, MissionPhase, MissionStatus, PhaseIntent, PrdDocument,
     Proposal, ProposalStatus, UserStory, WorkType, all_stories_pass, clarifications_complete,
     classify_phase_intent, classify_work_type, clear_mode_flag, mission_dir, resolve_mode,

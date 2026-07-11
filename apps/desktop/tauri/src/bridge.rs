@@ -1,12 +1,12 @@
 //! Shell ↔ core IPC bridge.
 //!
 //! The typed command surface the UI invokes over Tauri IPC. Each command maps
-//! one-to-one onto the core capability contract (`cronus::Capabilities`) — the
+//! one-to-one onto the core capability contract (`cronus_core::Capabilities`) — the
 //! same surface the CLI and TUI bind — and returns already-masked output via
 //! the core redaction path. The shell only marshals: no domain logic, no
 //! re-implemented redaction.
 
-use cronus::{Capabilities, Engine};
+use cronus_core::{Capabilities, Engine};
 
 /// Bridge over a core handle plus the secret values to mask in any output
 /// that crosses the IPC boundary.
@@ -23,7 +23,7 @@ impl<C: Capabilities> Bridge<C> {
 
     fn mask(&self, raw: &str) -> String {
         let secret_refs: Vec<&str> = self.secrets.iter().map(String::as_str).collect();
-        cronus::redact::redact(raw, &secret_refs)
+        cronus_core::redact::redact(raw, &secret_refs)
     }
 
     /// Core/product version, masked like every bridged value.
@@ -100,7 +100,7 @@ mod tests {
         );
         let out = bridge.status();
         assert!(!out.contains("sk-LIVE-777"), "secret must not cross IPC");
-        assert!(out.contains(cronus::redact::MASK));
+        assert!(out.contains(cronus_core::redact::MASK));
         assert!(out.contains("ready"), "non-secret content preserved");
     }
 

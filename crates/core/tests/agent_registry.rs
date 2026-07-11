@@ -1,4 +1,4 @@
-use cronus::agent_registry::{AgentMode, AgentRegistry};
+use cronus_core::agent_registry::{AgentMode, AgentRegistry};
 
 // ── built-in agents ──────────────────────────────────────────────────────────
 

@@ -1,23 +1,25 @@
 //! Invariant-compliance sweep for the skill system (§3): one test per row
 //! of the Invariant Compliance table, exercising the
-//! modules in `cronus::skills` together rather than in isolation, so the
+//! modules in `cronus_core::skills` together rather than in isolation, so the
 //! cross-module story (convert → store, convert → exec, synthesize →
 //! store) is proven, not just each module's own unit-level behavior.
 
 use std::collections::HashMap;
 
-use cronus::extensions::{
+use cronus_core::extensions::{
     ExtensionKind, ExtensionManifest, ExtensionPermissions, ExtensionRegistry, ExtensionSource,
     ExtensionState,
 };
-use cronus::skills::commands::{
+use cronus_core::skills::commands::{
     CommandCategory, CommandRegistry, CommandSpec, DispatchError, InputSchema, RequiredGrant,
 };
-use cronus::skills::convert::{self, ConvertError, ForeignItem, ForeignKind, WitnessStatus};
-use cronus::skills::exec::{self, ActivationResult, Degradation, OperationStep, WorkflowRuntime};
-use cronus::skills::package::SkillPackage;
-use cronus::skills::store::{SkillEntry, SkillId, SkillStore, SkillTier, WriteOutcome};
-use cronus::skills::synthesize::{self, AuthoredSkill};
+use cronus_core::skills::convert::{self, ConvertError, ForeignItem, ForeignKind, WitnessStatus};
+use cronus_core::skills::exec::{
+    self, ActivationResult, Degradation, OperationStep, WorkflowRuntime,
+};
+use cronus_core::skills::package::SkillPackage;
+use cronus_core::skills::store::{SkillEntry, SkillId, SkillStore, SkillTier, WriteOutcome};
+use cronus_core::skills::synthesize::{self, AuthoredSkill};
 
 fn manifest(id: &str, name: &str) -> ExtensionManifest {
     ExtensionManifest {

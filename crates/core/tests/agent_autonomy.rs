@@ -1,4 +1,4 @@
-use cronus::autonomy::{
+use cronus_core::autonomy::{
     ActionTracker, ApprovalDecision, ApprovalManager, AutonomyError, AutonomyLevel,
     CommandRiskLevel, GateDecision, RESOLVED_ENTRY_GRACE_MS, classify_command, evaluate,
 };

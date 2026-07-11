@@ -35,7 +35,7 @@ pub fn dispatch(command: Command, ctx: &Context) -> i32 {
 mod init {
     use std::path::{Path, PathBuf};
 
-    use cronus::state;
+    use cronus_core::state;
 
     use crate::output::Context;
 
@@ -122,7 +122,7 @@ mod init {
 mod status {
     use std::path::Path;
 
-    use cronus::paths::{Paths, Root};
+    use cronus_core::paths::{Paths, Root};
 
     use crate::output::Context;
 
@@ -193,8 +193,8 @@ mod status {
 mod doctor {
     use std::path::Path;
 
-    use cronus::doctor::{self, Disposition};
-    use cronus::paths::{Paths, Root};
+    use cronus_core::doctor::{self, Disposition};
+    use cronus_core::paths::{Paths, Root};
 
     use crate::output::Context;
 
@@ -207,7 +207,7 @@ mod doctor {
     /// Config validity is checked against the real workspace state root;
     /// the remaining check categories (board cards, sessions, disk, store,
     /// crash recovery) await their subsystem-projection wiring — the check
-    /// engine itself already covers all six (see `cronus::doctor` tests).
+    /// engine itself already covers all six (see `cronus_core::doctor` tests).
     fn run_at(state_root: &Path, fix: bool, ctx: &Context) -> i32 {
         let mut inputs = doctor::DoctorInputs::default();
         if !state_root.join("app.json").exists() {
@@ -291,8 +291,8 @@ mod doctor {
 mod backup_cmd {
     use std::path::{Path, PathBuf};
 
-    use cronus::backup::{self, BackupOptions};
-    use cronus::paths::{Paths, Root};
+    use cronus_core::backup::{self, BackupOptions};
+    use cronus_core::paths::{Paths, Root};
 
     use crate::cli::BackupCommand;
     use crate::output::Context;
@@ -429,7 +429,7 @@ mod backup_cmd {
             assert_eq!(create_at(&state_root, &backups_dir, None, false, &ctx), 0);
             assert_eq!(list_at(&backups_dir, &ctx), 0);
 
-            let backups = cronus::backup::list(&backups_dir).unwrap();
+            let backups = cronus_core::backup::list(&backups_dir).unwrap();
             assert_eq!(backups.len(), 1);
             assert_eq!(
                 restore_at(&restore_target, &backups_dir, &backups[0].id, &ctx),
@@ -888,7 +888,7 @@ mod workflow {
 mod workspace {
     use std::path::{Path, PathBuf};
 
-    use cronus::workspace::{WorkspaceId, WorkspaceManager, WorkspaceTemplate};
+    use cronus_core::workspace::{WorkspaceId, WorkspaceManager, WorkspaceTemplate};
 
     use crate::cli::WorkspaceCommand;
     use crate::output::Context;
@@ -904,8 +904,8 @@ mod workspace {
     }
 
     fn db_path() -> PathBuf {
-        cronus::paths::Paths::os_native()
-            .resolve(cronus::paths::Root::State)
+        cronus_core::paths::Paths::os_native()
+            .resolve(cronus_core::paths::Root::State)
             .join("workspaces.db")
     }
 
@@ -1115,7 +1115,7 @@ mod workspace {
     mod tests {
         use std::path::Path;
 
-        use cronus::workspace::{WorkspaceId, WorkspaceManager, WorkspaceTemplate};
+        use cronus_core::workspace::{WorkspaceId, WorkspaceManager, WorkspaceTemplate};
 
         use crate::output::{Context, OutputFormat};
 
@@ -1181,7 +1181,7 @@ mod workspace {
 // ─── memory ───────────────────────────────────────────────────────────────────
 
 mod memory {
-    use cronus::memory::{MemoryEntry, MemoryKind, MemorySource, store::MemoryStore};
+    use cronus_core::memory::{MemoryEntry, MemoryKind, MemorySource, store::MemoryStore};
 
     use crate::cli::MemoryCommand;
     use crate::output::Context;
@@ -1320,7 +1320,7 @@ mod memory {
 // ─── codegraph ────────────────────────────────────────────────────────────────
 
 mod codegraph_cmd {
-    use codegraph::{
+    use cronus_codegraph::{
         extractor::{Extractor, RegexExtractor},
         index::CodeIndex,
     };
@@ -1444,13 +1444,13 @@ mod codegraph_cmd {
 // ─── role ─────────────────────────────────────────────────────────────────────
 
 mod role {
-    use cronus::roles::{PRESET_CATALOG, RoleManager};
+    use cronus_core::roles::{PRESET_CATALOG, RoleManager};
 
     use crate::cli::RoleCommand;
     use crate::output::Context;
 
     fn state_dir() -> std::path::PathBuf {
-        cronus::paths::Paths::os_native().resolve(cronus::paths::Root::State)
+        cronus_core::paths::Paths::os_native().resolve(cronus_core::paths::Root::State)
     }
 
     fn open_manager() -> RoleManager {
@@ -1581,15 +1581,15 @@ mod role {
 mod board {
     use std::path::PathBuf;
 
-    use cronus::kanban::{Board, CardState};
-    use cronus::tool_security::now_ms;
+    use cronus_core::kanban::{Board, CardState};
+    use cronus_core::tool_security::now_ms;
 
     use crate::cli::BoardCommand;
     use crate::output::Context;
 
     fn board_path() -> PathBuf {
-        cronus::paths::Paths::os_native()
-            .resolve(cronus::paths::Root::State)
+        cronus_core::paths::Paths::os_native()
+            .resolve(cronus_core::paths::Root::State)
             .join("kanban")
     }
 
@@ -1775,14 +1775,14 @@ mod board {
 mod schedule {
     use std::path::PathBuf;
 
-    use cronus::scheduler::{RecurrencePreset, Schedule, ScheduleAction, Scheduler};
+    use cronus_core::scheduler::{RecurrencePreset, Schedule, ScheduleAction, Scheduler};
 
     use crate::cli::ScheduleCommand;
     use crate::output::Context;
 
     fn sched_dir() -> PathBuf {
-        cronus::paths::Paths::os_native()
-            .resolve(cronus::paths::Root::State)
+        cronus_core::paths::Paths::os_native()
+            .resolve(cronus_core::paths::Root::State)
             .join("schedules")
     }
 
@@ -1914,7 +1914,7 @@ mod schedule {
 // ─── budget ───────────────────────────────────────────────────────────────────
 
 mod budget_cmd {
-    use cronus::budget::{BudgetEngine, BudgetPeriod, BudgetPolicy};
+    use cronus_core::budget::{BudgetEngine, BudgetPeriod, BudgetPolicy};
 
     use crate::cli::BudgetCommand;
     use crate::output::Context;
@@ -1967,15 +1967,15 @@ mod budget_cmd {
 mod exec {
     use std::path::PathBuf;
 
-    use cronus::exec_workspace::ExecWorkspaceManager;
-    use cronus::tool_security::now_ms;
+    use cronus_core::exec_workspace::ExecWorkspaceManager;
+    use cronus_core::tool_security::now_ms;
 
     use crate::cli::ExecCommand;
     use crate::output::Context;
 
     fn base_dir() -> PathBuf {
-        cronus::paths::Paths::os_native()
-            .resolve(cronus::paths::Root::State)
+        cronus_core::paths::Paths::os_native()
+            .resolve(cronus_core::paths::Root::State)
             .join("exec-workspaces")
     }
 
@@ -2067,7 +2067,7 @@ mod exec {
 mod check {
     use std::path::PathBuf;
 
-    use cronus::quality::{GateResultStore, detect_language};
+    use cronus_core::quality::{GateResultStore, detect_language};
 
     use crate::cli::CheckCommand;
     use crate::output::Context;
@@ -2123,7 +2123,7 @@ mod check {
 mod ext {
     use std::path::PathBuf;
 
-    use cronus::extensions::{
+    use cronus_core::extensions::{
         ExtensionKind, ExtensionManifest, ExtensionPermissions, ExtensionRegistry, ExtensionSource,
         ExtensionState,
     };
@@ -2206,7 +2206,7 @@ mod ext {
             }
         };
         let fname = path.file_name().and_then(|n| n.to_str()).unwrap_or("ext");
-        let result = cronus::tool_security::SkillScanner::scan_content(&content, fname);
+        let result = cronus_core::tool_security::SkillScanner::scan_content(&content, fname);
         println!("safe: {}", result.is_safe);
         println!("risk_score: {}", result.risk_score);
         println!("findings: {}", result.findings.len());
@@ -2278,14 +2278,14 @@ mod ext {
         use std::collections::HashMap;
         use std::path::Path;
 
-        use cronus::extensions::{
+        use cronus_core::extensions::{
             ExtensionKind, ExtensionManifest, ExtensionPermissions, ExtensionSource,
         };
-        use cronus::skills::convert::{
+        use cronus_core::skills::convert::{
             self, ConvertError, ForeignItem, ForeignKind, WitnessStatus,
         };
-        use cronus::skills::store::{SkillId, SkillStore, SkillTier};
-        use cronus::skills::synthesize::{self, AuthoredSkill, SynthesizeError};
+        use cronus_core::skills::store::{SkillId, SkillStore, SkillTier};
+        use cronus_core::skills::synthesize::{self, AuthoredSkill, SynthesizeError};
 
         use crate::cli::SkillCommand;
         use crate::output::Context;
@@ -2505,7 +2505,7 @@ mod ext {
         mod tests {
             use super::*;
             use crate::output::OutputFormat;
-            use cronus::skills::store::SkillEntry;
+            use cronus_core::skills::store::SkillEntry;
             use std::fs;
             use std::path::PathBuf;
 
@@ -2604,7 +2604,7 @@ mod ext {
 // ─── learn ────────────────────────────────────────────────────────────────────
 
 mod learn {
-    use cronus::learning::LearningApprovalGate;
+    use cronus_core::learning::LearningApprovalGate;
 
     use crate::cli::LearnCommand;
     use crate::output::Context;
@@ -2668,7 +2668,7 @@ mod learn {
 // ─── registry ─────────────────────────────────────────────────────────────────
 
 mod registry {
-    use cronus::agent_registry::AgentRegistry;
+    use cronus_core::agent_registry::AgentRegistry;
 
     use crate::cli::RegistryCommand;
     use crate::output::Context;
@@ -2755,7 +2755,7 @@ mod registry {
 // ─── agent ────────────────────────────────────────────────────────────────────
 
 mod agent {
-    use cronus::constitution::{IDENTITY_FILES, identity_paths};
+    use cronus_core::constitution::{IDENTITY_FILES, identity_paths};
 
     use crate::cli::AgentCommand;
     use crate::output::Context;

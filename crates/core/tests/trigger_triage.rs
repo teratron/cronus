@@ -1,4 +1,4 @@
-use cronus::trigger_triage::{
+use cronus_core::trigger_triage::{
     CONFIDENCE_THRESHOLD, ContentHash, DeduplicateCache, RateLimiter, SourceType, TriageDecision,
     TriggerEnvelope, TriggerPayload, rule_classify, triage,
 };

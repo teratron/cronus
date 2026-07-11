@@ -1,4 +1,4 @@
-use cronus::tool_security::{
+use cronus_core::tool_security::{
     BaseGuardrail, GuardrailContext, PiiMaskerGuardrail, PolicyMode, PromptInjectionGuardrail,
     PromptInjectionMode, RiskBand, RiskRecommendation, SarifLog, ScanCategory, Severity,
     SkillScanner, ToolExecutionLevel, ToolGuard, ToolPermitResult, ToolPolicy,

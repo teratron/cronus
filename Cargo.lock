@@ -546,13 +546,6 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "0c9ea0ac24bc397ab3c98583a3c9ba74fa56b09a4449bbe172b9b1ddb016027a"
 
 [[package]]
-name = "codegraph"
-version = "0.1.0"
-dependencies = [
- "rusqlite",
-]
-
-[[package]]
 name = "colorchoice"
 version = "1.0.5"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -655,16 +648,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "cronus"
-version = "0.1.0"
-dependencies = [
- "cronus-auth-local",
- "cronus-contract",
- "cronus-domain",
- "cronus-store-local",
-]
-
-[[package]]
 name = "cronus-auth-local"
 version = "0.1.0"
 dependencies = [
@@ -680,15 +663,32 @@ name = "cronus-cli"
 version = "0.1.0"
 dependencies = [
  "clap",
- "codegraph",
- "cronus",
+ "cronus-codegraph",
+ "cronus-core",
  "nodus",
  "serde_json",
 ]
 
 [[package]]
+name = "cronus-codegraph"
+version = "0.1.0"
+dependencies = [
+ "rusqlite",
+]
+
+[[package]]
 name = "cronus-contract"
 version = "0.1.0"
+
+[[package]]
+name = "cronus-core"
+version = "0.1.0"
+dependencies = [
+ "cronus-auth-local",
+ "cronus-contract",
+ "cronus-domain",
+ "cronus-store-local",
+]
 
 [[package]]
 name = "cronus-domain"

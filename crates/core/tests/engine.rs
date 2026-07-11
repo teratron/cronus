@@ -1,4 +1,4 @@
-use cronus::{Capabilities, Engine};
+use cronus_core::{Capabilities, Engine};
 
 #[test]
 fn engine_exposes_version_and_status() {

@@ -1,4 +1,4 @@
-use cronus::exec_workspace::{ExecError, ExecState, ExecWorkspaceManager, make_slug};
+use cronus_core::exec_workspace::{ExecError, ExecState, ExecWorkspaceManager, make_slug};
 use std::sync::atomic::{AtomicU64, Ordering};
 
 static COUNTER: AtomicU64 = AtomicU64::new(0);

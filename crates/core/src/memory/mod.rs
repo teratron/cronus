@@ -10,7 +10,7 @@
 //! and at-rest encryption moved to `cronus-store-local` (§4.2, §4.6) — the
 //! adapter implementing the `MemorySearch`/`UserDataStore` seam. Re-exported
 //! here so every existing call site (`crate::memory::MemoryStore`,
-//! `cronus::memory::MemoryStore`, …) is unaffected. `consolidation` has no
+//! `cronus_core::memory::MemoryStore`, …) is unaffected. `consolidation` has no
 //! infrastructure dependency and stays here, in the domain tier.
 
 pub mod consolidation;
@@ -26,5 +26,5 @@ pub use cronus_store_local::memory::{
 // `cronus-contract` (§4.2) — `MemorySearch`/`UserDataStore`
 // carry `MemoryEntry` across the domain/adapter boundary, so its shape lives
 // where both sides can see it. Re-exported here so every existing call site
-// (`crate::memory::MemoryEntry`, `cronus::memory::MemoryEntry`, …) is unaffected.
+// (`crate::memory::MemoryEntry`, `cronus_core::memory::MemoryEntry`, …) is unaffected.
 pub use cronus_contract::{MemoryEntry, MemoryId, MemoryKind, MemorySource, VerificationState};

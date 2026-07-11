@@ -1,4 +1,4 @@
-use cronus::context_mgmt::{
+use cronus_core::context_mgmt::{
     CONTEXT_RESERVE_TOKENS, CompactionDetails, Compactor, ContextEntry, DEFAULT_MAX_BYTES,
     GREP_MAX_LINE_LENGTH, NoOpCompactor, TOOL_RESULT_MAX_CHARS, TrimPriority, adaptive_budget,
     should_compact, total_tokens, trim_cascade, truncate_head, truncate_tail, truncate_tool_result,

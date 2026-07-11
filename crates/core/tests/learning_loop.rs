@@ -1,4 +1,4 @@
-use cronus::learning::{
+use cronus_core::learning::{
     CandidateSkill, CandidateStatus, LearningApprovalGate, LearningConfig, NoOpReviewFork,
     PostTurnReviewFork, try_review,
 };

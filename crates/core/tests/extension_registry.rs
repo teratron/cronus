@@ -1,4 +1,4 @@
-use cronus::extensions::{
+use cronus_core::extensions::{
     ExtensionKind, ExtensionManifest, ExtensionPermissions, ExtensionRegistry, ExtensionSource,
     ExtensionState, validate_manifest,
 };

@@ -1,4 +1,4 @@
-use cronus::research::{
+use cronus_core::research::{
     DEFAULT_MAX_ROUNDS, FetchedPage, MIN_CONTENT_CHARS, ResearchJob, ResearchPlan, ResearchReport,
     ResearchStatus, build_partial_report, date_grounding_preamble, filter_page, job_dir, run_round,
     search_stub, wrap_untrusted,

@@ -4,13 +4,13 @@
 //! Both are pure/CPU-bound (no database), so they measure the parts of
 //! indexing and hybrid search that dominate wall-clock at scale. Std-only
 //! harness (`harness = false`), stable toolchain. Invoke with
-//! `cargo bench -p codegraph --bench extraction`.
+//! `cargo bench -p cronus-codegraph --bench extraction`.
 
 use std::hint::black_box;
 use std::time::Instant;
 
-use codegraph::extractor::{Extractor, RegexExtractor};
-use codegraph::search::rrf_merge;
+use cronus_codegraph::extractor::{Extractor, RegexExtractor};
+use cronus_codegraph::search::rrf_merge;
 
 /// Time `iters` calls of `f`, discarding a short warm-up, and report ns/op.
 fn bench(label: &str, iters: u32, mut f: impl FnMut()) {

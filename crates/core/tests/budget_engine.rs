@@ -1,4 +1,4 @@
-use cronus::budget::{
+use cronus_core::budget::{
     BudgetEngine, BudgetError, BudgetPeriod, BudgetPolicy, BudgetStatus, CostEvent,
 };
 

@@ -1,7 +1,7 @@
 use std::sync::atomic::{AtomicU64, Ordering};
 use std::time::{SystemTime, UNIX_EPOCH};
 
-use cronus::scheduler::{
+use cronus_core::scheduler::{
     RecurrencePreset, RunResult, ScheduleAction, ScheduleKind, Scheduler, SchedulerError,
     next_fire_utc,
 };
@@ -27,7 +27,7 @@ fn now_ms() -> u64 {
 
 #[test]
 fn recurring_schedule_kind_is_recurring() {
-    let sched = cronus::scheduler::Schedule::recurring(
+    let sched = cronus_core::scheduler::Schedule::recurring(
         "r1",
         "daily review",
         &RecurrencePreset::Daily,
@@ -43,7 +43,7 @@ fn recurring_schedule_kind_is_recurring() {
 fn oneshot_schedule_has_delete_after_fire() {
     let at = now_ms() + 60_000;
     let sched =
-        cronus::scheduler::Schedule::oneshot("o1", "one shot", at, ScheduleAction::Reminder);
+        cronus_core::scheduler::Schedule::oneshot("o1", "one shot", at, ScheduleAction::Reminder);
     assert_eq!(sched.kind, ScheduleKind::Oneshot);
     assert!(sched.delete_after_fire);
     assert_eq!(sched.at_ms, Some(at));
@@ -58,7 +58,7 @@ fn heartbeat_action_as_str() {
 
 #[test]
 fn weekdays_preset_next_fire_is_future() {
-    let sched = cronus::scheduler::Schedule::recurring(
+    let sched = cronus_core::scheduler::Schedule::recurring(
         "w1",
         "weekday task",
         &RecurrencePreset::Weekdays,
@@ -76,7 +76,7 @@ fn weekdays_preset_next_fire_is_future() {
 fn add_and_get_round_trip() {
     let dir = tmp_dir("add-get");
     let scheduler = Scheduler::new(dir).unwrap();
-    let sched = cronus::scheduler::Schedule::recurring(
+    let sched = cronus_core::scheduler::Schedule::recurring(
         "test-1",
         "test schedule",
         &RecurrencePreset::Daily,
@@ -95,7 +95,7 @@ fn list_returns_all_stored_schedules() {
     let dir = tmp_dir("list");
     let scheduler = Scheduler::new(dir).unwrap();
     for i in 0..3 {
-        let s = cronus::scheduler::Schedule::recurring(
+        let s = cronus_core::scheduler::Schedule::recurring(
             format!("s{i}"),
             format!("schedule {i}"),
             &RecurrencePreset::Daily,
@@ -111,7 +111,7 @@ fn list_returns_all_stored_schedules() {
 fn delete_removes_schedule() {
     let dir = tmp_dir("delete");
     let scheduler = Scheduler::new(dir).unwrap();
-    let s = cronus::scheduler::Schedule::recurring(
+    let s = cronus_core::scheduler::Schedule::recurring(
         "del-me",
         "deletable",
         &RecurrencePreset::Daily,
@@ -137,7 +137,7 @@ fn get_missing_returns_not_found() {
 fn fire_creates_run_log_entry() {
     let dir = tmp_dir("fire-log");
     let scheduler = Scheduler::new(dir).unwrap();
-    let s = cronus::scheduler::Schedule::recurring(
+    let s = cronus_core::scheduler::Schedule::recurring(
         "f1",
         "heartbeat task",
         &RecurrencePreset::Daily,
@@ -158,7 +158,8 @@ fn fire_oneshot_with_delete_after_fire_removes_it() {
     let dir = tmp_dir("oneshot-delete");
     let scheduler = Scheduler::new(dir).unwrap();
     let at = now_ms() + 60_000;
-    let s = cronus::scheduler::Schedule::oneshot("one", "single run", at, ScheduleAction::Routine);
+    let s =
+        cronus_core::scheduler::Schedule::oneshot("one", "single run", at, ScheduleAction::Routine);
     scheduler.add(&s).unwrap();
     scheduler.fire("one", "clean prompt").unwrap();
     let err = scheduler.get("one").unwrap_err();
@@ -170,7 +171,7 @@ fn fire_heartbeat_does_not_require_board() {
     // Heartbeat fires as a no-op seam — no kanban interaction expected yet.
     let dir = tmp_dir("heartbeat");
     let scheduler = Scheduler::new(dir).unwrap();
-    let s = cronus::scheduler::Schedule::recurring(
+    let s = cronus_core::scheduler::Schedule::recurring(
         "hb",
         "wake up",
         &RecurrencePreset::Weekdays,
@@ -186,7 +187,7 @@ fn fire_heartbeat_does_not_require_board() {
 fn fire_blocks_on_prompt_injection() {
     let dir = tmp_dir("injection");
     let scheduler = Scheduler::new(dir).unwrap();
-    let s = cronus::scheduler::Schedule::recurring(
+    let s = cronus_core::scheduler::Schedule::recurring(
         "inj",
         "unsafe task",
         &RecurrencePreset::Daily,

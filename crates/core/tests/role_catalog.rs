@@ -1,6 +1,6 @@
 use std::sync::atomic::{AtomicU64, Ordering};
 
-use cronus::roles::{
+use cronus_core::roles::{
     AgentConfigRevision, HiredFrom, PRESET_CATALOG, RevisionSource, RoleCategory, RoleError,
     RoleManager,
 };

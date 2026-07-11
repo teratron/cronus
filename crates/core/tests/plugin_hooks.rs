@@ -1,4 +1,4 @@
-use cronus::hooks::{
+use cronus_core::hooks::{
     ActorMatcher, HookEntry, HookEvent, HookResult, RuleCondition, RuleOp, evaluate_conditions,
     run_hooks, validate_hook_command,
 };

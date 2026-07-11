@@ -1,10 +1,10 @@
-use cronus::orchestration::{
+use cronus_core::orchestration::{
     AgentDefinitionError, AgentTier, AgentToolResult, AgentWorkspaceScope, ChangeMetadata, GoalRun,
     GoalRunStatus, JudgeVerdict, MAX_SPAWN_DEPTH, PermissionAction, PermissionRule,
     SpawnDepthCounter, TieredAgentDef, ToolDefinition, changes_are_acyclic, evaluate,
     evaluate_goal, rank_tools, should_terminate_batch, unblocked_changes, validate_tier,
 };
-use cronus::trigger_triage::{
+use cronus_core::trigger_triage::{
     DeduplicateCache, RateLimiter, SourceType, TriageDecision, TriggerEnvelope, TriggerPayload,
     triage,
 };

@@ -1,4 +1,4 @@
-use cronus::{
+use cronus_core::{
     context_router::{ContextRouter, RuleEntry, RulePrecedence, SessionAction, SessionContext},
     memory::MemoryStore,
 };
@@ -23,7 +23,7 @@ fn empty_bundle_when_no_memories_or_rules() {
 
 #[test]
 fn memory_entries_included_in_bundle() {
-    use cronus::memory::{MemoryEntry, MemoryKind, MemorySource};
+    use cronus_core::memory::{MemoryEntry, MemoryKind, MemorySource};
     let s = store();
     let e = MemoryEntry::new(
         MemoryKind::Convention,

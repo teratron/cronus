@@ -1,4 +1,4 @@
-use cronus::constitution::{
+use cronus_core::constitution::{
     ActivationStep, BOOTSTRAP_FILE, HEARTBEAT_FILE, IDENTITY_FILES, MEMORY_FILE, PROFILE_FILE,
     ReadinessSignal, ReadinessTier, SOUL_FILE, TomlValue, activate, bootstrap, identity_paths,
     merge_toml, readiness_score,

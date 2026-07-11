@@ -23,8 +23,8 @@ documentation = "https://teratron.github.io/cronus"
 readme = "README.md"
 
 [workspace.dependencies]
-codegraph = { path = "crates/codegraph" }
-cronus = { path = "crates/core" }
+cronus-codegraph = { path = "crates/codegraph" }
+cronus-core = { path = "crates/core" }
 cronus-contract = { path = "crates/contract" }
 cronus-domain = { path = "crates/domain" }
 cronus-store-local = { path = "crates/store-local" }

@@ -1,5 +1,5 @@
 [package]
-name = "codegraph"
+name = "cronus-codegraph"
 version.workspace = true
 edition.workspace = true
 license.workspace = true

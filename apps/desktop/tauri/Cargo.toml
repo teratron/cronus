@@ -20,7 +20,7 @@ serde = { version = "1.0.228", features = ["derive"] }
 serde_json = "1.0.150"
 # The embeddable core engine — the shell marshals IPC calls onto its
 # capability surface and never re-implements domain logic.
-cronus = { path = "../../../crates/core" }
+cronus-core = { path = "../../../crates/core" }
 
 # Detach from the repo's Rust workspace (crates/*): the desktop shell builds
 # independently of the core engine workspace and must not pull webview deps into it.

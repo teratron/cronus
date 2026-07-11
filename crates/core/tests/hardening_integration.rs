@@ -7,11 +7,11 @@ use std::fs;
 use std::path::PathBuf;
 use std::sync::atomic::{AtomicU64, Ordering};
 
-use cronus::backup::{self, BackupOptions};
-use cronus::error_reporting::{
+use cronus_core::backup::{self, BackupOptions};
+use cronus_core::error_reporting::{
     self, ConsentDecision, ConsentMode, FingerprintTable, ReportRequest,
 };
-use cronus::telemetry::{MetricPayload, TelemetryStore};
+use cronus_core::telemetry::{MetricPayload, TelemetryStore};
 
 static COUNTER: AtomicU64 = AtomicU64::new(0);
 

@@ -1,6 +1,6 @@
 use std::sync::atomic::{AtomicU64, Ordering};
 
-use cronus::kanban::{Board, CardState, KanbanError};
+use cronus_core::kanban::{Board, CardState, KanbanError};
 
 static COUNTER: AtomicU64 = AtomicU64::new(0);
 

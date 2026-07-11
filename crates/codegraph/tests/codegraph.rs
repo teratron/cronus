@@ -1,8 +1,10 @@
-use codegraph::community::{CommunityDetector, Edge, UnionFindDetector};
-use codegraph::dedup::{DEFAULT_SIMILARITY_THRESHOLD, is_low_entropy, jaro_winkler, should_merge};
-use codegraph::extractor::{Confidence, Extractor, RegexExtractor, SymbolKind};
-use codegraph::index::CodeIndex;
-use codegraph::search::{fuse, rrf_merge};
+use cronus_codegraph::community::{CommunityDetector, Edge, UnionFindDetector};
+use cronus_codegraph::dedup::{
+    DEFAULT_SIMILARITY_THRESHOLD, is_low_entropy, jaro_winkler, should_merge,
+};
+use cronus_codegraph::extractor::{Confidence, Extractor, RegexExtractor, SymbolKind};
+use cronus_codegraph::index::CodeIndex;
+use cronus_codegraph::search::{fuse, rrf_merge};
 use std::collections::HashMap;
 
 fn open() -> CodeIndex {

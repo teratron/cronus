@@ -1,5 +1,5 @@
-use cronus::context_router::ContextBundle;
-use cronus::session::{
+use cronus_core::context_router::ContextBundle;
+use cronus_core::session::{
     InterruptFence, IterationBudget, MAX_GOAL_REACT, MAX_OUTPUT_CHARS, RunnerMap, SessionEntry,
     SessionError, SessionId, TurnContext, guard_output_size,
     hooks::{HookOutcome, NoOpHook, StopHook},

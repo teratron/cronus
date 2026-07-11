@@ -1,4 +1,4 @@
-use cronus::quality::{
+use cronus_core::quality::{
     CardTag, DoneGateStatus, GateKind, GateResult, GateResultStore, GateStatus, Language,
     check_done_gate, detect_language,
 };

@@ -1,4 +1,4 @@
-use cronus::router::{
+use cronus_core::router::{
     FitLevel, RouterError, RouterMode, RouterPool,
     circuit::{CircuitBreaker, CircuitState},
     provider::{ModelProvider, ProviderHealth, ProviderTier, RoutingRequest, TaskType},
@@ -170,7 +170,7 @@ fn record_failure_opens_circuit() {
 
 #[test]
 fn circuit_starts_closed() {
-    use cronus::router::circuit::CircuitState;
+    use cronus_core::router::circuit::CircuitState;
     let cb = CircuitBreaker::default();
     assert_eq!(cb.state(), CircuitState::Closed);
 }

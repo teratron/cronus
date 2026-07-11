@@ -1,4 +1,4 @@
-use cronus::checkpoint::{
+use cronus_core::checkpoint::{
     AUTO_MEMORY_THRESHOLD_BYTES, CheckpointPaths, CheckpointWriter, FileCheckpointWriter,
     MAX_SNAPSHOTS, NoOpCheckpointWriter, build_resume_reminder, list_snapshots, needs_auto_memory,
     prune_snapshots, read_section, write_atomic,

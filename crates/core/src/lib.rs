@@ -4,7 +4,7 @@
 //! for the user-data plane lives in `cronus-store-local`; the default for
 //! the auth/identity planes lives in `cronus-auth-local`. This crate wires
 //! them together and re-exports every module under its historical path, so
-//! `cronus::memory::MemoryEntry`, `cronus::orchestration::…`, and every other
+//! `cronus_core::memory::MemoryEntry`, `cronus_core::orchestration::…`, and every other
 //! existing call site are unaffected by the split. Frontends (CLI, TUI, app)
 //! depend on this crate; it has no presentation dependencies of its own.
 

@@ -3,15 +3,15 @@
 //! Every routed request scores the full provider pool; this measures that
 //! decision under a realistic pool size. Std-only harness (`harness = false`),
 //! stable toolchain. Invoke with
-//! `cargo bench -p cronus --bench model_router`.
+//! `cargo bench -p cronus-core --bench model_router`.
 
 use std::hint::black_box;
 use std::time::Instant;
 
-use cronus::router::provider::{
+use cronus_core::router::provider::{
     ModelProvider, ProviderHealth, ProviderTier, RoutingRequest, TaskType,
 };
-use cronus::router::{RouterMode, RouterPool};
+use cronus_core::router::{RouterMode, RouterPool};
 
 /// Time `iters` calls of `f`, discarding a short warm-up, and report ns/op.
 fn bench(label: &str, iters: u32, mut f: impl FnMut()) {

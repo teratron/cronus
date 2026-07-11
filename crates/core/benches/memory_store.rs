@@ -3,12 +3,12 @@
 //!
 //! Runs on the stable toolchain via a std-only timing harness (`harness =
 //! false`); no external benchmark crate is pulled in. Invoke with
-//! `cargo bench -p cronus --bench memory_store`.
+//! `cargo bench -p cronus-core --bench memory_store`.
 
 use std::hint::black_box;
 use std::time::Instant;
 
-use cronus::memory::{MemoryEntry, MemoryKind, MemorySource, MemoryStore};
+use cronus_core::memory::{MemoryEntry, MemoryKind, MemorySource, MemoryStore};
 
 /// Time `iters` calls of `f`, discarding a short warm-up, and report ns/op.
 fn bench(label: &str, iters: u32, mut f: impl FnMut()) {
