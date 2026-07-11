@@ -4,15 +4,15 @@
 <!-- Maximum 100 lines. Agent updates AFTER each completed action. -->
 
 **Workspace:** main
-**Updated:** 2026-07-11 13:34
+**Updated:** 2026-07-11 14:06
 **Phase:** 14 — Memory Intelligence & Consolidation
 **Status:** Active
 
 ## Current Position
 
-- **Task:** /magic.spec → /magic.task chain: promoted both memory L2s RFC→Stable and **opened Phase 14 — Memory Intelligence & Consolidation** (8 tasks / 4 tracks). Phase 14 Todo, not yet executed.
+- **Task:** T-14B02 Corpus-maintenance pass (MC-6 minus MC-7)
 - **Spec:** INDEX v1.0.101 (196 specs: 188 Stable, 7 RFC, 1 Draft) · PLAN v2.17.0 · TASKS v1.20.0. Memory L1s Stable (Phase 0); both L2s `l2-memory-consolidation` 1.0.1 + `l2-memory-intelligence` 1.0.0 now **Stable**, in **Phase 14** (behind the UserDataStore seam, composing l2-memory-store; the two L1-deferred params discharged in the intelligence L2). Backlog now 6: spec-driven-governance/dynamic-harness/loop-governance/dev-office (RFC L1); knowledge-store/archetype-catalog/service-activation (RFC L2); loop-runner (Draft). `l2-service-activation` still RFC (blocked on the Windows S4U spike).
-- **Next Action:** Execute T-14A01 `memory_signal` fact-vs-derived table + version-guarded neutral-default degradation (MC-5) via /magic.run main
+- **Next Action:** Execute T-14B03 consolidation write path: edges, action algebra, watermark, co-edit safety, MC-7 summaries via /magic.run main
 
 ## Progress
 
@@ -21,6 +21,7 @@ Build phases: Done 1–13 (Seed → Advanced Office Features → Content/Sharing
 ```
 
 ## Recent Decisions
+
 - 2026-07-11 **Decision:** Promoted both memory L2s RFC→Stable and **opened Phase 14 — Memory Intelligence & Consolidation** (/magic.spec → /magic.task chain). Rigorous Post-Update Review (spec-critic + prompt-engineer): found + fixed ONE real issue — l2-memory-consolidation §4.4/MC-8 had overclaimed it "subsumes" l2-memory-store §4.2.2's recency knob; reworded to explicitly compositional (§4.2's additive fuse is the untouched base_text_relevance factor; MC-8 multiplies NEW derived signals over it; the two L2s realize DIFFERENT L1s and compose at runtime — no Stable-spec contradiction, no store edit). Both PASS: consolidation 1.0.0→1.0.1 Stable, intelligence 1.0.0 Stable. INDEX v1.0.101 (188 Stable). Phase 14 = 8 tasks / 4 tracks (A schema · B consolidation · C intelligence · T), domain-logic-first, foundation-then-parallel (A gates B/C; MC-8→C-recall + MC-6-archive→MI-9-lifecycle cross-edges; generator-optional degrade paths are build requirements, community-detection MC-7 a seam+stub). PLAN v2.17.0 / TASKS v1.20.0. Transparency: L2s promoted on same-session author-review — Stable means "design agreed, build may begin", validated during implementation. finalize: v0.1.304→0.1.305. Next: /magic.run main. (Revert: git restore .design/main/{INDEX,PLAN,TASKS,STATE}.md .design/main/specifications/l2-memory-*.md && rm .design/main/tasks/phase-14.md)
 - 2026-07-11 **Decision:** Authored l2-memory-intelligence (RFC 1.0.0, Implements l1-memory-intelligence, MI-1..MI-13) → INDEX v1.0.100, then /magic.task main reconciled PLAN (v2.16.0) / TASKS (v1.19.2). Completes the memory L2 pair (same architecture as consolidation: separate L2 behind the UserDataStore seam, composing l2-memory-store §4.2/4.3/4.4/4.14/4.15 + l2-memory-consolidation MC-8 signals, no new engine). This L2 **discharges the two params l1-memory-intelligence deferred to L2**: MI-4 ambiguity threshold (objective confidence/trust-gap + recency-dominance rule) and MI-5 digest cadence (per-session-close + daily floor, opt-in per office). PLAN reconciliation: moved the 2 now-Stable memory L1s Backlog→Phase 0 (not concept-only — L2s exist); added both RFC L2s to Backlog as the memory-implementation wave. No new phase opened — L2s need RFC→Stable first. Pre-flight ok:true, orphans resolved, no drift. finalize: v0.1.302→0.1.303. (Revert: git restore .design/main/{INDEX,PLAN,TASKS,STATE}.md && rm .design/main/specifications/l2-memory-intelligence.md)
 - 2026-07-11 **Decision:** Authored l2-memory-consolidation (RFC 1.0.0, Implements l1-memory-consolidation) → INDEX v1.0.99, 195 specs. Architecture call (user delegated "decide ideally/flexibly/scalably, not easily"): chose SEPARATE new L2s over folding into l2-memory-store. Decisive rationale = flexibility+scalability — the memory query/maintenance surface is realized behind the DN-2 UserDataStore seam (l2-crate-topology), so it stays backend-swappable and each L2's blast radius stays small (a memory change never reverts the 950-line Stable substrate spec); mirrors the 3-L1 layering (model/consolidation/intelligence → 3 L2). No duplication: the L2 CITES l2-memory-store §4.2/4.7/4.12/4.14 and specifies only net-new (memory_signal fact-vs-derived table, multiplicative ranking wrapping §4.2 base relevance, maintenance action set, co-edit safety). Foundational lower layer authored first; kept RFC (new large L2 gets reviewed, not auto-Stabled). ok:true, no drift; expected non-blocking orphan (not yet in PLAN) left for /magic.task per pipeline ownership. finalize: v0.1.300→0.1.301, CHANGELOG [Unreleased]. (Revert: git restore .design/main/INDEX.md .design/main/STATE.md && rm .design/main/specifications/l2-memory-consolidation.md)
@@ -57,10 +58,6 @@ Build phases: Done 1–13 (Seed → Advanced Office Features → Content/Sharing
 - 2026-06-28 **T-7C01 delivered (command bar input + `/help`):** new `command` module — `parse`, `CATALOG` (help + 21 CLI-mirrored verbs), `classify` → `Help/Run/Error` (unknown → inline error, no panic). Parity source: TUI can't depend on `cronus-cli` (INV-2) and core has no command registry, so `CATALOG` is curated to mirror the CLI's 21 top-level verbs; anti-drift enforced by the validation track (T01), not a runtime import. Command bar made interactive: `ViewModel.command_input/feedback`, focus-aware key routing (`handle_key`/`submit_command`; Esc cancels line in the bar, quits elsewhere — resolved the provisional Esc note). 9 `command_parse` tests; 29 crate tests pass; clippy/fmt clean. (Revert: git restore crates/tui .design/main)
 
 - 2026-06-28 **T-7B03 delivered (Status + Sessions panels) — Track B complete:** Sessions scrollback chosen as a **bounded last-N projection in `CoreSnapshot`** (not accumulating `App` state) → view stays a pure function of the snapshot (INV-5; loop determinism test holds). `SessionsView::push` caps at `MAX_SESSION_LINES`=500 (drops oldest); core's durable log is source of truth, panel shows a recent tail. New `render_status` (mirrors version+status) + `render_sessions`. `CoreSnapshot` gained `sessions` (empty until core streams activity). All four panels now render. 20 crate tests pass; clippy/fmt clean. (Revert: git restore crates/tui .design/main)
-
-
-
-
 
 ## Blockers
 

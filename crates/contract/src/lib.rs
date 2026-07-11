@@ -170,6 +170,74 @@ impl VerificationState {
     }
 }
 
+/// Where a memory sits on the processing-depth axis (MC-1), orthogonal to
+/// scope. Refinement flows one way, `raw -> working -> consolidated`;
+/// consolidation never rewrites raw evidence, so any consolidated claim can
+/// be checked against what actually happened.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum MemoryDepth {
+    /// Verbatim captured evidence (transcripts, source documents) — immutable.
+    Raw,
+    /// Recent, lightly-processed notes organized by occurrence.
+    Working,
+    /// Durable, reusable abstraction — the recallable long-term corpus.
+    Consolidated,
+}
+
+impl MemoryDepth {
+    pub fn as_str(self) -> &'static str {
+        match self {
+            MemoryDepth::Raw => "Raw",
+            MemoryDepth::Working => "Working",
+            MemoryDepth::Consolidated => "Consolidated",
+        }
+    }
+
+    pub fn from_db_str(s: &str) -> Option<Self> {
+        match s {
+            "Raw" => Some(MemoryDepth::Raw),
+            "Working" => Some(MemoryDepth::Working),
+            "Consolidated" => Some(MemoryDepth::Consolidated),
+            _ => None,
+        }
+    }
+}
+
+/// A memory's reversible lifecycle state (MI-9), orthogonal to MEM-5 decay.
+/// Decay may lower an item's ranking in any state, but MUST NOT delete an
+/// item whose state is `Paused` or `Archived` — a deliberate shelving is a
+/// value signal that overrides automatic pruning. `Deleted` is not a stored
+/// variant: it is realized by the existing targeted forget (row removal),
+/// per MI-9's own table.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum LifecycleState {
+    /// In the default recall set.
+    Active,
+    /// Temporarily and reversibly excluded from recall, no data loss.
+    Paused,
+    /// Retained but out of the default recall set; opt-in to include.
+    Archived,
+}
+
+impl LifecycleState {
+    pub fn as_str(self) -> &'static str {
+        match self {
+            LifecycleState::Active => "Active",
+            LifecycleState::Paused => "Paused",
+            LifecycleState::Archived => "Archived",
+        }
+    }
+
+    pub fn from_db_str(s: &str) -> Option<Self> {
+        match s {
+            "Active" => Some(LifecycleState::Active),
+            "Paused" => Some(LifecycleState::Paused),
+            "Archived" => Some(LifecycleState::Archived),
+            _ => None,
+        }
+    }
+}
+
 #[derive(Debug, Clone)]
 pub struct MemoryEntry {
     pub id: MemoryId,
@@ -184,6 +252,8 @@ pub struct MemoryEntry {
     pub superseded_at: Option<u64>,
     pub workspace_id: Option<String>,
     pub verification_state: VerificationState,
+    pub depth: MemoryDepth,
+    pub lifecycle_state: LifecycleState,
 }
 
 impl MemoryEntry {
@@ -207,11 +277,24 @@ impl MemoryEntry {
             superseded_at: None,
             workspace_id: None,
             verification_state: VerificationState::Untested,
+            // A single-shot `new()` call already represents a discrete,
+            // finished fact — every pre-existing call site (auth, CLI `cronus
+            // memory store`, session capture) writes exactly this shape, so
+            // defaulting to `Consolidated` preserves that behavior exactly.
+            // `Raw`/`Working` are for the future ingestion pipeline (MC-1)
+            // and are opted into via `with_depth`.
+            depth: MemoryDepth::Consolidated,
+            lifecycle_state: LifecycleState::Active,
         }
     }
 
     pub fn with_workspace(mut self, id: impl Into<String>) -> Self {
         self.workspace_id = Some(id.into());
+        self
+    }
+
+    pub fn with_depth(mut self, depth: MemoryDepth) -> Self {
+        self.depth = depth;
         self
     }
 

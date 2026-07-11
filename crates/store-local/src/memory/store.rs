@@ -1,14 +1,17 @@
 //! SQLite-backed memory store with FTS5 and session chaining.
 
-use rusqlite::{Connection, params};
+use rusqlite::{Connection, OptionalExtension, params};
 
 use super::{
     CodeChangeType, MemoryEntry, MemoryError, MemoryId, MemoryKind, MemorySource, Result,
     SuggestedAction, TrustUpdate, VerificationState,
     chain::{BELLMAN_MAX_DEPTH, ChainKind, SESSION_CHAIN_WINDOW_SECS, propagated_delta},
-    now_secs,
+    consolidate::{self, ConsolidationAction, InterestTopic},
+    maintenance, now_secs,
+    signal::{self, SignalKind},
     trust::{TRUST_MIN_SEARCH, apply_delta},
 };
+use cronus_contract::{LifecycleState, MemoryDepth};
 
 pub struct MemoryStore {
     conn: Connection,
@@ -32,37 +35,13 @@ impl MemoryStore {
     /// Insert a new memory entry. Auto-chains to the most recent memory in
     /// the same workspace if one exists within the session window.
     pub fn add(&self, entry: MemoryEntry) -> Result<MemoryId> {
-        let id = entry.id.clone();
-        self.conn.execute(
-            "INSERT INTO memories
-             (id, kind, source, title, body, confidence, trust_score,
-              valid_at, created_at, superseded_at, workspace_id, verification_state)
-             VALUES (?1,?2,?3,?4,?5,?6,?7,?8,?9,?10,?11,?12)",
-            params![
-                id.as_str(),
-                entry.kind.as_str(),
-                entry.source.as_str(),
-                &entry.title,
-                &entry.body,
-                entry.confidence,
-                entry.trust_score,
-                entry.valid_at as i64,
-                entry.created_at as i64,
-                entry.superseded_at.map(|v| v as i64),
-                entry.workspace_id.as_deref(),
-                entry.verification_state.as_str(),
-            ],
-        )?;
-
-        // Sync standalone FTS index (standalone table — no triggers needed)
-        self.conn.execute(
-            "INSERT INTO memories_fts(memory_id, title, body) VALUES (?1, ?2, ?3)",
-            params![id.as_str(), &entry.title, &entry.body],
-        )?;
+        let workspace_id = entry.workspace_id.clone();
+        let created_at = entry.created_at;
+        let id = insert(&self.conn, entry)?;
 
         // Auto-chain within session window
-        if let Some(ws) = &entry.workspace_id
-            && let Some(prev) = self.latest_in_workspace(ws, entry.created_at)?
+        if let Some(ws) = &workspace_id
+            && let Some(prev) = self.latest_in_workspace(ws, created_at)?
             && prev.as_str() != id.as_str()
         {
             self.chain_internal(&prev, &id, ChainKind::Continuation)?;
@@ -143,7 +122,8 @@ impl MemoryStore {
     pub fn get(&self, id: &MemoryId) -> Result<Option<MemoryEntry>> {
         let mut stmt = self.conn.prepare(
             "SELECT id, kind, source, title, body, confidence, trust_score,
-                    valid_at, created_at, superseded_at, workspace_id, verification_state
+                    valid_at, created_at, superseded_at, workspace_id, verification_state,
+                    depth, lifecycle_state
              FROM memories WHERE id = ?1",
         )?;
         let mut rows = stmt.query_map(params![id.as_str()], map_row)?;
@@ -171,12 +151,17 @@ impl MemoryStore {
         // The SQL trust_score filter is the gate — effective_trust is not applied
         // here so that newly added entries (Untested verification state) still
         // surface in search results at their raw trust_score.
+        // MI-9: recall defaults to the `active` lifecycle state only; a
+        // caller wanting paused/archived items uses a dedicated lookup
+        // (e.g. `get`), not the default search path.
         let mut out = Vec::with_capacity(ids.len());
         let mut mem_stmt = self.conn.prepare(
             "SELECT id, kind, source, title, body, confidence, trust_score,
-                    valid_at, created_at, superseded_at, workspace_id, verification_state
+                    valid_at, created_at, superseded_at, workspace_id, verification_state,
+                    depth, lifecycle_state
              FROM memories
-             WHERE id = ?1 AND trust_score >= ?2 AND superseded_at IS NULL",
+             WHERE id = ?1 AND trust_score >= ?2 AND superseded_at IS NULL
+               AND lifecycle_state = 'Active'",
         )?;
         for id in &ids {
             let mut rows = mem_stmt.query_map(params![id, TRUST_MIN_SEARCH], map_row)?;
@@ -184,6 +169,61 @@ impl MemoryStore {
                 out.push(entry?);
             }
         }
+        Ok(out)
+    }
+
+    /// Ranked recall for MC-8 consumers: fuses `base_text_relevance` (this
+    /// method's own FTS5/BM25-derived score) with the derived signals from
+    /// `memory_signal` (MC-5) **multiplicatively** — a near-zero derived
+    /// factor vetoes rather than being averaged away. Every factor is either
+    /// the FTS5 engine's own score or a precomputed table lookup: no model
+    /// call, no graph walk (MC-8/MEM-2).
+    ///
+    /// Distinct from [`MemoryStore::search_fts`] (the unranked `MemorySearch`
+    /// seam implementation, unchanged) — this is the richer surface MC-8
+    /// consumers (the intelligence layer's `answer`/temporal recall) call.
+    /// Multi-script lexical robustness (a MATCH-miss substring fallback) is
+    /// `l2-memory-store` §4.2.1's own concern — unrealized there too — and
+    /// out of this phase's `Implements:` scope; this method inherits
+    /// whatever `memories_fts` finds, nothing more.
+    pub fn search_ranked(&self, query: &str, limit: usize) -> Result<Vec<(MemoryEntry, f64)>> {
+        // FTS5's own BM25 score (negative; a larger magnitude is a stronger
+        // match). Map to a bounded, monotonically increasing (0, 1) score.
+        let mut fts_stmt = self.conn.prepare(
+            "SELECT memory_id, bm25(memories_fts) FROM memories_fts
+             WHERE memories_fts MATCH ?1 ORDER BY rank LIMIT ?2",
+        )?;
+        let hits: Vec<(String, f64)> = fts_stmt
+            .query_map(params![query, limit as i64], |row| {
+                let id: String = row.get(0)?;
+                let bm25_raw: f64 = row.get(1)?;
+                let strength = -bm25_raw;
+                Ok((id, strength / (1.0 + strength)))
+            })?
+            .collect::<std::result::Result<_, _>>()?;
+
+        let mut out = Vec::with_capacity(hits.len());
+        for (id_str, base_text_relevance) in hits {
+            let id = MemoryId::from(id_str);
+            let Some(entry) = self.get(&id)? else {
+                continue;
+            };
+            if entry.trust_score < TRUST_MIN_SEARCH
+                || entry.superseded_at.is_some()
+                || entry.lifecycle_state != LifecycleState::Active
+            {
+                continue;
+            }
+
+            let centrality = self.signal_factor(&id, SignalKind::Centrality)?;
+            let cluster = self.signal_factor(&id, SignalKind::Cluster)?;
+            let recency = self.signal_factor(&id, SignalKind::Recency)?;
+            let score = base_text_relevance * centrality * cluster * recency;
+
+            out.push((entry, score));
+        }
+
+        out.sort_by(|a, b| b.1.partial_cmp(&a.1).unwrap_or(std::cmp::Ordering::Equal));
         Ok(out)
     }
 
@@ -208,6 +248,197 @@ impl MemoryStore {
         vec![0.0f32; 256]
     }
 
+    // ── derived signals (MC-5) ───────────────────────────────────────────────
+
+    /// Write (overwrite) a derived ranking signal for `id`, stamped with the
+    /// current build's algorithm version and the current time (MC-5).
+    pub fn set_signal(&self, id: &MemoryId, kind: SignalKind, value: f64) -> Result<()> {
+        signal::write(&self.conn, id, kind, value, now_secs())
+    }
+
+    /// Read a derived signal's ranking factor for `id` — [`signal::NEUTRAL_FACTOR`]
+    /// when absent or version-stale (MC-5/MC-8), never an error.
+    pub fn signal_factor(&self, id: &MemoryId, kind: SignalKind) -> Result<f64> {
+        signal::factor(&self.conn, id, kind)
+    }
+
+    /// Remove every derived signal for `id` (e.g. before a MC-6 merge discards it).
+    pub fn clear_signals(&self, id: &MemoryId) -> Result<()> {
+        signal::clear(&self.conn, id)
+    }
+
+    // ── consolidation write path (MC-2/3/4/7/9/10) ───────────────────────────
+
+    /// Add a relationship/provenance edge (MC-3, additive-only — no way to
+    /// remove or update an edge through this API by design).
+    pub fn add_edge(&self, source: &MemoryId, target: &MemoryId, predicate: &str) -> Result<()> {
+        consolidate::add_edge(&self.conn, source, target, predicate, now_secs())
+    }
+
+    /// Every `(target, predicate)` edge whose source is `id`.
+    pub fn edges_from(&self, id: &MemoryId) -> Result<Vec<(MemoryId, String)>> {
+        consolidate::edges_from(&self.conn, id)
+    }
+
+    /// Recompute the `Centrality` derived signal from the MC-3 edge graph's
+    /// in-degree (the half of "recompute derived signals" `recompute_recency`
+    /// does not cover).
+    pub fn recompute_centrality(&self) -> Result<usize> {
+        consolidate::recompute_centrality(&self.conn, now_secs())
+    }
+
+    /// The routine consolidation write (MC-4): create or corroborate,
+    /// depending on whether an active consolidated item already matches
+    /// `candidate` after normalization.
+    pub fn consolidate(
+        &self,
+        candidate: MemoryEntry,
+        provenance: Option<&MemoryId>,
+        actor: &str,
+    ) -> Result<(MemoryId, ConsolidationAction)> {
+        consolidate::consolidate(&self.conn, candidate, provenance, actor, now_secs())
+    }
+
+    /// Explicit refine (MC-4): append `addition` to `target`'s body
+    /// (additive-only, MC-3), optimistic-concurrency guarded (MC-9) against
+    /// `expected_body` — what the caller read before deciding to refine.
+    pub fn refine(
+        &self,
+        target: &MemoryId,
+        expected_body: &str,
+        addition: &str,
+        provenance: Option<&MemoryId>,
+        actor: &str,
+    ) -> Result<()> {
+        consolidate::refine(
+            &self.conn,
+            target,
+            expected_body,
+            addition,
+            provenance,
+            actor,
+            now_secs(),
+        )
+    }
+
+    /// Explicit correct (MC-4): non-destructively supersede `target` with
+    /// `corrected`, transactionally (MC-9). Returns the new item's id.
+    pub fn correct(
+        &self,
+        target: &MemoryId,
+        corrected: MemoryEntry,
+        actor: &str,
+    ) -> Result<MemoryId> {
+        consolidate::correct(&self.conn, target, corrected, actor, now_secs())
+    }
+
+    /// Run the incremental consolidation pass (MC-2) over every `raw`/
+    /// `working` item past the checkpoint watermark. Advances the watermark
+    /// only over inputs that committed — a failed input retries next pass.
+    pub fn run_incremental_consolidation(
+        &self,
+        actor: &str,
+    ) -> Result<Vec<(MemoryId, ConsolidationAction)>> {
+        consolidate::run_incremental_pass(&self.conn, actor, now_secs())
+    }
+
+    /// Synthesize emergent topic summaries (MC-7) over the current MC-3 edge
+    /// graph. Returns the new summary items' ids.
+    pub fn synthesize_summaries(&self, actor: &str) -> Result<Vec<MemoryId>> {
+        consolidate::synthesize_summaries(&self.conn, actor, now_secs())
+    }
+
+    /// Advisory interest topics (MC-10) — bounded, deduplicated, read-only.
+    pub fn extract_interest_topics(&self, limit: usize) -> Result<Vec<InterestTopic>> {
+        consolidate::extract_interest_topics(&self.conn, limit)
+    }
+
+    // ── lifecycle transitions (MI-9) ─────────────────────────────────────────
+
+    /// Read `id`'s current lifecycle state. `None` when the item does not exist.
+    pub fn lifecycle_state(&self, id: &MemoryId) -> Result<Option<LifecycleState>> {
+        let raw: Option<String> = self
+            .conn
+            .query_row(
+                "SELECT lifecycle_state FROM memories WHERE id = ?1",
+                params![id.as_str()],
+                |row| row.get(0),
+            )
+            .optional()?;
+        Ok(raw.and_then(|s| LifecycleState::from_db_str(&s)))
+    }
+
+    // ── corpus maintenance (MC-6) ────────────────────────────────────────────
+
+    /// Recompute the `Recency` derived signal for every active item
+    /// (step 1 of the maintenance pass; centrality/cluster need the MC-3
+    /// edge graph and land with T-14B03). Returns the count updated.
+    pub fn recompute_recency(&self) -> Result<usize> {
+        maintenance::recompute_recency(&self.conn, now_secs())
+    }
+
+    /// Archive active items whose cushioned recency has decayed past the
+    /// threshold (auto-applies — reversible, MC-6). Returns the archived ids.
+    pub fn sweep_archive(&self, actor: &str) -> Result<Vec<MemoryId>> {
+        maintenance::sweep_archive(&self.conn, actor, now_secs())
+    }
+
+    /// Auto-thaw an archived item on touch (MC-6). No-op for any other state.
+    pub fn touch(&self, id: &MemoryId, actor: &str) -> Result<bool> {
+        maintenance::touch(&self.conn, id, actor, now_secs())
+    }
+
+    /// Flag active items whose content crosses the overload threshold
+    /// (MC-6 split candidates). Does not split them — that needs a
+    /// generator; flagging is the complete no-generator behavior.
+    pub fn flag_split_candidates(&self) -> Result<Vec<MemoryId>> {
+        maintenance::flag_split_candidates(&self.conn)
+    }
+
+    /// Find pairs of active items that are exact duplicates after
+    /// normalization (MC-6 merge candidates, elevated-gate stand-in).
+    pub fn find_merge_candidates(&self) -> Result<Vec<(MemoryId, MemoryId)>> {
+        maintenance::find_merge_candidates(&self.conn)
+    }
+
+    /// Merge `discard` into `keep`: re-point chain edges, drop derived
+    /// signals, hard-delete `discard`, all transactionally (MC-6/MC-9).
+    pub fn merge_pair(&self, keep: &MemoryId, discard: &MemoryId, actor: &str) -> Result<()> {
+        maintenance::merge_pair(&self.conn, keep, discard, actor, now_secs())
+    }
+
+    /// Transition `id` to `new_state`, recording an append-only audit row
+    /// (actor, instant, old→new) so "who shelved this and when" is
+    /// answerable (MI-9). Returns the prior state, or `Ok(None)` if `id`
+    /// does not exist (no transition, no audit row).
+    pub fn set_lifecycle_state(
+        &self,
+        id: &MemoryId,
+        new_state: LifecycleState,
+        actor: &str,
+    ) -> Result<Option<LifecycleState>> {
+        let Some(old_state) = self.lifecycle_state(id)? else {
+            return Ok(None);
+        };
+
+        self.conn.execute(
+            "UPDATE memories SET lifecycle_state = ?1 WHERE id = ?2",
+            params![new_state.as_str(), id.as_str()],
+        )?;
+        self.conn.execute(
+            "INSERT INTO lifecycle_audit (item_id, actor, instant, old_state, new_state)
+             VALUES (?1, ?2, ?3, ?4, ?5)",
+            params![
+                id.as_str(),
+                actor,
+                now_secs() as i64,
+                old_state.as_str(),
+                new_state.as_str(),
+            ],
+        )?;
+        Ok(Some(old_state))
+    }
+
     /// Every stored entry, unfiltered. Backs `UserDataStore::export` (DN-7:
     /// always able to come home) — unlike `search_fts`, this applies no
     /// trust-score gate, since export is an operator/backup action, not a
@@ -215,7 +446,8 @@ impl MemoryStore {
     pub fn export_all(&self) -> Result<Vec<MemoryEntry>> {
         let mut stmt = self.conn.prepare(
             "SELECT id, kind, source, title, body, confidence, trust_score,
-                    valid_at, created_at, superseded_at, workspace_id, verification_state
+                    valid_at, created_at, superseded_at, workspace_id, verification_state,
+                    depth, lifecycle_state
              FROM memories",
         )?;
         let entries = stmt
@@ -339,7 +571,7 @@ impl cronus_contract::UserDataStore for MemoryStore {
 
 // ── schema ────────────────────────────────────────────────────────────────────
 
-fn setup(conn: &Connection) -> Result<()> {
+pub(crate) fn setup(conn: &Connection) -> Result<()> {
     conn.execute_batch("PRAGMA journal_mode = WAL")?;
     conn.execute_batch("PRAGMA foreign_keys = ON")?;
     conn.execute_batch(
@@ -355,7 +587,9 @@ fn setup(conn: &Connection) -> Result<()> {
             created_at         INTEGER NOT NULL,
             superseded_at      INTEGER,
             workspace_id       TEXT,
-            verification_state TEXT NOT NULL DEFAULT 'Untested'
+            verification_state TEXT NOT NULL DEFAULT 'Untested',
+            depth              TEXT NOT NULL DEFAULT 'Consolidated',
+            lifecycle_state    TEXT NOT NULL DEFAULT 'Active'
         )",
     )?;
     // Standalone FTS5 table — synced manually in add().
@@ -375,12 +609,62 @@ fn setup(conn: &Connection) -> Result<()> {
             PRIMARY KEY (source_id, target_id)
         )",
     )?;
+    // MI-9: append-only audit of every lifecycle-state transition.
+    conn.execute_batch(
+        "CREATE TABLE IF NOT EXISTS lifecycle_audit (
+            item_id    TEXT    NOT NULL,
+            actor      TEXT    NOT NULL,
+            instant    INTEGER NOT NULL,
+            old_state  TEXT    NOT NULL,
+            new_state  TEXT    NOT NULL
+        )",
+    )?;
+    signal::migrate(conn)?;
+    super::maintenance::migrate(conn)?;
+    super::consolidate::migrate(conn)?;
     Ok(())
+}
+
+// ── shared insert (also used by the consolidation write path) ────────────────
+
+/// Raw insert: writes `memories` + syncs the FTS index. No auto-chain — that
+/// is a session-continuation concept `MemoryStore::add` layers on top;
+/// consolidation-authored items (T-14B03) are not session activity.
+pub(crate) fn insert(conn: &Connection, entry: MemoryEntry) -> Result<MemoryId> {
+    let id = entry.id.clone();
+    conn.execute(
+        "INSERT INTO memories
+         (id, kind, source, title, body, confidence, trust_score,
+          valid_at, created_at, superseded_at, workspace_id, verification_state,
+          depth, lifecycle_state)
+         VALUES (?1,?2,?3,?4,?5,?6,?7,?8,?9,?10,?11,?12,?13,?14)",
+        params![
+            id.as_str(),
+            entry.kind.as_str(),
+            entry.source.as_str(),
+            &entry.title,
+            &entry.body,
+            entry.confidence,
+            entry.trust_score,
+            entry.valid_at as i64,
+            entry.created_at as i64,
+            entry.superseded_at.map(|v| v as i64),
+            entry.workspace_id.as_deref(),
+            entry.verification_state.as_str(),
+            entry.depth.as_str(),
+            entry.lifecycle_state.as_str(),
+        ],
+    )?;
+    conn.execute(
+        "INSERT INTO memories_fts(memory_id, title, body) VALUES (?1, ?2, ?3)",
+        params![id.as_str(), &entry.title, &entry.body],
+    )?;
+    Ok(id)
 }
 
 // ── row mapper ────────────────────────────────────────────────────────────────
 
-fn map_row(row: &rusqlite::Row<'_>) -> rusqlite::Result<MemoryEntry> {
+pub(crate) fn map_row(row: &rusqlite::Row<'_>) -> rusqlite::Result<MemoryEntry> {
     let id: String = row.get(0)?;
     let kind_str: String = row.get(1)?;
     let src_str: String = row.get(2)?;
@@ -388,6 +672,8 @@ fn map_row(row: &rusqlite::Row<'_>) -> rusqlite::Result<MemoryEntry> {
     let created_at: i64 = row.get(8)?;
     let superseded_at: Option<i64> = row.get(9)?;
     let vs_str: String = row.get(11)?;
+    let depth_str: String = row.get(12)?;
+    let lifecycle_str: String = row.get(13)?;
 
     Ok(MemoryEntry {
         id: MemoryId::from(id),
@@ -403,5 +689,8 @@ fn map_row(row: &rusqlite::Row<'_>) -> rusqlite::Result<MemoryEntry> {
         workspace_id: row.get(10)?,
         verification_state: VerificationState::from_db_str(&vs_str)
             .unwrap_or(VerificationState::Untested),
+        depth: MemoryDepth::from_db_str(&depth_str).unwrap_or(MemoryDepth::Consolidated),
+        lifecycle_state: LifecycleState::from_db_str(&lifecycle_str)
+            .unwrap_or(LifecycleState::Active),
     })
 }

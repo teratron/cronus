@@ -1,7 +1,7 @@
 use cronus_contract::{MemorySearch, UserDataStore};
 use cronus_store_local::memory::{
-    CodeChangeType, MemoryEntry, MemoryKind, MemorySource, MemoryStore, SuggestedAction,
-    TrustUpdate, VerificationState,
+    CodeChangeType, LifecycleState, MemoryDepth, MemoryEntry, MemoryKind, MemorySource,
+    MemoryStore, SignalKind, SuggestedAction, TrustUpdate, VerificationState,
     chain::ChainKind,
     trust::{TRUST_MIN_SEARCH, TRUST_NEGATIVE_DELTA, TRUST_POSITIVE_DELTA},
 };
@@ -264,4 +264,265 @@ fn memory_search_trait_object_resolves_to_the_same_store() {
     let as_trait: &dyn MemorySearch = &s;
     let results = as_trait.search_fts("findable", 10).unwrap();
     assert_eq!(results.len(), 1);
+}
+
+// ── MC-1: processing-depth tiers ────────────────────────────────────────────
+
+#[test]
+fn depth_defaults_to_consolidated_and_round_trips() {
+    let s = store();
+    let id = s.add(entry("depth default", "body")).unwrap();
+    let got = s.get(&id).unwrap().unwrap();
+    assert_eq!(got.depth, MemoryDepth::Consolidated);
+}
+
+#[test]
+fn explicit_raw_depth_round_trips() {
+    let s = store();
+    let raw = entry("raw evidence", "verbatim transcript").with_depth(MemoryDepth::Raw);
+    let id = s.add(raw).unwrap();
+    let got = s.get(&id).unwrap().unwrap();
+    assert_eq!(got.depth, MemoryDepth::Raw);
+}
+
+// ── MI-9: reversible lifecycle states ───────────────────────────────────────
+
+#[test]
+fn lifecycle_state_defaults_to_active() {
+    let s = store();
+    let id = s.add(entry("lifecycle default", "body")).unwrap();
+    let got = s.get(&id).unwrap().unwrap();
+    assert_eq!(got.lifecycle_state, LifecycleState::Active);
+    assert_eq!(
+        s.lifecycle_state(&id).unwrap(),
+        Some(LifecycleState::Active)
+    );
+}
+
+#[test]
+fn set_lifecycle_state_transitions_and_returns_prior_state() {
+    let s = store();
+    let id = s.add(entry("shelve me", "body")).unwrap();
+
+    let prior = s
+        .set_lifecycle_state(&id, LifecycleState::Archived, "test-actor")
+        .unwrap();
+    assert_eq!(prior, Some(LifecycleState::Active));
+    assert_eq!(
+        s.lifecycle_state(&id).unwrap(),
+        Some(LifecycleState::Archived)
+    );
+}
+
+#[test]
+fn set_lifecycle_state_on_unknown_id_is_a_noop_returning_none() {
+    let s = store();
+    use cronus_store_local::memory::MemoryId;
+    let fake = MemoryId::from("nonexistent".to_string());
+    let prior = s
+        .set_lifecycle_state(&fake, LifecycleState::Paused, "test-actor")
+        .unwrap();
+    assert_eq!(prior, None);
+}
+
+#[test]
+fn lifecycle_transition_is_audited() {
+    let s = store();
+    let id = s.add(entry("audited", "body")).unwrap();
+    s.set_lifecycle_state(&id, LifecycleState::Paused, "user:alice")
+        .unwrap();
+    s.set_lifecycle_state(&id, LifecycleState::Active, "user:alice")
+        .unwrap();
+
+    // No public audit-read API yet (T-14A02 is schema + transitions only;
+    // a query surface is a later task) — assert indirectly: two transitions
+    // must have landed without error, and the final state reflects the
+    // second one, proving both audit inserts succeeded (a failed insert on
+    // the append-only table would have propagated as an Err).
+    assert_eq!(
+        s.lifecycle_state(&id).unwrap(),
+        Some(LifecycleState::Active)
+    );
+}
+
+#[test]
+fn recall_defaults_to_active_excluding_paused_and_archived() {
+    let s = store();
+    let active = s.add(entry("active item", "findable text")).unwrap();
+    let paused = s.add(entry("paused item", "findable text")).unwrap();
+    let archived = s.add(entry("archived item", "findable text")).unwrap();
+
+    s.set_lifecycle_state(&paused, LifecycleState::Paused, "test")
+        .unwrap();
+    s.set_lifecycle_state(&archived, LifecycleState::Archived, "test")
+        .unwrap();
+
+    let results = s.search_fts("findable", 10).unwrap();
+    let ids: Vec<_> = results.iter().map(|e| e.id.clone()).collect();
+    assert!(ids.contains(&active), "active item must be recalled");
+    assert!(
+        !ids.contains(&paused),
+        "paused item must not appear in default recall"
+    );
+    assert!(
+        !ids.contains(&archived),
+        "archived item must not appear in default recall"
+    );
+}
+
+// ── MC-8: multiplicative offline-precomputed ranking ────────────────────────
+
+#[test]
+fn ranked_recall_on_cold_signals_matches_plain_text_relevance_order() {
+    let s = store();
+    s.add(entry("strong match apple", "apple apple apple fruit"))
+        .unwrap();
+    s.add(entry("weak match apple", "apple mentioned once"))
+        .unwrap();
+
+    // No signals computed anywhere — every derived factor is neutral (1.0),
+    // so the fused score is exactly the base text relevance: cold-start
+    // ranks purely on text strength, per MC-5/MC-8.
+    let ranked = s.search_ranked("apple", 10).unwrap();
+    assert_eq!(ranked.len(), 2);
+    assert!(
+        ranked[0].0.title == "strong match apple",
+        "the stronger textual match must rank first with no derived signals"
+    );
+    assert!(
+        ranked[0].1 > ranked[1].1,
+        "fused scores must be strictly ordered by text relevance alone"
+    );
+}
+
+#[test]
+fn a_near_zero_derived_factor_vetoes_a_strong_text_match() {
+    let s = store();
+    let strong = s
+        .add(entry("dominant apple", "apple apple apple apple fruit"))
+        .unwrap();
+    let weak = s.add(entry("faint apple", "apple mentioned")).unwrap();
+
+    // Without signals, `strong` would rank first (proven above). Crush its
+    // centrality factor near zero — multiplicative fusion must let that
+    // veto the otherwise-dominant text match, not just nudge it down.
+    s.set_signal(&strong, SignalKind::Centrality, 0.001)
+        .unwrap();
+
+    let ranked = s.search_ranked("apple", 10).unwrap();
+    let strong_score = ranked.iter().find(|(e, _)| e.id == strong).unwrap().1;
+    let weak_score = ranked.iter().find(|(e, _)| e.id == weak).unwrap().1;
+    assert!(
+        weak_score > strong_score,
+        "a near-zero derived factor must veto a stronger text match, not average it away"
+    );
+}
+
+#[test]
+fn ranked_recall_excludes_low_trust_superseded_and_inactive_items() {
+    let s = store();
+    let mut low_trust = entry("low trust rankme", "rankme content");
+    low_trust.trust_score = 0.01;
+    s.add(low_trust).unwrap();
+
+    let now = std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .unwrap()
+        .as_secs();
+    let mut superseded = entry("superseded rankme", "rankme content");
+    superseded.superseded_at = Some(now);
+    s.add(superseded).unwrap();
+
+    let paused = s.add(entry("paused rankme", "rankme content")).unwrap();
+    s.set_lifecycle_state(&paused, LifecycleState::Paused, "test")
+        .unwrap();
+
+    let active = s.add(entry("active rankme", "rankme content")).unwrap();
+
+    let ranked = s.search_ranked("rankme", 10).unwrap();
+    assert_eq!(
+        ranked.len(),
+        1,
+        "only the active, trusted, non-superseded item ranks"
+    );
+    assert_eq!(ranked[0].0.id, active);
+}
+
+#[test]
+fn ranked_recall_returns_empty_for_no_match_not_an_error() {
+    let s = store();
+    s.add(entry("something else entirely", "unrelated content"))
+        .unwrap();
+    let ranked = s.search_ranked("xyz_nonexistent_term", 10).unwrap();
+    assert!(ranked.is_empty());
+}
+
+// ── MC-6: corpus maintenance, exercised through MemoryStore ────────────────
+
+#[test]
+fn memory_store_recompute_recency_and_sweep_archive_wire_through() {
+    let s = store();
+    let id = s.add(entry("old memory", "body")).unwrap();
+    s.recompute_recency().unwrap();
+    // A brand-new item's recency is fresh — nothing archives on this pass.
+    let archived = s.sweep_archive("test").unwrap();
+    assert!(!archived.contains(&id));
+}
+
+#[test]
+fn memory_store_touch_wires_through_to_the_lifecycle_transition() {
+    let s = store();
+    let id = s.add(entry("shelved", "body")).unwrap();
+    s.set_lifecycle_state(&id, LifecycleState::Archived, "test")
+        .unwrap();
+
+    let thawed = s.touch(&id, "test").unwrap();
+    assert!(thawed);
+    assert_eq!(
+        s.lifecycle_state(&id).unwrap(),
+        Some(LifecycleState::Active)
+    );
+}
+
+#[test]
+fn memory_store_merge_candidates_and_merge_pair_wire_through() {
+    let s = store();
+    let a = s.add(entry("dup a", "identical content")).unwrap();
+    let b = s.add(entry("dup b", "identical content")).unwrap();
+
+    let candidates = s.find_merge_candidates().unwrap();
+    assert_eq!(candidates.len(), 1);
+    let (keep, discard) = candidates[0].clone();
+    assert!((keep == a && discard == b) || (keep == b && discard == a));
+
+    s.merge_pair(&keep, &discard, "test").unwrap();
+    assert!(s.get(&discard).unwrap().is_none(), "discard must be gone");
+    assert!(s.get(&keep).unwrap().is_some(), "keep must remain");
+}
+
+#[test]
+fn memory_store_flag_split_candidates_wires_through() {
+    let s = store();
+    let long_body = "x".repeat(5_000);
+    s.add(entry("huge", &long_body)).unwrap();
+    s.add(entry("tiny", "short")).unwrap();
+
+    let candidates = s.flag_split_candidates().unwrap();
+    assert_eq!(candidates.len(), 1);
+}
+
+// ── MC-5: derived-signal store, exercised through MemoryStore ──────────────
+
+#[test]
+fn memory_store_signal_roundtrip_and_neutral_default() {
+    let s = store();
+    let id = s.add(entry("ranked item", "body")).unwrap();
+
+    assert_eq!(s.signal_factor(&id, SignalKind::Centrality).unwrap(), 1.0);
+
+    s.set_signal(&id, SignalKind::Centrality, 0.42).unwrap();
+    assert_eq!(s.signal_factor(&id, SignalKind::Centrality).unwrap(), 0.42);
+
+    s.clear_signals(&id).unwrap();
+    assert_eq!(s.signal_factor(&id, SignalKind::Centrality).unwrap(), 1.0);
 }
