@@ -1,7 +1,7 @@
 # Memory Intelligence (Local Realization)
 
 **Version:** 1.0.0
-**Status:** RFC
+**Status:** Stable
 **Layer:** implementation
 **Implements:** l1-memory-intelligence.md
 
@@ -174,4 +174,5 @@ The reuse projection wraps a costly action in a recall-before-acting gate; the g
 
 | Version | Date | Notes |
 | --- | --- | --- |
+| 1.0.0 (Stable) | 2026-07-11 | Promoted RFC→Stable via Post-Update Review (spec-critic + prompt-engineer PASS), same session as authoring — the review found no blocker: it composes Stable specs (`l2-memory-store` §4.2/4.3/4.4/4.14/4.15, KB-6, CV-3/CV-4) without contradicting any, and discharges its two L1-deferred parameters concretely. Content unchanged from the initial cut (status-only promotion). Stable = design agreed; concrete SQL/algorithm choices validated during implementation. Depends on `l2-memory-consolidation` (Stable) for MC-8 signals. |
 | 1.0.0 | 2026-07-11 | Initial RFC — local realization of MI-1…MI-13 as the caller-facing query surface behind the `UserDataStore` seam, composing `l2-memory-store` (§4.2/4.3/4.4/4.6/4.14/4.15) and `l2-memory-consolidation` (MC-8 signals) with no new engine. Realizes the `answer` grounded projection (KB-6 + CV-3/CV-4, extractive degrade), the three temporal modes over §4.14, immediate recall-visibility, conflict routing, the intelligence digest, the capture policy, procedural distillation, the closed structured predicate compiled to SQL, reversible lifecycle states with the prune guard, capture-time normalization, capture directives, raw/inferred modes, and gated experience reuse. **Discharges the two L1-deferred parameters**: the MI-4 ambiguity threshold (objective confidence/trust-gap + recency-dominance rule, §4.3) and the MI-5 digest cadence (per-session-close + daily floor, opt-in per office, §4.4). Kept a separate L2 for backend-swappability and small blast radius (parallels l2-memory-consolidation). |
