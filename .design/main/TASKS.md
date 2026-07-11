@@ -1,15 +1,15 @@
 # Master Task Index (Registry)
 
-**Version:** 1.19.1
+**Version:** 1.19.2
 **Generated:** 2026-07-11
-**Based on:** .design/main/PLAN.md v2.15.1
+**Based on:** .design/main/PLAN.md v2.16.0
 **Based on RULES:** .design/RULES.md v1.5.0
 **Execution Mode:** Parallel
 **Status:** Active
 
 ## Overview
 
-Tactical registry of all phases and their statuses, ordered by the growth metaphor (seed → stem → leaf → flower). Atomic checklists live in `tasks/phase-{N}.md`. Build phases 1–13 are Done. **No phase is currently open** — every currently-Stable spec is implemented; the ten Backlog items are all RFC (9) or Draft (1) and cannot be planned until reviewed to Stable via `/magic.spec` (RULES §2). Deterministic next target (DA-3): `l2-service-activation`, unblocked by Phase 13's crate seam.
+Tactical registry of all phases and their statuses, ordered by the growth metaphor (seed → stem → leaf → flower). Atomic checklists live in `tasks/phase-{N}.md`. Build phases 1–13 are Done. **No phase is currently open** — every currently-Stable spec is implemented. The memory-cluster L1s reached Stable (Phase 0) and their two L2 realizations (`l2-memory-consolidation`, `l2-memory-intelligence`) are authored and parked `RFC` in the Backlog; a memory-implementation phase opens only once those L2s reach Stable via `/magic.spec` (RULES §2). Deterministic next target (DA-3): review `l2-memory-consolidation` (the lower layer) → `l2-memory-intelligence`.
 
 ## Active Phases
 
@@ -32,5 +32,5 @@ Tactical registry of all phases and their statuses, ordered by the growth metaph
 
 ## Meta Information
 
-- **Last Updated**: 2026-07-11 (v1.19.1 milestone sync: **Phase 13 — Core Decomposition complete and archived** (8/8 tasks Done; `l2-crate-topology` + `l2-source-layout` 1.2.0 realized — five-crate topology, INV-8 compiler-enforced, CI boundary guard live). All thirteen phases Done; every Stable spec implemented; no phase open. Pre-flight clean (ok:true, no drift). Pre-Planning Stabilization: 0 promoted — sole Draft `l2-loop-runner` stays Draft (RFC parent `l1-loop-governance`, layer constraint). Ten Backlog items all RFC/Draft — advance only via `/magic.spec`. DA-3 next target: `l2-service-activation` (direct downstream of Phase 13's crate seam). PLAN v2.15.1. Prior: v2.15.0 opened Phase 13 from the core-decomposition wave; v2.14.1 milestone — all 12 build phases Done)
+- **Last Updated**: 2026-07-11 (v1.19.2 plan-sync: **memory wave** — the memory-intelligence + memory-consolidation L1s reached Stable and moved Backlog→Phase 0; their two L2 realizations (`l2-memory-consolidation`, `l2-memory-intelligence`) were authored `RFC` and parked in Backlog. No new phase opened (L2s need RFC→Stable first). PLAN v2.16.0 / INDEX v1.0.100. Prior: v1.19.1 milestone sync: **Phase 13 — Core Decomposition complete and archived** (8/8 tasks Done; `l2-crate-topology` + `l2-source-layout` 1.2.0 realized — five-crate topology, INV-8 compiler-enforced, CI boundary guard live). All thirteen phases Done; every Stable spec implemented; no phase open. Pre-flight clean (ok:true, no drift). Pre-Planning Stabilization: 0 promoted — sole Draft `l2-loop-runner` stays Draft (RFC parent `l1-loop-governance`, layer constraint). Ten Backlog items all RFC/Draft — advance only via `/magic.spec`. DA-3 next target: `l2-service-activation` (direct downstream of Phase 13's crate seam). PLAN v2.15.1. Prior: v2.15.0 opened Phase 13 from the core-decomposition wave; v2.14.1 milestone — all 12 build phases Done)
 - **Maintainer**: Core Team
