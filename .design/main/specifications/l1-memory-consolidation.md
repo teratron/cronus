@@ -1,7 +1,7 @@
 # Memory Consolidation
 
-**Version:** 0.1.0
-**Status:** RFC
+**Version:** 1.0.0
+**Status:** Stable
 **Layer:** concept
 
 ## Overview
@@ -207,6 +207,7 @@ The workflow runtime carries pending storage/policy extension seams (`l1-nodus-p
 | Version | Change |
 | --- | --- |
 | 0.1.0 | Initial RFC — memory consolidation & corpus-maintenance layer (MC-1…MC-10): processing-depth tiers, scheduled incremental idempotent consolidation, write-time additive-only relationship binding, consolidation action algebra, fact-vs-derived-signal separation, corpus-maintenance action set, emergent topic-cluster abstraction, multiplicative offline-precomputed recall ranking, co-edit write safety, and advisory interest extraction; Ideas-to-Adopt ledger and Nodus Relevance |
+| 1.0.0 | Promoted RFC→Stable via Post-Update Review (spec-critic + prompt-engineer PASS). No content change — MC-1…MC-10 unchanged; the layer is technology-neutral, complete (degradation, cold-start, co-edit safety, anti-cycle guards all covered), and composes rather than contradicts the Stable substrate (refines MEM-6/MEM-7 additively). L1 concept locked; the L2 implementation (extending l2-memory-store with the consolidation / maintenance / derived-signal layer) may now be authored. |
 
 ## 7. Drawbacks & Alternatives
 

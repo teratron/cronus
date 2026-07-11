@@ -1,7 +1,7 @@
 # Memory Intelligence
 
-**Version:** 0.4.0
-**Status:** RFC
+**Version:** 1.0.0
+**Status:** Stable
 **Layer:** concept
 
 ## Overview
@@ -115,7 +115,7 @@ Routing rule:
 - **Unambiguous** (a strict newer statement of the same fact, or an exact duplicate) → auto-supersede/de-dupe, recorded non-destructively (MEM-6), `status = auto-resolved`.
 - **Ambiguous** (a genuine semantic disagreement where recency does not settle truth) → emit to a structured, inspectable **conflict report** with its recommendation; `status = awaiting-adjudication`. A human or a delegated agent picks from the closed recommendation set; the pick is then applied through the normal supersede path.
 
-The report is produced on the same cadence as the digest (§4.4) and only compares **new-versus-existing** knowledge — it never reports old-versus-old churn. <!-- TBD: the ambiguity threshold that splits auto-supersede from surfaced-for-adjudication (confidence gap? trust gap? explicit recency dominance?) -->
+The report is produced on the same cadence as the digest (§4.4) and only compares **new-versus-existing** knowledge — it never reports old-versus-old churn. The specific threshold that splits auto-supersede from surfaced-for-adjudication — whether it keys on a confidence gap, a trust gap, or explicit recency dominance — is a realization-tuning decision deferred to L2 (`l2-memory-store`): pinning a numeric cutoff at this layer would violate L1 technology-neutrality. This spec fixes only the routing *rule* (unambiguous → auto-supersede; ambiguous → surface), never the cutoff value.
 
 ### 4.4 Periodic intelligence digest (MI-5)
 
@@ -125,7 +125,7 @@ A scheduled, read-only job (fired by the scheduler model) distills a window of m
 - **Analytics** — structured, chart-ready aggregates rendered by the dashboard: activity over time, memory-type distribution, and confidence/trust distribution across the window.
 - **Conflict report** — the §4.3 findings for the window.
 
-The digest is budget-bounded, derived only from stored memory, and may itself be stored as a `context`/`event` memory so future recall can find "what happened that week." It mutates nothing it reads. <!-- TBD: default cadence (daily vs per-session-close vs office-idle) and whether the digest is opt-in per office -->
+The digest is budget-bounded, derived only from stored memory, and may itself be stored as a `context`/`event` memory so future recall can find "what happened that week." It mutates nothing it reads. The default cadence (daily / per-session-close / office-idle) and whether the digest is opt-in per office are configuration-policy decisions deferred to L2 and the office-config surface; MI-5 fixes only that the digest is scheduled, bounded, read-only, and memory-derived — not the specific schedule.
 
 ### 4.5 Capture discipline (MI-6)
 
@@ -311,6 +311,7 @@ The workflow-language runtime carries a pending storage/knowledge extension seam
 | Version | Change |
 | --- | --- |
 | 0.4.0 | Added MI-13 (experience reuse — recall-before-acting, gated reuse): the active counterpart to MI-7 capture — before a costly/repeatable action, query typed (`success`/`failure`/`insight`), quality-scored prior experiences (MI-2/MI-8 filters); a high-quality prior success MAY be reused directly (short-circuit) only when a similarity+score+freshness gate passes, a failure surfaces as an avoid-signal, an insight injects as guidance; every outcome captured back typed+scored (MI-6/MI-7). Four guards: gated reuse, independent read/write, reused-not-re-derived attribution (MI-1), retained authority gate (SEC-9/SEC-10). New design §4.12 + a §6 nodus row (reuse = `RUN(@macro)`, gating host-side on StorageProvider — no nodus invariant). Case-based reasoning over the memory substrate. Stays RFC (additive). |
+| 1.0.0 | Promoted RFC→Stable via Post-Update Review (spec-critic + prompt-engineer PASS). Resolved the two open realization-tuning TBDs by deferring them explicitly to L2 rather than pinning impl values at L1: the conflict-adjudication ambiguity threshold (§4.3) and the intelligence-digest default cadence / per-office opt-in (§4.4, §7) are L2 / office-config decisions, not L1 invariants — the invariants (MI-4, MI-5) fix only the mechanism and routing, which is L1-pure. MI-1…MI-13 otherwise unchanged. L1 concept locked; L2 implementation (the active query surface over l2-memory-store) may now be authored. |
 | 0.3.1 | Linked the new sibling layer `l1-memory-consolidation` (MC-1…MC-10) in Related Specifications: it precomputes recall's ranking signals (MC-8), owns the write-time consolidation algebra (MC-4) upstream of MI-4 adjudication, and maintains the archive lifecycle input MI-9 exposes. No invariant change. |
 | 0.3.0 | Added MI-9 (reversible lifecycle states active/paused/archived), MI-10 (capture-time temporal normalization), MI-11 (caller capture directives include/exclude/custom-instructions), and MI-12 (raw vs inferred capture modes); extended MI-6 with a subject-of-memory lens (about-user vs about-agent-self); added design §4.8–§4.11; extended the Ideas-to-Adopt ledger (lifecycle/normalization/directives/raw-mode adopted; cross-agent ACL + access log, open-vocabulary auto-categories, and declarative retention policy dispositioned as refinement candidates with their correct substrate/security home) and Nodus Relevance |
 | 0.2.0 | Added MI-7 (procedural distillation — end-of-run trajectory-to-memory) and MI-8 (structured filter predicate); extended MI-6 with actor attribution, caller-declared explicit expiry, and capture-time cross-reference; extended the Ideas-to-Adopt ledger and Nodus Relevance with the newly evaluated mechanics |
@@ -319,7 +320,7 @@ The workflow-language runtime carries a pending storage/knowledge extension seam
 ## 7. Drawbacks & Alternatives
 
 - **Answer latency:** grounded synthesis + verification costs more than a raw recall. Mitigated by making `answer` an explicit sibling operation — callers who only need hits still call `recall`; the extractive-degrade path keeps `answer` usable with no generator.
-- **Digest cost:** periodic generation consumes budget. Mitigated by the scheduler's existing budgeting and by making the digest opt-in per office. <!-- TBD: cadence default (see §4.4) -->
+- **Digest cost:** periodic generation consumes budget. Mitigated by the scheduler's existing budgeting and by making the digest opt-in per office (the specific cadence default is an L2 / office-config decision, per §4.4).
 - **Surfacing fatigue:** if the ambiguity threshold (§4.3) is too low, every minor update becomes an adjudication prompt. Mitigated by biasing toward auto-supersede for recency-dominated updates and reserving surfacing for genuine semantic disagreement.
 - **Alternative — leave `answer` to each caller:** rejected; it reproduces grounding/refusal logic inconsistently and is the exact "passive infrastructure" failure this spec exists to remove.
 - **Alternative — a separate memory-intelligence engine:** rejected; every operation here composes an existing engine, and a parallel engine would fork grounding/verification/scheduling logic.
