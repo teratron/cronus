@@ -39,6 +39,7 @@
 - <https://github.com/stablyai/orca>
 - <https://github.com/nexu-io/open-design>
 - <https://github.com/linear/linear>
+- <https://github.com/nextlevelbuilder/goclaw>
 
 ## Spec-Driven Development
 
@@ -90,6 +91,10 @@
 - <https://github.com/snyk/agent-scan>
 - <https://github.com/karpathy/autoresearch>
 - <https://github.com/openai/tiktoken>
+- <https://github.com/modelcontextprotocol/rust-sdk>
+- <https://github.com/modelcontextprotocol/typescript-sdk>
+- <https://github.com/nextlevelbuilder/ui-ux-pro-max-skill>
+- <https://github.com/upstash/context7>
 
 ## Harness
 
