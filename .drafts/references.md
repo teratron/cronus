@@ -64,6 +64,7 @@
 - <https://github.com/tinyhumansai/tinyjuice>
 - <https://github.com/tinyhumansai/tinycortex>
 - <https://github.com/awrshift/claude-memory-kit>
+- <https://github.com/DeusData/codebase-memory-mcp>
 
 ## Tools
 
