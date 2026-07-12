@@ -33,18 +33,31 @@ describe("navigation model", () => {
     expect(SIDEBAR_TABS[0]).toBe("chat");
     expect(SIDEBAR_TABS[SIDEBAR_TABS.length - 1]).toBe("settings");
     expect(isCanonicalOrder(SIDEBAR_TABS)).toBe(true);
-    const reordered = [...SIDEBAR_TABS].reverse();
+    const reordered = [
+      ...SIDEBAR_TABS,
+    ].reverse();
     expect(isCanonicalOrder(reordered)).toBe(false);
   });
 
   it("keeps the canonical set intact below pinned shortcuts (NV-1)", () => {
-    const { pinned, canonical } = composeSidebar(["kanban", "memory"]);
-    expect(pinned).toEqual(["kanban", "memory"]);
+    const { pinned, canonical } = composeSidebar([
+      "kanban",
+      "memory",
+    ]);
+    expect(pinned).toEqual([
+      "kanban",
+      "memory",
+    ]);
     expect(isCanonicalOrder(canonical)).toBe(true);
   });
 
   it("enforces strict four-layer nesting (NV-6)", () => {
-    expect(NAV_LAYERS).toEqual(["building", "floor", "subsystem", "mechanism"]);
+    expect(NAV_LAYERS).toEqual([
+      "building",
+      "floor",
+      "subsystem",
+      "mechanism",
+    ]);
     expect(isChildLayer("building", "floor")).toBe(true);
     expect(isChildLayer("floor", "subsystem")).toBe(true);
     // Non-adjacent or reversed layers are not parent-child.
@@ -61,7 +74,10 @@ describe("navigation model", () => {
   it("lazy-loads project floors only when active or running (NV-2)", () => {
     expect(shouldLoad(projectFloor, "home")).toBe(false); // inactive, idle
     expect(shouldLoad(projectFloor, "proj-1")).toBe(true); // active
-    const running = { ...projectFloor, hasRunningTask: true };
+    const running = {
+      ...projectFloor,
+      hasRunningTask: true,
+    };
     expect(shouldLoad(running, "home")).toBe(true); // running task monitored
   });
 

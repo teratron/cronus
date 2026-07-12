@@ -44,17 +44,11 @@ export function DashboardPanel({ projection, locale = "en" }: DashboardProps) {
           <h3>{msg("dashboard.building")}</h3>
           <dl>
             <dt>{msg("dashboard.offices")}</dt>
-            <dd data-testid="building-offices">
-              {projection.building.offices}
-            </dd>
+            <dd data-testid="building-offices">{projection.building.offices}</dd>
             <dt>{msg("dashboard.active-agents")}</dt>
-            <dd data-testid="building-active">
-              {projection.building.activeAgents}
-            </dd>
+            <dd data-testid="building-active">{projection.building.activeAgents}</dd>
             <dt>{msg("dashboard.cards")}</dt>
-            <dd data-testid="building-cards">
-              {projection.building.totalCards}
-            </dd>
+            <dd data-testid="building-cards">{projection.building.totalCards}</dd>
           </dl>
         </section>
       ) : null}

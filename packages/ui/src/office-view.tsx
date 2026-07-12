@@ -48,12 +48,7 @@ export interface OfficeViewProps {
   locale?: Locale;
 }
 
-export function OfficeViewPanel({
-  projection,
-  mode,
-  onInspect,
-  locale = "en",
-}: OfficeViewProps) {
+export function OfficeViewPanel({ projection, mode, onInspect, locale = "en" }: OfficeViewProps) {
   const msg = translator(locale);
   if (projection.agents.length === 0 && projection.tasks.length === 0) {
     return <p data-testid="office-empty">{msg("office.empty")}</p>;
@@ -81,9 +76,7 @@ function GraphRender({
           <li key={agent.id} data-testid={`node-agent-${agent.id}`}>
             <button type="button" onClick={() => onInspect?.(agent.id)}>
               {agent.name} · {agent.role}
-              {agent.active ? (
-                <span data-testid={`active-${agent.id}`}> ●</span>
-              ) : null}
+              {agent.active ? <span data-testid={`active-${agent.id}`}> ●</span> : null}
             </button>
           </li>
         ))}
@@ -97,16 +90,10 @@ function GraphRender({
       </ul>
       <ul>
         {reportingEdges.map((agent) => (
-          <li
-            key={agent.id}
-            data-testid={`edge-reports-${agent.id}-${agent.reportsTo}`}
-          />
+          <li key={agent.id} data-testid={`edge-reports-${agent.id}-${agent.reportsTo}`} />
         ))}
         {assignmentEdges.map((task) => (
-          <li
-            key={task.id}
-            data-testid={`edge-assigned-${task.id}-${task.assignee}`}
-          />
+          <li key={task.id} data-testid={`edge-assigned-${task.id}-${task.assignee}`} />
         ))}
       </ul>
     </div>
@@ -129,7 +116,9 @@ function FloorRender({
   }
   return (
     <div data-testid="office-floor">
-      {[...rooms.entries()].map(([room, seated]) => (
+      {[
+        ...rooms.entries(),
+      ].map(([room, seated]) => (
         <section key={room} data-testid={`room-${room}`}>
           <h3>{room}</h3>
           <ul>

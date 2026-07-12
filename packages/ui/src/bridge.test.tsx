@@ -27,8 +27,6 @@ describe("core bridge client", () => {
     const status = await client.status();
     render(<App status={status} />);
 
-    expect(screen.getByTestId("status")).toHaveTextContent(
-      "Cronus core 0.1.0 — bridged",
-    );
+    expect(screen.getByTestId("status")).toHaveTextContent("Cronus core 0.1.0 — bridged");
   });
 });

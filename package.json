@@ -10,7 +10,7 @@
   "scripts": {
     "build": "pnpm -r build",
     "test": "pnpm -r test",
-    "lint": "biome check .",
+    "lint": "biome check --write .",
     "format": "biome format --write .",
     "fallow": "fallow",
     "fallow:fix": "fallow fix",

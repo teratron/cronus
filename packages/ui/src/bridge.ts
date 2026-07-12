@@ -8,10 +8,7 @@
  */
 
 /** Shape of the shell's IPC invoke function (injected by the host app). */
-export type InvokeFn = <T>(
-  command: string,
-  args?: Record<string, unknown>,
-) => Promise<T>;
+export type InvokeFn = <T>(command: string, args?: Record<string, unknown>) => Promise<T>;
 
 /** Typed view of the core capability surface exposed over IPC. */
 export interface CoreClient {

@@ -23,12 +23,7 @@ export interface AppProps {
   systemPrefersDark?: boolean;
 }
 
-export function App({
-  status,
-  locale = "en",
-  theme = "system",
-  systemPrefersDark,
-}: AppProps) {
+export function App({ status, locale = "en", theme = "system", systemPrefersDark }: AppProps) {
   // View state only: which surface the user is looking at.
   const [active, setActive] = useState<SurfaceId>("office");
 

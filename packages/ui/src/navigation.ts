@@ -55,10 +55,7 @@ export const SIDEBAR_TABS: readonly SidebarTab[] = Object.freeze([
 
 /** Whether a candidate ordering matches the canonical order exactly (NV-1). */
 export function isCanonicalOrder(tabs: readonly SidebarTab[]): boolean {
-  return (
-    tabs.length === SIDEBAR_TABS.length &&
-    tabs.every((tab, i) => tab === SIDEBAR_TABS[i])
-  );
+  return tabs.length === SIDEBAR_TABS.length && tabs.every((tab, i) => tab === SIDEBAR_TABS[i]);
 }
 
 /**
@@ -69,7 +66,10 @@ export function composeSidebar(pinnedShortcuts: readonly SidebarTab[]): {
   pinned: readonly SidebarTab[];
   canonical: readonly SidebarTab[];
 } {
-  return { pinned: pinnedShortcuts, canonical: SIDEBAR_TABS };
+  return {
+    pinned: pinnedShortcuts,
+    canonical: SIDEBAR_TABS,
+  };
 }
 
 /** Whether `inner` is a valid direct child layer of `outer` (NV-6). */
@@ -112,11 +112,7 @@ export function shouldLoad(floor: Floor, activeFloorId: string): boolean {
  * floor with no running task. The home floor is never a candidate (NV-9).
  */
 export function isUnloadable(floor: Floor, activeFloorId: string): boolean {
-  return (
-    floor.kind === "project" &&
-    floor.id !== activeFloorId &&
-    !floor.hasRunningTask
-  );
+  return floor.kind === "project" && floor.id !== activeFloorId && !floor.hasRunningTask;
 }
 
 /** The two settings tiers (NV-4). */

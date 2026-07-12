@@ -10,11 +10,7 @@
 import { DashboardPanel, type DashboardProjection } from "./dashboard";
 import type { MessageKey } from "./i18n";
 import { type Locale, translator } from "./i18n";
-import {
-  type OfficeProjection,
-  type OfficeRenderMode,
-  OfficeViewPanel,
-} from "./office-view";
+import { type OfficeProjection, type OfficeRenderMode, OfficeViewPanel } from "./office-view";
 import { resolveTheme, type Theme, themeAttributes } from "./theme";
 
 /** The five surfaces of the graphical shell. */
@@ -79,10 +75,7 @@ export function Workbench({
       data-testid="workbench"
       className={`flex h-screen flex-col bg-neutral-950 text-neutral-100 ${attrs.className}`}
     >
-      <nav
-        className="flex gap-2 border-b border-neutral-800 p-2"
-        aria-label={msg("app.title")}
-      >
+      <nav className="flex gap-2 border-b border-neutral-800 p-2" aria-label={msg("app.title")}>
         {SURFACES.map((surface) => (
           <button
             key={surface}

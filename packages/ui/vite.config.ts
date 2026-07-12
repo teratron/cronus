@@ -6,20 +6,30 @@ import { defineConfig } from "vitest/config";
 // this build produces a distributable bundle. React stays external. Tailwind is
 // applied by the consuming app's build (where the final CSS is bundled).
 export default defineConfig({
-  plugins: [react()],
+  plugins: [
+    react(),
+  ],
   build: {
     lib: {
       entry: resolve(__dirname, "src/index.ts"),
-      formats: ["es"],
+      formats: [
+        "es",
+      ],
       fileName: "index",
     },
     rollupOptions: {
-      external: ["react", "react-dom", "react/jsx-runtime"],
+      external: [
+        "react",
+        "react-dom",
+        "react/jsx-runtime",
+      ],
     },
   },
   test: {
     globals: true,
     environment: "jsdom",
-    setupFiles: ["./vitest.setup.ts"],
+    setupFiles: [
+      "./vitest.setup.ts",
+    ],
   },
 });

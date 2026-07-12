@@ -20,7 +20,13 @@ const projection: OfficeProjection = {
       active: false,
     },
   ],
-  tasks: [{ id: "t1", title: "Migrate endpoints", assignee: "eng" }],
+  tasks: [
+    {
+      id: "t1",
+      title: "Migrate endpoints",
+      assignee: "eng",
+    },
+  ],
 };
 
 describe("OfficeViewPanel", () => {
@@ -46,15 +52,18 @@ describe("OfficeViewPanel", () => {
   });
 
   it("re-renders when the next projection arrives (projection, not source)", () => {
-    const { rerender } = render(
-      <OfficeViewPanel projection={projection} mode="graph" />,
-    );
+    const { rerender } = render(<OfficeViewPanel projection={projection} mode="graph" />);
     expect(screen.queryByTestId("node-agent-new")).not.toBeInTheDocument();
 
     const next: OfficeProjection = {
       agents: [
         ...projection.agents,
-        { id: "new", name: "Reviewer", role: "code-reviewer", active: false },
+        {
+          id: "new",
+          name: "Reviewer",
+          role: "code-reviewer",
+          active: false,
+        },
       ],
       tasks: projection.tasks,
     };
@@ -64,30 +73,24 @@ describe("OfficeViewPanel", () => {
 
   it("forwards inspect intents and renders an empty state", () => {
     const onInspect = vi.fn();
-    render(
-      <OfficeViewPanel
-        projection={projection}
-        mode="graph"
-        onInspect={onInspect}
-      />,
-    );
-    fireEvent.click(
-      screen
-        .getByTestId("node-agent-eng")
-        .querySelector("button") as HTMLElement,
-    );
+    render(<OfficeViewPanel projection={projection} mode="graph" onInspect={onInspect} />);
+    fireEvent.click(screen.getByTestId("node-agent-eng").querySelector("button") as HTMLElement);
     expect(onInspect).toHaveBeenCalledWith("eng");
 
     render(
-      <OfficeViewPanel projection={{ agents: [], tasks: [] }} mode="graph" />,
+      <OfficeViewPanel
+        projection={{
+          agents: [],
+          tasks: [],
+        }}
+        mode="graph"
+      />,
     );
     expect(screen.getByTestId("office-empty")).toBeInTheDocument();
   });
 
   it("the office surface hosts the panel when a projection is supplied", () => {
-    render(
-      <Workbench active="office" office={projection} officeMode="graph" />,
-    );
+    render(<Workbench active="office" office={projection} officeMode="graph" />);
     expect(screen.getByTestId("office-graph")).toBeInTheDocument();
   });
 });

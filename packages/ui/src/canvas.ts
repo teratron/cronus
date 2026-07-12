@@ -35,7 +35,10 @@ export interface CanvasNode {
 export function projectionDrift(
   engineNodeIds: readonly string[],
   canvasNodeIds: readonly string[],
-): { missingFromCanvas: string[]; missingFromEngine: string[] } {
+): {
+  missingFromCanvas: string[];
+  missingFromEngine: string[];
+} {
   const engine = new Set(engineNodeIds);
   const canvas = new Set(canvasNodeIds);
   return {
@@ -51,8 +54,14 @@ export interface Edge {
 
 /** A connection-rule violation surfaced during editing (AC §4.3). */
 export type ConnectionIssue =
-  | { kind: "trigger-has-inbound"; node: string }
-  | { kind: "action-not-leaf"; node: string };
+  | {
+      kind: "trigger-has-inbound";
+      node: string;
+    }
+  | {
+      kind: "action-not-leaf";
+      node: string;
+    };
 
 /**
  * Validate the connection rules for an explicit pipeline (AC §4.3): a trigger node
@@ -65,11 +74,19 @@ export function validateConnections(
   errorBranchNodes: ReadonlySet<string> = new Set(),
 ): ConnectionIssue[] {
   const issues: ConnectionIssue[] = [];
-  const byId = new Map(nodes.map((n) => [n.id, n]));
+  const byId = new Map(
+    nodes.map((n) => [
+      n.id,
+      n,
+    ]),
+  );
   for (const node of nodes) {
     if (node.type === "trigger") {
       if (edges.some((e) => e.to === node.id)) {
-        issues.push({ kind: "trigger-has-inbound", node: node.id });
+        issues.push({
+          kind: "trigger-has-inbound",
+          node: node.id,
+        });
       }
     }
     if (node.type === "action") {
@@ -79,7 +96,10 @@ export function validateConnections(
         return target !== undefined && errorBranchNodes.has(target.id);
       });
       if (outbound.length > 0 && !onlyErrorBranch) {
-        issues.push({ kind: "action-not-leaf", node: node.id });
+        issues.push({
+          kind: "action-not-leaf",
+          node: node.id,
+        });
       }
     }
   }
@@ -98,11 +118,12 @@ export interface DevRunRequest {
  * a pinned node; it never executes (AC-3). Actions run dry unless explicitly opted
  * live downstream in the engine — that is not the canvas's concern.
  */
-export function requestDevRun(
-  pinnedNode: string,
-  fromNode: string,
-): DevRunRequest {
-  return { pinnedNode, fromNode, development: true };
+export function requestDevRun(pinnedNode: string, fromNode: string): DevRunRequest {
+  return {
+    pinnedNode,
+    fromNode,
+    development: true,
+  };
 }
 
 export interface ObserverView {

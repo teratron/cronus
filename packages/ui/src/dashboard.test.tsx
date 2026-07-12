@@ -9,10 +9,18 @@ const projection: DashboardProjection = {
       id: "acme",
       name: "Acme Project",
       activeAgents: 2,
-      cardsByState: { running: 1, blocked: 2, done: 7 },
+      cardsByState: {
+        running: 1,
+        blocked: 2,
+        done: 7,
+      },
     },
   ],
-  building: { offices: 3, activeAgents: 5, totalCards: 42 },
+  building: {
+    offices: 3,
+    activeAgents: 5,
+    totalCards: 42,
+  },
 };
 
 describe("DashboardPanel", () => {
@@ -21,9 +29,7 @@ describe("DashboardPanel", () => {
 
     expect(screen.getByTestId("dashboard-office-acme")).toBeInTheDocument();
     expect(screen.getByTestId("office-active-acme")).toHaveTextContent("2");
-    expect(screen.getByTestId("cards-acme-blocked")).toHaveTextContent(
-      "blocked: 2",
-    );
+    expect(screen.getByTestId("cards-acme-blocked")).toHaveTextContent("blocked: 2");
     expect(screen.getByTestId("building-offices")).toHaveTextContent("3");
     expect(screen.getByTestId("building-active")).toHaveTextContent("5");
     expect(screen.getByTestId("building-cards")).toHaveTextContent("42");
@@ -35,7 +41,11 @@ describe("DashboardPanel", () => {
       <DashboardPanel
         projection={{
           ...projection,
-          building: { offices: 3, activeAgents: 6, totalCards: 43 },
+          building: {
+            offices: 3,
+            activeAgents: 6,
+            totalCards: 43,
+          },
         }}
       />,
     );
@@ -43,7 +53,13 @@ describe("DashboardPanel", () => {
   });
 
   it("omits the building section when the projection has none (per-office view)", () => {
-    render(<DashboardPanel projection={{ offices: projection.offices }} />);
+    render(
+      <DashboardPanel
+        projection={{
+          offices: projection.offices,
+        }}
+      />,
+    );
     expect(screen.queryByTestId("dashboard-building")).not.toBeInTheDocument();
   });
 

@@ -44,17 +44,11 @@ describe("theming", () => {
 
   it("switching theme swaps the token attributes on the root", () => {
     const { rerender } = render(<Workbench active="office" theme="dark" />);
-    expect(screen.getByTestId("workbench")).toHaveAttribute(
-      "data-theme",
-      "dark",
-    );
+    expect(screen.getByTestId("workbench")).toHaveAttribute("data-theme", "dark");
     expect(screen.getByTestId("workbench").className).toContain("dark");
 
     rerender(<Workbench active="office" theme="light" />);
-    expect(screen.getByTestId("workbench")).toHaveAttribute(
-      "data-theme",
-      "light",
-    );
+    expect(screen.getByTestId("workbench")).toHaveAttribute("data-theme", "light");
     expect(screen.getByTestId("workbench").className).not.toContain("dark");
   });
 
@@ -73,23 +67,17 @@ describe("theming", () => {
 describe("localization", () => {
   it("switching locale swaps every visible navigation string", () => {
     const { rerender } = render(<Workbench active="dashboard" locale="en" />);
-    expect(screen.getByTestId("nav-dashboard")).toHaveTextContent(
-      t("en", "surface.dashboard"),
-    );
+    expect(screen.getByTestId("nav-dashboard")).toHaveTextContent(t("en", "surface.dashboard"));
 
     rerender(<Workbench active="dashboard" locale="ru" />);
     for (const surface of SURFACES) {
-      expect(screen.getByTestId(`nav-${surface}`)).toHaveTextContent(
-        t("ru", `surface.${surface}`),
-      );
+      expect(screen.getByTestId(`nav-${surface}`)).toHaveTextContent(t("ru", `surface.${surface}`));
     }
   });
 
   it("the connecting placeholder is localized, not hardcoded", () => {
     render(<Workbench active="office" locale="ru" />);
-    expect(screen.getByTestId("status")).toHaveTextContent(
-      t("ru", "status.connecting"),
-    );
+    expect(screen.getByTestId("status")).toHaveTextContent(t("ru", "status.connecting"));
   });
 
   it("a key missing from a locale falls back to English", () => {

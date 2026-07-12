@@ -62,7 +62,10 @@ const ru: Partial<Catalog> = {
   "dashboard.cards": "Карточки",
 };
 
-const catalogs: Record<Locale, Partial<Catalog>> = { en, ru };
+const catalogs: Record<Locale, Partial<Catalog>> = {
+  en,
+  ru,
+};
 
 /** Resolve a message for a locale, falling back to English. */
 export function t(locale: Locale, key: MessageKey): string {
