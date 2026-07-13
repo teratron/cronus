@@ -105,4 +105,3 @@
 - T-14C03: gated experience reuse (MI-13) — a new `ExperienceOutcome` typing (Success/Failure/Insight) pulled forward as the one field the deferral could not do without, a deterministic similarity/score/freshness reuse gate, and a structural retained-authority-gate composing the existing SEC-9/SEC-10 realization — a reused plan needing approval is surfaced, never auto-applied
 - T-14T01: cross-layer validation — 5 new integration tests through the real facade and SQLite adapter (capture→consolidate→answer, cold start, a no-graph-rewalk regression proof, the fact/derived boundary, and a real-adapter experience round-trip); MI-6/10/11/12 explicitly out of this sweep's scope — nothing built yet to exercise
 - Verify: `cargo test --workspace` green, 1,333 passed / 0 failed (1,252 Phase-13 baseline + 81 new across the phase); `cargo clippy --workspace --all-targets -- -D warnings` clean; `cargo fmt --all -- --check` clean
-

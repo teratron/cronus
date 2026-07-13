@@ -361,7 +361,6 @@ Execution mode: **Parallel** (C3); tracks grouped by file independence. Critical
 - [ ] **Dev Office** ([l1-dev-office.md](specifications/l1-dev-office.md)) [L1] — `RFC` — developer (self-hosting) office: a system workspace for maintaining Cronus itself; backlog until reviewed to Stable
 
 > The **core-decomposition wave** (`l2-crate-topology` + `l2-source-layout` 1.2.0) left the Backlog in v2.15.0 — both reached Stable via `/magic.spec` and are now **Phase 13**.
-
 > The **memory-implementation wave** (`l2-memory-consolidation` + `l2-memory-intelligence`) left the Backlog in v2.17.0 — both reached Stable via `/magic.spec` and are now **Phase 14**.
 
 *Subsystem fronts opened by the v2.14.0 registry wave. Each has a Stable L1 parent in Phase 0; the L2 realization is RFC.*
