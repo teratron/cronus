@@ -1,6 +1,6 @@
 # Agent Tool Ergonomics
 
-**Version:** 1.0.0
+**Version:** 1.1.0
 **Status:** Stable
 **Layer:** concept
 
@@ -50,6 +50,8 @@ Layer 2 implementations MUST NOT violate these. They are technology-neutral.
 - **ATE-7 — Never steer to a manual fallback.** Tool output never instructs the agent to "use the file reader / grep". When more is needed it steers to another call of the same tool family and frames already-returned data as authoritative for the turn. Steering to the fallback trains the tool's own abandonment.
 - **ATE-8 — Lean surface by measured pick-rate.** Expose the tools agents actually pick; fold the information from rarely-picked capabilities inline into the primary tools and keep the rest reachable by opt-in. Surface size has a context cost paid every session. (Reuses the reduction model of [l1-tool-composition.md](l1-tool-composition.md) TC-7.)
 - **ATE-9 — Validate by A/B ablation on the floor model.** Ergonomic claims are validated with-vs-without the capability, measuring *task-level* outcomes (tool-call count, manual-fallback count, wall-clock), as a median over multiple runs, on the deliberate **floor model** (the weakest model real users attach) — not the strongest. An affordance that lands on the floor model generalizes up; one that needs the strongest model does not generalize down. Both arms use the same model.
+- **ATE-10 — Per-call intent declaration on mutating tools.** `[ADDED v1.1.0]` every tool whose call mutates state (writes, executes, deletes, sends) carries a mandatory short **intent field** — why this call, in the agent's words — as a schema-level parameter, ordered **before** the payload. The intent is machine-carried, not prose convention: it feeds per-step attribution in the trace, gives authorization/confirmation surfaces something legible to show, and — because it precedes the payload in parameter order — is available to observers before the (possibly large) payload streams. Read-only tools MAY carry it; mutating tools MUST.
+- **ATE-11 — Opaque reference passing with host-side hydration.** `[ADDED v1.1.0]` when one tool's output feeds another tool's input, the surface passes **compact, stable identifiers** (returned by the producing tool) rather than re-serializing full objects through the agent's context; the consuming side **hydrates** the full record host-side from the identifier. The contract has two halves: the tool output marks hydration-capable identifiers as copy-verbatim values (never retyped from memory, never abbreviated), and the consuming tool accepts the identifier as authoritative — rejecting look-alike or fabricated identifiers rather than guessing. This bounds context cost on large records, removes transcription-corruption of structured data, and keeps the authoritative copy host-side (the agent moves *references*, the host moves *data*).
 
 ## 4. Concept Detail
 
@@ -97,6 +99,8 @@ Output budgets scale with the workload (e.g. indexed size): both the *number* of
 | Never steer to manual fallback | **[new]** ATE-7; output-wording rule for all tools. |
 | Lean surface by measured pick-rate | ATE-8; reuses `l1-tool-composition.md` TC-7 + `ToolSurfaceProfile`; adds the *measured* basis (fold rarely-picked tools inline). |
 | A/B ablation on the floor model | **[new]** ATE-9; complements `l1-retrieval-evaluation.md` (ranking metrics) and `l1-evaluation-suites.md` (customization behavior) with task-level capability ablation + an explicit floor-model policy. |
+| Mandatory per-call intent field, ordered before payload | **[new v1.1.0]** ATE-10; feeds per-step trace attribution and gives confirmation surfaces legible text; parameter order makes intent observable before payload streams. |
+| Compact IDs + host-side hydration between tool calls | **[new v1.1.0]** ATE-11; copy-verbatim identifier discipline + authoritative host-side records; bounds context cost and kills transcription corruption of structured data. |
 
 ## 6. Nodus Relevance
 
@@ -121,6 +125,7 @@ The nodus workspace owns any realization; this records the relevance.
 | Version | Change |
 | --- | --- |
 | 1.0.0 | Initial spec — ATE-1…ATE-9: agent-facing tool-surface ergonomics (sufficiency-to-stop, recoverable-as-success, absence-as-signal, adapt-tool-to-agent, monotonic budget, staleness signaling, no-manual-fallback steering, lean surface by pick-rate, A/B ablation on the floor model); ideas-to-adopt + nodus-relevance mapping |
+| 1.1.0 | Amendment — ATE-10 mandatory per-call intent declaration on mutating tools (schema-level field ordered before payload; feeds trace attribution + confirmation surfaces) + ATE-11 opaque reference passing with host-side hydration (copy-verbatim identifier discipline, authoritative host records, fabricated-identifier rejection); ideas-to-adopt table extended |
 
 ## Canonical References
 

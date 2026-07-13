@@ -1,6 +1,6 @@
 # Generative Surface
 
-**Version:** 1.0.0
+**Version:** 1.1.0
 **Status:** Stable
 **Layer:** concept
 
@@ -16,6 +16,9 @@ An interactive visual surface the agent renders as a turn output — a chart, a 
 - [l1-execution-sandbox.md](l1-execution-sandbox.md) - Agent-generated surface content is untrusted and rendered confined.
 - [l1-output-contracts.md](l1-output-contracts.md) - A surface is a bounded, structured output; its underlying data follows the output contract.
 - [l1-architecture.md](l1-architecture.md) - INV-3 frontend interchangeability; the surface's portable representation degrades across frontends.
+- [l1-storage-model.md](l1-storage-model.md) - Durable surface state (GS-9) is held through the host storage plane, never by the rendered content itself.
+- [l1-model-runtime.md](l1-model-runtime.md) / [l1-usage-allowance.md](l1-usage-allowance.md) - Brokered surface inference (GS-10): the host pins the serving model and enforces the budget.
+- [l1-action-gating.md](l1-action-gating.md) - A surface-initiated model call is an effect and passes the same gates as any tool call (GS-10, CE-3 parity).
 
 ## 1. Motivation
 
@@ -41,7 +44,9 @@ Rules every Layer 2 implementation MUST NOT violate:
 - **GS-5 (Portable, degradable representation):** the surface is described by a declared, portable representation (a UI/data contract), so it renders consistently across the product's interchangeable frontends and degrades gracefully to a text or structured fallback where rich rendering is unavailable (consistent with INV-3).
 - **GS-6 (Projection, not source):** a surface is a derived view of data the agent holds; it MUST NOT be the authoritative copy. Edits made on the surface flow back as explicit changes to the underlying data, never as a hidden second source (consistent with OVZ-1).
 - **GS-7 (Bounded generation):** surface size and complexity are bounded so generation stays cheap and rendering stays safe; oversized surfaces are truncated or paginated with the limit made explicit (consistent with output-contract size-bounding).
-- **GS-8 (Lifecycle & inspectability):** a surface has an explicit lifecycle — create → update (incremental) → dismiss (releases resources). Its source representation is inspectable by the user, and the underlying data is recoverable; a rendered surface is never the only copy of what it shows.
+- **GS-8 (Lifecycle & inspectability):** a surface has an explicit lifecycle — create → update (incremental) → dismiss (releases resources). Its source representation is inspectable by the user, and the underlying data is recoverable; a rendered surface is never the only copy of what it shows. `[ADDED v1.1.0: dismissal releases *rendering* resources; declared durable state (GS-9) survives dismissal by design.]`
+- **GS-9 (Durable scoped surface state):** `[ADDED v1.1.0]` a surface MAY persist its own application state across sessions **only** through a host-provided keyed storage seam — never through renderer-local ambient storage mechanisms, hidden files, or the rendered content itself. The seam is: **scoped** (per-user by default; a shared-across-users scope exists but requires the surface to disclose shared visibility to the user before first write), **quota'd** (per-key size, key-count/rate bounds; key grammar is host-declared), **concurrency-honest** (the host declares its merge discipline — e.g. last-write-wins — and the surface must not pretend stronger guarantees), and **inspectable/erasable by the user**. Durable surface state is the surface application's *own* state; it never becomes a hidden second source of truth for data the agent holds (GS-6 stands), and batching related values into one key is the norm rather than chatty per-item round-trips.
+- **GS-10 (Brokered surface inference):** `[ADDED v1.1.0]` a surface MAY invoke model inference at interaction time **only** through a host-brokered gateway: credentials are injected by the host and never present in surface content; the serving model and per-call budget are **pinned by the host** (typically an economical tier, independent of the model that authored the surface); the exchange contract is **stateless** (the surface supplies all conversation/application state on each call); and every call is an effect passing the same authorization and audit path as a tool call (GS-2 parity). An unavailable or denied gateway yields a typed refusal the surface must handle gracefully — never a silent hang or a credential workaround.
 
 > L2 specs cannot reach RFC status until all invariants here are addressed in their "Invariant Compliance" section.
 
@@ -79,7 +84,39 @@ Rendered content runs sandboxed (GS-2): it has no implicit host access. Any acti
 
 ### 4.4 Relation to the Automation Canvas
 
-The automation canvas is one concrete generative surface: an interactive flow-graph projection of the pipeline engine. This concept is the general contract it satisfies — automation canvas adds engine-specific semantics on top of GS-1…GS-8; other surfaces (a chart, a form, a document preview) reuse the same contract without inventing a parallel one.
+The automation canvas is one concrete generative surface: an interactive flow-graph projection of the pipeline engine. This concept is the general contract it satisfies — automation canvas adds engine-specific semantics on top of GS-1…GS-10; other surfaces (a chart, a form, a document preview) reuse the same contract without inventing a parallel one.
+
+### 4.5 Durable Surface State (GS-9) `[ADDED v1.1.0]`
+
+What GS-9 enables is the class of surfaces that are *applications*, not one-turn artifacts: a journal that keeps entries across weeks, a tracker that keeps streaks, a shared leaderboard. The storage seam keeps that power inside the trust model:
+
+```text
+[REFERENCE]
+surface.storage (host-provided seam):
+  get(key, scope) / set(key, value, scope) / delete(key, scope) / list(prefix, scope)
+  scope      : personal (default) | shared        -- shared requires user-facing disclosure
+  bounds     : key grammar + per-key size + rate  -- host-declared quotas
+  concurrency: host-declared (e.g. last-write-wins); surface must not assume stronger
+  visibility : user can inspect and erase any scope's contents
+```
+
+Failure honesty is part of the contract: storage operations can fail or be quota-denied, and the surface must degrade visibly (partial UI, retry affordance) rather than silently dropping user data. The realization rides the existing storage plane; where the workflow engine hosts the surface, the storage role is the same host-supplied seam the DSL already defines (nodus `StorageProvider`, LP-15) — no second storage channel appears.
+
+### 4.6 Brokered Surface Inference (GS-10) `[ADDED v1.1.0]`
+
+A surface that can call a model at interaction time becomes a small AI application authored by a larger one. The broker keeps the recursion safe and economical:
+
+```mermaid
+graph LR
+    surface[Surface content - untrusted] -->|stateless request, no credentials| broker[Host broker]
+    broker -->|gate + audit + budget| model[Host-pinned economical model]
+    model --> broker --> surface
+```
+
+- **Credential isolation:** the surface never sees a key; leaking surface source leaks no secret.
+- **Host pinning:** model choice and per-call budget are platform decisions — the authoring agent cannot escalate the serving tier from inside generated content.
+- **Statelessness:** each call carries full state; the broker holds no per-surface conversation memory, which keeps the gateway auditable and the surface portable (GS-5).
+- **Gate parity:** the call is an effect; interception and action-gating apply exactly as for a tool call, and each call is a traced, cost-attributed event.
 
 ## 5. Drawbacks & Alternatives
 
@@ -101,3 +138,4 @@ The automation canvas is one concrete generative surface: an interactive flow-gr
 | Version | Date | Author | Notes |
 | --- | --- | --- | --- |
 | 1.0.0 | 2026-06-26 | Core Team | Initial spec — generative surface: agent-rendered interactive artifacts as a response output, sandboxed rendering, closed agent-perception loop, user control, portable degradable representation, projection-not-source, bounded generation, explicit lifecycle (GS-1…GS-8); generalizes the automation canvas. |
+| 1.1.0 | 2026-07-13 | Core Team | Amendment — GS-9 durable scoped surface state (host storage seam: personal/shared scoping with disclosure, quotas + key grammar, concurrency honesty, user inspect/erase; no source-of-truth capture) + GS-10 brokered surface inference (host-injected credentials, host-pinned model & budget, stateless exchange, gate/audit parity, typed refusal); §4.5–4.6 added; GS-8 dismissal note; related specs extended (storage-model, model-runtime, usage-allowance, action-gating). |

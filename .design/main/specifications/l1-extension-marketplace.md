@@ -1,6 +1,6 @@
 # Extension Marketplace & Distribution
 
-**Version:** 1.0.0
+**Version:** 1.1.0
 **Status:** Stable
 **Layer:** concept
 
@@ -55,6 +55,8 @@ Rules every Layer 2 implementation MUST NOT violate. They are technology-neutral
 - **XM-8 (Distribution is a source, not a trust bypass):** installing from a marketplace is the **origin** step that feeds the existing extension lifecycle (discover → grant → activate); it never bypasses it. A marketplace-sourced extension is still **default-deny** (EXT-3): presence in a curated catalog grants it no capability. The user still grants permissions explicitly, the payload is still content-vetted (component-scanning) and integrity-verified against its pin (attestation) **before activation**, an **update** re-runs the same gates against the new pin, and a **remove** is clean. The catalog changes *where an extension comes from*, never *what it may do on arrival*.
 
 - **XM-9 (Explicit, legible sync — no silent supply-chain drift):** the local view of a marketplace — its catalog, the installed set, available updates, and applied rename migrations — is refreshed by an **explicit sync**, and what sync changed (new / updated / renamed / removed entries) is **legible to the user**. Sync updates the catalog view and applies identity migrations (XM-2) only; it never silently fetches-and-activates, auto-updates a pin, or grants a capability. Distribution drift is always a visible, user-authorized event.
+
+- **XM-10 (Provider choice stays with the user):** `[ADDED v1.1.0]` when a task could be served by an extension the user has not **named**, the agent surfaces the candidate(s) as a **suggestion the user picks from** — it MUST NOT select a provider on the user's behalf, even when exactly one candidate exists, even when the extension is already installed, and even under urgency (speed never licenses picking the partner). The suggestion discipline is itself bounded: the agent does not withhold or degrade the answer it can already give to pressure adoption; it does not re-surface a suggestion the user declined or ignored in the same session; commerce-class extensions are suggested only when the user names them; and a suggestion states the **specific value** for the task at hand ("I could pull your open issues and sort by priority"), not a generic capability pitch. Direct invocation without the suggestion step is licensed only by: the user naming the provider, the user having just picked it, or a recorded durable preference. Discovering an installable extension through search or a registry never licenses direct invocation by itself.
 
 > L2 specs cannot reach RFC status until all invariants here are addressed in their "Invariant Compliance" section.
 
@@ -129,3 +131,4 @@ Curation is a catalog-level, human/policy judgment about responsible behavior an
 | Version | Date | Author | Notes |
 | --- | --- | --- | --- |
 | 1.0.0 | 2026-07-09 | Core Team | Initial stable spec — extension marketplace & distribution: catalog of addressable sourced entries (XM-1), stable immutable identity + governed rename migration (XM-2), reproducible install via pinning (XM-3), explicit + honest trust tiers — curation is a signal not a guarantee (XM-4), publishing gate judging responsible behavior + description-matches-behavior over the whole shipped payload (XM-5), structured truthful discovery (XM-6), bundle-or-curate-subset entry as manifest of intent (XM-7), distribution is a source not a trust bypass — still default-deny + vetted + attested before activation (XM-8), explicit legible sync with no silent drift (XM-9). Composes l1-extensions / l1-component-scanning / l1-attestation / l1-version-control / l1-security. Distilled from an adoption pass over an external plugin-marketplace / extension-directory reference. |
+| 1.1.0 | 2026-07-13 | Core Team | Amendment — XM-10 provider choice stays with the user: suggest-and-let-pick for unnamed providers (even sole-candidate, already-installed, or urgent cases), no answer-withholding as adoption pressure, no re-surfacing declined suggestions, commerce-class only-when-named, specific-value phrasing; direct invocation licensed only by naming / just-picked / durable preference. Distilled from an adoption pass over an external conversational-platform connector-suggestion reference. |
