@@ -3,7 +3,7 @@
   "private": true,
   "version": "0.1.0",
   "description": "Cronus JS/TS workspace — desktop app (Tauri) and shared UI (React).",
-  "packageManager": "pnpm@11.9.0",
+  "packageManager": "pnpm@11.12.0",
   "engines": {
     "node": ">=22"
   },
@@ -20,6 +20,6 @@
   },
   "devDependencies": {
     "@biomejs/biome": "^2.5.3",
-    "fallow": "^3.3.0"
+    "fallow": "^3.4.2"
   }
 }
