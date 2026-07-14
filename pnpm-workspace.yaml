@@ -3,15 +3,15 @@ packages:
   - "apps/*"
 minimumReleaseAgeExclude:
   - vite@8.1.2 || 8.1.4
-  - '@fallow-cli/darwin-arm64@3.0.0 || 3.2.0 || 3.3.0 || 3.4.2'
-  - '@fallow-cli/darwin-x64@3.0.0 || 3.2.0 || 3.3.0 || 3.4.2'
-  - '@fallow-cli/linux-arm64-gnu@3.0.0 || 3.2.0 || 3.3.0 || 3.4.2'
-  - '@fallow-cli/linux-arm64-musl@3.0.0 || 3.2.0 || 3.3.0 || 3.4.2'
-  - '@fallow-cli/linux-x64-gnu@3.0.0 || 3.2.0 || 3.3.0 || 3.4.2'
-  - '@fallow-cli/linux-x64-musl@3.0.0 || 3.2.0 || 3.3.0 || 3.4.2'
-  - '@fallow-cli/win32-arm64-msvc@3.0.0 || 3.2.0 || 3.3.0 || 3.4.2'
-  - '@fallow-cli/win32-x64-msvc@3.0.0 || 3.2.0 || 3.3.0 || 3.4.2'
-  - fallow@3.0.0 || 3.2.0 || 3.3.0 || 3.4.2
+  - '@fallow-cli/darwin-arm64@3.0.0 || 3.2.0 || 3.3.0 || 3.4.2 || 3.5.0'
+  - '@fallow-cli/darwin-x64@3.0.0 || 3.2.0 || 3.3.0 || 3.4.2 || 3.5.0'
+  - '@fallow-cli/linux-arm64-gnu@3.0.0 || 3.2.0 || 3.3.0 || 3.4.2 || 3.5.0'
+  - '@fallow-cli/linux-arm64-musl@3.0.0 || 3.2.0 || 3.3.0 || 3.4.2 || 3.5.0'
+  - '@fallow-cli/linux-x64-gnu@3.0.0 || 3.2.0 || 3.3.0 || 3.4.2 || 3.5.0'
+  - '@fallow-cli/linux-x64-musl@3.0.0 || 3.2.0 || 3.3.0 || 3.4.2 || 3.5.0'
+  - '@fallow-cli/win32-arm64-msvc@3.0.0 || 3.2.0 || 3.3.0 || 3.4.2 || 3.5.0'
+  - '@fallow-cli/win32-x64-msvc@3.0.0 || 3.2.0 || 3.3.0 || 3.4.2 || 3.5.0'
+  - fallow@3.0.0 || 3.2.0 || 3.3.0 || 3.4.2 || 3.5.0
   - '@vitest/expect@4.1.10'
   - '@vitest/mocker@4.1.10'
   - '@vitest/pretty-format@4.1.10'
