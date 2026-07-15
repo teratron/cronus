@@ -173,3 +173,4 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Added specification `optimization-integrity` (main)
 - Added specification `cost-rating` (main)
 - Added specification `context-degradation` (main)
+- Updated specification `knowledge-horizon` (main)
