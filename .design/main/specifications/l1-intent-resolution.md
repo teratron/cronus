@@ -1,6 +1,6 @@
 # Intent Resolution
 
-**Version:** 1.0.0
+**Version:** 1.1.0
 **Status:** Stable
 **Layer:** concept
 
@@ -49,6 +49,8 @@ Rules every Layer 2 implementation MUST NOT violate:
 - **IR-5 (Risk-proportional ask-or-assume):** the threshold between asking and assuming scales with blast radius. Irreversible or high-impact gaps — payments, finances, legal/contractual content, destructive actions, external/irrevocable delivery — bias toward ask or an approval gate (composes ORC-9 and the destructive-always-approve rule); low-impact, reversible gaps bias toward assume-and-record. The cost of being wrong, not the mere existence of a gap, sets the bar.
 - **IR-6 (Surface at the right gate, not mid-flight):** material assumptions are surfaced to the client at a natural checkpoint — result delivery, an approval gate, or a periodic digest — concise and correctable, not buried and not interrupting flow. The client should be able to see what was assumed and change it cheaply, without being managed during the work (consistent with OFF-5).
 - **IR-7 (Correction propagates; assumptions feed learning):** correcting an assumption re-plans the dependent work rather than leaving it to drift (TG-9). A class of assumption the client repeatedly confirms is promoted to a stated default/preference (user model) so the office stops re-deriving it; a class repeatedly corrected becomes a recorded anti-pattern (self-improvement) so the office stops repeating the wrong guess.
+
+- **IR-8 (Interpretation fidelity — confirm a stated intent when its reading is genuinely uncertain):** IR-1…IR-7 resolve what the client left *unsaid*; IR-8 governs the distinct risk of *misreading what they did say*. When the office's confidence in its **interpretation** of a stated idea or requirement is genuinely low — the phrasing admits materially different readings, or the idea is about to be transformed into a durable, high-leverage artifact (a specification, a plan) where a misread would propagate into everything built from it — the office confirms its understanding **before** building on it, by **restating its interpretation back** ("here is what I understood: … — is that right?") for the client to validate or correct. This is not a front-loaded interview (it reaffirms IR-2 / §4.4): it is **uncertainty-gated** — only genuine interpretation-doubt or a high-leverage transform triggers it, never a routine quiz — and it is **lower-friction than a clarifying question**, reflecting the office's own reading back for a cheap confirm/adjust rather than interrogating the client for missing information (that is gap-resolution, IR-2). A confidently-wrong interpretation carried silently into a spec is the failure this prevents; a corrected interpretation propagates and feeds learning exactly as a corrected assumption does (IR-7).
 
 > L2 specs cannot reach RFC status until all invariants here are addressed in their "Invariant Compliance" section.
 
@@ -113,6 +115,32 @@ Resolution is the *front door*; two adjacent disciplines guard the rest of the l
 - **Validate-before-build** (proportional human-in-the-loop on high-impact work) is the approval gate (ORC-9) and lookahead; IR-5 feeds it by escalating high-blast-radius gaps rather than assuming them.
 - **Promote-to-automation** (turning resolved, repeated work into a skill, then into autonomous operation) is the autonomy ladder and self-improvement promotion; IR-7 feeds it by turning confirmed assumptions into defaults and corrected ones into anti-patterns.
 
+### 4.6 Interpretation fidelity — restate-to-confirm (IR-8)
+
+IR-1…IR-5 resolve what is *missing*; IR-8 guards against misreading what is *present*. The
+two are distinct axes and use distinct moves — a gap is *asked or assumed*, a shaky
+reading is *reflected back*:
+
+```text
+[REFERENCE]
+handle_stated_intent(idea, context):
+    reading := interpret(idea)
+    if confidence(reading) >= threshold(context):      // routine, unambiguous → proceed
+        return reading                                   // no confirmation (reaffirms IR-2 / §4.4)
+    // genuine interpretation-doubt, OR a high-leverage transform (idea → spec/plan):
+    confirmed := restate_and_confirm(reading)            // "here's what I understood: … — right?"
+    return confirmed                                     // reflect, don't interrogate; precedes formalizing
+// a corrected reading propagates + feeds learning exactly as a corrected assumption does (IR-7)
+```
+
+Restate-to-confirm is deliberately *lower-friction* than an IR-2 clarifying question: it
+does not ask the client to supply information (that is gap-resolution) — it reflects the
+office's own interpretation for a cheap yes/no/adjust, the right move when the doubt is
+"did I understand you," not "what did you leave out." It is reserved for genuine
+interpretation-uncertainty and for the moment an idea is about to become a durable,
+high-leverage artifact where a silent misread would propagate into everything built from
+it — the ideation → specification boundary being the canonical trigger.
+
 ## 5. Drawbacks & Alternatives
 
 - **Recording overhead.** Writing down every assumption is more than guessing. Mitigation: only *material* assumptions need surfacing (IR-6); trivial defaults are recorded cheaply and never shown unless asked. The cost is small against one avoided wrong build (the "40% of the budget spent producing the wrong thing" failure).
@@ -136,3 +164,4 @@ Resolution is the *front door*; two adjacent disciplines guard the rest of the l
 | Version | Date | Author | Notes |
 | --- | --- | --- | --- |
 | 1.0.0 | 2026-06-26 | Core Team | Initial spec — autonomous intent-gap resolution without interviewing: ground-before-ask (IR-1), ask-only-when-blocking-and-costly minimal/non-technical/batched (IR-2), assume-and-record-never-silently-guess (IR-3), assumption≠fact/reversible (IR-4), risk-proportional ask-or-assume (IR-5), surface-at-the-right-gate (IR-6), correction-propagates + assumptions-feed-learning (IR-7); operationalizes OFF-5/OFF-6 and resolves the acting-on-misread-intent risk; adapts the external "spec-first / 0%-guesses / interview-me" pattern to the office's autonomy-first, non-technical-client posture (interview deliberately rejected). |
+| 1.1.0 | 2026-07-15 | Core Team | Added IR-8 (interpretation fidelity — confirm a stated intent when its reading is genuinely uncertain) + §4.6 — a distinct axis from IR-1…7 gap-resolution: IR-1…7 resolve what the client left *unsaid*, IR-8 guards against *misreading what they did say*. When confidence in the *interpretation* of a stated idea/requirement is genuinely low (phrasing admits materially different readings) or the idea is about to become a durable high-leverage artifact (a spec/plan) where a misread propagates, the office confirms understanding *before* building on it by **restating its interpretation back** ("here's what I understood: … — right?") for validate/correct; uncertainty-gated and lower-friction than an IR-2 clarifying question (it *reflects* the office's reading rather than *interrogating* the client for missing info), reaffirming IR-2/§4.4 anti-interview; a corrected interpretation propagates + feeds learning as a corrected assumption does (IR-7); the ideation → specification boundary is the canonical trigger. Sharpens the "acting-on-misread-intent" claim the 1.0.0 spec made only via gap-resolution. Additive — L1 stays Stable (C9). |
