@@ -176,3 +176,4 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Updated specification `knowledge-horizon` (main)
 - Added specification `completion-verification` (main)
 - Added specification `human-intervention` (main)
+- Updated specification `policy-governance` (main)

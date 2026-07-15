@@ -1,6 +1,6 @@
 # Policy Governance
 
-**Version:** 1.0.0
+**Version:** 1.1.0
 **Status:** Stable
 **Layer:** concept
 
@@ -18,6 +18,7 @@ This is distinct from client security (which protects secrets and confines execu
 - [l2-plugin-hooks.md](l2-plugin-hooks.md) - Hooks are a governable artifact class; managed-only mode constrains which hooks run.
 - [l2-tool-security.md](l2-tool-security.md) - Permission rules and approval gates are governable; governance can fix them and disable bypass.
 - [l1-application-shell.md](l1-application-shell.md) - Hosts the layered settings model this spec orders.
+- [l2-app-ui.md](l2-app-ui.md) - Realizes the per-parameter override indicator and the revert-to-default affordance (PG-9) in the settings surface; the concrete control is L2, the precedence-aware semantics are PG-9.
 
 ## 1. Motivation
 
@@ -44,6 +45,8 @@ Rules every Layer 2 implementation MUST NOT violate:
 - **PG-6 (Escape-hatch governance):** any setting that *reduces* enforced safety (e.g. a mode that bypasses approval gates, or weakens the sandbox) is itself a governed value the managed tier can disable. When disabled, the escape hatch is unavailable regardless of user or project intent.
 - **PG-7 (Fail-open absence, fail-safe presence):** with no managed policy present, the system imposes no hidden restriction (behaves as unmanaged). With a managed policy present, every restriction it enforces and every action it denies is auditable (composes with SEC-7).
 - **PG-8 (Policy integrity):** the managed policy source is integrity-verified (pinned/hash-checked) before it is trusted; a tampered, substituted, or corrupt policy is detected and the system fails safe (treats it as a hard error, not as "no policy"), reusing the pinning discipline already applied to hooks and tool manifests.
+
+- **PG-9 (Per-parameter override visibility & revert-to-default):** the settings surface exposes, per parameter, whether its effective value is the **default** or an **override**, and — when it is an override at a tier the acting principal may write — offers a **revert-to-default** action. Reverting clears the override at the principal's *own writable tier* so the value falls back through the precedence chain (PG-1) to the next-lower tier's value; it never edits a tier the principal may not write. The revert affordance is present **only when there is a principal-writable override to clear**: a parameter already at its default, or one fixed by the managed tier (PG-2), offers no revert — a managed-locked value surfaces as *locked* (PG-3 provenance), never as resettable. A revert is itself a governed, auditable configuration write (PG-7), and "default" means the value the parameter resolves to *absent this principal's override*, not necessarily the built-in baseline (a user-tier revert may fall back to a project value, then to the built-in default).
 
 > L2 specs cannot reach RFC status until all invariants here are addressed in their "Invariant Compliance" section.
 
@@ -97,6 +100,30 @@ load_managed_policy(source):
 
 Distinguishing "no policy" (legitimately unmanaged → PG-7 fail-open) from "policy present but tampered" (→ PG-8 fail-safe hard error) is the security-critical boundary: a substituted policy must never be silently downgraded to "no restrictions."
 
+### 4.5 Per-parameter Override & Revert (PG-9)
+
+The revert is a precedence operation, not a value assignment — it *removes* the
+principal's override and lets resolution (§4.1) re-run:
+
+```text
+[REFERENCE]
+is_overridden(key, principal):                       // PG-9 visibility
+    eff := resolve(key)                                // PG-1: value + source tier
+    return eff.source is a tier the principal WROTE (not `default`, not a higher locked tier)
+
+revert_to_default(key, principal):
+    if managed_fixes(key):        return LOCKED         // PG-2 — not resettable, shown locked (PG-3)
+    if not is_overridden(key, principal):  return NOOP  // nothing to clear → no affordance shown
+    clear_override(key, principal.writable_tier)        // remove ONLY the principal's own entry
+    audit("revert", key, principal)                     // PG-7 governed, auditable write
+    return resolve(key)                                 // value falls through to the next-lower tier
+```
+
+The UI shows the revert control next to a parameter exactly when `is_overridden` holds
+and the parameter is not managed-locked; the concrete control (an inline reset icon that
+appears on change) is the L2 settings-surface realization, the precedence-and-lock-aware
+semantics above are the L1 contract.
+
 ## 5. Drawbacks & Alternatives
 
 - **Lockout risk:** an over-restrictive managed tier can make a deployment unusable, and by PG-2 the user cannot self-rescue. Mitigated by PG-3 provenance (the user sees the cause) and by keeping administration out-of-band (the administrator can correct it where the policy lives).
@@ -118,3 +145,4 @@ Distinguishing "no policy" (legitimately unmanaged → PG-7 fail-open) from "pol
 | Version | Date | Author | Notes |
 | --- | --- | --- | --- |
 | 1.0.0 | 2026-06-26 | Core Team | Initial spec — administrative policy-governance layer: layered precedence with an un-overridable managed tier, surface lockdown (managed-only extensions/hooks/permission rules), trusted-source restriction, escape-hatch governance, inspectable provenance, fail-safe policy integrity (PG-1…PG-8). |
+| 1.1.0 | 2026-07-15 | Core Team | Added PG-9 (per-parameter override visibility & revert-to-default) + §4.5 — the settings surface shows per parameter whether the effective value is default or an override and, for a principal-writable override, offers a revert-to-default that *clears the override at the principal's own writable tier* so the value falls back through the precedence chain (PG-1), never editing a tier the principal may not write; the affordance appears only when there is a principal-writable override to clear — a default-valued or managed-locked (PG-2) parameter offers no revert (locked, not resettable, PG-3); revert is a governed auditable config write (PG-7); "default" = the value absent this principal's override (may be a lower tier's value, not necessarily the built-in baseline). Added l2-app-ui Related (realizes the inline reset-icon affordance; the precedence-and-lock-aware semantics are L1). Additive — L1 stays Stable (C9). |
