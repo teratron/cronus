@@ -4,7 +4,7 @@
 <!-- Maximum 100 lines. Agent updates AFTER each completed action. -->
 
 **Workspace:** main
-**Updated:** 2026-07-15 15:54
+**Updated:** 2026-07-15 16:13
 **Phase:** 16 — Project Wiki Store
 **Status:** Active
 
@@ -12,7 +12,7 @@
 
 - **Task:** `/magic.spec → /magic.task` chain (from TODO line 9 "wiki-память в БД"): amended MEM-4 (source-of-truth by memory kind), authored + promoted `l2-project-wiki` RFC→Stable, opened **Phase 16 — Project Wiki Store**
 - **Spec:** INDEX v1.0.107 (202 specs: 194 Stable, 7 RFC, 1 Draft) · PLAN v2.20.0 · TASKS v1.23.0. `l2-project-wiki` (PW-1…8) Stable 1.0.1 → Phase 16 open (7 tasks / 4 tracks). MEM-4 v1.1 wave: `l1-memory-model` 1.1.0 / `l2-memory-store` 1.4.0 / `l2-memory-consolidation` 1.0.2 — spec-only, no code delta (shipped `crates/store-local` already store-authoritative). Backlog: 8 (7 RFC + 1 Draft) — wiki-store removed (now phased). Five concept-only Stable L1s still await Phase 0 placement (`l1-solution-frugality`, `l1-derived-artifact-handoff`, `l1-session-reinforcement`, `l1-knowledge-horizon`, `l1-generation-shaping`).
-- **Next Action:** Execute T-16A01 Wiki schema & types: `wiki_page` (parent/ord tree, `citations` JSON, `source_fingerprint`, `stale` flag), `wiki_changelog`, `wiki_page_fts` (FTS5) + indices in `crates/store-local`; `WikiPage`/`WikiCitation` contract types, absent-by-default. **Verify:** `cargo test -p cronus-store-local wiki::schema` — tables + indices created; a page round-trips with its citations and fingerprint. via /magic.run main
+- **Next Action:** Run /magic.task main to update the plan
 
 ## Progress
 
