@@ -1,6 +1,6 @@
 # Memory Store
 
-**Version:** 1.3.0
+**Version:** 1.4.0
 **Status:** Stable
 **Layer:** implementation
 **Implements:** l1-memory-model.md
@@ -24,7 +24,7 @@ The model demands cheap, multi-signal, local recall with clean forgetting and co
 
 - Embedded only; no memory daemon. Per-scope SQLite files (see filesystem layout).
 - sqlite-vec is pre-1.0 — pin the version and isolate it behind a repository interface.
-- Markdown notes are the source of truth; the databases are rebuildable indices (MEM-4).
+- **Source of truth by kind (MEM-4):** the high-volume **learned** corpus is store-authoritative — the SQLite `memory_item` row (with its `content` column) is the truth, and the vector/lexical/graph indices are derived and rebuildable from it, with no parallel authoritative note file. The small **authored** quick-memory (`MEMORY.md` / `USER.md` per role, §4.11) stays human-readable-authoritative — it is the one tier a human edits directly. A human-readable export of the learned corpus is a derived projection, not a second truth.
 - v0.1.0 ships vector + lexical + tags. No relationship graph yet.
 
 ## 3. Invariant Compliance (Layer 2 only)
@@ -34,7 +34,7 @@ The model demands cheap, multi-signal, local recall with clean forgetting and co
 | MEM-1 Four scopes | Separate stores per scope: global `<state>/memory/`, workspace `<ws>/memory/`, employee `<role>/memory/`, session `<ws>/sessions/`. |
 | MEM-2 Most-specific-first | Recall queries employee → workspace → global; merges with specificity precedence; truncates to a token budget. |
 | MEM-3 Multi-signal recall | Fuse sqlite-vec similarity + FTS5 BM25 + tag filter into one ranked set. |
-| MEM-4 Text source of truth | `notes/*.md` are authoritative; `*.db` indices are rebuildable from notes. |
+| MEM-4 Source of truth by kind | **Learned corpus:** the `memory_item` row (`content` column) is authoritative; `memory_fts` / `memory_vec` are derived and rebuildable from it — no external note file. **Authored quick-memory:** `MEMORY.md` / `USER.md` (§4.11) are human-readable-authoritative, the one tier a human edits directly. A text export of the learned corpus is a projection, not a second truth. |
 | MEM-5 Decay & prune | `validity_scope` sets a half-life; a prune job deletes expired low-utility rows and old sessions. |
 | MEM-6 Compounding, non-destructive | Archivist promotes/distills; contradictions set `invalid_at` (supersede), never hard-delete durable knowledge. |
 | MEM-7 Ownership split | Core service exposes read/write/recall; archivist role runs consolidation; no agent writes the DB directly. |
@@ -928,6 +928,7 @@ The archivist's `reconcile` stage reads the pending review queue and either:
 
 | Version | Change |
 | --- | --- |
+| 1.4.0 | Reconciled to l1-memory-model MEM-4 v1.1 (source-of-truth by kind): the learned `memory_item` corpus is store-authoritative (`content` column is truth, `memory_fts`/`memory_vec` derived from it, no external `notes/*.md`); authored quick-memory (`MEMORY.md`/`USER.md`, §4.11) stays human-readable-authoritative. Removed the db+notes dual-write; a text export of the corpus is now a projection, not a second truth. Updated §2 constraint, Invariant Compliance MEM-4 row, and Drawbacks |
 | 1.3.0 | Concurrent recall legs and scopes (§4.2): FTS5 + tag legs run during query-embedding computation, KNN starts when the embedding is ready; per-scope database files queried concurrently on scope-local read connections; fuse unchanged — a deterministic reduction after the join |
 | 1.2.0 | Added §4.2.2 diversity & recency ranking refinements — config-gated MMR diversity (`mmr_lambda`) and opt-in recency weight (`recency_weight`/`recency_halflife_days`), defaults = no behavior change; effect measurable via the retrieval-evaluation harness |
 | 1.1.0 | Added §4.2.1 multi-script lexical robustness — FTS5 `MATCH`→`LIKE` fallback for scripts the default tokenizer under-segments (CJK / unsegmented text), engaged only on empty `MATCH` results |
@@ -936,7 +937,7 @@ The archivist's `reconcile` stage reads the pending review queue and either:
 ## 5. Drawbacks & Alternatives
 
 - **sqlite-vec pre-1.0:** breaking changes possible; mitigated by version pinning and a repository abstraction.
-- **Dual write (db + notes):** keeping notes authoritative adds a sync step; justified by inspectability (MEM-4).
+- **No dual write for the learned corpus (MEM-4):** the store is authoritative, so there is no `db + notes` sync step and no divergence risk; recovery is a backup concern. Human inspectability is retained where it has value — the small authored quick-memory (`MEMORY.md` / `USER.md`, §4.11), which a human edits directly.
 - **Trust asymmetry (+0.05/−0.10):** over many corrections, a fact converges toward 0 even if mostly correct. The archivist's `verify` stage should promote facts that outcome-verification confirms as stable, resetting trust toward 1.0.
 - **HRR capacity:** dim=1024 supports ~256 items at SNR=2.0. For large memory stores, increase dim or rely on sqlite-vec embeddings instead; HRR is only the fallback when no embedding model is configured.
 - **Alternative — libSQL native vectors:** rejected for local default (Turso's vector engine is in flux); libSQL/PostgreSQL remain optional sync targets only.

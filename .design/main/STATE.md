@@ -4,7 +4,7 @@
 <!-- Maximum 100 lines. Agent updates AFTER each completed action. -->
 
 **Workspace:** main
-**Updated:** 2026-07-14 10:17
+**Updated:** 2026-07-15 11:45
 **Phase:** 15 — Memory Capture Policy & Metadata
 **Status:** Active
 
