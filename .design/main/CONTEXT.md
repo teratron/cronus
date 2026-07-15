@@ -1,6 +1,6 @@
 # Project Context
 
-**Generated:** 2026-07-11
+**Generated:** 2026-07-15
 
 ## Active Technologies
 
@@ -18,8 +18,9 @@
 ├── .claude/
 │   ├── commands/
 │   ├── rules/
-│   ├── scheduled_tasks.lock
-│   └── skills/
+│   ├── settings.local.json
+│   ├── skills/
+│   └── worktrees/
 ├── .codex/
 │   ├── prompts/
 │   ├── rules/
@@ -76,7 +77,6 @@
 │   └── tui/
 ├── docs/
 │   └── README.md
-├── firebase-debug.log
 ├── installer/
 ├── package.json
 ├── packages/
@@ -90,18 +90,19 @@
 
 ## Recent Changes
 
-- T-13T01: final validation — full boundary sweep via `cargo tree` confirms the tier diagram exactly (domain carries zero infra deps; neither adapter depends on domain); the §6.4 INV-2 violation (a frontend opening a DB connection) is gone
-- Verify: `cargo test --workspace` green, 1,252 passed / 0 failed (the original 314 core-lib tests redistributed as 2 + 265 + 29 + 18 = 314, exactly conserved); `cargo clippy --workspace --all-targets -- -D warnings` clean; `cargo fmt --all -- --check` clean
-
-## Phase 14 — Memory Intelligence & Consolidation (L2) (2026-07-11)
-
-- T-14A01: `memory_signal` fact-vs-derived table — a closed three-kind signal vocabulary (Centrality/Cluster/Recency), version-guarded neutral-default degradation on absence or mismatch, disposable and rebuildable independently of the authored fact layer
-- T-14A02: `depth`/`lifecycle_state` columns — never-rewrite-raw guard (MC-1); reversible Active/Paused/Archived lifecycle with an append-only transition audit and a prune-protective guard so decay can rank down but never delete a paused/archived item (MI-9)
-- T-14B01: multiplicative offline-precomputed ranking (MC-8) — FTS5 BM25 mapped to a bounded (0,1] base relevance, fused multiplicatively with precomputed derived signals; no hot-path model call or graph walk
-- T-14B02: corpus-maintenance pass — recency decay, prune-protected archive, split-flagging, merge-candidate detection and a transactional merge (MC-6 minus MC-7, moved to T-14B03 once its edge-graph dependency was caught at plan time)
 - T-14B03: consolidation write — an additive-only `memory_edge` graph, the closed create/corroborate/refine/correct action algebra, an incremental watermark pass, a real (not tautological) optimistic-concurrency check caught and fixed during review, transactional correct, emergent topic summaries via a locally reimplemented union-find (MC-7), bounded interest topics (MC-10)
 - T-14C01: `answer` projection (MI-1) with KB-6 citations and an honest CV-3/4-gated insufficient outcome; temporal recall modes (MI-2) and a closed structured-predicate compiler (MI-8) over the bi-temporal record; immediate recall-visibility proven (MI-3)
 - T-14C02: conflict routing (MI-4) with a pinned confidence/trust-gap ambiguity threshold, a read-only intelligence digest (MI-5), and grounded run distillation (MI-7); MI-6/10/11/12 deliberately deferred as their own follow-up rather than rushed through a fourth schema round in one task
 - T-14C03: gated experience reuse (MI-13) — a new `ExperienceOutcome` typing (Success/Failure/Insight) pulled forward as the one field the deferral could not do without, a deterministic similarity/score/freshness reuse gate, and a structural retained-authority-gate composing the existing SEC-9/SEC-10 realization — a reused plan needing approval is surfaced, never auto-applied
 - T-14T01: cross-layer validation — 5 new integration tests through the real facade and SQLite adapter (capture→consolidate→answer, cold start, a no-graph-rewalk regression proof, the fact/derived boundary, and a real-adapter experience round-trip); MI-6/10/11/12 explicitly out of this sweep's scope — nothing built yet to exercise
 - Verify: `cargo test --workspace` green, 1,333 passed / 0 failed (1,252 Phase-13 baseline + 81 new across the phase); `cargo clippy --workspace --all-targets -- -D warnings` clean; `cargo fmt --all -- --check` clean
+
+## Phase 15 — Memory Capture Policy & Metadata (L2) (2026-07-11)
+
+- T-15A01: capture-metadata schema — three new nullable `MemoryEntry` fields (`actor`/`expiry`/`subject`, the last a new `MemorySubject` enum), all absent-by-default so the entire pre-existing corpus reads back unchanged; cross-reference deliberately realized with no new field at all, reusing the existing MC-3 `add_edge`
+- T-15B01: the salience-gated capture policy (MI-6) — a confidence-honest gate in front of the existing MC-4 create/corroborate decision (reused wholesale, not reimplemented), MI-6 cross-reference edges via a new `CROSS_REF_PREDICATE`, and the previously-inert `expiry` field wired into every recall path's `WHERE` clause so a voided item is actually excluded, not just stored
+- T-15B02: capture-time temporal normalization (MI-10) and the raw/inferred write mode (MI-12) — one generator seam serving both, `raw` mode structurally never consults the generator at all rather than asking and discarding the answer; every no-generator path degrades to verbatim, never fabricating
+- T-15B03: caller capture directives (MI-11) — `include`/`exclude`/`custom-instruction` steering with the safety-suppression guard enforced structurally (an excluded safety-relevant sentence is retained regardless) and the honesty-floor invariant holding by construction (the function has no confidence parameter at all)
+- T-15T01: cross-layer validation — 4 new integration tests through the real facade and SQLite adapter proving MI-6's metadata and cross-ref edges, the confidence gate's real unrecallability, MI-10/12's degrade reaching an actually-recallable row, and MI-11's safety guard reaching real storage
+- Verify: `cargo test --workspace` green, 1,360 passed / 0 failed (1,333 Phase-14 baseline + 27 new across the phase); `cargo clippy --workspace --all-targets -- -D warnings` clean; `cargo fmt --all -- --check` clean
+

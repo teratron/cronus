@@ -1,6 +1,6 @@
 # Filesystem Layout (OS-native)
 
-**Version:** 1.1.0
+**Version:** 1.2.0
 **Status:** Stable
 **Layer:** implementation
 **Implements:** l1-storage-model.md
@@ -79,6 +79,7 @@ A single path resolver in the core maps the abstract roots (`<program>`, `<state
     ├── config.json  RULES.md  STATE.md
     ├── memory/           #   workspace.db (SQLite+vec) + notes
     ├── graph/            #   graph.db (people/tasks/decisions/artifacts)
+    ├── wiki/             #   wiki.db — client-facing projection CACHE (rebuildable, not source of truth)
     ├── sessions/         #   SESSION (episodic, pruned)
     ├── kanban/  office/  schedules/  hooks/  sandboxes/  snapshots/  dashboard/
 ```
@@ -89,6 +90,7 @@ A single path resolver in the core maps the abstract roots (`<program>`, `<state
 | --- | --- | --- |
 | Global | `<state>/memory/global.db`, `<state>/memory/graph.db` | SQLite + sqlite-vec |
 | Workspace | `<state>/workspaces/<ws>/memory/workspace.db`, `<ws>/graph/graph.db` | SQLite + sqlite-vec |
+| Workspace wiki | `<state>/workspaces/<ws>/wiki/wiki.db` | SQLite + FTS5 (projection cache; rebuildable, droppable — see l2-project-wiki) |
 | Employee | `<state>/employees/<role>/memory/employee.db` | SQLite + sqlite-vec |
 
 Physical consolidation (one file with attached schemas vs separate files per level) is an implementation choice deferred to the build phase. Optional remote sync targets libSQL/PostgreSQL; local files remain the source of truth.
@@ -123,3 +125,4 @@ Physical consolidation (one file with attached schemas vs separate files per lev
 | --- | --- | --- |
 | 1.0.0 | 2026-06-24 | Initial stable spec — OS-native tier locations, program/state trees, database placement, repository visualization stub. |
 | 1.1.0 | 2026-07-08 | `[ADDED]` `<program>/skills/` (read-only preset skill store) to the program tier tree; `[MODIFIED]` `<state>/skills/` comment to reflect the mutable skill store (user-added + generated canonical packages); Related Specifications link to the skill system spec. Additive — status remains Stable. |
+| 1.2.0 | 2026-07-15 | `[ADDED]` `<state>/workspaces/<ws>/wiki/wiki.db` — the per-office project-wiki projection cache (SQLite + FTS5; rebuildable/droppable, not source of truth) to the workspace tree and the §4.4 database-placement table. Additive — status remains Stable. Realized by the new l2-project-wiki. |
