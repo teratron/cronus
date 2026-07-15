@@ -1,6 +1,6 @@
 # Report Prompting & Diagnostic Findings
 
-**Version:** 1.0.0
+**Version:** 1.1.0
 **Status:** Stable
 **Layer:** concept
 
@@ -15,7 +15,8 @@ This spec is the bridge between two established reporting paths: automatic error
 ## Related Specifications
 
 - [l1-issue-reporting.md](l1-issue-reporting.md) - The flow every invitation completes into: prefilled compose, mandatory preview-before-send (ISS-3), opt-in diagnostics (ISS-4), local-first capture (ISS-5).
-- [l1-error-reporting.md](l1-error-reporting.md) - The sibling automatic path for errors; prompting reuses its fingerprint/dedup discipline (ERR-3) and never duplicates its filing.
+- [l1-error-reporting.md](l1-error-reporting.md) - The sibling automatic path; prompting reuses its fingerprint/dedup discipline (ERR-3), never duplicates its filing, and defers to its autonomy modes (ERR-6).
+- [l1-improvement-loop.md](l1-improvement-loop.md) - The loop contract behind the `improvement` trigger: capture discipline (IMP-1/IMP-2), submission autonomy (IMP-3), upstream triage and disposition feedback consuming this ledger's outcomes (IMP-7).
 - [l1-operational-health.md](l1-operational-health.md) - Source of graded alerts and trend anomalies (OH-3/OH-4); health measures and hands findings off (OH-7) — prompting is one receiver.
 - [l1-doctor.md](l1-doctor.md) - Source of escalated, unrepairable or risky findings (HEAL-3); inconsistencies the doctor cannot safely fix become invitation candidates.
 - [l1-diagnostic-log.md](l1-diagnostic-log.md) - Evidence plane: a crash that only the forensic log witnessed (DL-2) is detected on the next start and becomes a finding; bundle egress stays under DL-6.
@@ -45,7 +46,7 @@ Rules every Layer 2 implementation MUST NOT violate:
 
 - **RP-1 (Invitation, never transmission):** the prompting layer only *invites*. It MUST NOT send, file, or egress anything by itself, and MUST NOT introduce a new egress path. A report reaches the tracker exclusively through the existing flows — the user-completed issue flow with its mandatory preview (ISS-3/ISS-6), or error reporting's own consent-gated path (ERR-1). Declining or ignoring an invitation has no egress side effect.
 
-- **RP-2 (Closed trigger taxonomy):** invitations arise only from a closed, named set of trigger sources: **(a) failure** — an error occurrence, including a crash discovered on next start from the forensic record (DL-2); **(b) degradation** — a health alert or trend anomaly of at least warning severity (OH-3/OH-4); **(c) inconsistency** — a self-check escalation the repair layer surfaced as unrepairable or risky (HEAL-3), including cross-component contract mismatches surfaced by its checks; **(d) component failure** — a user-visible, severity-coded failure surfaced by an embedded component's error taxonomy (e.g. the workflow-language runtime's canonical error codes); **(e) friction** — a repeated user-visible failure pattern of the same operation (retry/cancel loops) crossing a conservative threshold. A new trigger kind is an amendment to this taxonomy, never a one-off.
+- **RP-2 (Closed trigger taxonomy):** invitations arise only from a closed, named set of trigger sources: **(a) failure** — an error occurrence, including a crash discovered on next start from the forensic record (DL-2); **(b) degradation** — a health alert or trend anomaly of at least warning severity (OH-3/OH-4); **(c) inconsistency** — a self-check escalation the repair layer surfaced as unrepairable or risky (HEAL-3), including cross-component contract mismatches surfaced by its checks; **(d) component failure** — a user-visible, severity-coded failure surfaced by an embedded component's error taxonomy (e.g. the workflow-language runtime's canonical error codes); **(e) friction** — a repeated user-visible failure pattern of the same operation (retry/cancel loops) crossing a conservative threshold; **(f) improvement** — a system-observed improvement or optimization opportunity derived during real work from evidence the observation planes already record (run outcomes, routing/latency patterns, wasted-work signals, capability gaps), captured under the improvement loop's discipline: evidence-backed, product-subject-only, budget-bounded, never a bare opinion (IMP-1/IMP-2). A new trigger kind is an amendment to this taxonomy, never a one-off.
 
 - **RP-3 (Setting-governed modes):** prompting behavior is a user setting with a closed mode set — at minimum **off** (fully inert: no invitations, though findings are still recorded), **passive** (findings surface only as a non-intrusive indicator/counter the user can open), and **active** (invitations are delivered into the user's message stream). Per-trigger-category enablement and thresholds are also settings. The mode is changeable in one step from any invitation itself.
 
@@ -69,7 +70,7 @@ Rules every Layer 2 implementation MUST NOT violate:
 | --- | --- | --- | --- |
 | Initiator | system | system suggests | user |
 | Completer | system (under consent) | **user** | user |
-| Scope | errors/crashes | failures + degradation + inconsistency + friction | anything the user wants |
+| Scope | errors/crashes + eligible findings (ERR-6) | failures + degradation + inconsistency + friction + improvement | anything the user wants |
 | Egress | ERR-1 consent gate | none (RP-1) — hands off | ISS-3 preview gate |
 | Content | machine-authored | machine-drafted, user-rewritten | user-authored |
 
@@ -105,9 +106,10 @@ The ledger write precedes the policy gate (RP-6): a suppressed finding is still 
 | self-check escalation, contract mismatch | inconsistency | bug |
 | component error taxonomy (user-visible, `error` severity) | failure | bug |
 | repeated retry/cancel of one operation | friction | feedback |
+| in-work improvement/optimization opportunity (evidence-backed) | improvement | idea |
 | (user-side observation, no trigger) | — | any (plain issue flow, out of scope here) |
 
-Improvement *suggestions* have no system trigger of their own: they emerge either as the user's rewriting of a friction invitation or as a plain user-initiated idea report. The system proposes evidence, not opinions.
+[MODIFIED v1.1.0] System-derived improvement suggestions are first-class findings: the improvement loop defines their capture discipline — evidence-backed, product-subject-only, budget-bounded (IMP-1/IMP-2). The principle stands unchanged in stronger form: the system proposes *evidence*, not opinions — an improvement candidate without evidence references is not a finding. Under the automatic submission grant (ERR-6 automatic), a qualifying finding MAY file through the automatic path directly; RP-1 is untouched — transmission is the reporting pipeline's consented act, never the prompting layer's — and such findings are marked *reported* per RP-4.
 
 ### 4.4 The invitation surface
 
@@ -152,4 +154,5 @@ Names and storage are L2 concerns; the closed mode set and one-step reachability
 
 | Version | Date | Author | Notes |
 | --- | --- | --- | --- |
+| 1.1.0 | 2026-07-16 | Core Team | RP-2 gains **(f) improvement** — system-observed, evidence-backed improvement/optimization opportunities captured during real work under the improvement loop's discipline (IMP-1/IMP-2); §4.3 mapping row added (improvement → idea) and the "no system trigger for suggestions" stance replaced by the evidence-gated trigger; §4.1 scope updated for ERR-6 autonomy modes. Related link to l1-improvement-loop. |
 | 1.0.0 | 2026-07-09 | Core Team | Initial spec — system-prompted, user-completed reporting: invitation-never-transmission (RP-1), closed trigger taxonomy failure/degradation/inconsistency/component-failure/friction (RP-2), setting-governed off/passive/active modes (RP-3), bounded deduplicated dismissible invitations (RP-4), prefilled evidence-linked sanitized drafts (RP-5), local findings ledger with two consumers — user invitations and developer triage (RP-6), respects reporting config and never pressures consent (RP-7), frontend parity (RP-8). Bridges error-reporting (system-sent) and issue-reporting (user-sent); no new egress path. |
