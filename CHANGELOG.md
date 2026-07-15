@@ -171,3 +171,4 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Added specification `derived-artifact-handoff` (main)
 - Added specification `generation-shaping` (main)
 - Added specification `optimization-integrity` (main)
+- Added specification `cost-rating` (main)
