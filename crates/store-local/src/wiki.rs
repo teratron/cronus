@@ -8,7 +8,9 @@ use std::path::Path;
 
 use rusqlite::{Connection, OptionalExtension, params};
 
-use cronus_contract::{WikiCache, WikiChangelogEntry, WikiCitation, WikiPage, WikiPageKind};
+use cronus_contract::{
+    WikiCache, WikiChangelogEntry, WikiCitation, WikiPage, WikiPageKind, WikiReadSurface,
+};
 
 #[derive(Debug)]
 pub enum WikiError {
@@ -158,6 +160,76 @@ impl WikiStore {
             entries.push(row?);
         }
         Ok(entries)
+    }
+
+    /// Direct children of `parent_id` (roots when `None`), ordered by `ord`
+    /// (PW-6 navigation tree).
+    pub fn children(&self, office_id: &str, parent_id: Option<&str>) -> Result<Vec<WikiPage>> {
+        // `IS` is null-safe: binds NULL → matches root rows, binds a value →
+        // matches that parent.
+        let mut stmt = self.conn.prepare(
+            "SELECT id, office_id, parent_id, ord, kind, title, body,
+                    citations, source_fingerprint, generated_at, stale
+             FROM wiki_page
+             WHERE office_id = ?1 AND parent_id IS ?2
+             ORDER BY ord",
+        )?;
+        let rows = stmt.query_map(params![office_id, parent_id], row_to_page)?;
+        let mut pages = Vec::new();
+        for row in rows {
+            pages.push(row??);
+        }
+        Ok(pages)
+    }
+
+    /// Full-text search over title + body, best matches first (PW-6).
+    pub fn search(&self, office_id: &str, query: &str, limit: usize) -> Result<Vec<WikiPage>> {
+        let mut stmt = self.conn.prepare(
+            "SELECT p.id, p.office_id, p.parent_id, p.ord, p.kind, p.title, p.body,
+                    p.citations, p.source_fingerprint, p.generated_at, p.stale
+             FROM wiki_page_fts f
+             JOIN wiki_page p ON p.id = f.page_id
+             WHERE f.wiki_page_fts MATCH ?1 AND p.office_id = ?2
+             ORDER BY f.rank
+             LIMIT ?3",
+        )?;
+        let rows = stmt.query_map(params![query, office_id, limit as i64], row_to_page)?;
+        let mut pages = Vec::new();
+        for row in rows {
+            pages.push(row??);
+        }
+        Ok(pages)
+    }
+}
+
+impl WikiReadSurface for WikiStore {
+    fn page(&self, id: &str) -> std::result::Result<Option<WikiPage>, String> {
+        WikiStore::get_page(self, id).map_err(|e| e.to_string())
+    }
+
+    fn children(
+        &self,
+        office_id: &str,
+        parent_id: Option<&str>,
+    ) -> std::result::Result<Vec<WikiPage>, String> {
+        WikiStore::children(self, office_id, parent_id).map_err(|e| e.to_string())
+    }
+
+    fn search(
+        &self,
+        office_id: &str,
+        query: &str,
+        limit: usize,
+    ) -> std::result::Result<Vec<WikiPage>, String> {
+        WikiStore::search(self, office_id, query, limit).map_err(|e| e.to_string())
+    }
+
+    fn changelog(
+        &self,
+        office_id: &str,
+        limit: usize,
+    ) -> std::result::Result<Vec<WikiChangelogEntry>, String> {
+        WikiStore::changelog(self, office_id, limit).map_err(|e| e.to_string())
     }
 }
 
@@ -528,5 +600,112 @@ mod schema {
 
         // The limit is honored.
         assert_eq!(store.changelog("office-1", 1).unwrap().len(), 1);
+    }
+
+    // Build an overview → area → detail tree for the read-surface tests.
+    fn seed_tree(store: &WikiStore) {
+        let mut overview = WikiPage::new(
+            "o",
+            "office-1",
+            WikiPageKind::Overview,
+            "Overview",
+            "the project",
+        );
+        let mut area = WikiPage::new(
+            "a",
+            "office-1",
+            WikiPageKind::Area,
+            "Billing",
+            "billing area",
+        );
+        area.parent_id = Some("o".to_string());
+        area.ord = 0;
+        let mut detail = WikiPage::new(
+            "d",
+            "office-1",
+            WikiPageKind::Howto,
+            "Refunds",
+            "how to issue a refund",
+        );
+        detail.parent_id = Some("a".to_string());
+        detail.ord = 0;
+        overview.ord = 0;
+        for p in [&overview, &area, &detail] {
+            store.upsert_page(p).expect("seed");
+        }
+    }
+
+    #[test]
+    fn read_surface_navigates_the_parent_ord_tree() {
+        let store = WikiStore::open_in_memory().expect("open");
+        seed_tree(&store);
+        // Exercise through the read-only trait object — the client's handle.
+        let reader: &dyn WikiReadSurface = &store;
+
+        let roots = reader.children("office-1", None).expect("roots");
+        assert_eq!(
+            roots.iter().map(|p| p.id.as_str()).collect::<Vec<_>>(),
+            ["o"]
+        );
+
+        let under_overview = reader.children("office-1", Some("o")).expect("children");
+        assert_eq!(
+            under_overview
+                .iter()
+                .map(|p| p.id.as_str())
+                .collect::<Vec<_>>(),
+            ["a"]
+        );
+
+        let under_area = reader.children("office-1", Some("a")).expect("children");
+        assert_eq!(
+            under_area.iter().map(|p| p.id.as_str()).collect::<Vec<_>>(),
+            ["d"]
+        );
+
+        assert_eq!(reader.page("d").unwrap().unwrap().title, "Refunds");
+    }
+
+    #[test]
+    fn read_surface_full_text_search_finds_the_matching_page() {
+        let store = WikiStore::open_in_memory().expect("open");
+        seed_tree(&store);
+        let reader: &dyn WikiReadSurface = &store;
+
+        let hits = reader.search("office-1", "refund", 10).expect("search");
+        assert_eq!(
+            hits.iter().map(|p| p.id.as_str()).collect::<Vec<_>>(),
+            ["d"]
+        );
+
+        // A term only in the overview matches the overview.
+        let hits = reader.search("office-1", "project", 10).expect("search");
+        assert_eq!(
+            hits.iter().map(|p| p.id.as_str()).collect::<Vec<_>>(),
+            ["o"]
+        );
+
+        // No match → empty.
+        assert!(
+            reader
+                .search("office-1", "nonexistentterm", 10)
+                .unwrap()
+                .is_empty()
+        );
+    }
+
+    #[test]
+    fn read_surface_is_read_only_by_construction() {
+        // `&dyn WikiReadSurface` exposes ONLY read methods — there is no
+        // upsert/mark_stale/apply_regeneration on it, so the client
+        // structurally cannot mutate the wiki (PW-2). This compiles; a write
+        // call like `reader.upsert_page(..)` would not.
+        let store = WikiStore::open_in_memory().expect("open");
+        seed_tree(&store);
+        let reader: &dyn WikiReadSurface = &store;
+        let _ = reader.page("o").unwrap();
+        let _ = reader.children("office-1", None).unwrap();
+        let _ = reader.search("office-1", "project", 5).unwrap();
+        let _ = reader.changelog("office-1", 5).unwrap();
     }
 }

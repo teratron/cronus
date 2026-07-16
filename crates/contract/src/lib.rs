@@ -1188,3 +1188,23 @@ pub trait WikiCache {
     /// Change history newest-first (PW-5), at most `limit` entries.
     fn changelog(&self, office_id: &str, limit: usize) -> Result<Vec<WikiChangelogEntry>, String>;
 }
+
+/// The **read-only** client-facing wiki surface (PW-2/PW-6). The client is
+/// handed a `&dyn WikiReadSurface`, which — by having no write method at all —
+/// makes "the client can never curate the wiki" a compile-time property, not a
+/// convention: there is simply no API to mutate a row through this trait. The
+/// curator pipeline uses [`WikiCache`]; the client uses only this.
+pub trait WikiReadSurface {
+    /// One page by id, or `None`.
+    fn page(&self, id: &str) -> Result<Option<WikiPage>, String>;
+
+    /// The direct children of `parent_id` (or the roots when `None`), ordered
+    /// for navigation — the overview → area → detail tree (PW-6).
+    fn children(&self, office_id: &str, parent_id: Option<&str>) -> Result<Vec<WikiPage>, String>;
+
+    /// Full-text search over page title + body, best matches first (PW-6).
+    fn search(&self, office_id: &str, query: &str, limit: usize) -> Result<Vec<WikiPage>, String>;
+
+    /// Change history newest-first (PW-5), at most `limit` entries.
+    fn changelog(&self, office_id: &str, limit: usize) -> Result<Vec<WikiChangelogEntry>, String>;
+}
