@@ -1,0 +1,10 @@
+[package]
+name = "cronus-model-local"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+repository.workspace = true
+
+[dependencies]
+cronus-contract = { workspace = true }
+ureq = { workspace = true }

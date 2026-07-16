@@ -6,6 +6,7 @@ members = [
     "crates/domain",
     "crates/store-local",
     "crates/auth-local",
+    "crates/model-local",
     "crates/codegraph",
     "crates/nodus",
     "crates/cli",
@@ -29,6 +30,7 @@ cronus-contract = { path = "crates/contract" }
 cronus-domain = { path = "crates/domain" }
 cronus-store-local = { path = "crates/store-local" }
 cronus-auth-local = { path = "crates/auth-local" }
+cronus-model-local = { path = "crates/model-local" }
 nodus = { path = "crates/nodus" }
 aes-gcm = "0.11.0"
 argon2 = "0.5.3"
@@ -44,3 +46,4 @@ keyring = "4.1.5"
 rusqlite = { version = "0.40.1", features = ["bundled"] }
 serde_json = "1.0.150"
 sha1 = "0.11.0"
+ureq = { version = "3.3.0", default-features = false, features = ["rustls"] }
