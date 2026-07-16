@@ -8,7 +8,7 @@ use std::path::Path;
 
 use rusqlite::{Connection, OptionalExtension, params};
 
-use cronus_contract::{WikiChangelogEntry, WikiCitation, WikiPage, WikiPageKind};
+use cronus_contract::{WikiCache, WikiChangelogEntry, WikiCitation, WikiPage, WikiPageKind};
 
 #[derive(Debug)]
 pub enum WikiError {
@@ -68,35 +68,7 @@ impl WikiStore {
     /// The client never calls this — only the office regeneration pipeline
     /// (PW-2); it lives here as the store's write half for that pipeline.
     pub fn upsert_page(&self, page: &WikiPage) -> Result<()> {
-        self.conn.execute(
-            "INSERT OR REPLACE INTO wiki_page
-             (id, office_id, parent_id, ord, kind, title, body,
-              citations, source_fingerprint, generated_at, stale)
-             VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11)",
-            params![
-                page.id,
-                page.office_id,
-                page.parent_id,
-                page.ord,
-                page.kind.as_str(),
-                page.title,
-                page.body,
-                citations_to_json(&page.citations),
-                page.source_fingerprint,
-                page.generated_at as i64,
-                page.stale as i64,
-            ],
-        )?;
-        // Standalone FTS index (like the memory store): re-sync this page's row.
-        self.conn.execute(
-            "DELETE FROM wiki_page_fts WHERE page_id = ?1",
-            params![page.id],
-        )?;
-        self.conn.execute(
-            "INSERT INTO wiki_page_fts (page_id, title, body) VALUES (?1, ?2, ?3)",
-            params![page.id, page.title, page.body],
-        )?;
-        Ok(())
+        upsert_page_on(&self.conn, page)
     }
 
     /// Read a page by id, or `None` if absent.
@@ -115,19 +87,91 @@ impl WikiStore {
 
     /// Append a change-history entry (PW-5, newest-first by `at`).
     pub fn append_changelog(&self, entry: &WikiChangelogEntry) -> Result<()> {
-        self.conn.execute(
-            "INSERT INTO wiki_changelog (id, office_id, page_id, change, at)
-             VALUES (?1, ?2, ?3, ?4, ?5)",
-            params![
-                entry.id,
-                entry.office_id,
-                entry.page_id,
-                entry.change,
-                entry.at as i64,
-            ],
-        )?;
+        append_changelog_on(&self.conn, entry)
+    }
+
+    /// Apply a regeneration transactionally (PW-3): upsert every page and
+    /// append every changelog entry inside one SQLite transaction, so a
+    /// failure part-way rolls the whole batch back and the prior rows stay
+    /// intact. `unchecked_transaction` is used because the store holds the
+    /// connection behind `&self` (no `&mut` handle) — the batch is the only
+    /// writer, so there is no reentrancy to guard against.
+    pub fn apply_regeneration(
+        &self,
+        pages: &[WikiPage],
+        changelog: &[WikiChangelogEntry],
+    ) -> Result<()> {
+        let tx = self.conn.unchecked_transaction()?;
+        for page in pages {
+            upsert_page_on(&tx, page)?;
+        }
+        for entry in changelog {
+            append_changelog_on(&tx, entry)?;
+        }
+        tx.commit()?;
         Ok(())
     }
+}
+
+impl WikiCache for WikiStore {
+    fn get_page(&self, id: &str) -> std::result::Result<Option<WikiPage>, String> {
+        WikiStore::get_page(self, id).map_err(|e| e.to_string())
+    }
+
+    fn apply_regeneration(
+        &self,
+        pages: &[WikiPage],
+        changelog: &[WikiChangelogEntry],
+    ) -> std::result::Result<(), String> {
+        WikiStore::apply_regeneration(self, pages, changelog).map_err(|e| e.to_string())
+    }
+}
+
+fn upsert_page_on(conn: &Connection, page: &WikiPage) -> Result<()> {
+    conn.execute(
+        "INSERT OR REPLACE INTO wiki_page
+         (id, office_id, parent_id, ord, kind, title, body,
+          citations, source_fingerprint, generated_at, stale)
+         VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11)",
+        params![
+            page.id,
+            page.office_id,
+            page.parent_id,
+            page.ord,
+            page.kind.as_str(),
+            page.title,
+            page.body,
+            citations_to_json(&page.citations),
+            page.source_fingerprint,
+            page.generated_at as i64,
+            page.stale as i64,
+        ],
+    )?;
+    // Standalone FTS index (like the memory store): re-sync this page's row.
+    conn.execute(
+        "DELETE FROM wiki_page_fts WHERE page_id = ?1",
+        params![page.id],
+    )?;
+    conn.execute(
+        "INSERT INTO wiki_page_fts (page_id, title, body) VALUES (?1, ?2, ?3)",
+        params![page.id, page.title, page.body],
+    )?;
+    Ok(())
+}
+
+fn append_changelog_on(conn: &Connection, entry: &WikiChangelogEntry) -> Result<()> {
+    conn.execute(
+        "INSERT INTO wiki_changelog (id, office_id, page_id, change, at)
+         VALUES (?1, ?2, ?3, ?4, ?5)",
+        params![
+            entry.id,
+            entry.office_id,
+            entry.page_id,
+            entry.change,
+            entry.at as i64,
+        ],
+    )?;
+    Ok(())
 }
 
 /// Map a `wiki_page` row to a `WikiPage`. Returns `Result` inside the row
@@ -311,5 +355,51 @@ mod schema {
             )
             .unwrap();
         assert_eq!(fts_count, 1);
+    }
+
+    fn changelog(id: &str) -> WikiChangelogEntry {
+        WikiChangelogEntry {
+            id: id.to_string(),
+            office_id: "office-1".to_string(),
+            page_id: Some("p".to_string()),
+            change: "regenerated".to_string(),
+            at: 1_700_000_000,
+        }
+    }
+
+    #[test]
+    fn apply_regeneration_is_atomic_and_rolls_back_on_failure() {
+        let store = WikiStore::open_in_memory().expect("open");
+
+        // Seed a committed page + changelog.
+        let mut original = WikiPage::new("p", "office-1", WikiPageKind::Overview, "T", "original");
+        original.citations = vec![WikiCitation::new("decision", "d1")];
+        store
+            .apply_regeneration(&[original.clone()], &[changelog("cl-1")])
+            .expect("seed regeneration commits");
+
+        // A second batch updates the page but its changelog has a DUPLICATE id
+        // (`cl-1` already exists) — the second changelog INSERT violates the
+        // PRIMARY KEY, failing the transaction part-way.
+        let mut updated = original.clone();
+        updated.body = "SHOULD NOT PERSIST".to_string();
+        let result = store.apply_regeneration(&[updated], &[changelog("cl-1")]);
+        assert!(
+            result.is_err(),
+            "a duplicate changelog id must fail the batch"
+        );
+
+        // The whole batch rolled back: the prior page row is intact...
+        let got = store.get_page("p").expect("get").expect("present");
+        assert_eq!(
+            got.body, "original",
+            "the failed regeneration must not have written"
+        );
+        // ...and no duplicate/partial changelog row was left behind.
+        let cl_count: i64 = store
+            .conn
+            .query_row("SELECT count(*) FROM wiki_changelog", [], |r| r.get(0))
+            .unwrap();
+        assert_eq!(cl_count, 1, "only the seed changelog row exists");
     }
 }

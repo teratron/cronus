@@ -1157,3 +1157,23 @@ pub struct WikiChangelogEntry {
     pub change: String,
     pub at: u64,
 }
+
+/// The wiki store seam the office regeneration pipeline writes through
+/// (l2-project-wiki §4.2). Lives in the ports tier so `cronus-domain` (the
+/// pipeline) never depends on `cronus-store-local` (the SQLite realization);
+/// the client has no handle to this — only the curator-owned pipeline does
+/// (PW-2). The plain `String` error mirrors the other DN-2 seams.
+pub trait WikiCache {
+    fn get_page(&self, id: &str) -> Result<Option<WikiPage>, String>;
+
+    /// Apply one regeneration **transactionally** (PW-3): upsert every page
+    /// and append every changelog entry as a single all-or-nothing unit. On
+    /// any failure, nothing is written — the prior rows stay intact and
+    /// correctly marked (a failed regeneration never leaves a half-written
+    /// projection).
+    fn apply_regeneration(
+        &self,
+        pages: &[WikiPage],
+        changelog: &[WikiChangelogEntry],
+    ) -> Result<(), String>;
+}
