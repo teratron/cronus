@@ -4,23 +4,25 @@
 <!-- Maximum 100 lines. Agent updates AFTER each completed action. -->
 
 **Workspace:** main
-**Updated:** 2026-07-16 15:13
-**Phase:** 16 — Project Wiki Store (open); Phase 17 Done+Archived
+**Updated:** 2026-07-16 15:27
+**Phase:** 16 — Project Wiki Store
 **Status:** Active
 
 ## Current Position
 
-- **Task:** `/magic.run main` — **Phase 17 (Model Transport) COMPLETE (7/7) and archived.** The concept-conformance audit's keystone is closed: the model-consuming surface is live end-to-end (facade → `InferenceBackend` → HTTP → real result). Two pre-existing cronus-core test-isolation races fixed along the way. `cargo test --workspace` green exit 0 ×3.
-- **Spec:** INDEX v1.0.118 (209 specs: 201 Stable, 7 RFC, 1 Draft) · PLAN v2.22.0 · TASKS (Phase 17 → Done (Archived)). **Phase 16 (Project Wiki Store) remains open (Todo).** Backlog: 8 (7 RFC + 1 Draft). 0 PLAN-orphans.
-- **Next Action:** Phase complete → **`/magic.task main`** to revalidate the plan (per Post-Task Replan). Two follow-ups it should surface/absorb: (a) Phase 16 (Wiki Store) is the remaining open buildable phase; (b) a pending `l2-crate-topology` spec amendment (register `model-local` as a peer infra crate row) was deferred out of run per the SDD boundary — resolve via the spec workflow when the plan surfaces it.
+- **Task:** `/magic.task main` — **post-phase replan after Phase 17 complete+archived; milestone sync, no new tasks.** Confirmed Phase 16 (Project Wiki Store) is the sole open buildable phase; no new phase (every Stable spec is built or covered by an open phase). PLAN v2.23.0 / TASKS v1.25.0.
+- **Spec:** INDEX v1.0.118 (209 specs: 201 Stable, 7 RFC, 1 Draft) · PLAN v2.23.0 · TASKS v1.25.0. **Phase 16 (Project Wiki Store) open (Todo); Phase 17 Done+Archived.** Backlog: 8 (7 RFC + 1 Draft). 0 PLAN-orphans.
+- **Next Action:** Execute T-16A01 Wiki schema & types: `wiki_page` (parent/ord tree, `citations` JSON, `source_fingerprint`, `stale` flag), `wiki_changelog`, `wiki_page_fts` (FTS5) + indices in `crates/store-local`; `WikiPage`/`WikiCitation` contract types, absent-by-default. **Verify:** `cargo test -p cronus-store-local wiki::schema` — tables + indices created; a page round-trips with its citations and fingerprint. via /magic.run main
 
 ## Progress
 
 ```
-Build phases: Done 1–15 + **Phase 17 (Model Transport) DONE (7/7, archived)** | **Phase 16 (Project Wiki Store) OPEN — Todo (the remaining buildable phase)** | `cargo test --workspace` green exit 0 ×3 + clippy -D warnings + fmt clean | model-consuming surface LIVE end-to-end (contract::InferenceBackend → model-local transport → facade NodusModelBridge/TransportCompactor); CI domain→model-local guard self-tested; two cronus-core test races fixed | Backlog: 8 | Next: /magic.task main (phase-complete replan)
+Build phases: Done 1–15 + **Phase 17 (Model Transport) DONE (7/7, archived)** | **Phase 16 (Project Wiki Store) OPEN — Todo (the remaining buildable phase)** | `cargo test --workspace` green exit 0 ×3 + clippy -D warnings + fmt clean | model-consuming surface LIVE end-to-end (contract::InferenceBackend → model-local transport → facade NodusModelBridge/TransportCompactor); CI domain→model-local guard self-tested; two cronus-core test races fixed | Backlog: 8 | Next: /magic.run main (execute Phase 16)
 ```
 
 ## Recent Decisions
+
+- 2026-07-16 **Decision:** `/magic.task main` — **post-phase replan (Phase 17 complete+archived); milestone sync, no new tasks.** PLAN v2.23.0 / TASKS v1.25.0. Pre-flight clean (ok:true, 0 orphans, no drift, no SYNC_GAP). Confirmed by DA-3 that **Phase 16 (Project Wiki Store) is the sole open buildable phase** — every currently-Stable spec is now either built or covered by an open phase, so no new phase opens; the Backlog stays 8 (7 RFC + 1 Draft), each awaiting a `/magic.spec` review. Pre-Planning Stabilization: 0 promoted (sole Draft `l2-loop-runner` stays Draft — RFC parent `l1-loop-governance`; RFC→Stable is a `/magic.spec` act). No cascade, no new task units — pure milestone. Recorded the deferred `l2-crate-topology` amendment (register `model-local` peer-crate row) as a mechanical, non-blocking `/magic.spec` follow-up (does NOT gate Phase 16, not a Pre-flight HALT since it needs no design input). Clean `/magic.task` completion → handoff to `/magic.run main` (Phase 16). RULES parity v1.5.0 unchanged. (Revert: git restore .design/main/{PLAN,TASKS,STATE,CONTEXT}.md)
 - 2026-07-16 **Decision:** Phase 17 complete (7/7). Provides: contract::InferenceBackend + model-local REST transport + facade NodusModelBridge/TransportCompactor + CI boundary guard; two cronus-core test races fixed. Model-consuming surface is live end-to-end.
 
 - 2026-07-16 **Decision:** `/magic.run main` — **T-17D01 Done: topology registration + CI boundary guard. Track D complete (6/7).** `model-local` was already a workspace member + `workspace.dependencies` entry (B01). The existing allowlist guard (`scripts/check-domain-boundary.mjs`) **already forbade `domain → model-local`** by construction (adapters absent from the allowlist `[cronus-contract, nodus, blake3, chrono, cron]`) — T-17D01 made it *explicit and tested*, not assumed. Refactored the guard: pure `findOffenders(deps, allowlist)` core split from the cargo-metadata I/O + a `--self-test` mode (real deps clean; injected `cronus-model-local` flagged; all three adapters asserted off the allowlist so none can be silently allowlisted later); wired the self-test into `.github/workflows/deps-gate.yml` as its own CI step. **Verify: happy path exit 0; self-test exit 0; and a REAL end-to-end proof — actually adding `cronus-model-local` to `crates/domain/Cargo.toml` made the guard exit 1 (`forbidden normal dependencies: cronus-model-local`), reverted to exit 0 (manifest restored clean via `git checkout` — an intermediate PowerShell `Set-Content -Encoding utf8` had added a UTF-8 BOM, caught via `git diff` and fixed).** Code + CI only; the `l2-crate-topology` spec amendment (add `model-local` peer-crate row) deferred to `/magic.spec` per the SDD boundary (never edit a Stable spec inside run). Next: T-17T01 (the last Phase 17 task). (Revert: git restore scripts/check-domain-boundary.mjs .github/workflows/deps-gate.yml)
