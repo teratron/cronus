@@ -7,4 +7,4 @@ repository.workspace = true
 
 [dependencies]
 cronus-contract = { workspace = true }
-ureq = { workspace = true }
+serde_json = { workspace = true }
