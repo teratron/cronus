@@ -10,10 +10,7 @@ pub mod provider;
 pub mod recovery;
 pub mod scoring;
 
-use std::sync::{
-    Mutex,
-    atomic::{AtomicU64, Ordering},
-};
+use std::sync::Mutex;
 
 use cache::SemanticCache;
 use circuit::{CircuitBreaker, CircuitState};
@@ -51,8 +48,8 @@ impl std::error::Error for RouterError {}
 
 // ── RouterPool ────────────────────────────────────────────────────────────────
 
-/// Deterministic exploration counter — every 20th call uses bandit selection.
-static BANDIT_COUNTER: AtomicU64 = AtomicU64::new(0);
+/// One in every `BANDIT_INTERVAL` route calls uses bandit exploration.
+const BANDIT_INTERVAL: u64 = 20;
 
 struct ProviderEntry {
     provider: Box<dyn ModelProvider>,
@@ -65,6 +62,12 @@ struct PoolInner {
     lkgp: Option<String>,
     max_cost: f64,
     max_latency_ms: u64,
+    /// Per-pool exploration counter (every `BANDIT_INTERVAL`-th call explores).
+    /// Instance-scoped, not a process-global `static`: a global counter coupled
+    /// unrelated pools (and unrelated tests) so exploration cadence depended on
+    /// how many calls every *other* pool in the process had made. It is stepped
+    /// under the same lock as the rest of the routing decision.
+    bandit_counter: u64,
 }
 
 pub struct RouterPool {
@@ -81,6 +84,7 @@ impl RouterPool {
                 lkgp: None,
                 max_cost: 1.0,
                 max_latency_ms: 5000,
+                bandit_counter: 0,
             }),
             cache: SemanticCache::new(),
         }
@@ -162,16 +166,26 @@ impl RouterPool {
             return Err(RouterError::NoProvidersAvailable);
         }
 
-        // 5% bandit exploration — pick a random healthy provider.
-        // Use `state()` (&self) rather than `is_open()` (&mut self) because the
-        // `find` predicate only gets a shared reference to each entry.
-        let use_bandit = BANDIT_COUNTER
-            .fetch_add(1, Ordering::Relaxed)
-            .is_multiple_of(20);
+        // 5% bandit exploration — explore a healthy provider that still fits
+        // the request. The fit gate matters: without it, exploration could
+        // pick a provider whose context window is too small for the request
+        // (the scored path already excludes those via `FitLevel::TooTight`),
+        // so bandit selection would violate the same feasibility invariant the
+        // scored path upholds. Use `state()` (&self) rather than `is_open()`
+        // (&mut self) because the `find` predicate only gets a shared reference.
+        // Increment first, then test: the 20th/40th/… call of *this* pool
+        // explores, never the very first. (A count-then-increment scheme would
+        // fire on call 0, so a single-call routing test would always land on
+        // the bandit path — the accidental coupling the old global counter hid
+        // only because unrelated calls kept it away from a multiple of 20.)
+        inner.bandit_counter = inner.bandit_counter.wrapping_add(1);
+        let use_bandit = inner.bandit_counter.is_multiple_of(BANDIT_INTERVAL);
         if use_bandit
             && let Some(entry) = inner.entries.iter_mut().find(|e| {
                 e.circuit.state() != CircuitState::Open
                     && e.provider.health() != ProviderHealth::Unavailable
+                    && FitLevel::evaluate(req.required_context, e.provider.context_window())
+                        != FitLevel::TooTight
             })
         {
             return Ok(RouteDecision {

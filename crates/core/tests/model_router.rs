@@ -209,6 +209,41 @@ fn fit_level_routing_exclusion() {
 }
 
 #[test]
+fn bandit_exploration_still_respects_context_fit() {
+    // Drive enough calls that the every-20th bandit path fires at least once,
+    // with a context-incompatible provider registered FIRST (so a fit-blind
+    // bandit — which picks the first healthy provider — would select it). The
+    // tiny provider must never be chosen, on the scored path OR the bandit
+    // path, and the bandit path must actually have fired (else the test would
+    // prove nothing about the exploration branch).
+    let pool = RouterPool::new(ModePack::Quality);
+    pool.register(Box::new(MockProvider {
+        id: "tiny",
+        health: ProviderHealth::Healthy,
+        ctx: 100, // too small for our 5k request
+        cost: 0.001,
+        latency: 50,
+        tier: ProviderTier::Economy,
+        task_fit: 0.9,
+    }));
+    pool.register(healthy("big"));
+
+    let mut bandit_fired = false;
+    for _ in 0..40 {
+        let dec = pool.route(&req()).unwrap();
+        assert_eq!(
+            dec.provider_id, "big",
+            "the context-incompatible provider must never be selected, even during exploration"
+        );
+        bandit_fired |= dec.via_bandit;
+    }
+    assert!(
+        bandit_fired,
+        "the bandit exploration path must have fired within 40 calls (else the fit gate is untested)"
+    );
+}
+
+#[test]
 fn fit_level_evaluation() {
     assert_eq!(FitLevel::evaluate(50_000, 128_000), FitLevel::Perfect);
     assert_eq!(FitLevel::evaluate(90_000, 128_000), FitLevel::Good);

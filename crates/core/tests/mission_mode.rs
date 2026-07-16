@@ -120,9 +120,24 @@ fn abort_sets_aborted_status() {
 
 // ── resolve_mode priority ─────────────────────────────────────────────────────
 
+// `CRONUS_MISSION_MODE` is process-global, and `cargo test` runs a binary's
+// tests multi-threaded — so the tests that set/remove it must not interleave.
+// This lock serializes them; each holds it across its whole set→read→remove
+// sequence. Poisoning is recovered (a failing test still holds correct data
+// for the next), so one failure does not cascade into spurious lock panics.
+static MISSION_MODE_ENV_LOCK: std::sync::Mutex<()> = std::sync::Mutex::new(());
+
+fn lock_mission_mode_env() -> std::sync::MutexGuard<'static, ()> {
+    MISSION_MODE_ENV_LOCK
+        .lock()
+        .unwrap_or_else(std::sync::PoisonError::into_inner)
+}
+
 #[test]
 fn resolve_mode_env_overrides_config() {
-    // SAFETY: test runs single-threaded or with unique key; no concurrent readers
+    let _env = lock_mission_mode_env();
+    // SAFETY: the env lock serializes every test that touches this var, so
+    // there is no concurrent reader/writer of `CRONUS_MISSION_MODE`.
     unsafe { std::env::set_var("CRONUS_MISSION_MODE", "ultra") };
     let mode = resolve_mode(Some("lite"));
     unsafe { std::env::remove_var("CRONUS_MISSION_MODE") };
@@ -131,6 +146,8 @@ fn resolve_mode_env_overrides_config() {
 
 #[test]
 fn resolve_mode_config_used_when_no_env() {
+    let _env = lock_mission_mode_env();
+    // SAFETY: serialized by the env lock (see above).
     unsafe { std::env::remove_var("CRONUS_MISSION_MODE") };
     let mode = resolve_mode(Some("off"));
     assert_eq!(mode, MissionMode::Off);
@@ -138,6 +155,8 @@ fn resolve_mode_config_used_when_no_env() {
 
 #[test]
 fn resolve_mode_defaults_to_full() {
+    let _env = lock_mission_mode_env();
+    // SAFETY: serialized by the env lock (see above).
     unsafe { std::env::remove_var("CRONUS_MISSION_MODE") };
     let mode = resolve_mode(None);
     assert_eq!(mode, MissionMode::Full);
@@ -145,6 +164,8 @@ fn resolve_mode_defaults_to_full() {
 
 #[test]
 fn resolve_mode_invalid_env_falls_to_config() {
+    let _env = lock_mission_mode_env();
+    // SAFETY: serialized by the env lock (see above).
     unsafe { std::env::set_var("CRONUS_MISSION_MODE", "garbage") };
     let mode = resolve_mode(Some("lite"));
     unsafe { std::env::remove_var("CRONUS_MISSION_MODE") };
