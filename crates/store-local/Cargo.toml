@@ -11,3 +11,4 @@ argon2 = { workspace = true }
 cronus-contract = { workspace = true }
 keyring = { workspace = true }
 rusqlite = { workspace = true }
+serde_json = { workspace = true }

@@ -720,6 +720,7 @@ dependencies = [
  "cronus-contract",
  "keyring",
  "rusqlite",
+ "serde_json",
 ]
 
 [[package]]

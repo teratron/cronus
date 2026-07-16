@@ -1024,3 +1024,136 @@ mod inference_tests {
         );
     }
 }
+
+// ── Project wiki types ────────────────────────────────────────────────────────
+//
+// The client-facing project wiki (l2-project-wiki) is a derived projection
+// CACHE: pages are rows written only by the office regeneration pipeline and
+// reconstructable from ground truth (PW-3). These are the payload types the
+// store persists; the SQLite store itself lives in `cronus-store-local`.
+
+/// The fixed page-kind hierarchy (l2-project-wiki §4.1). The client wiki is
+/// navigable overview → area → detail via `WikiPage::parent_id` + `ord`; the
+/// kinds are closed so no page sits far from the overview (PW-6).
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum WikiPageKind {
+    Overview,
+    Area,
+    Decisions,
+    Howto,
+    Glossary,
+    Changelog,
+}
+
+impl WikiPageKind {
+    pub fn as_str(self) -> &'static str {
+        match self {
+            WikiPageKind::Overview => "overview",
+            WikiPageKind::Area => "area",
+            WikiPageKind::Decisions => "decisions",
+            WikiPageKind::Howto => "howto",
+            WikiPageKind::Glossary => "glossary",
+            WikiPageKind::Changelog => "changelog",
+        }
+    }
+
+    pub fn from_db_str(s: &str) -> Option<Self> {
+        match s {
+            "overview" => Some(WikiPageKind::Overview),
+            "area" => Some(WikiPageKind::Area),
+            "decisions" => Some(WikiPageKind::Decisions),
+            "howto" => Some(WikiPageKind::Howto),
+            "glossary" => Some(WikiPageKind::Glossary),
+            "changelog" => Some(WikiPageKind::Changelog),
+            _ => None,
+        }
+    }
+}
+
+/// One citation backing a wiki page's claims (PW-4). Every substantive claim
+/// must resolve to a citation; the regeneration pipeline drops an uncited
+/// section rather than persisting it. `source_kind` names what is cited (e.g.
+/// `decision`, `work_product`, `board_item`, `ledger_fact`); `source_id`
+/// references the specific ground-truth record.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct WikiCitation {
+    pub source_kind: String,
+    pub source_id: String,
+}
+
+impl WikiCitation {
+    pub fn new(source_kind: impl Into<String>, source_id: impl Into<String>) -> Self {
+        WikiCitation {
+            source_kind: source_kind.into(),
+            source_id: source_id.into(),
+        }
+    }
+}
+
+/// A client-facing wiki page — a derived projection row (PW-1…PW-6), never a
+/// source of truth: reconstructable from ground truth by `rebuild` (PW-3).
+///
+/// Optional structure is absent by default: a freshly-built page is a root
+/// (`parent_id = None`), first in order (`ord = 0`), fresh (`stale = false`),
+/// and uncited (`citations` empty) until the regeneration pipeline attributes
+/// and places it.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct WikiPage {
+    pub id: String,
+    pub office_id: String,
+    /// `None` for the overview root; otherwise the parent in the nav tree (PW-6).
+    pub parent_id: Option<String>,
+    /// Sibling ordering under `parent_id`.
+    pub ord: i64,
+    pub kind: WikiPageKind,
+    pub title: String,
+    /// Generated plain-language content (PW-1).
+    pub body: String,
+    /// Sources backing the page (PW-4); non-empty once the pipeline attributes it.
+    pub citations: Vec<WikiCitation>,
+    /// Hash of the inputs this page was generated from (PW-5).
+    pub source_fingerprint: String,
+    pub generated_at: u64,
+    /// `true` when the current source fingerprint differs from the stored one (PW-5).
+    pub stale: bool,
+}
+
+impl WikiPage {
+    /// A minimal page with structure absent by default (root, ord 0, uncited,
+    /// fresh). Callers set `parent_id`/`ord`/`citations`/`source_fingerprint`
+    /// as the regeneration pipeline places and attributes it.
+    pub fn new(
+        id: impl Into<String>,
+        office_id: impl Into<String>,
+        kind: WikiPageKind,
+        title: impl Into<String>,
+        body: impl Into<String>,
+    ) -> Self {
+        WikiPage {
+            id: id.into(),
+            office_id: office_id.into(),
+            parent_id: None,
+            ord: 0,
+            kind,
+            title: title.into(),
+            body: body.into(),
+            citations: Vec::new(),
+            source_fingerprint: String::new(),
+            generated_at: now_secs(),
+            stale: false,
+        }
+    }
+}
+
+/// One entry in a page's change history (PW-5), appended newest-first by the
+/// regeneration pipeline. `page_id` is `None` for an office-level change not
+/// tied to a single page.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct WikiChangelogEntry {
+    pub id: String,
+    pub office_id: String,
+    pub page_id: Option<String>,
+    /// Human-readable "what changed".
+    pub change: String,
+    pub at: u64,
+}

@@ -7,4 +7,5 @@
 
 pub mod inbox;
 pub mod memory;
+pub mod wiki;
 pub mod workspace;

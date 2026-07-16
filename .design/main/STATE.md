@@ -4,24 +4,25 @@
 <!-- Maximum 100 lines. Agent updates AFTER each completed action. -->
 
 **Workspace:** main
-**Updated:** 2026-07-16 15:27
+**Updated:** 2026-07-16 15:47
 **Phase:** 16 — Project Wiki Store
 **Status:** Active
 
 ## Current Position
 
-- **Task:** `/magic.task main` — **post-phase replan after Phase 17 complete+archived; milestone sync, no new tasks.** Confirmed Phase 16 (Project Wiki Store) is the sole open buildable phase; no new phase (every Stable spec is built or covered by an open phase). PLAN v2.23.0 / TASKS v1.25.0.
-- **Spec:** INDEX v1.0.118 (209 specs: 201 Stable, 7 RFC, 1 Draft) · PLAN v2.23.0 · TASKS v1.25.0. **Phase 16 (Project Wiki Store) open (Todo); Phase 17 Done+Archived.** Backlog: 8 (7 RFC + 1 Draft). 0 PLAN-orphans.
-- **Next Action:** Execute T-16A01 Wiki schema & types: `wiki_page` (parent/ord tree, `citations` JSON, `source_fingerprint`, `stale` flag), `wiki_changelog`, `wiki_page_fts` (FTS5) + indices in `crates/store-local`; `WikiPage`/`WikiCitation` contract types, absent-by-default. **Verify:** `cargo test -p cronus-store-local wiki::schema` — tables + indices created; a page round-trips with its citations and fingerprint. via /magic.run main
+- **Task:** `/magic.run main` executing Phase 16, Track A. T-16A01 Done (1/7 tasks). Next: T-16B01 (regeneration pipeline core, Track B).
+- **Spec:** INDEX v1.0.118 (209 specs: 201 Stable, 7 RFC, 1 Draft) · PLAN v2.23.0 · TASKS v1.25.0. **Phase 16 (Project Wiki Store) open; Phase 17 Done+Archived.** Backlog: 8 (7 RFC + 1 Draft). 0 PLAN-orphans.
+- **Next Action:** Execute T-16B01 Regeneration pipeline core (PW-2/PW-3): event→affected-page mapping + ground-truth gather (board / graph decisions / ledger / deliverables) + transactional per-page upsert + `wiki_changelog` append; office-owned, no client write path. **Verify:** test — a simulated office event regenerates only the affected pages transactionally; a forced mid-regen failure rolls back, leaving prior rows intact and correctly marked. via /magic.run main
 
 ## Progress
 
 ```
-Build phases: Done 1–15 + **Phase 17 (Model Transport) DONE (7/7, archived)** | **Phase 16 (Project Wiki Store) OPEN — Todo (the remaining buildable phase)** | `cargo test --workspace` green exit 0 ×3 + clippy -D warnings + fmt clean | model-consuming surface LIVE end-to-end (contract::InferenceBackend → model-local transport → facade NodusModelBridge/TransportCompactor); CI domain→model-local guard self-tested; two cronus-core test races fixed | Backlog: 8 | Next: /magic.run main (execute Phase 16)
+Build phases: Done 1–15 + Phase 17 (Model Transport) DONE+archived | **Phase 16 (Project Wiki Store) IN PROGRESS — T-16A01 Done (wiki schema + WikiPage/WikiCitation contract types), 6 tasks remain (B01/B02/B03/C01/C02/T01)** | Gates: cronus-store-local wiki::schema 3/3 ×2 + cargo test --workspace green exit 0 + clippy -D warnings + fmt clean | Backlog: 8 | Track A (schema) gates B/C
 ```
 
 ## Recent Decisions
 
+- 2026-07-16 **Decision:** `/magic.run main` — **T-16A01 Done: project-wiki schema + contract types. Phase 16 Track A complete (1/7).** Added contract types (`WikiPage`, `WikiCitation`, `WikiPageKind` closed enum overview|area|decisions|howto|glossary|changelog, `WikiChangelogEntry`) with structure absent-by-default (`WikiPage::new` → root/`ord`0/uncited/fresh, `parent_id: None`). New `crates/store-local/src/wiki.rs`: `WikiStore` (open/open_in_memory → `setup`) with the DDL — `wiki_page` (parent/ord tree, `citations` JSON TEXT, `source_fingerprint`, `stale`), `wiki_changelog`, `wiki_page_fts` (FTS5) + `idx_wiki_parent`/`idx_wiki_stale`; `upsert_page`/`get_page`/`append_changelog` for the round-trip. **Design calls:** (1) citations serialized to JSON in store-local via `serde_json::Value` built by hand — keeps `cronus-contract` **zero-dependency** (can't derive Serialize there), added `serde_json` to store-local deps. (2) FTS5 as a **standalone** table synced manually in `upsert_page` (matching the memory store's proven pattern), not the spec's illustrative `content=wiki_page` external-content form which would couple the FTS rowid to `wiki_page`'s implicit rowid despite its TEXT PK — noted inline. (3) A corrupt row (unknown kind / bad citations JSON) surfaces as `WikiError::Corrupt`, not a panic — recovery is rebuild (PW-3), never restore. 3 `wiki::schema` tests (tables+indices created; page round-trips with citations+fingerprint; upsert-replaces-by-id + FTS re-sync) — 3/3 ×2, `cargo test --workspace` green exit 0, clippy `-D warnings` + fmt clean. Track A gates B/C. Next: T-16B01 (regeneration pipeline core, domain tier). (Revert: git restore crates/store-local/Cargo.toml crates/store-local/src/lib.rs crates/contract/src/lib.rs && rm crates/store-local/src/wiki.rs)
 - 2026-07-16 **Decision:** `/magic.task main` — **post-phase replan (Phase 17 complete+archived); milestone sync, no new tasks.** PLAN v2.23.0 / TASKS v1.25.0. Pre-flight clean (ok:true, 0 orphans, no drift, no SYNC_GAP). Confirmed by DA-3 that **Phase 16 (Project Wiki Store) is the sole open buildable phase** — every currently-Stable spec is now either built or covered by an open phase, so no new phase opens; the Backlog stays 8 (7 RFC + 1 Draft), each awaiting a `/magic.spec` review. Pre-Planning Stabilization: 0 promoted (sole Draft `l2-loop-runner` stays Draft — RFC parent `l1-loop-governance`; RFC→Stable is a `/magic.spec` act). No cascade, no new task units — pure milestone. Recorded the deferred `l2-crate-topology` amendment (register `model-local` peer-crate row) as a mechanical, non-blocking `/magic.spec` follow-up (does NOT gate Phase 16, not a Pre-flight HALT since it needs no design input). Clean `/magic.task` completion → handoff to `/magic.run main` (Phase 16). RULES parity v1.5.0 unchanged. (Revert: git restore .design/main/{PLAN,TASKS,STATE,CONTEXT}.md)
 - 2026-07-16 **Decision:** Phase 17 complete (7/7). Provides: contract::InferenceBackend + model-local REST transport + facade NodusModelBridge/TransportCompactor + CI boundary guard; two cronus-core test races fixed. Model-consuming surface is live end-to-end.
 
