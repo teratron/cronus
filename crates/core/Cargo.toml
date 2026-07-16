@@ -10,6 +10,12 @@ cronus-auth-local = { workspace = true }
 cronus-contract = { workspace = true }
 cronus-domain = { workspace = true }
 cronus-store-local = { workspace = true }
+cronus-model-local = { workspace = true }
+# The facade hosts the nodus↔InferenceBackend bridge (l1-model-runtime §4.1):
+# core depends on nodus to implement its `ModelProvider`, and on model-local to
+# call the transport — nodus itself gains no dependency (LP-1 preserved).
+nodus = { workspace = true }
+serde_json = { workspace = true }
 
 # Benchmarks use a std-only timing harness (no external bench crate — see the
 # dependency policy). Each bench target is a plain `fn main()` gated behind

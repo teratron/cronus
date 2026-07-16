@@ -687,7 +687,10 @@ dependencies = [
  "cronus-auth-local",
  "cronus-contract",
  "cronus-domain",
+ "cronus-model-local",
  "cronus-store-local",
+ "nodus",
+ "serde_json",
 ]
 
 [[package]]
