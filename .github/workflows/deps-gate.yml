@@ -56,6 +56,12 @@ jobs:
       - name: Domain dependency boundary guard
         run: node scripts/check-domain-boundary.mjs
 
+      # Prove the guard's rejection path still works (real tree clean AND an
+      # injected domain->model-local edge is flagged) — a guard that cannot
+      # fail protects nothing.
+      - name: Boundary guard self-test
+        run: node scripts/check-domain-boundary.mjs --self-test
+
       - uses: Swatinem/rust-cache@v2
 
       # --all-targets also compiles the benches; --locked catches manifest ↔
