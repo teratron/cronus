@@ -111,6 +111,54 @@ impl WikiStore {
         tx.commit()?;
         Ok(())
     }
+
+    /// Every page for an office (the freshness-sweep input).
+    pub fn pages_for_office(&self, office_id: &str) -> Result<Vec<WikiPage>> {
+        let mut stmt = self.conn.prepare(
+            "SELECT id, office_id, parent_id, ord, kind, title, body,
+                    citations, source_fingerprint, generated_at, stale
+             FROM wiki_page WHERE office_id = ?1 ORDER BY parent_id, ord",
+        )?;
+        let rows = stmt.query_map(params![office_id], row_to_page)?;
+        let mut pages = Vec::new();
+        for row in rows {
+            pages.push(row??);
+        }
+        Ok(pages)
+    }
+
+    /// Flip the `stale` flag on the given pages (PW-5), transactionally.
+    pub fn mark_stale(&self, page_ids: &[String]) -> Result<()> {
+        let tx = self.conn.unchecked_transaction()?;
+        for id in page_ids {
+            tx.execute("UPDATE wiki_page SET stale = 1 WHERE id = ?1", params![id])?;
+        }
+        tx.commit()?;
+        Ok(())
+    }
+
+    /// Change history newest-first (PW-5), at most `limit` entries.
+    pub fn changelog(&self, office_id: &str, limit: usize) -> Result<Vec<WikiChangelogEntry>> {
+        let mut stmt = self.conn.prepare(
+            "SELECT id, office_id, page_id, change, at
+             FROM wiki_changelog WHERE office_id = ?1 ORDER BY at DESC LIMIT ?2",
+        )?;
+        let rows = stmt.query_map(params![office_id, limit as i64], |row| {
+            let at: i64 = row.get(4)?;
+            Ok(WikiChangelogEntry {
+                id: row.get(0)?,
+                office_id: row.get(1)?,
+                page_id: row.get(2)?,
+                change: row.get(3)?,
+                at: at as u64,
+            })
+        })?;
+        let mut entries = Vec::new();
+        for row in rows {
+            entries.push(row?);
+        }
+        Ok(entries)
+    }
 }
 
 impl WikiCache for WikiStore {
@@ -124,6 +172,22 @@ impl WikiCache for WikiStore {
         changelog: &[WikiChangelogEntry],
     ) -> std::result::Result<(), String> {
         WikiStore::apply_regeneration(self, pages, changelog).map_err(|e| e.to_string())
+    }
+
+    fn pages_for_office(&self, office_id: &str) -> std::result::Result<Vec<WikiPage>, String> {
+        WikiStore::pages_for_office(self, office_id).map_err(|e| e.to_string())
+    }
+
+    fn mark_stale(&self, page_ids: &[String]) -> std::result::Result<(), String> {
+        WikiStore::mark_stale(self, page_ids).map_err(|e| e.to_string())
+    }
+
+    fn changelog(
+        &self,
+        office_id: &str,
+        limit: usize,
+    ) -> std::result::Result<Vec<WikiChangelogEntry>, String> {
+        WikiStore::changelog(self, office_id, limit).map_err(|e| e.to_string())
     }
 }
 
@@ -401,5 +465,68 @@ mod schema {
             .query_row("SELECT count(*) FROM wiki_changelog", [], |r| r.get(0))
             .unwrap();
         assert_eq!(cl_count, 1, "only the seed changelog row exists");
+    }
+
+    #[test]
+    fn mark_stale_flips_the_flag_and_pages_for_office_reads_it_back() {
+        let store = WikiStore::open_in_memory().expect("open");
+        let a = WikiPage::new(
+            "office-1:overview",
+            "office-1",
+            WikiPageKind::Overview,
+            "O",
+            "b",
+        );
+        let b = WikiPage::new(
+            "office-1:decisions",
+            "office-1",
+            WikiPageKind::Decisions,
+            "D",
+            "b",
+        );
+        store.upsert_page(&a).expect("a");
+        store.upsert_page(&b).expect("b");
+
+        // Both start fresh.
+        assert!(
+            store
+                .pages_for_office("office-1")
+                .unwrap()
+                .iter()
+                .all(|p| !p.stale)
+        );
+
+        store
+            .mark_stale(&["office-1:overview".to_string()])
+            .expect("mark");
+
+        let pages = store.pages_for_office("office-1").unwrap();
+        let overview = pages.iter().find(|p| p.id == "office-1:overview").unwrap();
+        let decisions = pages.iter().find(|p| p.id == "office-1:decisions").unwrap();
+        assert!(overview.stale, "the marked page is stale");
+        assert!(!decisions.stale, "an unmarked page stays fresh");
+    }
+
+    #[test]
+    fn changelog_is_returned_newest_first() {
+        let store = WikiStore::open_in_memory().expect("open");
+        for (id, at) in [("cl-a", 100u64), ("cl-b", 300), ("cl-c", 200)] {
+            store
+                .append_changelog(&WikiChangelogEntry {
+                    id: id.to_string(),
+                    office_id: "office-1".to_string(),
+                    page_id: None,
+                    change: id.to_string(),
+                    at,
+                })
+                .expect("append");
+        }
+
+        let entries = store.changelog("office-1", 10).expect("changelog");
+        let ats: Vec<u64> = entries.iter().map(|e| e.at).collect();
+        assert_eq!(ats, vec![300, 200, 100], "newest-first by `at`");
+
+        // The limit is honored.
+        assert_eq!(store.changelog("office-1", 1).unwrap().len(), 1);
     }
 }

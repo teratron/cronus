@@ -280,6 +280,33 @@ fn fingerprint_of(sources: &[WikiCitation]) -> String {
     hasher.finalize().to_hex().to_string()
 }
 
+/// Freshness sweep (PW-5): for every non-stale page, recompute the current
+/// fingerprint of its sources and, if it differs from the stored one, mark the
+/// page stale — its sources moved without a regeneration catching up. Returns
+/// the ids newly marked stale. This never regenerates or mutates content; it
+/// only flips the honest "may be out of date" marker so the UI never presents
+/// a drifted page silently as current.
+pub fn check_freshness(
+    office_id: &str,
+    ground_truth: &dyn GroundTruth,
+    cache: &dyn WikiCache,
+) -> Result<Vec<String>, String> {
+    let mut drifted: Vec<String> = Vec::new();
+    for page in cache.pages_for_office(office_id)? {
+        if page.stale {
+            continue; // already flagged — nothing to do
+        }
+        let current = fingerprint_of(&ground_truth.sources(office_id, page.kind)?);
+        if current != page.source_fingerprint {
+            drifted.push(page.id);
+        }
+    }
+    if !drifted.is_empty() {
+        cache.mark_stale(&drifted)?;
+    }
+    Ok(drifted)
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -289,11 +316,15 @@ mod tests {
     #[derive(Default)]
     struct RecordingCache {
         applied: RefCell<Vec<Vec<WikiPage>>>,
+        /// Pages the store already holds (for `pages_for_office` / freshness).
+        seeded: RefCell<Vec<WikiPage>>,
+        /// Ids passed to `mark_stale`, in order.
+        marked: RefCell<Vec<String>>,
     }
 
     impl WikiCache for RecordingCache {
-        fn get_page(&self, _id: &str) -> Result<Option<WikiPage>, String> {
-            Ok(None)
+        fn get_page(&self, id: &str) -> Result<Option<WikiPage>, String> {
+            Ok(self.seeded.borrow().iter().find(|p| p.id == id).cloned())
         }
         fn apply_regeneration(
             &self,
@@ -302,6 +333,25 @@ mod tests {
         ) -> Result<(), String> {
             self.applied.borrow_mut().push(pages.to_vec());
             Ok(())
+        }
+        fn pages_for_office(&self, _office_id: &str) -> Result<Vec<WikiPage>, String> {
+            Ok(self.seeded.borrow().clone())
+        }
+        fn mark_stale(&self, page_ids: &[String]) -> Result<(), String> {
+            self.marked.borrow_mut().extend_from_slice(page_ids);
+            for page in self.seeded.borrow_mut().iter_mut() {
+                if page_ids.contains(&page.id) {
+                    page.stale = true;
+                }
+            }
+            Ok(())
+        }
+        fn changelog(
+            &self,
+            _office_id: &str,
+            _limit: usize,
+        ) -> Result<Vec<WikiChangelogEntry>, String> {
+            Ok(vec![])
         }
     }
 
@@ -597,5 +647,60 @@ mod tests {
             cache.applied.borrow().is_empty(),
             "nothing written — prior rows stay intact"
         );
+    }
+
+    #[test]
+    fn a_source_moving_without_regeneration_flips_the_page_stale() {
+        // Seed one page whose stored fingerprint was computed from source `d1`.
+        let cache = RecordingCache::default();
+        let mut page = WikiPage::new(
+            "office-1:overview",
+            "office-1",
+            WikiPageKind::Overview,
+            "O",
+            "body",
+        );
+        page.source_fingerprint = fingerprint_of(&[WikiCitation::new("decision", "d1")]);
+        cache.seeded.borrow_mut().push(page);
+
+        // Ground truth now yields a DIFFERENT source (`d-overview`) → the
+        // current fingerprint differs → the page has drifted.
+        let drifted = check_freshness("office-1", &ground(), &cache).expect("sweep");
+        assert_eq!(drifted, vec!["office-1:overview"]);
+        assert_eq!(cache.marked.borrow().as_slice(), ["office-1:overview"]);
+        assert!(
+            cache.get_page("office-1:overview").unwrap().unwrap().stale,
+            "the drifted page is now marked stale"
+        );
+
+        // Idempotent: a second sweep marks nothing new (already stale).
+        assert!(
+            check_freshness("office-1", &ground(), &cache)
+                .unwrap()
+                .is_empty()
+        );
+    }
+
+    #[test]
+    fn a_page_whose_sources_are_unchanged_stays_fresh() {
+        let cache = RecordingCache::default();
+        let mut page = WikiPage::new(
+            "office-1:overview",
+            "office-1",
+            WikiPageKind::Overview,
+            "O",
+            "body",
+        );
+        // Stored fingerprint matches exactly what ground() will report for
+        // the Overview kind (`d-overview`), so there is no drift.
+        page.source_fingerprint = fingerprint_of(&[WikiCitation::new("decision", "d-overview")]);
+        cache.seeded.borrow_mut().push(page);
+
+        assert!(
+            check_freshness("office-1", &ground(), &cache)
+                .unwrap()
+                .is_empty()
+        );
+        assert!(!cache.get_page("office-1:overview").unwrap().unwrap().stale);
     }
 }

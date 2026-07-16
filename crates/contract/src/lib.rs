@@ -1176,4 +1176,15 @@ pub trait WikiCache {
         pages: &[WikiPage],
         changelog: &[WikiChangelogEntry],
     ) -> Result<(), String>;
+
+    /// Every page belonging to an office — the input to the freshness sweep.
+    fn pages_for_office(&self, office_id: &str) -> Result<Vec<WikiPage>, String>;
+
+    /// Mark pages stale (PW-5): their sources drifted since generation and no
+    /// regeneration has caught up, so the UI must show a stale marker rather
+    /// than silently presenting them as current.
+    fn mark_stale(&self, page_ids: &[String]) -> Result<(), String>;
+
+    /// Change history newest-first (PW-5), at most `limit` entries.
+    fn changelog(&self, office_id: &str, limit: usize) -> Result<Vec<WikiChangelogEntry>, String>;
 }
