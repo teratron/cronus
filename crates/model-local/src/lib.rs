@@ -20,13 +20,18 @@
 //! profile path, where TLS is genuinely required; adding it before that
 //! path exists would be an unused dependency.
 
+use std::fmt;
 use std::io::{self, Read, Write};
 use std::net::{IpAddr, SocketAddr, TcpStream, ToSocketAddrs};
+use std::sync::Arc;
 use std::sync::mpsc::{Receiver, SyncSender, sync_channel};
 use std::thread;
 use std::time::Duration;
 
-use cronus_contract::{CancelHandle, GenerateRequest, InferenceError, StreamEvent};
+use cronus_contract::{
+    CancelHandle, GenerateRequest, InferenceBackend, InferenceError, ModelDescriptor, PullProgress,
+    ResidencyHint, StreamEvent,
+};
 
 /// The stack §4.4 probe discipline: no probe blocks longer than this by
 /// default. Tests override via `probe_with_timeout`.
@@ -60,12 +65,55 @@ pub enum ProfileError {
     /// `api_base` did not parse into a connectable host[:port].
     InvalidAddress(String),
     /// The host is not loopback, and `EndpointProfile::new` is loopback-only
-    /// by default (MR-1) — a remote endpoint needs the (egress-gated)
-    /// remote constructor landing in a later task.
+    /// by default (MR-1) — a remote endpoint must be built with
+    /// [`EndpointProfile::new_remote`], which requires an [`EgressGrant`].
     NotLoopback(String),
     /// The host is a wildcard bind address (`0.0.0.0` / `::`), never a
     /// valid connect target (stack §4.4).
     WildcardAddress(String),
+    /// A remote profile's [`EgressGrant`] authorized a different endpoint
+    /// than the one being constructed — the grant is endpoint-scoped and is
+    /// not a blanket egress permit (SEC-8).
+    GrantEndpointMismatch { granted: String, requested: String },
+}
+
+/// Resolves the credential for a remote endpoint **at call time**, so the
+/// secret is never cached in the profile or in config (§4.4, INV-7). The
+/// concrete implementation wraps the secret store; the transport only calls
+/// `resolve` when it is about to build a request and forgets the result
+/// immediately after attaching it. `None` means "no credential available"
+/// — the call proceeds unauthenticated and the endpoint's own auth failure
+/// (a 401/403) surfaces through the normal taxonomy.
+pub trait CredentialResolver: Send + Sync {
+    /// Return the bearer credential for `endpoint`, freshly, per call.
+    fn resolve(&self, endpoint: &str) -> Option<String>;
+}
+
+/// Proof that the security egress gate (SEC-8) authorized reaching a
+/// specific remote endpoint. Minted by the security layer that owns the
+/// egress decision — **never** by the transport itself (SEC-10: the agent's
+/// execution plane cannot self-authorize egress). Requiring one to build a
+/// remote profile makes "no remote call without an egress grant" a
+/// compile-time property: [`EndpointProfile::new_remote`] cannot be called
+/// without it. The grant is endpoint-scoped, not a blanket permit.
+#[derive(Debug, Clone)]
+pub struct EgressGrant {
+    endpoint: String,
+}
+
+impl EgressGrant {
+    /// Mint a grant for `endpoint`. Called by the security layer once its
+    /// egress gate has approved reaching `endpoint`; the transport receives
+    /// the minted grant, it does not construct one on its own behalf.
+    pub fn for_endpoint(endpoint: impl Into<String>) -> Self {
+        EgressGrant {
+            endpoint: endpoint.into(),
+        }
+    }
+
+    pub fn endpoint(&self) -> &str {
+        &self.endpoint
+    }
 }
 
 /// Outcome of a reachability probe (§4.3, mirrors technology-stack §4.4).
@@ -81,17 +129,40 @@ pub enum ProbeOutcome {
 /// (`api_base`) is supplied by the caller (the router's policy); this
 /// profile adds only the how-to-talk layer, never a parallel address
 /// registry.
-#[derive(Debug, Clone, PartialEq, Eq)]
+///
+/// Not `PartialEq`/`Eq`: a remote profile carries a credential resolver
+/// (`Arc<dyn CredentialResolver>`) that has no meaningful equality, and
+/// comparing profiles is not a use this crate needs. `Debug` is hand-written
+/// to redact the resolver — a secret source must never reach a log (INV-7).
+#[derive(Clone)]
 pub struct EndpointProfile {
     api_base: String,
     protocol: ProtocolFamily,
     capabilities: Capabilities,
+    /// `Some` only for remote (non-loopback) profiles built via
+    /// [`Self::new_remote`]. Holds the call-time credential resolver, never
+    /// a resolved secret.
+    remote_auth: Option<Arc<dyn CredentialResolver>>,
+}
+
+impl fmt::Debug for EndpointProfile {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        f.debug_struct("EndpointProfile")
+            .field("api_base", &self.api_base)
+            .field("protocol", &self.protocol)
+            .field("capabilities", &self.capabilities)
+            .field(
+                "remote_auth",
+                &self.remote_auth.as_ref().map(|_| "<credential-resolver>"),
+            )
+            .finish()
+    }
 }
 
 impl EndpointProfile {
     /// Construct a loopback-only profile — the default per MR-1. Rejects a
     /// non-loopback host and a wildcard bind address; a remote profile is a
-    /// distinct, egress-gated construction path (later task).
+    /// distinct, egress-gated construction path ([`Self::new_remote`]).
     pub fn new(
         api_base: impl Into<String>,
         protocol: ProtocolFamily,
@@ -115,6 +186,43 @@ impl EndpointProfile {
             api_base,
             protocol,
             capabilities,
+            remote_auth: None,
+        })
+    }
+
+    /// Construct a **remote** (non-loopback-permitted) profile. Requires an
+    /// [`EgressGrant`] scoped to this exact `api_base` (SEC-8) — the type
+    /// makes "no remote profile without an egress grant" a compile-time
+    /// guarantee. The credential is not passed here: a [`CredentialResolver`]
+    /// is stored and invoked per call so the secret is never cached
+    /// (§4.4, INV-7). A wildcard bind address is still rejected.
+    pub fn new_remote(
+        api_base: impl Into<String>,
+        protocol: ProtocolFamily,
+        capabilities: Capabilities,
+        grant: &EgressGrant,
+        credential: Arc<dyn CredentialResolver>,
+    ) -> Result<Self, ProfileError> {
+        let api_base = api_base.into();
+        if grant.endpoint() != api_base {
+            return Err(ProfileError::GrantEndpointMismatch {
+                granted: grant.endpoint().to_string(),
+                requested: api_base,
+            });
+        }
+        let host =
+            host_of(&api_base).ok_or_else(|| ProfileError::InvalidAddress(api_base.clone()))?;
+        if let Ok(ip) = host.parse::<IpAddr>()
+            && ip.is_unspecified()
+        {
+            return Err(ProfileError::WildcardAddress(api_base));
+        }
+
+        Ok(EndpointProfile {
+            api_base,
+            protocol,
+            capabilities,
+            remote_auth: Some(credential),
         })
     }
 
@@ -179,11 +287,233 @@ impl EndpointProfile {
         let api_base = self.api_base.clone();
         let protocol = self.protocol;
         let request = request.clone();
-        thread::spawn(move || run_generate_worker(&api_base, protocol, &request, &cancel, &tx));
+        // Resolve the credential now (at call time), never earlier: the
+        // profile caches only the resolver, and the resolved secret lives
+        // only for this call's worker (§4.4, INV-7).
+        let auth_header = self.resolve_auth_header();
+        thread::spawn(move || {
+            run_generate_worker(&api_base, protocol, &request, auth_header, &cancel, &tx)
+        });
         StreamReceiver {
             rx,
             terminated: false,
         }
+    }
+
+    /// Resolve this profile's bearer credential fresh, per call. `None` for
+    /// a loopback profile (no auth) or when the resolver has no credential.
+    fn resolve_auth_header(&self) -> Option<String> {
+        self.remote_auth
+            .as_ref()
+            .and_then(|r| r.resolve(&self.api_base))
+            .map(|secret| format!("Bearer {secret}"))
+    }
+
+    /// Embed `input` with `model` (MR-8). Capability-gated: a profile whose
+    /// `embeddings` flag is unset reports `Unsupported` rather than emulating
+    /// (MR-9). One request, no retry.
+    pub fn embed(&self, model: &str, input: &str) -> Result<Vec<f32>, InferenceError> {
+        if !self.capabilities.embeddings {
+            return Err(InferenceError::Unsupported);
+        }
+        let path = match self.protocol {
+            ProtocolFamily::OpenAiCompatible => "/v1/embeddings",
+            ProtocolFamily::Native => "/api/embeddings",
+        };
+        let body = match self.protocol {
+            ProtocolFamily::OpenAiCompatible => {
+                serde_json::json!({ "model": model, "input": input }).to_string()
+            }
+            ProtocolFamily::Native => {
+                serde_json::json!({ "model": model, "prompt": input }).to_string()
+            }
+        };
+        let (_status, bytes) = self.http_call("POST", path, Some(&body))?;
+        let json: serde_json::Value = serde_json::from_slice(&bytes)
+            .map_err(|e| InferenceError::MalformedStream(e.to_string()))?;
+        // OpenAI: {data:[{embedding:[...]}]}; Ollama: {embedding:[...]}.
+        let vec = json
+            .get("data")
+            .and_then(|d| d.get(0))
+            .and_then(|d| d.get("embedding"))
+            .or_else(|| json.get("embedding"))
+            .and_then(|e| e.as_array())
+            .map(|arr| {
+                arr.iter()
+                    .filter_map(|v| v.as_f64().map(|f| f as f32))
+                    .collect::<Vec<f32>>()
+            })
+            .ok_or_else(|| {
+                InferenceError::MalformedStream("no embedding array in response".to_string())
+            })?;
+        Ok(vec)
+    }
+
+    /// Describe `model` (MR-3/MR-12): surface whatever static facts the
+    /// serving backend reports (name/digest/size/parameters), missing fields
+    /// left `None` rather than fabricated. One request, no retry.
+    pub fn describe(&self, model: &str) -> Result<ModelDescriptor, InferenceError> {
+        let (path, method, body) = match self.protocol {
+            ProtocolFamily::OpenAiCompatible => (format!("/v1/models/{model}"), "GET", None),
+            ProtocolFamily::Native => (
+                "/api/show".to_string(),
+                "POST",
+                Some(serde_json::json!({ "name": model }).to_string()),
+            ),
+        };
+        let (_status, bytes) = self.http_call(method, &path, body.as_deref())?;
+        let json: serde_json::Value = serde_json::from_slice(&bytes)
+            .map_err(|e| InferenceError::MalformedStream(e.to_string()))?;
+        let digest = json
+            .get("digest")
+            .or_else(|| json.pointer("/details/digest"))
+            .and_then(|v| v.as_str())
+            .map(str::to_string);
+        let size_bytes = json.get("size").and_then(|v| v.as_u64());
+        let parameters = json
+            .pointer("/details/parameter_size")
+            .or_else(|| json.get("parameter_size"))
+            .and_then(|v| v.as_str())
+            .map(str::to_string);
+        Ok(ModelDescriptor {
+            name: model.to_string(),
+            digest,
+            size_bytes,
+            parameters,
+        })
+    }
+
+    /// Set a residency hint for `model` (MR-6). Capability-gated: a profile
+    /// without `residency_control` reports `Unsupported` rather than
+    /// pretending. When supported, maps to a native keep-alive request.
+    pub fn set_residency(&self, model: &str, hint: ResidencyHint) -> Result<(), InferenceError> {
+        if !self.capabilities.residency_control {
+            return Err(InferenceError::Unsupported);
+        }
+        let keep_alive = match hint {
+            ResidencyHint::KeepAliveSecs(s) => s as i64,
+            ResidencyHint::UnloadNow => 0,
+        };
+        let body = serde_json::json!({ "model": model, "keep_alive": keep_alive }).to_string();
+        self.http_call("POST", "/api/generate", Some(&body))?;
+        Ok(())
+    }
+
+    /// Acquire `model` by name, progress-streamed (MR-4). Capability-gated:
+    /// a profile without `pull` yields a single `Error(Unsupported)`.
+    pub fn pull(&self, model: &str) -> PullReceiver {
+        if !self.capabilities.pull {
+            let (tx, rx) = sync_channel(1);
+            let _ = tx.send(PullProgress::Error(InferenceError::Unsupported));
+            return PullReceiver {
+                rx,
+                terminated: false,
+            };
+        }
+        let (tx, rx) = sync_channel(DEFAULT_CHANNEL_CAPACITY);
+        let api_base = self.api_base.clone();
+        let model = model.to_string();
+        let auth_header = self.resolve_auth_header();
+        thread::spawn(move || run_pull_worker(&api_base, &model, auth_header, &tx));
+        PullReceiver {
+            rx,
+            terminated: false,
+        }
+    }
+
+    /// A single non-streaming HTTP request/response over a raw `TcpStream`,
+    /// with the full wire-failure taxonomy and **no internal retry** (§4.5).
+    /// Returns the status code and the full body bytes for 2xx; a non-2xx
+    /// status maps to `ClientError`/`ServerError`.
+    fn http_call(
+        &self,
+        method: &str,
+        path: &str,
+        body: Option<&str>,
+    ) -> Result<(u16, Vec<u8>), InferenceError> {
+        let addr = resolve_one(&self.api_base).ok_or_else(|| {
+            InferenceError::MalformedStream(format!("cannot resolve {}", self.api_base))
+        })?;
+        let mut reader =
+            FrameReader::connect(addr, DEFAULT_PROBE_TIMEOUT).map_err(|e| map_connect_error(&e))?;
+        let never = CancelHandle::new();
+        let request = build_http_request(
+            method,
+            path,
+            &host_of(&self.api_base).unwrap_or_default(),
+            self.resolve_auth_header().as_deref(),
+            body,
+        );
+        reader
+            .stream
+            .write_all(request.as_bytes())
+            .map_err(|e| InferenceError::MalformedStream(e.to_string()))?;
+        let status = read_http_status(&mut reader, &never)?;
+        if !(200..300).contains(&status) {
+            return Err(if (400..500).contains(&status) {
+                InferenceError::ClientError(status)
+            } else {
+                InferenceError::ServerError(status)
+            });
+        }
+        let bytes = reader.read_to_end(&never)?;
+        Ok((status, bytes))
+    }
+}
+
+/// A blocking pull-iterator over a model-acquisition call (MR-4).
+pub struct PullReceiver {
+    rx: Receiver<PullProgress>,
+    terminated: bool,
+}
+
+impl Iterator for PullReceiver {
+    type Item = PullProgress;
+
+    fn next(&mut self) -> Option<PullProgress> {
+        if self.terminated {
+            return None;
+        }
+        match self.rx.recv() {
+            Ok(progress) => {
+                if matches!(progress, PullProgress::Done { .. } | PullProgress::Error(_)) {
+                    self.terminated = true;
+                }
+                Some(progress)
+            }
+            Err(_) => {
+                self.terminated = true;
+                Some(PullProgress::Error(InferenceError::MalformedStream(
+                    "pull worker ended without a terminal event".to_string(),
+                )))
+            }
+        }
+    }
+}
+
+impl InferenceBackend for EndpointProfile {
+    fn generate_stream(
+        &self,
+        request: GenerateRequest,
+        cancel: CancelHandle,
+    ) -> Box<dyn Iterator<Item = StreamEvent> + Send> {
+        Box::new(EndpointProfile::generate_stream(self, &request, cancel))
+    }
+
+    fn embed(&self, model: &str, input: &str) -> Result<Vec<f32>, InferenceError> {
+        EndpointProfile::embed(self, model, input)
+    }
+
+    fn describe(&self, model: &str) -> Result<ModelDescriptor, InferenceError> {
+        EndpointProfile::describe(self, model)
+    }
+
+    fn pull(&self, model: &str) -> Box<dyn Iterator<Item = PullProgress> + Send> {
+        Box::new(EndpointProfile::pull(self, model))
+    }
+
+    fn set_residency(&self, model: &str, hint: ResidencyHint) -> Result<(), InferenceError> {
+        EndpointProfile::set_residency(self, model, hint)
     }
 }
 
@@ -284,6 +614,30 @@ impl FrameReader {
                         || e.kind() == io::ErrorKind::TimedOut =>
                 {
                     continue; // poll again — re-checks `cancel` at the top
+                }
+                Err(e) => return Err(InferenceError::MalformedStream(e.to_string())),
+            }
+        }
+    }
+
+    /// Read everything remaining (buffered bytes + the rest of the stream)
+    /// until a clean EOF — for a non-streaming response body. Same
+    /// timeout-poll/cancel discipline as `read_line`.
+    fn read_to_end(&mut self, cancel: &CancelHandle) -> Result<Vec<u8>, InferenceError> {
+        let mut out = std::mem::take(&mut self.buf);
+        loop {
+            if cancel.is_cancelled() {
+                return Err(InferenceError::Cancelled);
+            }
+            let mut chunk = [0u8; 4096];
+            match self.stream.read(&mut chunk) {
+                Ok(0) => return Ok(out),
+                Ok(n) => out.extend_from_slice(&chunk[..n]),
+                Err(e)
+                    if e.kind() == io::ErrorKind::WouldBlock
+                        || e.kind() == io::ErrorKind::TimedOut =>
+                {
+                    continue;
                 }
                 Err(e) => return Err(InferenceError::MalformedStream(e.to_string())),
             }
@@ -409,10 +763,37 @@ fn build_request_body(request: &GenerateRequest) -> String {
     .to_string()
 }
 
+/// Build a raw HTTP/1.1 request string. `auth` is attached as an
+/// `Authorization` header only when present (a loopback profile passes
+/// `None`); the resolved secret lives only for this string's lifetime.
+fn build_http_request(
+    method: &str,
+    path: &str,
+    host: &str,
+    auth: Option<&str>,
+    body: Option<&str>,
+) -> String {
+    let mut req = format!("{method} {path} HTTP/1.1\r\nHost: {host}\r\nConnection: close\r\n");
+    if let Some(auth) = auth {
+        req.push_str(&format!("Authorization: {auth}\r\n"));
+    }
+    match body {
+        Some(body) => {
+            req.push_str(&format!(
+                "Content-Type: application/json\r\nContent-Length: {}\r\n\r\n{body}",
+                body.len()
+            ));
+        }
+        None => req.push_str("\r\n"),
+    }
+    req
+}
+
 fn run_generate_worker(
     api_base: &str,
     protocol: ProtocolFamily,
     request: &GenerateRequest,
+    auth_header: Option<String>,
     cancel: &CancelHandle,
     tx: &SyncSender<StreamEvent>,
 ) {
@@ -436,10 +817,7 @@ fn run_generate_worker(
     };
     let host = host_of(api_base).unwrap_or_default();
     let body = build_request_body(request);
-    let http_request = format!(
-        "POST {path} HTTP/1.1\r\nHost: {host}\r\nContent-Type: application/json\r\nContent-Length: {}\r\nConnection: close\r\n\r\n{body}",
-        body.len()
-    );
+    let http_request = build_http_request("POST", path, &host, auth_header.as_deref(), Some(&body));
     if let Err(e) = reader.stream.write_all(http_request.as_bytes()) {
         let _ = tx.send(StreamEvent::Error(InferenceError::MalformedStream(
             e.to_string(),
@@ -487,6 +865,104 @@ fn run_generate_worker(
             Err(e) => {
                 let _ = tx.send(StreamEvent::Error(e));
                 return; // drops `reader` (and its TcpStream), closing the socket
+            }
+        }
+    }
+}
+
+/// Native model acquisition (`/api/pull`), streamed as newline-delimited
+/// JSON progress objects `{status, completed, total}` mapped onto
+/// `PullProgress`. One request, no retry.
+fn run_pull_worker(
+    api_base: &str,
+    model: &str,
+    auth_header: Option<String>,
+    tx: &SyncSender<PullProgress>,
+) {
+    let Some(addr) = resolve_one(api_base) else {
+        let _ = tx.send(PullProgress::Error(InferenceError::MalformedStream(
+            format!("cannot resolve address: {api_base}"),
+        )));
+        return;
+    };
+    let mut reader = match FrameReader::connect(addr, DEFAULT_PROBE_TIMEOUT) {
+        Ok(r) => r,
+        Err(e) => {
+            let _ = tx.send(PullProgress::Error(map_connect_error(&e)));
+            return;
+        }
+    };
+    let host = host_of(api_base).unwrap_or_default();
+    let body = serde_json::json!({ "name": model, "stream": true }).to_string();
+    let http_request = build_http_request(
+        "POST",
+        "/api/pull",
+        &host,
+        auth_header.as_deref(),
+        Some(&body),
+    );
+    if let Err(e) = reader.stream.write_all(http_request.as_bytes()) {
+        let _ = tx.send(PullProgress::Error(InferenceError::MalformedStream(
+            e.to_string(),
+        )));
+        return;
+    }
+
+    let never = CancelHandle::new();
+    let status = match read_http_status(&mut reader, &never) {
+        Ok(s) => s,
+        Err(e) => {
+            let _ = tx.send(PullProgress::Error(e));
+            return;
+        }
+    };
+    if !(200..300).contains(&status) {
+        let _ = tx.send(PullProgress::Error(if (400..500).contains(&status) {
+            InferenceError::ClientError(status)
+        } else {
+            InferenceError::ServerError(status)
+        }));
+        return;
+    }
+
+    loop {
+        match reader.read_line(&never) {
+            Ok(Some(line)) if line.trim().is_empty() => continue,
+            Ok(Some(line)) => {
+                let json: serde_json::Value = match serde_json::from_str(&line) {
+                    Ok(v) => v,
+                    Err(e) => {
+                        let _ = tx.send(PullProgress::Error(InferenceError::MalformedStream(
+                            e.to_string(),
+                        )));
+                        return;
+                    }
+                };
+                let status_field = json.get("status").and_then(|v| v.as_str()).unwrap_or("");
+                if status_field.eq_ignore_ascii_case("success") {
+                    let digest = json
+                        .get("digest")
+                        .and_then(|v| v.as_str())
+                        .map(str::to_string);
+                    let _ = tx.send(PullProgress::Done { digest });
+                    return;
+                }
+                let progress = PullProgress::Downloading {
+                    bytes_done: json.get("completed").and_then(|v| v.as_u64()).unwrap_or(0),
+                    bytes_total: json.get("total").and_then(|v| v.as_u64()),
+                };
+                if tx.send(progress).is_err() {
+                    return;
+                }
+            }
+            Ok(None) => {
+                // Clean EOF without an explicit success line — treat as done.
+                let _ = tx.send(PullProgress::Done { digest: None });
+                return;
+            }
+            Err(e) => {
+                let _ = tx.send(PullProgress::Error(e));
+                return;
             }
         }
     }
@@ -625,6 +1101,116 @@ mod tests {
         let _ = stream.flush();
     }
 
+    /// Read the incoming request's header block (up to `\r\n\r\n`) and
+    /// return it as a string so a test can assert on headers.
+    fn read_request_headers(stream: &mut TcpStream) -> String {
+        let mut acc: Vec<u8> = Vec::new();
+        let mut buf = [0u8; 1024];
+        loop {
+            if let Some(pos) = acc.windows(4).position(|w| w == b"\r\n\r\n") {
+                return String::from_utf8_lossy(&acc[..pos]).into_owned();
+            }
+            let n = stream.read(&mut buf).expect("read request");
+            if n == 0 {
+                return String::from_utf8_lossy(&acc).into_owned();
+            }
+            acc.extend_from_slice(&buf[..n]);
+        }
+    }
+
+    fn write_json_response(stream: &mut TcpStream, status: u16, json: &serde_json::Value) {
+        let body = json.to_string();
+        let reason = if status == 200 { "OK" } else { "ERR" };
+        write!(
+            stream,
+            "HTTP/1.1 {status} {reason}\r\nContent-Type: application/json\r\nContent-Length: {}\r\nConnection: close\r\n\r\n{body}",
+            body.len()
+        )
+        .expect("write json response");
+        let _ = stream.flush();
+    }
+
+    fn write_status_only(stream: &mut TcpStream, status: u16) {
+        write!(
+            stream,
+            "HTTP/1.1 {status} ERR\r\nContent-Length: 0\r\nConnection: close\r\n\r\n"
+        )
+        .expect("write status");
+        let _ = stream.flush();
+    }
+
+    /// A loopback server that accepts connections in a loop and counts them,
+    /// so a test can assert "exactly one request was made" (no retry). Runs
+    /// each accepted connection through `script`. Stops on `Drop`.
+    struct CountingServer {
+        api_base: String,
+        count: Arc<std::sync::atomic::AtomicUsize>,
+        stop: Arc<AtomicBool>,
+        handle: Option<thread::JoinHandle<()>>,
+    }
+
+    impl CountingServer {
+        fn start(script: impl Fn(TcpStream) + Send + Sync + 'static) -> Self {
+            let listener = TcpListener::bind("127.0.0.1:0").expect("bind an ephemeral port");
+            let api_base = format!(
+                "http://127.0.0.1:{}",
+                listener.local_addr().expect("local addr").port()
+            );
+            listener
+                .set_nonblocking(true)
+                .expect("set listener nonblocking");
+            let count = Arc::new(std::sync::atomic::AtomicUsize::new(0));
+            let stop = Arc::new(AtomicBool::new(false));
+            let count_t = count.clone();
+            let stop_t = stop.clone();
+            let handle = thread::spawn(move || {
+                while !stop_t.load(Ordering::SeqCst) {
+                    match listener.accept() {
+                        Ok((stream, _)) => {
+                            count_t.fetch_add(1, Ordering::SeqCst);
+                            script(stream);
+                        }
+                        Err(e) if e.kind() == io::ErrorKind::WouldBlock => {
+                            thread::sleep(Duration::from_millis(10));
+                        }
+                        Err(_) => return,
+                    }
+                }
+            });
+            CountingServer {
+                api_base,
+                count,
+                stop,
+                handle: Some(handle),
+            }
+        }
+
+        fn api_base(&self) -> &str {
+            &self.api_base
+        }
+
+        fn connection_count(&self) -> usize {
+            self.count.load(Ordering::SeqCst)
+        }
+    }
+
+    impl Drop for CountingServer {
+        fn drop(&mut self) {
+            self.stop.store(true, Ordering::SeqCst);
+            if let Some(h) = self.handle.take() {
+                let _ = h.join();
+            }
+        }
+    }
+
+    fn embeddable_caps() -> Capabilities {
+        Capabilities {
+            streaming: true,
+            embeddings: true,
+            ..Default::default()
+        }
+    }
+
     #[test]
     fn accepts_the_real_default_localhost_endpoints() {
         // The stack §4.4 catalog's actual defaults use the literal
@@ -652,34 +1238,26 @@ mod tests {
 
     #[test]
     fn rejects_wildcard_bind_addresses() {
-        assert_eq!(
+        assert!(matches!(
             EndpointProfile::new("http://0.0.0.0:8080", ProtocolFamily::Native, caps()),
-            Err(ProfileError::WildcardAddress(
-                "http://0.0.0.0:8080".to_string()
-            ))
-        );
-        assert_eq!(
+            Err(ProfileError::WildcardAddress(s)) if s == "http://0.0.0.0:8080"
+        ));
+        assert!(matches!(
             EndpointProfile::new("http://[::]:8080", ProtocolFamily::Native, caps()),
-            Err(ProfileError::WildcardAddress(
-                "http://[::]:8080".to_string()
-            ))
-        );
+            Err(ProfileError::WildcardAddress(s)) if s == "http://[::]:8080"
+        ));
     }
 
     #[test]
     fn rejects_non_loopback_hosts_by_default() {
-        assert_eq!(
+        assert!(matches!(
             EndpointProfile::new("http://192.168.1.5:8080", ProtocolFamily::Native, caps()),
-            Err(ProfileError::NotLoopback(
-                "http://192.168.1.5:8080".to_string()
-            ))
-        );
-        assert_eq!(
+            Err(ProfileError::NotLoopback(s)) if s == "http://192.168.1.5:8080"
+        ));
+        assert!(matches!(
             EndpointProfile::new("http://example.com:8080", ProtocolFamily::Native, caps()),
-            Err(ProfileError::NotLoopback(
-                "http://example.com:8080".to_string()
-            ))
-        );
+            Err(ProfileError::NotLoopback(s)) if s == "http://example.com:8080"
+        ));
     }
 
     #[test]
@@ -738,6 +1316,7 @@ mod tests {
             api_base: "192.0.2.1:80".to_string(),
             protocol: ProtocolFamily::Native,
             capabilities: caps(),
+            remote_auth: None,
         };
 
         let start = std::time::Instant::now();
@@ -905,5 +1484,308 @@ mod tests {
         for _ in receiver {}
 
         handle.join().expect("server thread must not panic");
+    }
+
+    // ── T-17B03: embed / describe / pull / residency + failure map + egress ──
+
+    #[test]
+    fn embed_is_capability_gated_off_reports_unsupported() {
+        // Default caps have embeddings=false — no network call is even made.
+        let profile = EndpointProfile::new(
+            "http://127.0.0.1:1",
+            ProtocolFamily::OpenAiCompatible,
+            caps(),
+        )
+        .expect("loopback profile");
+        assert_eq!(profile.embed("m", "hi"), Err(InferenceError::Unsupported));
+    }
+
+    #[test]
+    fn embed_parses_openai_shaped_embedding() {
+        let server = MockSseServer::bind();
+        let api_base = server.api_base();
+        let handle = server.accept_and_run(|mut stream| {
+            drain_request(&mut stream);
+            write_json_response(
+                &mut stream,
+                200,
+                &serde_json::json!({"data":[{"embedding":[0.1, 0.2, 0.3]}]}),
+            );
+        });
+
+        let profile = EndpointProfile::new(
+            api_base,
+            ProtocolFamily::OpenAiCompatible,
+            embeddable_caps(),
+        )
+        .expect("loopback profile");
+        let vec = profile.embed("m", "hi").expect("embedding");
+
+        handle.join().expect("server thread must not panic");
+        assert_eq!(vec, vec![0.1_f32, 0.2, 0.3]);
+    }
+
+    #[test]
+    fn describe_surfaces_present_fields_and_leaves_missing_ones_none() {
+        let server = MockSseServer::bind();
+        let api_base = server.api_base();
+        let handle = server.accept_and_run(|mut stream| {
+            drain_request(&mut stream);
+            write_json_response(
+                &mut stream,
+                200,
+                &serde_json::json!({"digest":"sha256:abc","size":42}),
+            );
+        });
+
+        let profile = EndpointProfile::new(api_base, ProtocolFamily::Native, caps())
+            .expect("loopback profile");
+        let d = profile.describe("llama3").expect("descriptor");
+
+        handle.join().expect("server thread must not panic");
+        assert_eq!(d.name, "llama3");
+        assert_eq!(d.digest.as_deref(), Some("sha256:abc"));
+        assert_eq!(d.size_bytes, Some(42));
+        assert_eq!(d.parameters, None); // absent field stays None, not fabricated
+    }
+
+    #[test]
+    fn wire_failures_map_onto_the_taxonomy() {
+        // 404 → ClientError.
+        {
+            let server = MockSseServer::bind();
+            let api_base = server.api_base();
+            let handle = server.accept_and_run(|mut stream| {
+                drain_request(&mut stream);
+                write_status_only(&mut stream, 404);
+            });
+            let profile = EndpointProfile::new(api_base, ProtocolFamily::Native, caps())
+                .expect("loopback profile");
+            assert_eq!(profile.describe("m"), Err(InferenceError::ClientError(404)));
+            handle.join().expect("server thread must not panic");
+        }
+        // 503 → ServerError.
+        {
+            let server = MockSseServer::bind();
+            let api_base = server.api_base();
+            let handle = server.accept_and_run(|mut stream| {
+                drain_request(&mut stream);
+                write_status_only(&mut stream, 503);
+            });
+            let profile = EndpointProfile::new(api_base, ProtocolFamily::Native, caps())
+                .expect("loopback profile");
+            assert_eq!(profile.describe("m"), Err(InferenceError::ServerError(503)));
+            handle.join().expect("server thread must not panic");
+        }
+        // Connection refused → ConnectRefused (bind then drop → closed port).
+        {
+            let listener = TcpListener::bind("127.0.0.1:0").expect("bind");
+            let port = listener.local_addr().unwrap().port();
+            drop(listener);
+            let profile = EndpointProfile::new(
+                format!("http://127.0.0.1:{port}"),
+                ProtocolFamily::Native,
+                caps(),
+            )
+            .expect("loopback profile");
+            // This sandbox may time out instead of refusing (see the probe
+            // test's note) — both are honest "could not reach" outcomes.
+            assert!(matches!(
+                profile.describe("m"),
+                Err(InferenceError::ConnectRefused) | Err(InferenceError::Timeout)
+            ));
+        }
+        // Malformed JSON body on a 200 → MalformedStream.
+        {
+            let server = MockSseServer::bind();
+            let api_base = server.api_base();
+            let handle = server.accept_and_run(|mut stream| {
+                drain_request(&mut stream);
+                write!(
+                    stream,
+                    "HTTP/1.1 200 OK\r\nContent-Length: 3\r\nConnection: close\r\n\r\n{{ ["
+                )
+                .unwrap();
+                let _ = stream.flush();
+            });
+            let profile = EndpointProfile::new(api_base, ProtocolFamily::Native, embeddable_caps())
+                .expect("loopback profile");
+            assert!(matches!(
+                profile.embed("m", "hi"),
+                Err(InferenceError::MalformedStream(_))
+            ));
+            handle.join().expect("server thread must not panic");
+        }
+    }
+
+    #[test]
+    fn embed_makes_exactly_one_request_no_retry() {
+        // Every request gets a 500 — a retrying client would reconnect and
+        // the counter would climb past 1.
+        let server = CountingServer::start(|mut stream| {
+            drain_request(&mut stream);
+            write_status_only(&mut stream, 500);
+        });
+        let profile =
+            EndpointProfile::new(server.api_base(), ProtocolFamily::Native, embeddable_caps())
+                .expect("loopback profile");
+
+        assert_eq!(
+            profile.embed("m", "hi"),
+            Err(InferenceError::ServerError(500))
+        );
+        // Give any (wrongly) spawned retry time to connect before counting.
+        thread::sleep(Duration::from_millis(150));
+        assert_eq!(
+            server.connection_count(),
+            1,
+            "exactly one request per call — no internal retry"
+        );
+    }
+
+    #[test]
+    fn pull_is_capability_gated_off_yields_single_unsupported() {
+        let profile = EndpointProfile::new("http://127.0.0.1:1", ProtocolFamily::Native, caps())
+            .expect("loopback profile");
+        let events: Vec<PullProgress> = profile.pull("m").collect();
+        assert_eq!(
+            events,
+            vec![PullProgress::Error(InferenceError::Unsupported)]
+        );
+    }
+
+    #[test]
+    fn set_residency_is_capability_gated_off_reports_unsupported() {
+        let profile = EndpointProfile::new("http://127.0.0.1:1", ProtocolFamily::Native, caps())
+            .expect("loopback profile");
+        assert_eq!(
+            profile.set_residency("m", ResidencyHint::UnloadNow),
+            Err(InferenceError::Unsupported)
+        );
+    }
+
+    #[test]
+    fn remote_profile_requires_a_matching_egress_grant() {
+        // The loopback constructor refuses a non-loopback host outright.
+        assert!(matches!(
+            EndpointProfile::new(
+                "http://10.0.0.5:8080",
+                ProtocolFamily::OpenAiCompatible,
+                caps()
+            ),
+            Err(ProfileError::NotLoopback(_))
+        ));
+
+        struct FixedCred(&'static str);
+        impl CredentialResolver for FixedCred {
+            fn resolve(&self, _endpoint: &str) -> Option<String> {
+                Some(self.0.to_string())
+            }
+        }
+
+        // A grant scoped to a DIFFERENT endpoint is rejected.
+        let grant = EgressGrant::for_endpoint("http://10.0.0.5:8080");
+        assert!(matches!(
+            EndpointProfile::new_remote(
+                "http://10.0.0.9:8080",
+                ProtocolFamily::OpenAiCompatible,
+                caps(),
+                &grant,
+                Arc::new(FixedCred("k")),
+            ),
+            Err(ProfileError::GrantEndpointMismatch { .. })
+        ));
+
+        // A grant scoped to the exact endpoint succeeds.
+        assert!(
+            EndpointProfile::new_remote(
+                "http://10.0.0.5:8080",
+                ProtocolFamily::OpenAiCompatible,
+                caps(),
+                &grant,
+                Arc::new(FixedCred("k")),
+            )
+            .is_ok()
+        );
+    }
+
+    #[test]
+    fn remote_credential_resolved_per_call_and_attached_never_cached() {
+        let server = MockSseServer::bind();
+        let api_base = server.api_base();
+        let seen_auth = Arc::new(std::sync::Mutex::new(String::new()));
+        let seen_auth_t = seen_auth.clone();
+        let handle = server.accept_and_run(move |mut stream| {
+            let headers = read_request_headers(&mut stream);
+            *seen_auth_t.lock().unwrap() = headers;
+            write_json_response(
+                &mut stream,
+                200,
+                &serde_json::json!({"data":[{"embedding":[1.0]}]}),
+            );
+        });
+
+        // Count how often the resolver is consulted — proves per-call
+        // resolution (not caching in the profile).
+        struct CountingCred(Arc<std::sync::atomic::AtomicUsize>);
+        impl CredentialResolver for CountingCred {
+            fn resolve(&self, _endpoint: &str) -> Option<String> {
+                self.0.fetch_add(1, Ordering::SeqCst);
+                Some("secret-token".to_string())
+            }
+        }
+        let calls = Arc::new(std::sync::atomic::AtomicUsize::new(0));
+        let grant = EgressGrant::for_endpoint(&api_base);
+        let profile = EndpointProfile::new_remote(
+            &api_base,
+            ProtocolFamily::OpenAiCompatible,
+            embeddable_caps(),
+            &grant,
+            Arc::new(CountingCred(calls.clone())),
+        )
+        .expect("remote profile with matching grant");
+
+        let _ = profile.embed("m", "hi").expect("embedding");
+        handle.join().expect("server thread must not panic");
+
+        assert!(
+            seen_auth
+                .lock()
+                .unwrap()
+                .contains("Authorization: Bearer secret-token"),
+            "the resolved credential must be attached as a bearer token"
+        );
+        assert_eq!(
+            calls.load(Ordering::SeqCst),
+            1,
+            "credential resolved fresh for this one call (not cached, not skipped)"
+        );
+    }
+
+    #[test]
+    fn inference_backend_trait_object_streams_through_the_real_path() {
+        let server = MockSseServer::bind();
+        let api_base = server.api_base();
+        let handle = server.accept_and_run(|mut stream| {
+            drain_request(&mut stream);
+            write_sse_preamble(&mut stream);
+            write_sse_token(&mut stream, "hi");
+            write_sse_done(&mut stream);
+        });
+
+        let profile = EndpointProfile::new(api_base, ProtocolFamily::OpenAiCompatible, caps())
+            .expect("loopback profile");
+        // Exercise via the trait object — proves the MR-2 InferenceBackend
+        // impl wires to the same real transport as the inherent method.
+        let backend: &dyn InferenceBackend = &profile;
+        let events: Vec<StreamEvent> = backend
+            .generate_stream(req(), CancelHandle::new())
+            .collect();
+
+        handle.join().expect("server thread must not panic");
+        assert_eq!(
+            events,
+            vec![StreamEvent::Token("hi".to_string()), StreamEvent::Done]
+        );
     }
 }
