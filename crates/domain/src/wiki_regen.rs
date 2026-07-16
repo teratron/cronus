@@ -1,16 +1,24 @@
-//! Project-wiki regeneration pipeline core (l2-project-wiki §4.2, PW-2/PW-3).
+//! Project-wiki regeneration pipeline (l2-project-wiki §4.2, PW-1…PW-5, PW-8).
 //!
-//! Office-owned, curator-driven: on a significant office change, map the
-//! change to the affected page kinds, generate each page from ground truth,
-//! and write the whole set transactionally through the `WikiCache` seam. The
-//! client has no path in here (PW-2). Domain-logic-first: the ground-truth
-//! gather + client-language generation is a seam ([`PageRegenerator`]) — the
-//! real, model-backed impl lands later; this module owns the orchestration and
-//! the all-or-nothing write guarantee.
+//! Office-owned, curator-driven: on a significant office change, map the change
+//! to the affected page kinds, gather each page's ground truth, generate
+//! client-language content, apply the grounding/honesty guards, and write the
+//! whole set transactionally through the `WikiCache` seam. The client has no
+//! path in here (PW-2).
+//!
+//! Domain-logic-first via two seams: [`GroundTruth`] (no model — the sources a
+//! page cites) is always present; [`PageGenerator`] (model-backed prose) is
+//! optional, so a run with no generator degrades to a **grounded stub** rather
+//! than fabricating (PW-4/PW-1). The guards — internal-detail filter (PW-8) and
+//! citation guard (PW-4) — are pure pipeline steps, so the honesty properties
+//! are testable without a model. This module owns the orchestration, the
+//! guards, and the all-or-nothing write guarantee.
 
 use std::sync::atomic::{AtomicU64, Ordering};
 
-use cronus_contract::{WikiCache, WikiChangelogEntry, WikiPage, WikiPageKind, now_secs};
+use cronus_contract::{
+    WikiCache, WikiChangelogEntry, WikiCitation, WikiPage, WikiPageKind, now_secs,
+};
 
 /// A significant office change that triggers incremental regeneration
 /// (l2-project-wiki §4.2). Never per-agent-turn — only office events.
@@ -27,50 +35,72 @@ pub enum OfficeChange {
 /// `Overview` and `Changelog`; the rest is change-specific.
 pub fn map_event_to_kinds(change: OfficeChange) -> Vec<WikiPageKind> {
     match change {
-        OfficeChange::BoardItemDone => {
-            vec![
-                WikiPageKind::Overview,
-                WikiPageKind::Area,
-                WikiPageKind::Changelog,
-            ]
-        }
+        OfficeChange::BoardItemDone => vec![
+            WikiPageKind::Overview,
+            WikiPageKind::Area,
+            WikiPageKind::Changelog,
+        ],
         OfficeChange::DecisionRecorded => vec![
             WikiPageKind::Overview,
             WikiPageKind::Decisions,
             WikiPageKind::Changelog,
         ],
-        OfficeChange::DeliverableProduced => {
-            vec![
-                WikiPageKind::Overview,
-                WikiPageKind::Area,
-                WikiPageKind::Changelog,
-            ]
-        }
+        OfficeChange::DeliverableProduced => vec![
+            WikiPageKind::Overview,
+            WikiPageKind::Area,
+            WikiPageKind::Changelog,
+        ],
         OfficeChange::MilestoneReached => vec![WikiPageKind::Overview, WikiPageKind::Changelog],
     }
 }
 
-/// A page produced by the regeneration seam, plus the human-readable summary
-/// of what changed (for the changelog).
-pub struct RegeneratedPage {
-    pub page: WikiPage,
-    pub change_summary: String,
+/// One candidate section of generated content: its text, the sources it cites,
+/// and whether it carries internal engineering / SDD detail that must never
+/// reach a client page (PW-8). The generator flags internal detail; the guards
+/// drop it and any uncited section before assembly.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct GeneratedSection {
+    pub text: String,
+    pub citations: Vec<WikiCitation>,
+    pub internal_detail: bool,
 }
 
-/// The ground-truth-gather + client-language-generation seam (PW-1/PW-3/PW-4).
-///
-/// A real implementation reads the board / graph decisions / operational
-/// ledger / deliverables and generates cited, plain-language content. `Ok(None)`
-/// means there is nothing to regenerate for this kind right now (e.g. no
-/// decisions yet) — the page is skipped, not an error. `Err` aborts the whole
-/// regeneration **before any write**, so a generation failure never leaves a
-/// half-written projection.
-pub trait PageRegenerator {
-    fn regenerate_page(
+impl GeneratedSection {
+    /// A normal, client-facing cited section.
+    pub fn cited(text: impl Into<String>, citations: Vec<WikiCitation>) -> Self {
+        GeneratedSection {
+            text: text.into(),
+            citations,
+            internal_detail: false,
+        }
+    }
+}
+
+/// A generator's candidate content for one page, before guards.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct GeneratedContent {
+    pub title: String,
+    pub sections: Vec<GeneratedSection>,
+}
+
+/// Ground-truth gather (no model): the sources a page kind cites (PW-4 basis).
+/// Always available — reading records needs no generator. An empty result
+/// means there is nothing grounded to write for this kind (the page is
+/// skipped, never fabricated).
+pub trait GroundTruth {
+    fn sources(&self, office_id: &str, kind: WikiPageKind) -> Result<Vec<WikiCitation>, String>;
+}
+
+/// Client-language generation (model-backed) over the gathered sources.
+/// Optional in the pipeline: absent = the no-generator degrade (a grounded
+/// stub). `Err` aborts the whole regeneration before any write.
+pub trait PageGenerator {
+    fn generate(
         &self,
         office_id: &str,
         kind: WikiPageKind,
-    ) -> Result<Option<RegeneratedPage>, String>;
+        sources: &[WikiCitation],
+    ) -> Result<GeneratedContent, String>;
 }
 
 /// What a regeneration wrote.
@@ -80,19 +110,39 @@ pub struct RegenReport {
     pub regenerated: Vec<String>,
 }
 
+/// PW-8 internal-detail filter: drop every section carrying engineering / SDD
+/// detail so it can never reach a client `wiki_page` row.
+pub fn filter_internal_detail(sections: Vec<GeneratedSection>) -> Vec<GeneratedSection> {
+    sections
+        .into_iter()
+        .filter(|s| !s.internal_detail)
+        .collect()
+}
+
+/// PW-4 citation guard: drop every section that resolves to no source. An
+/// uncited claim is never persisted.
+pub fn citation_guard(sections: Vec<GeneratedSection>) -> Vec<GeneratedSection> {
+    sections
+        .into_iter()
+        .filter(|s| !s.citations.is_empty())
+        .collect()
+}
+
 /// Process-unique changelog-id suffix (the contract `MemoryId` id-generation
-/// idiom, not per-instance state): guarantees a batch never collides its own
-/// changelog primary keys even for two regenerations within the same second.
+/// idiom, not per-instance state): a batch never collides its own changelog
+/// primary keys even for two regenerations within the same second.
 static CHANGELOG_SEQ: AtomicU64 = AtomicU64::new(0);
 
 /// Regenerate the pages affected by `change` for one office, writing the whole
-/// set transactionally (PW-3). A generation failure aborts before any write;
-/// the store write is all-or-nothing (`WikiCache::apply_regeneration`). Pages a
-/// regenerator reports as `None` are skipped.
+/// set transactionally (PW-3). For each affected kind: gather sources; if none,
+/// skip; else generate + guard (or, with no generator, a grounded stub). A
+/// generation failure aborts before any write; the store write is
+/// all-or-nothing.
 pub fn regenerate(
     change: OfficeChange,
     office_id: &str,
-    regenerator: &dyn PageRegenerator,
+    ground_truth: &dyn GroundTruth,
+    generator: Option<&dyn PageGenerator>,
     cache: &dyn WikiCache,
 ) -> Result<RegenReport, String> {
     let at = now_secs();
@@ -100,19 +150,68 @@ pub fn regenerate(
     let mut changelog: Vec<WikiChangelogEntry> = Vec::new();
 
     for kind in map_event_to_kinds(change) {
-        // `?` here means a generation failure returns before any cache write —
-        // the prior rows stay intact (transactional at the pipeline level too).
-        if let Some(regen) = regenerator.regenerate_page(office_id, kind)? {
-            let seq = CHANGELOG_SEQ.fetch_add(1, Ordering::Relaxed);
-            changelog.push(WikiChangelogEntry {
-                id: format!("cl:{at}:{seq}"),
-                office_id: office_id.to_string(),
-                page_id: Some(regen.page.id.clone()),
-                change: regen.change_summary,
-                at,
-            });
-            pages.push(regen.page);
+        let sources = ground_truth.sources(office_id, kind)?;
+        if sources.is_empty() {
+            // Nothing grounded to write for this kind — skip, never fabricate.
+            continue;
         }
+
+        let (title, body, citations, summary) = match generator {
+            Some(g) => {
+                // `?`: a generation failure returns before any cache write.
+                let content = g.generate(office_id, kind, &sources)?;
+                // Guards: strip internal detail (PW-8) then drop uncited
+                // sections (PW-4). What survives is client-facing and attributed.
+                let kept = citation_guard(filter_internal_detail(content.sections));
+                if kept.is_empty() {
+                    // Everything was internal or uncited — fall back to a
+                    // grounded stub rather than persisting an empty/uncited page.
+                    (
+                        content.title,
+                        grounded_stub(kind, &sources),
+                        sources.clone(),
+                        format!("regenerated {} (stub — no citable content)", kind.as_str()),
+                    )
+                } else {
+                    (
+                        content.title,
+                        assemble_body(&kept),
+                        union_citations(&kept),
+                        format!("regenerated {}", kind.as_str()),
+                    )
+                }
+            }
+            None => (
+                default_title(kind),
+                grounded_stub(kind, &sources),
+                sources.clone(),
+                format!("stub for {} (no generator)", kind.as_str()),
+            ),
+        };
+
+        let page = WikiPage {
+            id: format!("{office_id}:{}", kind.as_str()),
+            office_id: office_id.to_string(),
+            parent_id: None,
+            ord: 0,
+            kind,
+            title,
+            body,
+            citations,
+            source_fingerprint: fingerprint_of(&sources),
+            generated_at: at,
+            stale: false,
+        };
+
+        let seq = CHANGELOG_SEQ.fetch_add(1, Ordering::Relaxed);
+        changelog.push(WikiChangelogEntry {
+            id: format!("cl:{at}:{seq}"),
+            office_id: office_id.to_string(),
+            page_id: Some(page.id.clone()),
+            change: summary,
+            at,
+        });
+        pages.push(page);
     }
 
     if !pages.is_empty() {
@@ -124,16 +223,72 @@ pub fn regenerate(
     })
 }
 
+fn assemble_body(sections: &[GeneratedSection]) -> String {
+    sections
+        .iter()
+        .map(|s| s.text.as_str())
+        .collect::<Vec<_>>()
+        .join("\n\n")
+}
+
+fn union_citations(sections: &[GeneratedSection]) -> Vec<WikiCitation> {
+    let mut out: Vec<WikiCitation> = Vec::new();
+    for s in sections {
+        for c in &s.citations {
+            if !out.contains(c) {
+                out.push(c.clone());
+            }
+        }
+    }
+    out
+}
+
+/// The no-generator / no-citable-content body. States only grounded, true
+/// facts — that the page is pending and how many sources back it — and
+/// fabricates nothing.
+fn grounded_stub(kind: WikiPageKind, sources: &[WikiCitation]) -> String {
+    format!(
+        "This {} page is not yet written in full. It is grounded in {} recorded source(s); \
+         a detailed summary will appear once generation runs.",
+        kind.as_str(),
+        sources.len()
+    )
+}
+
+fn default_title(kind: WikiPageKind) -> String {
+    match kind {
+        WikiPageKind::Overview => "Overview",
+        WikiPageKind::Area => "Area",
+        WikiPageKind::Decisions => "Decisions",
+        WikiPageKind::Howto => "How-to",
+        WikiPageKind::Glossary => "Glossary",
+        WikiPageKind::Changelog => "Changelog",
+    }
+    .to_string()
+}
+
+/// A page's `source_fingerprint` (PW-5): a hash of the exact sources it was
+/// generated from, so a later freshness check can detect drift.
+fn fingerprint_of(sources: &[WikiCitation]) -> String {
+    let mut hasher = blake3::Hasher::new();
+    for c in sources {
+        hasher.update(c.source_kind.as_bytes());
+        hasher.update(b":");
+        hasher.update(c.source_id.as_bytes());
+        hasher.update(b";");
+    }
+    hasher.finalize().to_hex().to_string()
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
     use std::cell::RefCell;
 
-    /// A cache that records every applied batch (and never fails), so a test
-    /// can assert exactly which pages were written.
+    /// A cache that records every applied batch (and never fails).
     #[derive(Default)]
     struct RecordingCache {
-        applied: RefCell<Vec<Vec<String>>>,
+        applied: RefCell<Vec<Vec<WikiPage>>>,
     }
 
     impl WikiCache for RecordingCache {
@@ -145,58 +300,72 @@ mod tests {
             pages: &[WikiPage],
             _changelog: &[WikiChangelogEntry],
         ) -> Result<(), String> {
-            self.applied
-                .borrow_mut()
-                .push(pages.iter().map(|p| p.id.clone()).collect());
+            self.applied.borrow_mut().push(pages.to_vec());
             Ok(())
         }
     }
 
-    /// Generates one page per requested kind (id = the kind's name), unless a
-    /// kind is in `skip` (→ `None`) or `fail_on` (→ `Err`).
-    struct MockRegenerator {
-        skip: Vec<WikiPageKind>,
-        fail_on: Option<WikiPageKind>,
+    impl RecordingCache {
+        fn last_batch(&self) -> Vec<WikiPage> {
+            self.applied.borrow().last().cloned().unwrap_or_default()
+        }
+        fn page(&self, kind: WikiPageKind) -> Option<WikiPage> {
+            self.last_batch().into_iter().find(|p| p.kind == kind)
+        }
     }
 
-    impl PageRegenerator for MockRegenerator {
-        fn regenerate_page(
+    /// Ground truth: one source per kind (so nothing is skipped), unless a kind
+    /// is in `empty` (→ no sources → skipped).
+    struct FixedGroundTruth {
+        empty: Vec<WikiPageKind>,
+    }
+    impl GroundTruth for FixedGroundTruth {
+        fn sources(
             &self,
-            office_id: &str,
+            _office_id: &str,
             kind: WikiPageKind,
-        ) -> Result<Option<RegeneratedPage>, String> {
-            if self.fail_on == Some(kind) {
-                return Err(format!("generation failed for {}", kind.as_str()));
+        ) -> Result<Vec<WikiCitation>, String> {
+            if self.empty.contains(&kind) {
+                Ok(vec![])
+            } else {
+                Ok(vec![WikiCitation::new(
+                    "decision",
+                    format!("d-{}", kind.as_str()),
+                )])
             }
-            if self.skip.contains(&kind) {
-                return Ok(None);
-            }
-            let page = WikiPage::new(
-                kind.as_str(),
-                office_id,
-                kind,
-                kind.as_str(),
-                format!("content for {}", kind.as_str()),
-            );
-            Ok(Some(RegeneratedPage {
-                page,
-                change_summary: format!("regenerated {}", kind.as_str()),
-            }))
+        }
+    }
+
+    fn ground() -> FixedGroundTruth {
+        FixedGroundTruth { empty: vec![] }
+    }
+
+    /// A generator whose per-kind output is scripted by a closure.
+    struct ScriptedGenerator<F: Fn(WikiPageKind) -> Result<GeneratedContent, String>>(F);
+    impl<F: Fn(WikiPageKind) -> Result<GeneratedContent, String>> PageGenerator
+        for ScriptedGenerator<F>
+    {
+        fn generate(
+            &self,
+            _office_id: &str,
+            kind: WikiPageKind,
+            _sources: &[WikiCitation],
+        ) -> Result<GeneratedContent, String> {
+            (self.0)(kind)
         }
     }
 
     #[test]
     fn event_maps_to_only_the_affected_kinds() {
+        let kinds = map_event_to_kinds(OfficeChange::DecisionRecorded);
         assert_eq!(
-            map_event_to_kinds(OfficeChange::DecisionRecorded),
+            kinds,
             vec![
                 WikiPageKind::Overview,
                 WikiPageKind::Decisions,
                 WikiPageKind::Changelog
             ]
         );
-        // A decision does NOT touch the glossary or how-to pages.
-        let kinds = map_event_to_kinds(OfficeChange::DecisionRecorded);
         assert!(!kinds.contains(&WikiPageKind::Glossary));
         assert!(!kinds.contains(&WikiPageKind::Howto));
     }
@@ -204,53 +373,229 @@ mod tests {
     #[test]
     fn regenerates_only_the_affected_pages_transactionally() {
         let cache = RecordingCache::default();
-        let regen = MockRegenerator {
-            skip: vec![],
-            fail_on: None,
-        };
+        let generator = ScriptedGenerator(|kind| {
+            Ok(GeneratedContent {
+                title: kind.as_str().to_string(),
+                sections: vec![GeneratedSection::cited(
+                    format!("body for {}", kind.as_str()),
+                    vec![WikiCitation::new("decision", "d1")],
+                )],
+            })
+        });
 
-        let report = regenerate(OfficeChange::DecisionRecorded, "office-1", &regen, &cache)
-            .expect("regeneration succeeds");
+        let report = regenerate(
+            OfficeChange::DecisionRecorded,
+            "office-1",
+            &ground(),
+            Some(&generator),
+            &cache,
+        )
+        .expect("regeneration succeeds");
 
-        // Exactly the affected kinds, written in one batch.
         assert_eq!(
             report.regenerated,
-            vec!["overview", "decisions", "changelog"]
+            vec![
+                "office-1:overview",
+                "office-1:decisions",
+                "office-1:changelog"
+            ]
         );
-        let applied = cache.applied.borrow();
-        assert_eq!(applied.len(), 1, "one transactional batch");
-        assert_eq!(applied[0], vec!["overview", "decisions", "changelog"]);
+        assert_eq!(cache.applied.borrow().len(), 1, "one transactional batch");
     }
 
     #[test]
-    fn a_skipped_kind_is_omitted_not_an_error() {
+    fn an_uncited_section_is_dropped_and_never_persisted() {
         let cache = RecordingCache::default();
-        let regen = MockRegenerator {
-            skip: vec![WikiPageKind::Decisions],
-            fail_on: None,
+        let generator = ScriptedGenerator(|kind| {
+            Ok(GeneratedContent {
+                title: kind.as_str().to_string(),
+                sections: vec![
+                    GeneratedSection::cited(
+                        "CITED FACT",
+                        vec![WikiCitation::new("decision", "d1")],
+                    ),
+                    // No citations → must be dropped (PW-4).
+                    GeneratedSection {
+                        text: "UNCITED CLAIM".to_string(),
+                        citations: vec![],
+                        internal_detail: false,
+                    },
+                ],
+            })
+        });
+
+        regenerate(
+            OfficeChange::MilestoneReached,
+            "office-1",
+            &ground(),
+            Some(&generator),
+            &cache,
+        )
+        .expect("succeeds");
+
+        let overview = cache.page(WikiPageKind::Overview).expect("overview page");
+        assert!(overview.body.contains("CITED FACT"));
+        assert!(
+            !overview.body.contains("UNCITED CLAIM"),
+            "an uncited claim must never be persisted"
+        );
+    }
+
+    #[test]
+    fn an_internal_detail_section_never_reaches_a_row() {
+        let cache = RecordingCache::default();
+        let generator = ScriptedGenerator(|kind| {
+            Ok(GeneratedContent {
+                title: kind.as_str().to_string(),
+                sections: vec![
+                    GeneratedSection::cited(
+                        "CLIENT FACT",
+                        vec![WikiCitation::new("board_item", "c1")],
+                    ),
+                    // Internal engineering detail — must be filtered (PW-8).
+                    GeneratedSection {
+                        text: "SDD internal: crate topology guard".to_string(),
+                        citations: vec![WikiCitation::new("decision", "d9")],
+                        internal_detail: true,
+                    },
+                ],
+            })
+        });
+
+        regenerate(
+            OfficeChange::MilestoneReached,
+            "office-1",
+            &ground(),
+            Some(&generator),
+            &cache,
+        )
+        .expect("succeeds");
+
+        let overview = cache.page(WikiPageKind::Overview).expect("overview page");
+        assert!(overview.body.contains("CLIENT FACT"));
+        assert!(
+            !overview.body.contains("SDD internal"),
+            "internal engineering detail must never reach a wiki row"
+        );
+    }
+
+    #[test]
+    fn no_generator_mode_stores_a_grounded_stub_and_never_fabricates() {
+        let cache = RecordingCache::default();
+
+        regenerate(
+            OfficeChange::MilestoneReached,
+            "office-1",
+            &ground(),
+            None, // no generator bound
+            &cache,
+        )
+        .expect("succeeds");
+
+        let overview = cache.page(WikiPageKind::Overview).expect("overview page");
+        // The stub is exactly the grounded template — no invented prose — and
+        // it carries the gathered sources so it is attributable (PW-4/PW-1).
+        assert_eq!(
+            overview.body,
+            grounded_stub(
+                WikiPageKind::Overview,
+                &[WikiCitation::new("decision", "d-overview")]
+            )
+        );
+        assert_eq!(overview.citations.len(), 1);
+        assert!(!overview.source_fingerprint.is_empty());
+    }
+
+    #[test]
+    fn all_sections_dropped_falls_back_to_a_grounded_stub() {
+        let cache = RecordingCache::default();
+        let generator = ScriptedGenerator(|kind| {
+            Ok(GeneratedContent {
+                title: kind.as_str().to_string(),
+                // Only an uncited section → dropped → empty → stub.
+                sections: vec![GeneratedSection {
+                    text: "UNCITED".to_string(),
+                    citations: vec![],
+                    internal_detail: false,
+                }],
+            })
+        });
+
+        regenerate(
+            OfficeChange::MilestoneReached,
+            "office-1",
+            &ground(),
+            Some(&generator),
+            &cache,
+        )
+        .expect("succeeds");
+
+        let overview = cache.page(WikiPageKind::Overview).expect("overview page");
+        assert!(!overview.body.contains("UNCITED"));
+        assert!(overview.body.contains("grounded in 1 recorded source"));
+    }
+
+    #[test]
+    fn a_kind_with_no_ground_truth_is_skipped() {
+        let cache = RecordingCache::default();
+        let gt = FixedGroundTruth {
+            empty: vec![WikiPageKind::Decisions],
         };
+        let generator = ScriptedGenerator(|kind| {
+            Ok(GeneratedContent {
+                title: kind.as_str().to_string(),
+                sections: vec![GeneratedSection::cited(
+                    "x",
+                    vec![WikiCitation::new("decision", "d1")],
+                )],
+            })
+        });
 
-        let report = regenerate(OfficeChange::DecisionRecorded, "office-1", &regen, &cache)
-            .expect("regeneration succeeds");
+        let report = regenerate(
+            OfficeChange::DecisionRecorded,
+            "office-1",
+            &gt,
+            Some(&generator),
+            &cache,
+        )
+        .expect("succeeds");
 
-        assert_eq!(report.regenerated, vec!["overview", "changelog"]);
-        assert_eq!(cache.applied.borrow()[0], vec!["overview", "changelog"]);
+        assert_eq!(
+            report.regenerated,
+            vec!["office-1:overview", "office-1:changelog"],
+            "the ungrounded decisions page is skipped, not fabricated"
+        );
     }
 
     #[test]
     fn a_generation_failure_aborts_before_any_write() {
         let cache = RecordingCache::default();
-        let regen = MockRegenerator {
-            skip: vec![],
-            fail_on: Some(WikiPageKind::Decisions),
-        };
+        let generator = ScriptedGenerator(|kind| {
+            if kind == WikiPageKind::Decisions {
+                Err("generation failed".to_string())
+            } else {
+                Ok(GeneratedContent {
+                    title: kind.as_str().to_string(),
+                    sections: vec![GeneratedSection::cited(
+                        "x",
+                        vec![WikiCitation::new("decision", "d1")],
+                    )],
+                })
+            }
+        });
 
-        let result = regenerate(OfficeChange::DecisionRecorded, "office-1", &regen, &cache);
+        let result = regenerate(
+            OfficeChange::DecisionRecorded,
+            "office-1",
+            &ground(),
+            Some(&generator),
+            &cache,
+        );
 
-        assert!(result.is_err(), "a generation failure surfaces");
+        assert!(result.is_err());
         assert!(
             cache.applied.borrow().is_empty(),
-            "nothing was written — the prior rows stay intact"
+            "nothing written — prior rows stay intact"
         );
     }
 }
