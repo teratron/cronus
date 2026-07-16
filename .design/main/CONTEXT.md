@@ -1,6 +1,6 @@
 # Project Context
 
-**Generated:** 2026-07-15
+**Generated:** 2026-07-16
 
 ## Active Technologies
 
@@ -18,9 +18,8 @@
 ├── .claude/
 │   ├── commands/
 │   ├── rules/
-│   ├── settings.local.json
-│   ├── skills/
-│   └── worktrees/
+│   ├── scheduled_tasks.lock
+│   └── skills/
 ├── .codex/
 │   ├── prompts/
 │   ├── rules/
@@ -38,6 +37,8 @@
 │   └── workspace.json
 ├── .drafts/
 │   ├── TODO.md
+│   ├── UX-UI - разбор 3 кейсов.md
+│   ├── UX-дизайн - 6 психологических принципов.md
 │   ├── desktop.drawio.svg
 │   ├── heartbeat.md
 │   ├── project-names.md
