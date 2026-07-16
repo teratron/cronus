@@ -2,6 +2,18 @@
 
 Internal phase journal. Each entry corresponds to a completed phase.
 
+## Phase 17 — Model Transport & Provider Connectivity (2026-07-16)
+
+- T-17A01: `contract::InferenceBackend` — the streaming call surface (`generate_stream`/`embed`/`describe`/`pull`/`set_residency`) + `GenerateRequest`/`StreamEvent`/`InferenceError`/`ModelDescriptor`/`ResidencyHint`/`PullProgress`/`CancelHandle`, deliberately separate from the untouched routing-metadata `ModelProvider` (score vs. call, two facets)
+- T-17B01: new `crates/model-local` + `EndpointProfile` (loopback-only by construction, MR-1) + reachability probe (thread-scoped, 800ms); registered in the workspace + `workspace.dependencies`
+- T-17B02: `/v1`-compatible streaming generate — worker thread + `sync_channel` bounded backpressure + SSE framing + `[DONE]`/clean-EOF, cooperative cancellation via `FrameReader` 50ms read-timeout polling, **no async runtime**; removed the unused `ureq` dep (loopback needs no TLS)
+- T-17B03: `embed`/`describe`/`pull`/`set_residency` per capability flag (unset → `Unsupported`, honest not emulated); wire-failure→taxonomy mapping with no internal retry; egress-gated remote profiles (`EgressGrant` compile-time-required + `CredentialResolver` resolved per call, never cached); `EndpointProfile` implements `InferenceBackend` (MR-2)
+- T-17C01: facade wiring + `NodusModelBridge` (`nodus::ModelProvider` over `InferenceBackend`, collapsing the stream to a `String`; `analyze` projects a real flag→map, absent flags → `Null`); re-exports `cronus::model` / `cronus::NodusModelBridge`; nodus gains no dependency (LP-1)
+- T-17D01: CI boundary guard forbids `domain → model-local` (already by allowlist construction), made explicit + self-tested (`--self-test` proves the FAIL path; real inject → exit 1) and wired into `deps-gate.yml`
+- T-17T01: `TransportCompactor` (`contract::Compactor` over `InferenceBackend`) replaces the inert `NoOpCompactor`; `transport_e2e` integration test drives the whole seam (facade → `EndpointProfile` → HTTP → mock) producing a real summary, and degrades to `Err` without panic when no backend is reachable
+- Also fixed two pre-existing `cronus-core` test-isolation races surfaced by the phase's workspace-green gate: `mission_mode` env-var race (serialized on a lock) and `model_router` `BANDIT_COUNTER` global state (→ per-pool counter + fit-gated bandit exploration, with a new 40-call fit test)
+- Verify: `cargo test --workspace` green (exit 0 across 3 consecutive runs); `cargo clippy --workspace --all-targets -- -D warnings` clean; `cargo fmt --all --check` clean; boundary guard + self-test exit 0
+
 ## Phase 7 — Leaf: TUI (2026-06-28)
 
 - T-7A01: `terminal` module — `TerminalBackend` DI trait + `CrosstermBackend` production impl (Windows Press-only key filter) + `Tui<B>` RAII guard with panic-safe, idempotent restore; converted `cronus-tui` to lib+bin; added `crossterm` workspace dependency

@@ -24,11 +24,13 @@ pub use cronus_domain::{
 // `cronus-model-local`) stay defined here — the tier model has no edge from
 // `cronus-domain` to any adapter, so these shims cannot live there.
 pub mod auth;
+pub mod context_compaction;
 pub mod inbox;
 pub mod memory;
 pub mod model_bridge;
 pub mod workspace;
 
+pub use context_compaction::TransportCompactor;
 /// The local model-transport adapter, re-exported so a host can construct a
 /// `contract::InferenceBackend` (an `EndpointProfile`) and hand it to the
 /// engine — the wired transport surface (l1-model-runtime §4.1).
