@@ -1,24 +1,32 @@
 # Model Runtime (Transport & Provider Connectivity)
 
-**Version:** 1.0.0
-**Status:** RFC
+**Version:** 1.0.1
+**Status:** Stable
 **Layer:** implementation
 **Implements:** l1-model-runtime.md
 
 ## Overview
 
 The concrete realization of the local model runtime for the Rust workspace: the **transport
-layer** that turns a routing decision into an actual inference call. It binds the two
-existing-but-unwired provider seams — the workspace contract's `ModelProvider` trait
-(authoritative) and the workflow runtime's provider trait (bridged via a host-side adapter) —
-to real serving backends: the six federated local REST providers from the technology-stack
-catalog, and explicitly egress-gated remote APIs.
+layer** that turns a routing decision into an actual inference call. It supplies the
+streaming inference surface the workspace does not yet have. Two provider seams exist today
+but neither serves a call: the contract's `ModelProvider` trait is **routing metadata**
+(`id`/`health`/`context_window`/`cost`/`latency`/`tier`/`task_fit` — the properties the
+router scores, with no generate method at all), and the workflow runtime's `ModelProvider`
+trait is a minimal **synchronous** surface (`generate(prompt) -> String`, `analyze` — no
+streaming, embeddings, or model introspection) satisfied only by a deterministic test stub.
 
-This spec exists to close a structural gap: model *selection* (router, credential lanes,
-hardware fit) is fully specified and implemented, while no component can actually reach a
-model — the workspace deliberately contains no HTTP transport today. This L2 defines that
-transport: synchronous-first, thread-scoped, streaming-capable, and cancellable, without
-introducing an async runtime into the core.
+This spec defines the missing piece: a new **inference trait** in the contract crate (the
+streaming call surface), a concrete endpoint-profile provider that implements it *alongside*
+the routing-metadata facet, and a host-side adapter that satisfies the nodus generate/analyze
+trait by collapsing the stream to a `String` — all over the six federated local REST
+providers from the technology-stack catalog and explicitly egress-gated remote APIs.
+
+Model *selection* (router, credential lanes, hardware fit) is fully specified and
+implemented, while no component can actually reach a model — the workspace deliberately
+contains no HTTP transport today. This L2 defines that transport: synchronous-first,
+thread-scoped, streaming-capable, and cancellable, without introducing an async runtime into
+the core.
 
 ## Related Specifications
 
@@ -34,10 +42,11 @@ introducing an async runtime into the core.
 
 Every model-consuming subsystem (orchestration, memory generators, triage, compaction,
 nodus workflows) targets a provider seam, and every seam currently dead-ends: the contract
-trait has no shipped implementation, and the workflow runtime executes against a built-in
-stub. The router can *decide* which model should serve a request, record credential lanes,
-and estimate hardware fit — and then nothing can perform the call. This is the single gap
-that keeps the office's autonomy inert end to end.
+trait exposes only routing metadata (no call method at all), and the workflow runtime's
+`generate`/`analyze` trait is satisfied only by a deterministic test stub. The router can
+*decide* which model should serve a request, record credential lanes, and estimate hardware
+fit — and then no seam can perform the streaming call. This is the single gap that keeps the
+office's autonomy inert end to end.
 
 The transport must respect two standing architectural facts: the workspace is synchronous by
 design (the stack's provider probes are *parallel thread-scoped*, not async), and the
@@ -67,7 +76,7 @@ An HTTP+TLS client is such a necessity; an async runtime is not.
 | L1 Invariant | Implementation |
 | --- | --- |
 | MR-1 Local-first serving | Default provider set = the six loopback REST providers (stack §4.4); a non-loopback endpoint is constructible only through the egress-gated remote-backend path with an explicit user grant; no silent remote fallback — a failed local call surfaces through error-recovery, never re-routes off-device on its own. |
-| MR-2 Provider-abstracted backends | One transport crate implements the contract's `ModelProvider` (load hints, generate-stream, embed, describe, unload hints) once per protocol family (`/v1`-compatible, provider-native REST); adding a provider is a new endpoint profile, never a caller change. The workflow-runtime provider trait is satisfied by a host-side adapter over the same contract implementation. |
+| MR-2 Provider-abstracted backends | The transport defines a new **inference trait** in the contract crate (`generate_stream`, `embed`, `describe`, `pull`, residency hints) — the streaming call surface neither existing trait provides. A concrete endpoint-profile provider implements this inference trait **and** the routing-metadata `contract::ModelProvider` (so the router can score it) — two facets of one object; adding a provider is a new endpoint profile, never a caller change. The nodus `ModelProvider` (`generate`/`analyze` → `String`) is satisfied by a host-side adapter that calls the inference trait and collapses the stream to a `String`. |
 | MR-3 Content-addressed model store | **Delegated (v1):** the federated local server owns manifests/blobs; the transport surfaces each provider's catalog (name, digest, size) through `describe`. A Cronus-native store is a disclosed deferral with an upgrade trigger (self-managed serving backend), per the frugality discipline. |
 | MR-4 Verifiable named acquisition | **Delegated (v1):** pull-by-name is forwarded to providers that support it, progress-streamed to the caller; digest reported back post-pull. Acquisition is explicit (a `model pull` capability), never a hidden stall inside a generate call — a missing model fails fast with the acquisition hint. |
 | MR-5 Portable model definition | **Delegated (v1):** definition-based customization forwards to the provider's definition mechanism where present; the transport records the resolved definition digest in `describe` output so a customized model stays reproducible. |
@@ -92,14 +101,16 @@ pattern from the crate topology:
 
 ```plaintext
 crates/
-├── contract/       # ModelProvider trait (exists, unchanged)
-├── model-local/    # NEW: REST transport implementing contract::ModelProvider
-├── domain/         # consumes the trait only — no transport dependency
-└── core/ (facade)  # wires model-local into the engine; hosts the nodus bridge adapter
+├── contract/       # ModelProvider (routing metadata, unchanged) + NEW InferenceBackend trait (streaming call surface)
+├── model-local/    # NEW: REST transport implementing contract::InferenceBackend
+├── domain/         # consumes both traits — no transport dependency
+└── core/ (facade)  # wires model-local in; hosts the nodus bridge adapter
 ```
 
-Dependency direction stays inward: `model-local → contract`; `domain` never depends on
-`model-local`; the facade composes them. Adding this crate extends the topology the
+The contract crate **gains** the inference trait; the routing-metadata `ModelProvider` stays
+exactly as-is (the two traits describe different facets — score vs. call — of one provider).
+Dependency direction stays inward: `model-local → contract`; `domain` depends on the traits,
+never on `model-local`; the facade composes them. Adding this crate extends the topology the
 crate-topology spec enumerates: implementation of this spec MUST be accompanied by a
 crate-topology amendment registering `model-local` as a peer infra crate (same tier and
 rules as `store-local`/`auth-local`) and by the corresponding CI boundary-guard update —
@@ -124,13 +135,24 @@ bounded channel; a slow consumer never grows memory unbounded. One request = one
 total transport concurrency is capped by a small pool sized from the router's
 concurrency budget.
 
+The nodus bridge consumes this **same** stream and concatenates its `Token` events into the
+`String` that `nodus::ModelProvider::generate` returns — streaming internally, blocking at
+the nodus boundary. This is why the nodus trait needs no streaming variant: the blocking
+`String` return is a projection of the stream, not a second call path.
+
 ### 4.3 Provider endpoint profiles
 
-Each catalog provider is an **endpoint profile**: base URL, protocol family (`/v1`-compatible
-or provider-native), capability flags (streaming, embeddings, pull, residency control,
-digest reporting), and probe rules — data, not code. New providers are added by profile.
-Probes follow the stack's discipline: thread-scoped, 800 ms timeout, loopback-only by
-default, wildcard binds rejected.
+Each catalog provider is an **endpoint profile**: protocol family (`/v1`-compatible or
+provider-native), capability flags (streaming, embeddings, pull, residency control, digest
+reporting), and probe rules — data, not code. New providers are added by profile. Probes
+follow the stack's discipline: thread-scoped, 800 ms timeout, loopback-only by default,
+wildcard binds rejected.
+
+The per-model endpoint **address** is not re-invented here: the router policy already carries
+`api_base` per model (and maps the on-device runtime to the `inference.local/v1` virtual
+host, per `l2-model-router`). The profile adds only the *how-to-talk* layer — protocol
+family, capability flags, probe rules — over that address; it is not a parallel endpoint
+registry, and `api_base` stays the single source of truth for *where* a model lives.
 
 ### 4.4 Credentials and egress
 
@@ -139,6 +161,12 @@ secret store at call time (never cached in config), attaches it per the profile'
 scheme, and is constructible only after the security egress grant for that endpoint. The
 credential lane chosen by the router (RTG-10) is carried in the request metadata so the
 transport uses the lane the router priced.
+
+The transport does **not** own credential rotation or the credential pool: multi-key rotation
+stays in `l2-model-error-recovery`, and per-key/account cooldown stays in `l2-model-router`
+(Connection Cooldown). The transport only *attaches* the single credential for the lane the
+router already selected, and reports an auth failure back onto the error-recovery taxonomy
+(§4.5) so those upstream layers decide rotation — no auth-state machine is duplicated here.
 
 ### 4.5 Failure surface
 
@@ -186,13 +214,15 @@ Per the shipped-surface honesty rule, these verbs appear on a frontend only once
 
 | Alias | Path | Purpose |
 | --- | --- | --- |
-| `[CONTRACT]` | `crates/contract/src/lib.rs` | The authoritative `ModelProvider` trait this crate implements |
+| `[CONTRACT]` | `crates/contract/src/lib.rs` | The routing-metadata `ModelProvider` trait, and the crate that gains the new `InferenceBackend` trait this transport implements |
+| `[NODUS]` | `crates/nodus/src/executor.rs` | The workflow-runtime `ModelProvider` (`generate`/`analyze` → `String`) the host-side bridge adapter satisfies |
 | `[STACK]` | `.design/main/specifications/l2-technology-stack.md` | Provider catalog, endpoints, and probe discipline (§4.4) |
-| `[ROUTER]` | `.design/main/specifications/l2-model-router.md` | Selection and hardware-fit sitting above this transport |
-| `[RECOVERY]` | `.design/main/specifications/l2-model-error-recovery.md` | Error taxonomy the failure surface maps onto |
+| `[ROUTER]` | `.design/main/specifications/l2-model-router.md` | Selection, hardware-fit, `api_base` address, and per-key cooldown sitting above this transport |
+| `[RECOVERY]` | `.design/main/specifications/l2-model-error-recovery.md` | Error taxonomy the failure surface maps onto; owner of multi-key rotation |
 
 ## Document History
 
 | Version | Date | Notes |
 | --- | --- | --- |
-| 1.0.0 | 2026-07-16 | Initial RFC — closes the audit-identified transport gap: synchronous streaming REST transport crate (`model-local`) implementing the contract `ModelProvider` over the federated §4.4 provider catalog; host-side nodus bridge adapter; endpoint profiles; credential-lane + egress-gated remote path; MR-1…MR-14 compliance table (MR-3/4/5 delegated-with-disclosure in v1). |
+| 1.0.1 | 2026-07-16 | Post-Update Review correction (Stable): the initial draft wrongly claimed the transport "implements `contract::ModelProvider`" with generate/embed/describe — but that trait is **routing metadata** (no call method), and the only real generate surface is nodus's synchronous `generate`/`analyze` → `String`. Corrected the seam model: the transport defines a NEW `InferenceBackend` trait in the contract crate; a concrete provider implements it *plus* the routing-metadata facet; the nodus trait is satisfied by a stream-collapsing bridge. Also clarified two seams against Stable neighbors — endpoint profile consumes the router's `api_base` (not a parallel address registry), and credential rotation stays in router/error-recovery (transport only attaches the selected credential). Promoted RFC→Stable. |
+| 1.0.0 | 2026-07-16 | Initial RFC — closes the audit-identified transport gap: synchronous streaming REST transport crate (`model-local`) over the federated §4.4 provider catalog; host-side nodus bridge adapter; endpoint profiles; credential-lane + egress-gated remote path; MR-1…MR-14 compliance table (MR-3/4/5 delegated-with-disclosure in v1). |
