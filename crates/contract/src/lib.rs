@@ -16,7 +16,8 @@
 // `MemorySearch` / `UserDataStore` seam traits below carry across the
 // domain/adapter boundary (§4.5); its field types travel with it.
 
-use std::sync::atomic::{AtomicU64, Ordering};
+use std::sync::Arc;
+use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
 use std::time::{Duration, SystemTime, UNIX_EPOCH};
 
 static ID_COUNTER: AtomicU64 = AtomicU64::new(0);
@@ -762,4 +763,264 @@ pub trait AuthProvider: Send + Sync {
 /// The DN-2 principal-identity plane (§4.5).
 pub trait IdentityProvider: Send + Sync {
     fn current_principal(&self) -> Option<String>;
+}
+
+// ── InferenceBackend seam ────────────────────────────────────────────────────
+//
+// The streaming call surface (MR-2/MR-8). Distinct from `ModelProvider`
+// above: that trait is routing metadata (id/health/cost/latency/tier/
+// task_fit — what the router scores) and has no method that performs a
+// call. A concrete provider in `cronus-model-local` implements both traits —
+// two facets of one object, score vs. call — never one subsuming the other.
+
+/// A request to generate against a named model.
+#[derive(Debug, Clone, PartialEq, Eq, Default)]
+pub struct GenerateRequest {
+    /// The model name/tag this request targets (resolves via the router's
+    /// `api_base`, not looked up here).
+    pub model: String,
+    pub prompt: String,
+    /// Backend-specific generation parameters (temperature, top_p, ...) as
+    /// opaque key/value pairs — mirrors the modifier convention `nodus`
+    /// already uses for its own provider seam.
+    pub parameters: Vec<(String, String)>,
+}
+
+/// One event in a generation stream (MR-8).
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum StreamEvent {
+    Token(String),
+    ToolCall {
+        name: String,
+        arguments: String,
+    },
+    Usage {
+        prompt_tokens: u64,
+        completion_tokens: u64,
+    },
+    /// Terminal: the stream completed normally.
+    Done,
+    /// Terminal: the stream ended abnormally, including on cancellation.
+    Error(InferenceError),
+}
+
+/// The wire-failure taxonomy a transport maps onto (§4.5). Deliberately flat
+/// and small — retry/rotate/fallback policy over these variants lives in
+/// `l2-model-error-recovery`, not here.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum InferenceError {
+    ConnectRefused,
+    Timeout,
+    ClientError(u16),
+    ServerError(u16),
+    MalformedStream(String),
+    /// The caller's `CancelHandle` was set mid-call.
+    Cancelled,
+    /// The backend has no support for the attempted operation (MR-6/MR-9:
+    /// reported honestly, never silently emulated).
+    Unsupported,
+}
+
+/// Static facts about a model as reported by its serving backend (MR-3/MR-12).
+#[derive(Debug, Clone, PartialEq, Eq, Default)]
+pub struct ModelDescriptor {
+    pub name: String,
+    pub digest: Option<String>,
+    pub size_bytes: Option<u64>,
+    pub parameters: Option<String>,
+}
+
+/// A residency instruction for an explicit load/unload lifecycle (MR-6).
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum ResidencyHint {
+    KeepAliveSecs(u64),
+    UnloadNow,
+}
+
+/// One event in a model-acquisition stream (MR-4).
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum PullProgress {
+    Downloading {
+        bytes_done: u64,
+        bytes_total: Option<u64>,
+    },
+    Done {
+        digest: Option<String>,
+    },
+    Error(InferenceError),
+}
+
+/// A cooperative cancellation flag shared between a caller and the worker
+/// driving a `generate_stream` call. Cloning shares the same underlying flag
+/// — the caller keeps one clone to call `cancel()` while another is moved
+/// into the streaming call.
+#[derive(Debug, Clone)]
+pub struct CancelHandle(Arc<AtomicBool>);
+
+impl CancelHandle {
+    pub fn new() -> Self {
+        CancelHandle(Arc::new(AtomicBool::new(false)))
+    }
+
+    /// Request cancellation. The next event the stream yields MUST be
+    /// `StreamEvent::Error(InferenceError::Cancelled)`, followed by
+    /// termination (no further events).
+    pub fn cancel(&self) {
+        self.0.store(true, Ordering::SeqCst);
+    }
+
+    pub fn is_cancelled(&self) -> bool {
+        self.0.load(Ordering::SeqCst)
+    }
+}
+
+impl Default for CancelHandle {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
+/// The streaming inference call surface (MR-2/MR-8). Implemented by a
+/// concrete endpoint-profile provider in `cronus-model-local`; the nodus
+/// `ModelProvider` (`generate`/`analyze` → `String`) is satisfied by a
+/// host-side bridge that collapses this stream, never by implementing this
+/// trait a second time.
+pub trait InferenceBackend: Send + Sync {
+    /// Blocking pull-iterator: the caller advances it to drive the call.
+    /// Cancelling `cancel` mid-stream yields exactly one
+    /// `Error(Cancelled)` and then `None`.
+    fn generate_stream(
+        &self,
+        request: GenerateRequest,
+        cancel: CancelHandle,
+    ) -> Box<dyn Iterator<Item = StreamEvent> + Send>;
+
+    fn embed(&self, model: &str, input: &str) -> Result<Vec<f32>, InferenceError>;
+
+    fn describe(&self, model: &str) -> Result<ModelDescriptor, InferenceError>;
+
+    /// Acquire a model by name; progress-streamed, never a hidden stall.
+    fn pull(&self, model: &str) -> Box<dyn Iterator<Item = PullProgress> + Send>;
+
+    fn set_residency(&self, model: &str, hint: ResidencyHint) -> Result<(), InferenceError>;
+}
+
+#[cfg(test)]
+mod inference_tests {
+    use super::*;
+
+    /// A scripted backend: yields three tokens then `Done`, unless
+    /// cancelled mid-stream, in which case it yields exactly one
+    /// `Error(Cancelled)` and stops.
+    struct ScriptedBackend;
+
+    impl InferenceBackend for ScriptedBackend {
+        fn generate_stream(
+            &self,
+            _request: GenerateRequest,
+            cancel: CancelHandle,
+        ) -> Box<dyn Iterator<Item = StreamEvent> + Send> {
+            let tokens = ["Hello", ", ", "world"];
+            let mut idx = 0usize;
+            let mut finished = false;
+            Box::new(std::iter::from_fn(move || {
+                if finished {
+                    return None;
+                }
+                if cancel.is_cancelled() {
+                    finished = true;
+                    return Some(StreamEvent::Error(InferenceError::Cancelled));
+                }
+                if idx < tokens.len() {
+                    let tok = tokens[idx].to_string();
+                    idx += 1;
+                    Some(StreamEvent::Token(tok))
+                } else {
+                    finished = true;
+                    Some(StreamEvent::Done)
+                }
+            }))
+        }
+
+        fn embed(&self, _model: &str, _input: &str) -> Result<Vec<f32>, InferenceError> {
+            Err(InferenceError::Unsupported)
+        }
+
+        fn describe(&self, model: &str) -> Result<ModelDescriptor, InferenceError> {
+            Ok(ModelDescriptor {
+                name: model.to_string(),
+                ..Default::default()
+            })
+        }
+
+        fn pull(&self, _model: &str) -> Box<dyn Iterator<Item = PullProgress> + Send> {
+            Box::new(std::iter::once(PullProgress::Done { digest: None }))
+        }
+
+        fn set_residency(&self, _model: &str, _hint: ResidencyHint) -> Result<(), InferenceError> {
+            Ok(())
+        }
+    }
+
+    #[test]
+    fn generate_stream_runs_to_done_uncancelled() {
+        let backend = ScriptedBackend;
+        let cancel = CancelHandle::new();
+        let events: Vec<StreamEvent> = backend
+            .generate_stream(GenerateRequest::default(), cancel)
+            .collect();
+
+        assert_eq!(
+            events,
+            vec![
+                StreamEvent::Token("Hello".to_string()),
+                StreamEvent::Token(", ".to_string()),
+                StreamEvent::Token("world".to_string()),
+                StreamEvent::Done,
+            ]
+        );
+    }
+
+    #[test]
+    fn cancel_mid_stream_yields_single_cancelled_error_then_stops() {
+        let backend = ScriptedBackend;
+        let cancel = CancelHandle::new();
+        let mut stream = backend.generate_stream(GenerateRequest::default(), cancel.clone());
+
+        // Pull two tokens, then cancel mid-stream.
+        assert_eq!(stream.next(), Some(StreamEvent::Token("Hello".to_string())));
+        assert_eq!(stream.next(), Some(StreamEvent::Token(", ".to_string())));
+        cancel.cancel();
+
+        assert_eq!(
+            stream.next(),
+            Some(StreamEvent::Error(InferenceError::Cancelled))
+        );
+        assert_eq!(
+            stream.next(),
+            None,
+            "no events after the terminal Cancelled"
+        );
+    }
+
+    #[test]
+    fn unsupported_capability_reported_honestly_not_emulated() {
+        let backend = ScriptedBackend;
+        assert_eq!(
+            backend.embed("any-model", "text"),
+            Err(InferenceError::Unsupported)
+        );
+    }
+
+    #[test]
+    fn cancel_handle_clone_shares_the_same_flag() {
+        let cancel = CancelHandle::new();
+        let clone = cancel.clone();
+        assert!(!clone.is_cancelled());
+        cancel.cancel();
+        assert!(
+            clone.is_cancelled(),
+            "clone must observe cancellation through the shared flag"
+        );
+    }
 }

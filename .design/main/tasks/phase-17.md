@@ -7,7 +7,7 @@ requires: [2, 4, 13]
 provides: []
 key_files:
   created: []
-  modified: []
+  modified: ["crates/contract/src/lib.rs"]
 patterns_established: []
 duration_minutes: ~
 ---
@@ -22,7 +22,7 @@ duration_minutes: ~
 
 ## Atomic Checklist
 
-- [ ] [T-17A01] `InferenceBackend` trait + types in `crates/contract`: `generate_stream` (→ pull-iterator of `StreamEvent { Token | ToolCall | Usage | Done | Error }`), `embed`, `describe` (→ `ModelDescriptor`: name/digest/size/params), `pull`, residency hints, and a `CancelHandle` (atomic flag). The routing-metadata `ModelProvider` trait stays exactly as-is — the two are distinct facets. **Verify:** `cargo test -p cronus-contract inference` — trait + types compile; a hand-written mock impl drives a scripted stream to `Done` and, on a mid-stream `CancelHandle` set, yields `Error(Cancelled)` and stops.
+- [x] [T-17A01] `InferenceBackend` trait + types in `crates/contract`: `generate_stream` (→ pull-iterator of `StreamEvent { Token | ToolCall | Usage | Done | Error }`), `embed`, `describe` (→ `ModelDescriptor`: name/digest/size/params), `pull`, residency hints, and a `CancelHandle` (atomic flag). The routing-metadata `ModelProvider` trait stays exactly as-is — the two are distinct facets. **Verify:** `cargo test -p cronus-contract inference` — trait + types compile; a hand-written mock impl drives a scripted stream to `Done` and, on a mid-stream `CancelHandle` set, yields `Error(Cancelled)` and stops.
 - [ ] [T-17B01] New `crates/model-local` + blocking HTTP+TLS client dependency (ureq-class, rustls); endpoint-profile model (protocol family `/v1`-compatible vs provider-native, capability flags, probe rules) that consumes the router policy's `api_base` (not a parallel address registry); loopback reachability probe reusing the stack §4.4 discipline (thread-scoped, 800 ms timeout, loopback-only default). **Verify:** `cargo test -p cronus-model-local profile` — profiles resolve their address from a supplied `api_base`; a probe against a stub `TcpListener` classifies reachable vs connection-refused vs timeout within the 800 ms budget.
 - [ ] [T-17B02] `/v1`-compatible streaming generate: a worker thread owns the HTTP connection and parses SSE/NDJSON into `StreamEvent`s pushed to a **bounded** channel; the caller pulls (backpressure = the bounded channel); the `CancelHandle` drops the connection mid-stream. **Verify:** `cargo test -p cronus-model-local generate_stream` — against the mock HTTP server emitting SSE chunks, the iterator yields ordered `Token`s then `Done`; a cancel mid-stream yields `Error(Cancelled)` and the server observes the socket close; a slow consumer does not grow memory unbounded (bounded-channel assertion).
 - [ ] [T-17B03] `embed` + `describe` + `pull` per capability flag; wire-failure mapping onto the error-recovery taxonomy (connect-refused / timeout / 4xx / 5xx / malformed-stream / cancelled) with **no internal retry** (retry/rotate/fallback stay upstream); remote profiles constructible only behind the security egress grant, credential attached from the secret store at call time (never cached). **Verify:** `cargo test -p cronus-model-local failure_map` — each simulated wire failure maps to the correct taxonomy variant; exactly one request is attempted per call (no retry observed); a remote profile refuses to construct without an egress grant.
@@ -35,11 +35,11 @@ duration_minutes: ~
 ### [T-17A01] InferenceBackend trait + types
 
 - **Spec:** l2-model-runtime.md §4.1, §4.2, MR-2/MR-8
-- **Status:** Todo
+- **Status:** Done
 - **Assignment:** Agent
-- **Verify:** `cargo test -p cronus-contract inference` — trait/types compile; mock impl drives a scripted stream to `Done`; mid-stream cancel yields `Error(Cancelled)`.
+- **Verify:** `cargo test -p cronus-contract inference` — 4/4 passed (`generate_stream_runs_to_done_uncancelled`, `cancel_mid_stream_yields_single_cancelled_error_then_stops`, `unsupported_capability_reported_honestly_not_emulated`, `cancel_handle_clone_shares_the_same_flag`). `cargo check --workspace` clean; `cargo clippy --workspace --all-targets -- -D warnings` clean; `cargo fmt --all -- --check` clean.
 - **Handoff:** Gates B (transport implements the trait) and C (facade/bridge consume it).
-- **Notes:** Critical path — the trait shape is the single point every other track builds on; keep it small and stable. Routing-metadata `ModelProvider` is untouched.
+- **Notes:** Critical path — the trait shape is the single point every other track builds on; keep it small and stable. Routing-metadata `ModelProvider` is untouched (zero changes to its section). **Pre-existing unrelated defect found during regression check (not caused by this task, not fixed here — out of scope):** `cargo test -p cronus-core --test model_router fit_level_routing_exclusion` fails when run in isolation, on the pre-change baseline too (confirmed via `git stash`/`git stash pop` — same failure with or without this task's diff). Root cause: `BANDIT_COUNTER` (`crates/domain/src/router/mod.rs:55`) is a process-wide `static AtomicU64`, not scoped per `RouterPool` — its "every 20th call" trigger fires on the very first `route()` call of an isolated test run (counter starts at 0, `0 % 20 == 0`), and the bandit branch (lines 171–183) picks the first healthy provider **without any context-window fit check**, violating the test's own asserted invariant ("tiny context window must be excluded"). This is a real correctness gap in `l2-model-router`'s bandit path (MR-7-adjacent) plus a test-isolation smell (shared global mutable state across the test binary) — reported to the user, not silently fixed; out of this task's crate/scope.
 
 ### [T-17B01] model-local crate + endpoint profiles + probe
 
