@@ -1,6 +1,6 @@
 # Agent Constitution
 
-**Version:** 1.0.9
+**Version:** 1.0.10
 **Status:** Stable
 **Layer:** implementation
 **Implements:** l1-office-model.md, l1-memory-model.md
@@ -922,6 +922,7 @@ Agents that ask questions before acting slow down workflows and transfer cogniti
 - **Concurrent writes (multi-agent):** two agents updating PROFILE.md simultaneously could cause lost updates. Mitigation: the `manager` role (orchestrator) is the designated writer; others read-only unless specifically granted write access.
 - **SOUL.md drift:** if the user edits SOUL.md, the agent's behavior changes on next session. This is by design — SOUL.md is a first-class configuration surface.
 - **Alternative — store identity in structured DB:** more queryable, but not user-editable without tooling. Plain files win for transparency and auditability.
+- **Disclosed simplification (FR-6)** `[ADDED]`: the 8-step activation sequence currently executes as a no-op seam — constitution files are read and validated, but activation performs no session side effects until agent-session wiring lands. Upgrade trigger: binding activation to session start in the session subsystem; the sequence contract is unchanged.
 
 ## Canonical References
 
@@ -931,3 +932,9 @@ Agents that ask questions before acting slow down workflows and transfer cogniti
 | `[MEMORY]` | `.design/main/specifications/l1-memory-model.md` | Memory scopes and lifecycle |
 | `[LAYOUT]` | `.design/main/specifications/l2-filesystem-layout.md` | Workspace layout |
 | `[SCHED]` | `.design/main/specifications/l2-scheduler.md` | Heartbeat schedule action |
+
+## Document History
+
+| Version | Date | Notes |
+| --- | --- | --- |
+| 1.0.10 | 2026-07-16 | Disclosed simplification (FR-6) recorded in §5: the 8-step activation sequence executes as a no-op seam pending agent-session wiring; upgrade trigger = binding activation to session start. History table added with this entry. |

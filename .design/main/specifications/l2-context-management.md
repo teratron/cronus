@@ -1,6 +1,6 @@
 # Context Management
 
-**Version:** 1.0.3
+**Version:** 1.0.4
 **Status:** Stable
 **Layer:** implementation
 **Implements:** l1-orchestration.md
@@ -452,6 +452,7 @@ conversation instead of a summary.
 - **Compaction loses exact tool-call history:** the summary captures what happened but not the raw tool inputs/outputs. Acceptable — the summary preserves the facts needed to continue; exact replay is not a goal.
 - **85% compaction threshold may trigger too early on rapid-fire turns:** a single very long turn can cross 85% before the older history is worth summarizing. Mitigation: the "< 4 turns" guard prevents premature compaction.
 - **Utility model for compaction may have different quality:** if the utility model is much smaller than the session model, summaries may be coarser. Fallback: use session model if no utility model configured.
+- **Disclosed simplification (FR-6)** `[ADDED]`: the shipped compactor is a no-op returning a fixed placeholder summary — automatic compaction is inert until a summarization model is bound. Upgrade trigger: a configured utility-model binding (the economical auxiliary route); the compaction contract above is unchanged, only the generator behind it is stubbed.
 - **Alternative — fixed sliding window:** discard oldest N turns. Rejected: loses information abruptly and has no awareness of which messages are high/low priority (RAG injection vs user intent).
 
 ## Canonical References
@@ -461,3 +462,9 @@ conversation instead of a summary.
 | `[ORC]` | `.design/main/specifications/l1-orchestration.md` | ORC-3 context isolation |
 | `[SESSION]` | `.design/main/specifications/l2-agent-session.md` | TurnContext + IterationBudget |
 | `[ROUTER]` | `.design/main/specifications/l2-model-router.md` | Context window discovery |
+
+## Document History
+
+| Version | Date | Notes |
+| --- | --- | --- |
+| 1.0.4 | 2026-07-16 | Disclosed simplification (FR-6) recorded in §5: the shipped compactor is a no-op returning a placeholder summary — compaction inert until a summarization model is bound; upgrade trigger = configured utility-model binding. History table added with this entry. |

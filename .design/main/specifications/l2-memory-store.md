@@ -1,6 +1,6 @@
 # Memory Store
 
-**Version:** 1.4.0
+**Version:** 1.4.1
 **Status:** Stable
 **Layer:** implementation
 **Implements:** l1-memory-model.md
@@ -928,6 +928,7 @@ The archivist's `reconcile` stage reads the pending review queue and either:
 
 | Version | Change |
 | --- | --- |
+| 1.4.1 | Disclosed simplification (FR-6) recorded in §5: the shipped HRR encoder is a zeroed-vector stub, so the HRR fallback recall leg is inert until a real encoding (or an embedding model) lands; no schema or contract change |
 | 1.4.0 | Reconciled to l1-memory-model MEM-4 v1.1 (source-of-truth by kind): the learned `memory_item` corpus is store-authoritative (`content` column is truth, `memory_fts`/`memory_vec` derived from it, no external `notes/*.md`); authored quick-memory (`MEMORY.md`/`USER.md`, §4.11) stays human-readable-authoritative. Removed the db+notes dual-write; a text export of the corpus is now a projection, not a second truth. Updated §2 constraint, Invariant Compliance MEM-4 row, and Drawbacks |
 | 1.3.0 | Concurrent recall legs and scopes (§4.2): FTS5 + tag legs run during query-embedding computation, KNN starts when the embedding is ready; per-scope database files queried concurrently on scope-local read connections; fuse unchanged — a deterministic reduction after the join |
 | 1.2.0 | Added §4.2.2 diversity & recency ranking refinements — config-gated MMR diversity (`mmr_lambda`) and opt-in recency weight (`recency_weight`/`recency_halflife_days`), defaults = no behavior change; effect measurable via the retrieval-evaluation harness |
@@ -940,6 +941,7 @@ The archivist's `reconcile` stage reads the pending review queue and either:
 - **No dual write for the learned corpus (MEM-4):** the store is authoritative, so there is no `db + notes` sync step and no divergence risk; recovery is a backup concern. Human inspectability is retained where it has value — the small authored quick-memory (`MEMORY.md` / `USER.md`, §4.11), which a human edits directly.
 - **Trust asymmetry (+0.05/−0.10):** over many corrections, a fact converges toward 0 even if mostly correct. The archivist's `verify` stage should promote facts that outcome-verification confirms as stable, resetting trust toward 1.0.
 - **HRR capacity:** dim=1024 supports ~256 items at SNR=2.0. For large memory stores, increase dim or rely on sqlite-vec embeddings instead; HRR is only the fallback when no embedding model is configured.
+- **Disclosed simplification (FR-6)** `[ADDED]`: the shipped HRR encoder returns a zeroed vector, so the HRR fallback recall leg is inert — with no embedding model configured, recall currently rests on the FTS5 and tag legs alone. Upgrade trigger: a real HRR encoding (or an embedding model that makes the fallback moot); the store schema and the fuse are unchanged.
 - **Alternative — libSQL native vectors:** rejected for local default (Turso's vector engine is in flux); libSQL/PostgreSQL remain optional sync targets only.
 
 ## Canonical References

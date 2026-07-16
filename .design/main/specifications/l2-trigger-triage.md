@@ -1,6 +1,6 @@
 # Trigger Triage
 
-**Version:** 1.0.0
+**Version:** 1.0.1
 **Status:** Stable
 **Layer:** implementation
 **Implements:** l1-orchestration.md, l1-scheduler-model.md
@@ -168,6 +168,7 @@ Each `SourceType` has an independent rate limit (configurable; defaults: `webhoo
 ## 5. Drawbacks & Alternatives
 
 - **CPU-only local model is a bundled dependency**: if no quantized classifier is included, the pipeline falls to rule-based classification, which is less accurate. The extension registry allows dropping in a custom classifier.
+- **Disclosed simplification (FR-6)** `[ADDED]`: the shipped local classifier is a stub that always reports 0.0 confidence, so every signal currently resolves through the rule-based fallback path — the rule path is the honest default today, not a degraded accident. Upgrade trigger: a bundled (or extension-registry-installed) quantized classifier; the seam is internals-only, callers unchanged.
 - **Dedup is best-effort**: in-memory cache; process restart allows a short re-fire window. For strict dedup, persist the cache to SQLite (deferred).
 - **No multi-dispatch**: one signal → one decision. A signal that legitimately needs both a Notify and a SpawnReactor must be handled by a post-dispatch hook on the reactor.
 - **Alternative — no triage, always spawn**: simpler, but unbounded agent spawning on high-volume event streams would exhaust compute and API budget.
@@ -180,3 +181,9 @@ Each `SourceType` has an independent rate limit (configurable; defaults: `webhoo
 | `[SCHED_MODEL]` | `.design/main/specifications/l1-scheduler-model.md` | Fire action model |
 | `[SCHED]` | `.design/main/specifications/l2-scheduler.md` | Event-driven trigger source |
 | `[SESSION]` | `.design/main/specifications/l2-agent-session.md` | Sessions spawned by triage |
+
+## Document History
+
+| Version | Date | Notes |
+| --- | --- | --- |
+| 1.0.1 | 2026-07-16 | Disclosed simplification (FR-6) recorded in §5: the shipped local classifier stub always reports 0.0 confidence, so classification currently resolves via the rule-based fallback; upgrade trigger = a bundled or extension-installed quantized classifier. History table added with this entry. |
