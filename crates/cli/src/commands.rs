@@ -28,6 +28,7 @@ pub fn dispatch(command: Command, ctx: &Context) -> i32 {
         Command::Backup { sub } => backup_cmd::dispatch(sub, ctx),
         Command::Restore { backup } => backup_cmd::restore(&backup, ctx),
         Command::Activation { sub } => activation_cmd::dispatch(sub, ctx),
+        Command::Loop { sub } => loop_cmd::dispatch(sub, ctx),
     }
 }
 
@@ -3367,6 +3368,119 @@ mod activation_cmd {
             // The flag is exactly what makes a script/CI-runner invocation
             // legitimate — it must proceed even with interactive=false.
             assert_eq!(enable_gate(true, false, || true), EnableGate::Proceed);
+        }
+    }
+}
+
+// ─── loop ───────────────────────────────────────────────────────────────────
+
+mod loop_cmd {
+    use std::path::PathBuf;
+    use std::time::{SystemTime, UNIX_EPOCH};
+
+    use cronus_core::loop_bootstrap::{
+        FileExistsBackend, file_exists_spec, read_report, read_spec, write_report, write_spec,
+    };
+    use cronus_core::loop_runner::{LoopOutcome, run_execution};
+
+    use crate::cli::LoopCommand;
+    use crate::output::Context;
+
+    pub fn dispatch(sub: LoopCommand, ctx: &Context) -> i32 {
+        match sub {
+            LoopCommand::Run { file, max_iter } => run(file, max_iter, ctx),
+            LoopCommand::Evolve { harness_id } => evolve(&harness_id),
+            LoopCommand::Log { run_id } => log(&run_id),
+            LoopCommand::Show { run_id } => show(&run_id),
+        }
+    }
+
+    fn new_run_id() -> String {
+        let secs = SystemTime::now()
+            .duration_since(UNIX_EPOCH)
+            .map(|d| d.as_secs())
+            .unwrap_or(0);
+        format!("run-{secs}-{}", std::process::id())
+    }
+
+    fn run(file: PathBuf, max_iter: u32, ctx: &Context) -> i32 {
+        let spec = file_exists_spec(max_iter);
+        let mut backend = FileExistsBackend { target_path: file };
+        let report = run_execution(&spec, &mut backend, "");
+        let run_id = new_run_id();
+
+        if let Err(e) = write_report(&run_id, &report) {
+            eprintln!("cronus loop run: failed to persist ledger: {e}");
+            return 1;
+        }
+        if let Err(e) = write_spec(&run_id, &spec) {
+            eprintln!("cronus loop run: failed to persist spec: {e}");
+            return 1;
+        }
+
+        match &report.outcome {
+            LoopOutcome::Done(_) => {
+                if ctx.is_json() {
+                    println!(
+                        "{{\"outcome\":\"done\",\"run_id\":\"{run_id}\",\"iterations\":{}}}",
+                        report.iterations_run
+                    );
+                } else {
+                    println!(
+                        "loop {run_id}: done ({} iteration(s))",
+                        report.iterations_run
+                    );
+                }
+                0
+            }
+            LoopOutcome::Stopped(reason) => {
+                if ctx.is_json() {
+                    println!(
+                        "{{\"outcome\":\"stopped\",\"reason\":\"{reason}\",\"run_id\":\"{run_id}\"}}"
+                    );
+                } else {
+                    println!("loop {run_id}: stopped ({reason})");
+                }
+                1
+            }
+        }
+    }
+
+    fn evolve(_harness_id: &str) -> i32 {
+        // INV-9 shipped-surface honesty: this workspace has no CLI-nameable
+        // harness registry yet, so the command is present but marked
+        // unavailable — never a silent "not implemented" success stub.
+        eprintln!(
+            "cronus loop evolve is unavailable: no harness registry exists in this workspace \
+             yet. The domain-tier run_evolution is implemented and tested; wiring a real, \
+             CLI-nameable harness resource is future work."
+        );
+        1
+    }
+
+    fn log(run_id: &str) -> i32 {
+        match read_report(run_id) {
+            Ok(text) => {
+                println!("{text}");
+                0
+            }
+            Err(e) => {
+                eprintln!("cronus loop log: {e}");
+                1
+            }
+        }
+    }
+
+    fn show(run_id: &str) -> i32 {
+        match read_spec(run_id) {
+            Ok(text) => {
+                println!("{text}");
+                0
+            }
+            Err(e) => {
+                eprintln!("cronus loop show: {e}");
+                1
+            }
         }
     }
 }

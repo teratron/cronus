@@ -143,6 +143,11 @@ pub enum Command {
         #[command(subcommand)]
         sub: ActivationCommand,
     },
+    /// Run and inspect governed autonomous loops (l2-loop-runner)
+    Loop {
+        #[command(subcommand)]
+        sub: LoopCommand,
+    },
 }
 
 #[derive(Subcommand)]
@@ -188,6 +193,40 @@ pub enum ActivationModeArg {
     Login,
     /// Boot-started, survives logout; registration requires elevation
     System,
+}
+
+#[derive(Subcommand)]
+pub enum LoopCommand {
+    /// Run an execution loop over a unit until its oracle says done or the
+    /// ceiling fires. This first cut's oracle is a file-existence check —
+    /// full worktree/budget/model-router composition is future work.
+    Run {
+        /// Path whose existence is this unit's done-condition
+        #[arg(long)]
+        file: PathBuf,
+        /// Maximum iterations before the ceiling stops the loop
+        #[arg(long, default_value_t = 1)]
+        max_iter: u32,
+    },
+    /// Run an evolution loop over a harness. Unavailable in this workspace:
+    /// there is no CLI-nameable harness registry yet (the domain-tier
+    /// `run_evolution` exists and is tested; wiring a real harness resource
+    /// is future work — INV-9, never a silent success stub)
+    Evolve {
+        /// Harness identifier (accepted for the command shape; not yet
+        /// resolvable to anything)
+        harness_id: String,
+    },
+    /// Inspect a run's mutation ledger
+    Log {
+        /// Run id, as printed by `cronus loop run`
+        run_id: String,
+    },
+    /// Show a run's manifest/oracle/ceiling
+    Show {
+        /// Run id, as printed by `cronus loop run`
+        run_id: String,
+    },
 }
 
 #[derive(Subcommand)]

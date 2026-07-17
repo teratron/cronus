@@ -392,3 +392,102 @@ fn activation_enable_without_acknowledgement_refuses_when_noninteractive() {
         "the refusal must name the flag that would unblock it"
     );
 }
+
+#[test]
+fn loop_help_exits_0() {
+    let status = bin()
+        .args(["loop", "--help"])
+        .status()
+        .expect("failed to spawn binary");
+    assert!(status.success(), "loop --help must exit 0");
+}
+
+#[test]
+fn loop_run_over_a_file_that_already_exists_reaches_done_and_its_ledger_is_inspectable() {
+    // A real end-to-end execution loop: the target file is pre-created, so
+    // the real FileExistsBackend's oracle reports done on the first
+    // iteration. This proves the CLI -> facade -> domain wiring is real,
+    // not mocked — the same compiled binary an operator would run.
+    let dir = std::env::temp_dir().join(format!("cronus-smoke-loop-{}", std::process::id()));
+    std::fs::create_dir_all(&dir).unwrap();
+    let target = dir.join("marker");
+    std::fs::write(&target, b"present").unwrap();
+
+    let output = bin()
+        .args(["loop", "run", "--file"])
+        .arg(&target)
+        .output()
+        .expect("failed to spawn binary");
+    assert!(
+        output.status.success(),
+        "a loop run over an already-existing file must reach Done"
+    );
+    let stdout = String::from_utf8_lossy(&output.stdout);
+    assert!(stdout.contains("done"), "stdout: {stdout}");
+
+    // Extract the run id the command printed, then prove `log`/`show` read
+    // back the SAME persisted state through the CLI/library-shared facade
+    // call (INV-3 parity) — not divergent logic.
+    let run_id = stdout
+        .trim()
+        .strip_prefix("loop ")
+        .and_then(|s| s.split(':').next())
+        .expect("run output names the run id")
+        .to_string();
+
+    let log_output = bin()
+        .args(["loop", "log", &run_id])
+        .output()
+        .expect("failed to spawn binary");
+    assert!(log_output.status.success(), "loop log must exit 0");
+    let log_text = String::from_utf8_lossy(&log_output.stdout);
+    assert!(
+        log_text.contains("OUTCOME") && log_text.contains("Done"),
+        "log: {log_text}"
+    );
+
+    let show_output = bin()
+        .args(["loop", "show", &run_id])
+        .output()
+        .expect("failed to spawn binary");
+    assert!(show_output.status.success(), "loop show must exit 0");
+    let show_text = String::from_utf8_lossy(&show_output.stdout);
+    assert!(show_text.contains("Execution"), "show: {show_text}");
+
+    std::fs::remove_dir_all(&dir).ok();
+}
+
+#[test]
+fn loop_run_over_a_file_that_never_appears_stops_at_the_ceiling() {
+    let dir = std::env::temp_dir().join(format!("cronus-smoke-loop-stop-{}", std::process::id()));
+    std::fs::create_dir_all(&dir).unwrap();
+    let target = dir.join("never-created");
+
+    let status = bin()
+        .args(["loop", "run", "--file"])
+        .arg(&target)
+        .status()
+        .expect("failed to spawn binary");
+    assert!(
+        !status.success(),
+        "a loop run whose file never appears must stop, not silently succeed"
+    );
+
+    std::fs::remove_dir_all(&dir).ok();
+}
+
+#[test]
+fn loop_evolve_is_marked_unavailable_not_a_silent_success() {
+    // INV-9 shipped-surface honesty: no harness registry exists yet, so
+    // this must refuse clearly rather than fake a result.
+    let output = bin()
+        .args(["loop", "evolve", "some-harness"])
+        .output()
+        .expect("failed to spawn binary");
+    assert!(
+        !output.status.success(),
+        "evolve must not report success for an unbound capability"
+    );
+    let stderr = String::from_utf8_lossy(&output.stderr);
+    assert!(stderr.contains("unavailable"), "stderr: {stderr}");
+}

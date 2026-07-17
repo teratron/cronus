@@ -13,10 +13,10 @@ pub use cronus_domain::{
     backup, budget, checkpoint, config_hotreload, constitution, context_mgmt, context_router,
     deliberation, development_workflow, doctor, egress, error_reporting, exec_workspace,
     extensions, file_store, global_orch, hooks, inner_monologue, kanban, learning, lookahead,
-    memory_capture, memory_intelligence, mission, notes, office_control, orchestration, paths,
-    quality, redact, research, resource_sharing, roles, router, sandbox_policy, scheduler, secrets,
-    self_improvement, session, skills, state, store, telemetry, tool_security, trigger_triage,
-    version_control, voice, wiki_access, wiki_regen,
+    loop_runner, memory_capture, memory_intelligence, mission, notes, office_control,
+    orchestration, paths, quality, redact, research, resource_sharing, roles, router,
+    sandbox_policy, scheduler, secrets, self_improvement, session, skills, state, store, telemetry,
+    tool_security, trigger_triage, version_control, voice, wiki_access, wiki_regen,
 };
 
 // The facade-wiring modules whose default implementation reaches into an
@@ -29,6 +29,7 @@ pub mod auth;
 pub mod context_compaction;
 pub mod engine_lock;
 pub mod inbox;
+pub mod loop_bootstrap;
 pub mod memory;
 pub mod model_bridge;
 pub mod workspace;
@@ -47,4 +48,5 @@ pub use cronus_activation_os as activation_os;
 /// `contract::InferenceBackend` (an `EndpointProfile`) and hand it to the
 /// engine — the wired transport surface (l1-model-runtime §4.1).
 pub use cronus_model_local as model;
+pub use loop_bootstrap::{FileExistsBackend, file_exists_spec};
 pub use model_bridge::NodusModelBridge;
