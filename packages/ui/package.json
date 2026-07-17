@@ -10,9 +10,7 @@
   },
   "scripts": {
     "build": "tsc --noEmit && vite build",
-    "test": "vitest run",
-    "lint": "biome check .",
-    "typecheck": "tsc --noEmit"
+    "test": "vitest run"
   },
   "devDependencies": {
     "@testing-library/jest-dom": "^6.9.1",

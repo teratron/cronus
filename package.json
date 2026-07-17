@@ -16,7 +16,8 @@
     "fallow:fix": "fallow fix",
     "audit": "fallow audit",
     "audit:ci": "fallow audit --format json",
-    "audit:review": "fallow review --brief"
+    "audit:review": "fallow review --brief",
+    "typecheck": "tsc --noEmit"
   },
   "dependencies": {
     "react": "^19.2.7",
