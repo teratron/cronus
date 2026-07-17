@@ -14,19 +14,10 @@
     "lint": "biome check .",
     "typecheck": "tsc --noEmit"
   },
-  "dependencies": {
-    "react": "catalog:",
-    "react-dom": "catalog:"
-  },
   "devDependencies": {
     "@testing-library/jest-dom": "^6.9.1",
     "@testing-library/react": "^16.3.2",
-    "@types/react": "catalog:",
-    "@types/react-dom": "catalog:",
-    "@vitejs/plugin-react": "catalog:",
     "jsdom": "^29.1.1",
-    "typescript": "catalog:",
-    "vite": "catalog:",
     "vitest": "^4.1.10"
   }
 }
