@@ -1,7 +1,7 @@
 # Loop Runner
 
-**Version:** 0.1.0
-**Status:** Draft
+**Version:** 1.0.0
+**Status:** Stable
 **Layer:** implementation
 **Implements:** l1-loop-governance.md
 
@@ -20,10 +20,16 @@ execution workspaces for isolation, the task graph for work, the budget engine f
 ceiling, the model router for oracle/judge lineage, version control for rollback, and
 session checkpoints for state externalization.
 
-Placement: domain logic in `crates/core` (the runner, governor, and the
-`LoopSpec`/`MutationManifest`/`Oracle` types); the portable contract seams it leans on
-live in `crates/nodus` (provider traits already defined there). The CLI/TUI expose thin
-bindings; the library method is the source of truth.
+Placement follows the decomposed crate topology (contract ← domain ← adapters + facade):
+the pure loop logic — the runner, the governor, and the `LoopSpec`/`MutationManifest`/
+`Oracle`/`Ceiling` types — is I/O-free domain logic in `crates/domain`; the cross-crate
+types the CLI and facade name live in `crates/contract`; the adapter-touching
+composition that hands the runner real subsystems (an actual execution workspace, a live
+budget handle, a model-router binding, a session-checkpoint store) is wired in
+`crates/core` (the facade/composition root), the same seam split used for other
+adapter-composing defaults. The portable provider traits it leans on live in
+`crates/nodus`. The CLI/TUI expose thin bindings; the library method is the source of
+truth.
 
 ## Related Specifications
 
@@ -74,13 +80,14 @@ inspectable the same way.
 | LG-7 Tier-escalation gate | `escalate()` requires a separated oracle, an external-novelty source handle, and a held-out evaluation; promotes only on `delta >= margin && regression <= bound`, recording the attempt either way. Reuses the dynamic-harness promotion gate machinery. |
 | LG-8 Mutation ledger | Every applied mutation appends an `AuditProvider` event `(run_id, step_index, artifact_kind, summary, why)`; evolution iterations add `predicted_flip` scored into `keep/revert/partial`. Append-only; never overwritten. |
 | LG-9 Cheapest trustworthy oracle | The runner prefers a `Deterministic` oracle for the inner done-check when the `LoopSpec` provides a validator; `Judge`/`Human` are used only when no deterministic validator is declared. Advisory — logged, not blocked. |
+| LG-10 Objective persistence across in-session reduction | Two runtime shapes, one durable-slot principle. **Discrete iterations** (the §4.2 execution runner, §4.3 evolution generations) already reconstruct from the plan/status slot each iteration (LG-5), so a dropped transcript loses nothing. **Continuous-session** loops (a standing-goal heartbeat, an indefinitely-running session that compacts in place) add `LoopSpec.objective_slot: ObjectiveSlot` — the standing objective + a progress cursor persisted in the session-checkpoint durable store. The governor **re-projects it into every turn** as a protected region (`l1-context-compression` CC-9), and re-materializes it if evicted, so in-place compaction can never drop the north-star. Durable progress is written to the LG-8 ledger **before** any lossy reduction runs (CC-10); after a reduction the ledger — not the compacted transcript — is the authoritative progress source (`l1-development-workflow` DW-5). The objective is phrased idempotent/resumable so a turn that re-reads it after supporting detail was compacted **resumes** rather than restarts or redoes completed work. A loop whose `objective_slot` is absent is a discrete-iteration loop governed by LG-5 alone. |
 
 ## 4. Detailed Design
 
 ### 4.1 Core types
 
 ```text
-[REFERENCE]  // crates/core — domain types
+[REFERENCE]  // crates/domain — I/O-free domain types
 enum LoopClass { Execution, Evolution }
 
 enum MutableArtifact {            // NOTE: no `Criteria` variant — LG-3 by construction
@@ -106,12 +113,19 @@ struct Ceiling {
   patience:       u32,            // consecutive no-progress iterations before stop
 }
 
+struct ObjectiveSlot {              // LG-10 — continuous-session objective persistence
+  objective: String,               // the standing north-star, re-projected every turn
+  progress:  ProgressCursor,       // idempotent/resumable progress, persisted to the ledger
+}
+
 struct LoopSpec {
   class:    LoopClass,
   manifest: MutationManifest,
   oracle:   Oracle,
   ceiling:  Ceiling,
-  workspace_kind: ProviderType,   // l2-execution-workspace (worktree default)
+  workspace_kind: ProviderType,    // l2-execution-workspace (worktree default)
+  objective_slot: Option<ObjectiveSlot>, // Some = continuous-session (LG-10 re-projection);
+                                   // None = discrete-iteration loop (LG-5 fresh-context only)
 }
 ```
 
@@ -249,23 +263,29 @@ escalate(target_loop, change) -> Promoted | Rejected:
 
 ```text
 [REFERENCE]
-crates/core/
+crates/domain/               // pure, I/O-free loop logic + types
   loop/
-    spec.rs        // LoopSpec, MutationManifest, MutableArtifact, LoopClass, Ceiling
+    spec.rs        // LoopSpec, MutationManifest, MutableArtifact, LoopClass, Ceiling, ObjectiveSlot
     governor.rs    // Governor: check_ceiling / guard_writes / judge
     execution.rs   // run_execution
     evolution.rs   // run_evolution (wraps harness EVALUATE→ANALYZE→IMPROVE)
     oracle.rs      // Oracle enum + lineage comparison
     escalate.rs    // §4.6 promotion gate
-crates/nodus/      // (existing seams, reused — no host types added)
+crates/core/                 // facade / composition root — adapter-touching wiring only
+  loop_bootstrap.rs // hands the runner real subsystems: an execution workspace, a live
+                    // budget handle, a model-router binding, a session-checkpoint store
+crates/nodus/                // (existing seams, reused — no host types added)
   ModelProvider    // judge-oracle lineage
   AuditProvider    // mutation ledger event stream
   PolicyProvider / StorageProvider   // escalation gate + provisional-vs-promoted state
 ```
 
-Dependencies point inward to `core`; `nodus` stays std-only and host-agnostic. The
-runner is a `core` consumer of nodus's provider traits, exercising the same two-host rule
-the dynamic-harness spec relies on.
+Dependencies point inward: `crates/domain` is I/O-free and depends only on
+`crates/contract` types + `crates/nodus` provider traits — never on an adapter crate or
+the facade; the adapter-touching composition that instantiates real subsystems lives in
+`crates/core`. `nodus` stays std-only and host-agnostic. The runner is a domain consumer
+of nodus's provider traits, exercising the same two-host rule the dynamic-harness spec
+relies on.
 
 ## 5. Implementation Notes
 
@@ -311,4 +331,5 @@ the dynamic-harness spec relies on.
 
 | Version | Date | Author | Notes |
 | --- | --- | --- | --- |
+| 1.0.0 | 2026-07-17 | Core Team | Promoted Draft→Stable via `/magic.spec` in the same pass that promoted its L1 parent `l1-loop-governance` to Stable — the Draft status was held only by the layer constraint (an L2 cannot pass RFC until its L1 parent is Stable), not by incompleteness. Two substantive closures made it Stable-ready: **(1)** added the missing **LG-10 compliance row** (objective persistence across in-session reduction) with a supporting `ObjectiveSlot` type on `LoopSpec` — the L2 was authored at 0.1.0 before LG-10 was added to the L1 at 0.2.0, so its Invariant Compliance table covered only LG-1…LG-9; it now addresses all ten (the L1's own gate for an L2 to reach RFC/Stable). **(2)** reconciled crate placement to the post-decomposition topology (Phase 13): the I/O-free runner/governor/types move from the pre-split `crates/core` to `crates/domain`, with the adapter-touching composition (`loop_bootstrap.rs`: real execution workspace, budget handle, model-router binding, session-checkpoint store) wired in the `crates/core` facade — the same domain/facade seam split the shipped adapters use. spec-critic + prompt-engineer PASS. Now Stable-but-unbuilt → the next `/magic.task` opens its build phase. |
 | 0.1.0 | 2026-06-25 | Core Team | Initial Draft — loop runner + governor mechanic for `crates/core` (composing execution-workspace, budget-engine, agent-autonomy, model-router, session-checkpoint, version-control, nodus provider seams); `LoopSpec`/`MutationManifest`/`Oracle`/`Ceiling` types with `MutableArtifact` having no `Criteria` variant (LG-3 by construction); execution + evolution runners; single-point governor (check_ceiling/guard_writes/judge); oracle wiring (deterministic/judge/human with lineage reduced-confidence); escalation path for criteria change / self-evolution; crate placement. Draft pending L1 parent promotion to Stable. |

@@ -1,7 +1,7 @@
 # Loop Governance
 
-**Version:** 0.2.0
-**Status:** RFC
+**Version:** 1.0.0
+**Status:** Stable
 **Layer:** concept
 
 ## Overview
@@ -428,5 +428,6 @@ already largely exists; the gaps are small):
 
 | Version | Date | Author | Notes |
 | --- | --- | --- | --- |
+| 1.0.0 | 2026-07-17 | Core Team | Promoted RFC→Stable via `/magic.spec` adversarial review (spec-critic + prompt-engineer PASS) — the governance-claim verification the 0.1.0/0.2.0 history named as the gate to Stable. No content change: LG-1…LG-10, the two loop classes with composition, the five-tier mutation-rights ladder with the criteria-immutability spine (LG-3), the separated-oracle contract, the independent ceiling, the escalation gate, and the objective-persistence guarantee were reviewed as-is and found technology-neutral, complete, and internally coherent. The keystone is now buildable via its L2 realization `l2-loop-runner` (promoted Draft→Stable in the same pass, LG-10 compliance row added, crate placement reconciled to the post-decomposition topology). |
 | 0.2.0 | 2026-07-02 | Core Team | Added LG-10 (objective persistence across in-session reduction) + §4.4 two-realizations table + nodus-relevance row: LG-5 opens a fresh context per iteration; LG-10 is the persistent-session counterpart — a continuous-session loop that compacts in place MUST re-project the standing objective + progress into every turn from the durable slot so mid-session compaction/eviction can never drop the north-star (compaction-immune presence via CC-9 protected + re-projected-if-evicted), and the objective must be idempotent/resumable so a post-reduction turn resumes rather than restarts/redoes (durable progress captured before the lossy reduction, CC-10; the ledger outranks the compacted transcript after, DW-5). Satisfied by construction in nodus (no in-place compaction; `@ctx`/EG-11 immutable invocation context always present) — no nodus-side invariant. Stays RFC (additive; Stable gate unchanged). |
 | 0.1.0 | 2026-06-25 | Core Team | Initial RFC — LG-1…LG-9; two loop classes (execution/evolution) with composition rule; five-tier mutation-rights ladder with criteria-immutability spine; oracle-ownership contract (deterministic/independent/human, lineage-separation reduced-confidence) generalizing DH-11 to termination authority; state externalization; mutation manifest over a closed artifact taxonomy + append-only ledger; tier-escalation promotion gate; six-question loop design checklist; ideas-to-adopt + nodus-relevance mappings. Adversarial verification of the governance claims is the gate to Stable (mirrors the dynamic-harness sibling). |
