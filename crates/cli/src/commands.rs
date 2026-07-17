@@ -29,6 +29,7 @@ pub fn dispatch(command: Command, ctx: &Context) -> i32 {
         Command::Restore { backup } => backup_cmd::restore(&backup, ctx),
         Command::Activation { sub } => activation_cmd::dispatch(sub, ctx),
         Command::Loop { sub } => loop_cmd::dispatch(sub, ctx),
+        Command::Archetype { sub } => archetype_cmd::dispatch(sub, ctx),
     }
 }
 
@@ -3479,6 +3480,165 @@ mod loop_cmd {
             }
             Err(e) => {
                 eprintln!("cronus loop show: {e}");
+                1
+            }
+        }
+    }
+}
+
+// ─── archetype ────────────────────────────────────────────────────────────────
+
+mod archetype_cmd {
+    use std::path::PathBuf;
+
+    use cronus_core::archetype::{ArchetypeCatalog, ValidationStatus};
+    use cronus_core::paths::{Paths, Root};
+
+    use crate::cli::ArchetypeCommand;
+    use crate::output::Context;
+
+    pub fn dispatch(sub: ArchetypeCommand, ctx: &Context) -> i32 {
+        match sub {
+            ArchetypeCommand::List { catalog, active } => list(catalog, active),
+            ArchetypeCommand::Info { id, deviations } => info(&id, deviations),
+            ArchetypeCommand::Set { id, clear } => set(id, clear, ctx),
+            ArchetypeCommand::Create { name, from } => create(&name, &from),
+        }
+    }
+
+    fn state_dir() -> PathBuf {
+        Paths::os_native().resolve(Root::State)
+    }
+
+    /// The office's active-archetype marker. A single state-tier file: absent
+    /// (or empty) means the archetype-free default (OA-11).
+    fn active_marker() -> PathBuf {
+        state_dir().join("archetype").join("active")
+    }
+
+    fn read_active() -> Option<String> {
+        std::fs::read_to_string(active_marker())
+            .ok()
+            .map(|s| s.trim().to_string())
+            .filter(|s| !s.is_empty())
+    }
+
+    fn list(_catalog: bool, active: bool) -> i32 {
+        let catalog = ArchetypeCatalog::program();
+        if active {
+            match read_active() {
+                Some(id) => println!("active archetype: {id}"),
+                None => println!("active archetype: (none — archetype-free)"),
+            }
+            return 0;
+        }
+        println!("shipped:");
+        for def in catalog.shipped() {
+            println!("  {} — {} ({} roles)", def.id, def.domain, def.pool.len());
+        }
+        println!("blocked:");
+        for b in catalog.blocked() {
+            println!(
+                "  {} — {} (needs: {})",
+                b.id,
+                b.domain,
+                b.missing_roles.join(", ")
+            );
+        }
+        0
+    }
+
+    fn info(id: &str, deviations: bool) -> i32 {
+        let catalog = ArchetypeCatalog::program();
+        if let Some(def) = catalog.get(id) {
+            println!("archetype: {}", def.id);
+            println!("domain: {}", def.domain);
+            println!("pool ({}): {}", def.pool.len(), def.pool.join(", "));
+            println!("departments: {}", def.shape.departments.join(", "));
+            println!("grow_when: {}", def.shape.grow_when);
+            println!("seed: {} role(s)", def.seed.len());
+            if deviations {
+                // No offices have run under this archetype in this surface yet,
+                // so its prior is unvalidated — reported honestly, never
+                // "correct" by default (OA-9).
+                println!("validation: {:?}", ValidationStatus::Unvalidated);
+            }
+            0
+        } else if let Some(b) = catalog.blocked_status(id) {
+            println!("archetype: {} (BLOCKED)", b.id);
+            println!("domain: {}", b.domain);
+            println!("missing roles: {}", b.missing_roles.join(", "));
+            println!(
+                "unblocking: each missing role must clear the ROL-9 gate in a \
+                 separate role-catalog amendment first"
+            );
+            0
+        } else {
+            eprintln!("cronus archetype info: unknown archetype '{id}'");
+            1
+        }
+    }
+
+    fn set(id: Option<String>, clear: bool, ctx: &Context) -> i32 {
+        let marker = active_marker();
+        if let Some(parent) = marker.parent()
+            && let Err(e) = std::fs::create_dir_all(parent)
+        {
+            eprintln!("cronus archetype set: {e}");
+            return 1;
+        }
+
+        if clear {
+            let _ = std::fs::remove_file(&marker);
+            if ctx.is_json() {
+                println!("{{\"active\":null}}");
+            } else {
+                println!("archetype cleared — office is archetype-free");
+            }
+            return 0;
+        }
+
+        let Some(id) = id else {
+            eprintln!("cronus archetype set: provide an archetype id or --clear");
+            return 1;
+        };
+
+        // Only a shippable archetype may be set active; a blocked one is not
+        // usable, and an unknown one is refused (never silently accepted).
+        let catalog = ArchetypeCatalog::program();
+        if catalog.get(&id).is_none() {
+            if catalog.blocked_status(&id).is_some() {
+                eprintln!("cronus archetype set: '{id}' is declared-blocked and cannot be applied");
+            } else {
+                eprintln!("cronus archetype set: unknown archetype '{id}'");
+            }
+            return 1;
+        }
+
+        if let Err(e) = std::fs::write(&marker, &id) {
+            eprintln!("cronus archetype set: {e}");
+            return 1;
+        }
+        if ctx.is_json() {
+            println!("{{\"active\":\"{id}\"}}");
+        } else {
+            println!("archetype set: {id} (expectations re-scoped; staff unchanged)");
+        }
+        0
+    }
+
+    fn create(name: &str, from: &str) -> i32 {
+        let catalog = ArchetypeCatalog::program();
+        match catalog.create_from_preset(&state_dir(), name, from) {
+            Ok(custom) => {
+                println!(
+                    "created custom archetype '{}' from preset '{}'",
+                    custom.definition.id, custom.derived_from
+                );
+                0
+            }
+            Err(e) => {
+                eprintln!("cronus archetype create: {e}");
                 1
             }
         }

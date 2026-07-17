@@ -14,6 +14,7 @@ pub mod acp;
 pub mod activation;
 pub mod agent_migration;
 pub mod agent_registry;
+pub mod archetype;
 pub mod automation;
 pub mod autonomy;
 pub mod backup;

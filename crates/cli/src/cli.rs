@@ -148,6 +148,49 @@ pub enum Command {
         #[command(subcommand)]
         sub: LoopCommand,
     },
+    /// Office archetypes: a prior on staffing, never a roster (l2-archetype-catalog)
+    Archetype {
+        #[command(subcommand)]
+        sub: ArchetypeCommand,
+    },
+}
+
+#[derive(Subcommand)]
+pub enum ArchetypeCommand {
+    /// List archetypes — the shipped catalog, or the office's active one
+    List {
+        /// Show the program-tier catalog (shipped + declared-blocked)
+        #[arg(long)]
+        catalog: bool,
+        /// Show the office's currently active archetype
+        #[arg(long)]
+        active: bool,
+    },
+    /// Show one archetype's pool, shape, and seed (or its blocked reason)
+    Info {
+        /// Archetype id
+        id: String,
+        /// Include the deviation counters + validation status
+        #[arg(long)]
+        deviations: bool,
+    },
+    /// Apply an archetype, or return to the archetype-free default. Changes
+    /// what the manager expects, never staff — non-destructive by construction
+    Set {
+        /// Archetype id to apply
+        id: Option<String>,
+        /// Return the office to the archetype-free state
+        #[arg(long)]
+        clear: bool,
+    },
+    /// Create a custom archetype by copying a preset into the state tier
+    Create {
+        /// Name for the new custom archetype
+        name: String,
+        /// Preset id to copy from
+        #[arg(long = "from")]
+        from: String,
+    },
 }
 
 #[derive(Subcommand)]

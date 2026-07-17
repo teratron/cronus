@@ -491,3 +491,81 @@ fn loop_evolve_is_marked_unavailable_not_a_silent_success() {
     let stderr = String::from_utf8_lossy(&output.stderr);
     assert!(stderr.contains("unavailable"), "stderr: {stderr}");
 }
+
+#[test]
+fn archetype_help_exits_0() {
+    let status = bin()
+        .args(["archetype", "--help"])
+        .status()
+        .expect("failed to spawn binary");
+    assert!(status.success(), "archetype --help must exit 0");
+}
+
+#[test]
+fn archetype_list_and_info_show_the_shipped_and_blocked_archetypes() {
+    // A real end-to-end read through the domain catalog via the compiled
+    // binary — the same the operator runs.
+    let list = bin()
+        .args(["archetype", "list", "--catalog"])
+        .output()
+        .expect("failed to spawn binary");
+    assert!(list.status.success(), "archetype list must exit 0");
+    let list_out = String::from_utf8_lossy(&list.stdout);
+    assert!(
+        list_out.contains("software-engineering"),
+        "list: {list_out}"
+    );
+    assert!(list_out.contains("advertising-agency"), "list: {list_out}");
+
+    let info = bin()
+        .args(["archetype", "info", "software-engineering"])
+        .output()
+        .expect("failed to spawn binary");
+    assert!(info.status.success(), "archetype info must exit 0");
+    let info_out = String::from_utf8_lossy(&info.stdout);
+    assert!(info_out.contains("pool (18)"), "info: {info_out}");
+    assert!(info_out.contains("seed: 0 role"), "info: {info_out}");
+
+    // A blocked archetype reports blocked + its missing roles.
+    let blocked = bin()
+        .args(["archetype", "info", "finance-department"])
+        .output()
+        .expect("failed to spawn binary");
+    assert!(
+        blocked.status.success(),
+        "info on a blocked archetype exits 0"
+    );
+    let blocked_out = String::from_utf8_lossy(&blocked.stdout);
+    assert!(blocked_out.contains("BLOCKED"), "blocked: {blocked_out}");
+    assert!(blocked_out.contains("controller"), "blocked: {blocked_out}");
+}
+
+#[test]
+fn archetype_set_then_clear_both_exit_0() {
+    let set = bin()
+        .args(["archetype", "set", "software-engineering"])
+        .status()
+        .expect("failed to spawn binary");
+    assert!(set.success(), "archetype set must exit 0");
+
+    let clear = bin()
+        .args(["archetype", "set", "--clear"])
+        .status()
+        .expect("failed to spawn binary");
+    assert!(clear.success(), "archetype set --clear must exit 0");
+}
+
+#[test]
+fn there_is_no_archetype_hire_subcommand() {
+    // OA / §4.8: hiring belongs to `role` and the manager, never to an
+    // archetype command — an `archetype hire` verb would put the prior on the
+    // wrong side of the decision boundary. clap must reject it.
+    let output = bin()
+        .args(["archetype", "hire", "architect"])
+        .output()
+        .expect("failed to spawn binary");
+    assert!(
+        !output.status.success(),
+        "there must be no `archetype hire` subcommand"
+    );
+}
