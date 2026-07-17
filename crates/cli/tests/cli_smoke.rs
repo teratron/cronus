@@ -357,3 +357,38 @@ fn change_next_exits_0() {
         .expect("failed to spawn binary");
     assert!(status.success(), "change next must exit 0");
 }
+
+#[test]
+fn activation_help_exits_0() {
+    let status = bin()
+        .args(["activation", "--help"])
+        .status()
+        .expect("failed to spawn binary");
+    assert!(status.success(), "activation --help must exit 0");
+}
+
+#[test]
+fn activation_enable_without_acknowledgement_refuses_when_noninteractive() {
+    // `status`/`observe` reads the real OS (read-only, harmless); `enable`
+    // mutates real activation state, so this test never lets it proceed —
+    // stdin is explicitly nulled (deterministically non-interactive
+    // regardless of how the test runner itself was invoked), so the BA-5
+    // gate must refuse before `default_activation_registry()` is ever
+    // touched.
+    use std::process::Stdio;
+    let output = bin()
+        .args(["activation", "enable", "--mode", "login"])
+        .stdin(Stdio::null())
+        .output()
+        .expect("failed to spawn binary");
+    assert_eq!(
+        output.status.code(),
+        Some(1),
+        "a non-interactive enable without the acknowledgement flag must refuse"
+    );
+    let stderr = String::from_utf8_lossy(&output.stderr);
+    assert!(
+        stderr.contains("acknowledge-unattended-execution"),
+        "the refusal must name the flag that would unblock it"
+    );
+}

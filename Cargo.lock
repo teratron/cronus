@@ -692,6 +692,7 @@ version = "0.1.0"
 name = "cronus-core"
 version = "0.1.0"
 dependencies = [
+ "cronus-activation-os",
  "cronus-auth-local",
  "cronus-contract",
  "cronus-domain",

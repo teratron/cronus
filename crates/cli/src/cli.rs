@@ -138,6 +138,11 @@ pub enum Command {
         /// Backup id (as shown by `cronus backup list`)
         backup: String,
     },
+    /// Manage background activation (l2-service-activation)
+    Activation {
+        #[command(subcommand)]
+        sub: ActivationCommand,
+    },
 }
 
 #[derive(Subcommand)]
@@ -153,6 +158,36 @@ pub enum BackupCommand {
     },
     /// List backups under the state tier's `backups/` directory
     List,
+}
+
+#[derive(Subcommand)]
+pub enum ActivationCommand {
+    /// Print the observed activation state — read from the OS, never a
+    /// remembered value (BA-8)
+    Status,
+    /// Register background activation for a mode (BA-5: an autonomy grant,
+    /// not a preference — disclosed and confirmed before it takes effect)
+    Enable {
+        #[arg(long, value_enum)]
+        mode: ActivationModeArg,
+        /// Skip the interactive confirmation. Required in a non-interactive
+        /// context (a script, a CI runner) — `enable` otherwise refuses,
+        /// because an unattended grant would silently satisfy the consent
+        /// moment BA-5 requires a human to see.
+        #[arg(long)]
+        acknowledge_unattended_execution: bool,
+    },
+    /// Remove whatever activation registration is currently active (BA-7:
+    /// removed and verified, never left partially registered)
+    Disable,
+}
+
+#[derive(Clone, Copy, clap::ValueEnum)]
+pub enum ActivationModeArg {
+    /// Starts with the user's session; ends when it ends; no elevation
+    Login,
+    /// Boot-started, survives logout; registration requires elevation
+    System,
 }
 
 #[derive(Subcommand)]

@@ -27,6 +27,7 @@ pub fn dispatch(command: Command, ctx: &Context) -> i32 {
         Command::Doctor { fix } => doctor::run(fix, ctx),
         Command::Backup { sub } => backup_cmd::dispatch(sub, ctx),
         Command::Restore { backup } => backup_cmd::restore(&backup, ctx),
+        Command::Activation { sub } => activation_cmd::dispatch(sub, ctx),
     }
 }
 
@@ -3133,5 +3134,239 @@ mod change {
             println!("change status: not yet implemented (id={id})");
         }
         0
+    }
+}
+
+// ─── activation ─────────────────────────────────────────────────────────────
+
+mod activation_cmd {
+    use std::io::{self, IsTerminal, Write};
+
+    use cronus_core::activation::{
+        TransitionError, TransitionOutcome, disable as disable_transition,
+        enable as enable_transition,
+    };
+    use cronus_core::{
+        ActivationMode, ActivationRegistry, ActivationState, default_activation_registry,
+    };
+
+    use crate::cli::{ActivationCommand, ActivationModeArg};
+    use crate::output::Context;
+
+    pub fn dispatch(sub: ActivationCommand, ctx: &Context) -> i32 {
+        match sub {
+            ActivationCommand::Status => status(ctx),
+            ActivationCommand::Enable {
+                mode,
+                acknowledge_unattended_execution,
+            } => enable(mode, acknowledge_unattended_execution, ctx),
+            ActivationCommand::Disable => disable(ctx),
+        }
+    }
+
+    fn mode_str(mode: ActivationMode) -> &'static str {
+        match mode {
+            ActivationMode::Login => "login",
+            ActivationMode::System => "system",
+        }
+    }
+
+    fn state_str(state: &ActivationState) -> String {
+        match state {
+            ActivationState::Inactive => "inactive".to_string(),
+            ActivationState::Active(mode) => format!("active ({})", mode_str(*mode)),
+            ActivationState::RequiresApproval(mode) => {
+                format!("requires-approval ({})", mode_str(*mode))
+            }
+            ActivationState::Unknown { reason } => format!("unknown: {reason}"),
+        }
+    }
+
+    fn transition_error_str(err: &TransitionError) -> String {
+        match err {
+            TransitionError::PriorModeNotRemoved { observed } => {
+                format!("the prior mode could not be verified removed (observed {observed:?})")
+            }
+            TransitionError::RegistrationFailed { detail } => detail.clone(),
+            TransitionError::VerificationFailed { observed } => {
+                format!("registration did not verify (observed {observed:?})")
+            }
+            TransitionError::ConsentMissing { mode } => {
+                format!("no consent recorded for {} mode", mode_str(*mode))
+            }
+        }
+    }
+
+    fn status(ctx: &Context) -> i32 {
+        let registry = default_activation_registry();
+        let state = registry.observe();
+        if ctx.is_json() {
+            println!(
+                "{{\"state\":\"{}\"}}",
+                state_str(&state).replace('"', "\\\"")
+            );
+        } else {
+            println!("activation status: {}", state_str(&state));
+        }
+        0
+    }
+
+    /// The outcome of `enable`'s consent gate, decided BEFORE any registry is
+    /// constructed or touched — so a `RefuseNonInteractive`/`CancelledByUser`
+    /// path structurally cannot mutate anything (the Verify property: "exits
+    /// non-zero and mutates nothing"). `confirm` is injected so the gate is
+    /// testable without a real terminal or a real OS call.
+    #[derive(Debug, PartialEq, Eq)]
+    enum EnableGate {
+        Proceed,
+        RefuseNonInteractive,
+        CancelledByUser,
+    }
+
+    fn enable_gate(
+        acknowledged: bool,
+        interactive: bool,
+        confirm: impl FnOnce() -> bool,
+    ) -> EnableGate {
+        if acknowledged {
+            return EnableGate::Proceed;
+        }
+        if !interactive {
+            // BA-5: an unattended `enable` would silently satisfy the
+            // consent moment a human must see — refuse rather than proceed.
+            return EnableGate::RefuseNonInteractive;
+        }
+        if confirm() {
+            EnableGate::Proceed
+        } else {
+            EnableGate::CancelledByUser
+        }
+    }
+
+    fn confirm_disclosure(mode: ActivationMode) -> bool {
+        println!(
+            "Enabling {} background activation lets Cronus run while you are not present.",
+            mode_str(mode)
+        );
+        println!(
+            "It will call models, spend allowance, and act on your behalf under the \
+             currently configured autonomy level and spend ceiling."
+        );
+        print!("Type 'yes' to confirm, anything else to cancel: ");
+        let _ = io::stdout().flush();
+        let mut input = String::new();
+        if io::stdin().read_line(&mut input).is_err() {
+            return false;
+        }
+        input.trim().eq_ignore_ascii_case("yes")
+    }
+
+    fn enable(mode: ActivationModeArg, acknowledged: bool, ctx: &Context) -> i32 {
+        let target = match mode {
+            ActivationModeArg::Login => ActivationMode::Login,
+            ActivationModeArg::System => ActivationMode::System,
+        };
+        let interactive = io::stdin().is_terminal();
+
+        match enable_gate(acknowledged, interactive, || confirm_disclosure(target)) {
+            EnableGate::RefuseNonInteractive => {
+                eprintln!(
+                    "cronus activation enable refuses to run non-interactively without \
+                     --acknowledge-unattended-execution"
+                );
+                return 1;
+            }
+            EnableGate::CancelledByUser => {
+                println!("cancelled — activation not changed");
+                return 1;
+            }
+            EnableGate::Proceed => {}
+        }
+
+        let registry = default_activation_registry();
+        match enable_transition(&registry, target) {
+            Ok(TransitionOutcome::Activated(m)) => {
+                if ctx.is_json() {
+                    println!("{{\"outcome\":\"activated\",\"mode\":\"{}\"}}", mode_str(m));
+                } else {
+                    println!("activation enabled: {}", mode_str(m));
+                }
+                0
+            }
+            Ok(TransitionOutcome::RequiresApproval(m)) => {
+                println!(
+                    "registered ({}), but the OS requires your approval before it will run — \
+                     see your system's background-items settings",
+                    mode_str(m)
+                );
+                0
+            }
+            Ok(TransitionOutcome::Deactivated) => 0, // enable() never returns this in practice
+            Err(err) => {
+                eprintln!("activation enable failed: {}", transition_error_str(&err));
+                1
+            }
+        }
+    }
+
+    fn disable(ctx: &Context) -> i32 {
+        let registry = default_activation_registry();
+        match disable_transition(&registry) {
+            Ok(_) => {
+                if ctx.is_json() {
+                    println!("{{\"outcome\":\"deactivated\"}}");
+                } else {
+                    println!("activation disabled");
+                }
+                0
+            }
+            Err(err) => {
+                eprintln!("activation disable failed: {}", transition_error_str(&err));
+                1
+            }
+        }
+    }
+
+    #[cfg(test)]
+    mod tests {
+        use std::cell::Cell;
+
+        use super::{EnableGate, enable_gate};
+
+        #[test]
+        fn non_interactive_without_acknowledgement_refuses() {
+            let gate = enable_gate(false, false, || true);
+            assert_eq!(gate, EnableGate::RefuseNonInteractive);
+        }
+
+        #[test]
+        fn interactive_without_acknowledgement_asks_for_confirmation() {
+            assert_eq!(enable_gate(false, true, || true), EnableGate::Proceed);
+            assert_eq!(
+                enable_gate(false, true, || false),
+                EnableGate::CancelledByUser
+            );
+        }
+
+        #[test]
+        fn the_acknowledgement_flag_skips_confirmation_entirely() {
+            let confirm_called = Cell::new(false);
+            let gate = enable_gate(true, true, || {
+                confirm_called.set(true);
+                true
+            });
+            assert_eq!(gate, EnableGate::Proceed);
+            assert!(
+                !confirm_called.get(),
+                "the acknowledgement flag must skip the confirmation prompt entirely"
+            );
+        }
+
+        #[test]
+        fn the_acknowledgement_flag_also_works_non_interactively() {
+            // The flag is exactly what makes a script/CI-runner invocation
+            // legitimate — it must proceed even with interactive=false.
+            assert_eq!(enable_gate(true, false, || true), EnableGate::Proceed);
+        }
     }
 }

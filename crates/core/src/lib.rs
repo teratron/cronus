@@ -21,8 +21,10 @@ pub use cronus_domain::{
 
 // The facade-wiring modules whose default implementation reaches into an
 // adapter crate (`cronus-store-local` / `cronus-auth-local` /
-// `cronus-model-local`) stay defined here — the tier model has no edge from
-// `cronus-domain` to any adapter, so these shims cannot live there.
+// `cronus-model-local` / `cronus-activation-os`) stay defined here — the
+// tier model has no edge from `cronus-domain` to any adapter, so these shims
+// cannot live there.
+pub mod activation_bootstrap;
 pub mod auth;
 pub mod context_compaction;
 pub mod engine_lock;
@@ -31,7 +33,16 @@ pub mod memory;
 pub mod model_bridge;
 pub mod workspace;
 
+pub use activation_bootstrap::{
+    ActivationCapabilities, ActivationMode, ActivationRegistry, ActivationState, ModeSupport,
+    default_activation_registry,
+};
 pub use context_compaction::TransportCompactor;
+/// The per-OS activation adapter crate, re-exported so a host can construct
+/// (or a frontend can name the types of) a `contract::ActivationRegistry`
+/// without depending on the adapter crate directly — `activation` (the
+/// domain policy engine) stays the re-export at that name.
+pub use cronus_activation_os as activation_os;
 /// The local model-transport adapter, re-exported so a host can construct a
 /// `contract::InferenceBackend` (an `EndpointProfile`) and hand it to the
 /// engine — the wired transport surface (l1-model-runtime §4.1).
