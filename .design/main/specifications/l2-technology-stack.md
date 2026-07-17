@@ -1,6 +1,6 @@
 # Technology Stack
 
-**Version:** 1.2.0
+**Version:** 1.2.1
 **Status:** Stable
 **Layer:** implementation
 **Implements:** l1-architecture.md
@@ -34,7 +34,7 @@ A cross-platform autonomous product must pick technologies that (a) let one core
 | INV-1 Embeddable core | Core is a **Rust** library crate with a C-ABI/FFI surface; linkable into Tauri, CLI/TUI binaries, and external host programs. |
 | INV-2 Logic in core only | Frontends (CLI/TUI/React app) call the Rust core; no domain logic in TypeScript or terminal layers. |
 | INV-3 Command parity | All frontends bind to the same core contract; commands map 1:1 to core calls. |
-| INV-4 Hub-and-spoke autonomy | Always-on engine runs as a desktop OS service (systemd/launchd/Windows service) or headless server/remote node; **Tauri v2 mobile is a thin client**, woken by APNs/FCM push. |
+| INV-4 Hub-and-spoke autonomy | Always-on engine runs as a desktop OS-supervised process (systemd/launchd/**Windows S4U scheduled task**) or headless server/remote node; **Tauri v2 mobile is a thin client**, woken by APNs/FCM push. The Windows mechanism is an S4U (Service-For-User) scheduled task, **not** a Windows Service — a Service's only unattended accounts (`LocalSystem` or a stored-credential user) cannot reach the per-user state root without violating least privilege; see l2-service-activation.md §4.2. |
 | INV-5 Durable, restartable state | **SQLite** (file-based) with **sqlite-vec** for vectors; state is a copyable file; optional **libSQL/PostgreSQL** for remote sync. |
 | INV-6 Graceful capability scaling | Mobile frontend exposes a subset (foreground + sync, optional 1–3B local model); never divergent behavior. |
 | INV-7 Security of client data | Secrets in `.env`/OS keychain, excluded via `.gitignore`; only anonymized operational telemetry leaves the device, never user data. |
@@ -45,7 +45,7 @@ A cross-platform autonomous product must pick technologies that (a) let one core
 
 | Tier | Role | Technologies |
 | --- | --- | --- |
-| Hub (always-on) | Autonomy core: orchestrator, heartbeat, Kanban, cron, memory, model router | Rust headless core + OS service (systemd/launchd/Windows service) or remote/self-hosted/SSH |
+| Hub (always-on) | Autonomy core: orchestrator, heartbeat, Kanban, cron, memory, model router | Rust headless core + OS-supervised process (systemd/launchd/Windows S4U scheduled task) or remote/self-hosted/SSH |
 | Spoke — Desktop | Full GUI over the core | Tauri v2 (Windows/macOS/Linux) |
 | Spoke — Mobile | **Thin client**, not a server: foreground + push-driven sync | Tauri v2 (iOS/Android) + APNs/FCM |
 
@@ -330,4 +330,5 @@ Discipline:
 | Version | Date | Notes |
 | --- | --- | --- |
 | 1.1.0 | 2026-07-04 | Added §4.7 SQLite Concurrency Policy — uniform cross-subsystem discipline: WAL everywhere, single owning writer task per database file (write-behind queue), bounded read pool, busy_timeout instead of spin-retries, short hot-path transactions with heavy work on the background tier. History table added with this entry. |
+| 1.2.1 | 2026-07-17 | Reconciled the Windows always-on mechanism to match its authoritative L2 realization: "Windows service" → "Windows S4U scheduled task" in the INV-4 compliance row and the Hub tier table (§3). A Windows Service's only unattended accounts (`LocalSystem` or a stored-credential named user) cannot reach the per-user state root without violating BA-6 least privilege, so `l2-service-activation` §4.2 selects an S4U task instead; this patch removes the now-superseded mechanism name. Terminology correction to an existing platform choice — no new requirement, stays Stable. |
 | 1.2.0 | 2026-07-10 | Added §4.8 Configuration Serialization Format — JSON is the default and the only boundary format (external-convention files, Rust↔TS/IPC files the UI reads, machine-generated data); RON is a narrow opt-in for Rust-owned, hand-edited, enum/variant-heavy internal config where tagged-enum fidelity + comments beat error-prone JSON (the justified-dependency bar for the `ron` crate); TOML stays for build manifests only; serde-uniform so format is a call-site choice and no big-bang migration; nodus exempt and format-neutral (LP-1 zero-dep forbids the `ron` crate, its durable state is host-supplied via the StorageProvider seam). §5 gains the two-format-overhead drawback + rejected alternatives (JSON-everywhere, JSON5/JSONC, TOML-for-all). Additive policy section — stays Stable (Trust Mode, no contradiction with §1–4). |

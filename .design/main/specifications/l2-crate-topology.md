@@ -1,6 +1,6 @@
 # Crate Topology (Core Decomposition)
 
-**Version:** 1.0.0
+**Version:** 1.0.1
 **Status:** Stable
 **Layer:** implementation
 **Implements:** l1-architecture.md
@@ -102,10 +102,11 @@ Two properties fall out of the graph and are worth naming because they are what 
 
 | Crate | Path | Depends on | External deps | Contents |
 | --- | --- | --- | --- | --- |
-| `cronus-contract` | `crates/contract` | — | **none** | Shared types (`MemoryEntry`, typed prefixed IDs, `ThinkingLevel`, error taxonomy) and the seam traits: `UserDataStore`, `AuthProvider`, `IdentityProvider`, plus the existing `StateStore`, `ModelProvider`, `CheckpointWriter`, `Compactor`, `BusSender`, `ArchiveSink`. |
+| `cronus-contract` | `crates/contract` | — | **none** | Shared types (`MemoryEntry`, typed prefixed IDs, `ThinkingLevel`, error taxonomy) and the seam traits: `UserDataStore`, `AuthProvider`, `IdentityProvider`, plus `StateStore`, `ModelProvider`, `CheckpointWriter`, `Compactor`, `BusSender`, `ArchiveSink`, and the later-added `InferenceBackend` (model-transport call surface, realized by `cronus-model-local`) and `WikiCache`/`WikiReadSurface` (project-wiki projection, realized by `cronus-store-local`). |
 | `cronus-domain` | `crates/domain` | `cronus-contract`, `nodus` | pure-computation allowlist only (§4.3) | The 47 pure-`std` modules — orchestration, router, kanban, roles, session, quality, autonomy, tool_security, redact, … — plus the domain halves of the six infrastructure modules (§4.6). No I/O. |
 | `cronus-store-local` | `crates/store-local` | `cronus-contract` | `rusqlite`, `aes-gcm`, `argon2`, `keyring` | The on-device `UserDataStore` default (DN-2): SQLite persistence for memory / inbox / workspace, at-rest encryption, keychain-held keys. |
 | `cronus-auth-local` | `crates/auth-local` | `cronus-contract` | `bcrypt`, `hmac`, `sha1`, `getrandom` | The on-device `AuthProvider` default (DN-2): password hashing, session tokens, TOTP. Also carries the trivial single-principal `IdentityProvider` default. |
+| `cronus-model-local` | `crates/model-local` | `cronus-contract` | `serde_json` (+ blocking HTTP/TLS on the remote path) | The on-device model-transport adapter: implements `contract::InferenceBackend` (streaming generate, embed, describe, pull, cancellation) over a loopback HTTP endpoint, plus egress-gated remote profiles. Minted by §4.4(a) — it needs network I/O the domain tier may not hold — realizing the l2-model-runtime transport. It is a fourth **adapter** crate, **not** one of the three DN-2 provider planes; the CI boundary guard forbids `cronus-domain → cronus-model-local` exactly as for the other adapters. |
 | `cronus` | `crates/core` | all of the above | — | Facade and composition root: `Engine`, `Capabilities`, the C-ABI/FFI surface, default-provider wiring, and `pub use` re-exports preserving today's module paths. |
 
 `crates/nodus` and `crates/codegraph` are unchanged by this spec, except that `codegraph` must stop exposing `rusqlite::Connection` in its public API (§6.4).
@@ -279,3 +280,4 @@ Recorded here because each bears on the topology, and each is independently acti
 | --- | --- | --- |
 | 1.0.0 | 2026-07-10 | Initial spec. Resolves the `l2-source-layout.md` §4.4 crate-granularity TBD: decompose on the dependency/seam axis (contract · domain · store-local · auth-local · facade), not the domain axis. Establishes the crate-minting rule (§4.4), realizes the DN-2 provider seams as crate boundaries (§4.5), identifies the single inverted `context_router → MemoryStore` edge as the migration pivot (§4.6), and distinguishes a crate boundary from a process boundary under INV-8 (§4.7). Records five analysis findings (§6), incl. an INV-2 violation in the CLI and the absent DN-2 seams. |
 | 1.0.0 | 2026-07-10 | `RFC → Stable`. Post-Update Review passed (`@role:spec-critic` + `@role:prompt-engineer`). The sole open question — the §2 reading of the stack spec's "one crate → desktop + mobile" — was resolved against `l2-technology-stack` INV-1 (the constraint is on the embeddable unit, preserved by the facade; the workspace already ships five crates) with no conflict; the TBD marker was cleared and the confirming rationale recorded inline. No design change; status advance only. |
+| 1.0.1 | 2026-07-17 | Registered `cronus-model-local` (`crates/model-local`) as a fourth **adapter** crate in the §4.2 crate set — the model-transport adapter shipped in the Model Transport build phase, implementing `contract::InferenceBackend` over a loopback HTTP endpoint plus egress-gated remote profiles. It was already minted by the existing §4.4(a) rule (needs network I/O) and already covered by the CI `domain → adapter` boundary guard; this patch records the existing crate in the table and notes it is **not** one of the three DN-2 provider planes. Also extended the `cronus-contract` row to list the later-added `InferenceBackend` and `WikiCache`/`WikiReadSurface` seam traits. Documentation reconciliation of shipped structure — no new requirement, no design change; stays Stable. |
