@@ -145,11 +145,64 @@ pub fn regenerate(
     generator: Option<&dyn PageGenerator>,
     cache: &dyn WikiCache,
 ) -> Result<RegenReport, String> {
+    let (pages, changelog) = build_pages(
+        &map_event_to_kinds(change),
+        office_id,
+        ground_truth,
+        generator,
+    )?;
+
+    if !pages.is_empty() {
+        cache.apply_regeneration(&pages, &changelog)?;
+    }
+
+    Ok(RegenReport {
+        regenerated: pages.into_iter().map(|p| p.id).collect(),
+    })
+}
+
+/// Rebuild an office's entire wiki from ground truth (PW-3) — the operational
+/// proof the store is a rebuildable projection cache. Regenerates **every**
+/// page kind (not just the ones an event touches), then hands the whole set to
+/// the store's transactional drop-and-reinsert. Because every page is derived
+/// from current ground truth, a dropped or corrupt `wiki.db` is reconstructed
+/// into an *equivalent* wiki — same structure, same sources, same attributed
+/// facts — losing nothing authoritative (the prose need not be byte-identical;
+/// generation is model-based). A generation failure aborts before the store is
+/// touched, so a failed rebuild leaves the prior rows intact.
+pub fn rebuild(
+    office_id: &str,
+    ground_truth: &dyn GroundTruth,
+    generator: Option<&dyn PageGenerator>,
+    cache: &dyn WikiCache,
+) -> Result<RegenReport, String> {
+    let (pages, changelog) = build_pages(&WikiPageKind::all(), office_id, ground_truth, generator)?;
+
+    // Always called — even with no grounded pages — so a rebuild also clears an
+    // office whose ground truth no longer grounds anything (PW-3).
+    cache.rebuild_office(office_id, &pages, &changelog)?;
+
+    Ok(RegenReport {
+        regenerated: pages.into_iter().map(|p| p.id).collect(),
+    })
+}
+
+/// Derive the pages + changelog for a set of kinds without touching the store
+/// (the shared core of `regenerate` and `rebuild`). For each kind: gather
+/// sources; if none, skip (never fabricate); else generate + guard, or a
+/// grounded stub with no generator. A generation failure returns `Err` before
+/// any page is built, so callers can write the result as one atomic unit.
+fn build_pages(
+    kinds: &[WikiPageKind],
+    office_id: &str,
+    ground_truth: &dyn GroundTruth,
+    generator: Option<&dyn PageGenerator>,
+) -> Result<(Vec<WikiPage>, Vec<WikiChangelogEntry>), String> {
     let at = now_secs();
     let mut pages: Vec<WikiPage> = Vec::new();
     let mut changelog: Vec<WikiChangelogEntry> = Vec::new();
 
-    for kind in map_event_to_kinds(change) {
+    for &kind in kinds {
         let sources = ground_truth.sources(office_id, kind)?;
         if sources.is_empty() {
             // Nothing grounded to write for this kind — skip, never fabricate.
@@ -158,7 +211,7 @@ pub fn regenerate(
 
         let (title, body, citations, summary) = match generator {
             Some(g) => {
-                // `?`: a generation failure returns before any cache write.
+                // `?`: a generation failure returns before any page is built.
                 let content = g.generate(office_id, kind, &sources)?;
                 // Guards: strip internal detail (PW-8) then drop uncited
                 // sections (PW-4). What survives is client-facing and attributed.
@@ -214,13 +267,7 @@ pub fn regenerate(
         pages.push(page);
     }
 
-    if !pages.is_empty() {
-        cache.apply_regeneration(&pages, &changelog)?;
-    }
-
-    Ok(RegenReport {
-        regenerated: pages.into_iter().map(|p| p.id).collect(),
-    })
+    Ok((pages, changelog))
 }
 
 fn assemble_body(sections: &[GeneratedSection]) -> String {
@@ -334,8 +381,29 @@ mod tests {
             self.applied.borrow_mut().push(pages.to_vec());
             Ok(())
         }
-        fn pages_for_office(&self, _office_id: &str) -> Result<Vec<WikiPage>, String> {
-            Ok(self.seeded.borrow().clone())
+        fn rebuild_office(
+            &self,
+            office_id: &str,
+            pages: &[WikiPage],
+            _changelog: &[WikiChangelogEntry],
+        ) -> Result<(), String> {
+            // Drop this office's rows, then install the rebuilt set — the
+            // in-memory mirror of the store's transactional drop-and-reinsert.
+            self.seeded
+                .borrow_mut()
+                .retain(|p| p.office_id != office_id);
+            self.seeded.borrow_mut().extend_from_slice(pages);
+            self.applied.borrow_mut().push(pages.to_vec());
+            Ok(())
+        }
+        fn pages_for_office(&self, office_id: &str) -> Result<Vec<WikiPage>, String> {
+            Ok(self
+                .seeded
+                .borrow()
+                .iter()
+                .filter(|p| p.office_id == office_id)
+                .cloned()
+                .collect())
         }
         fn mark_stale(&self, page_ids: &[String]) -> Result<(), String> {
             self.marked.borrow_mut().extend_from_slice(page_ids);
@@ -702,5 +770,111 @@ mod tests {
                 .is_empty()
         );
         assert!(!cache.get_page("office-1:overview").unwrap().unwrap().stale);
+    }
+
+    #[test]
+    fn rebuild_regenerates_every_page_kind_from_ground_truth() {
+        // Unlike an event (which touches only affected kinds), a rebuild
+        // re-derives all six kinds — the whole projection from ground truth.
+        let cache = RecordingCache::default();
+        let generator = ScriptedGenerator(|kind| {
+            Ok(GeneratedContent {
+                title: kind.as_str().to_string(),
+                sections: vec![GeneratedSection::cited(
+                    format!("body for {}", kind.as_str()),
+                    vec![WikiCitation::new("decision", "d1")],
+                )],
+            })
+        });
+
+        let report =
+            rebuild("office-1", &ground(), Some(&generator), &cache).expect("rebuild succeeds");
+
+        let mut kinds: Vec<String> = report.regenerated.clone();
+        kinds.sort();
+        assert_eq!(
+            kinds,
+            vec![
+                "office-1:area",
+                "office-1:changelog",
+                "office-1:decisions",
+                "office-1:glossary",
+                "office-1:howto",
+                "office-1:overview",
+            ],
+            "every page kind is re-derived"
+        );
+        assert_eq!(cache.applied.borrow().len(), 1, "one rebuild batch");
+    }
+
+    #[test]
+    fn rebuild_replaces_the_prior_office_rows() {
+        // A stale prior page for the office is dropped and re-derived — the
+        // rebuilt row carries current ground truth, not the old body.
+        let cache = RecordingCache::default();
+        let stale = WikiPage::new(
+            "office-1:overview",
+            "office-1",
+            WikiPageKind::Overview,
+            "Stale",
+            "OUTDATED BODY",
+        );
+        cache.seeded.borrow_mut().push(stale);
+
+        rebuild("office-1", &ground(), None, &cache).expect("rebuild");
+
+        let pages = cache.pages_for_office("office-1").unwrap();
+        let overview = pages
+            .iter()
+            .find(|p| p.id == "office-1:overview")
+            .expect("overview present");
+        assert!(
+            !overview.body.contains("OUTDATED BODY"),
+            "the prior stale body was replaced by a re-derived one"
+        );
+        // Every rebuilt page is grounded (non-empty citations), proving the set
+        // is a projection of ground truth, not carried over.
+        assert!(pages.iter().all(|p| !p.citations.is_empty()));
+    }
+
+    #[test]
+    fn rebuild_aborts_before_touching_the_store_on_generation_failure() {
+        // A generation failure must leave the prior projection intact — the
+        // office is never cleared on a rebuild that can't complete.
+        let cache = RecordingCache::default();
+        let prior = WikiPage::new(
+            "office-1:overview",
+            "office-1",
+            WikiPageKind::Overview,
+            "Prior",
+            "still here",
+        );
+        cache.seeded.borrow_mut().push(prior);
+
+        let generator = ScriptedGenerator(|kind| {
+            if kind == WikiPageKind::Glossary {
+                Err("generation failed".to_string())
+            } else {
+                Ok(GeneratedContent {
+                    title: kind.as_str().to_string(),
+                    sections: vec![GeneratedSection::cited(
+                        "x",
+                        vec![WikiCitation::new("decision", "d1")],
+                    )],
+                })
+            }
+        });
+
+        let result = rebuild("office-1", &ground(), Some(&generator), &cache);
+        assert!(result.is_err());
+        assert!(
+            cache.applied.borrow().is_empty(),
+            "no rebuild batch was applied"
+        );
+        assert_eq!(
+            cache.get_page("office-1:overview").unwrap().unwrap().body,
+            "still here",
+            "the prior projection is intact — the office was never cleared"
+        );
     }
 }

@@ -114,6 +114,45 @@ impl WikiStore {
         Ok(())
     }
 
+    /// Rebuild an office's wiki (PW-3): transactionally drop every existing
+    /// page + changelog + FTS row for `office_id`, then write the freshly
+    /// re-derived set. All-or-nothing — a failure part-way rolls back and the
+    /// prior rows stay intact, so a failed rebuild never leaves a half-cleared
+    /// projection. This is the store half of the "drop and re-derive from
+    /// ground truth" proof: nothing authoritative ever lived only here, so
+    /// dropping `wiki.db` and rebuilding loses nothing durable.
+    pub fn rebuild_office(
+        &self,
+        office_id: &str,
+        pages: &[WikiPage],
+        changelog: &[WikiChangelogEntry],
+    ) -> Result<()> {
+        let tx = self.conn.unchecked_transaction()?;
+        // Drop the FTS rows first (keyed by page_id) while the parent rows still
+        // resolve which pages belong to the office, then the parent rows.
+        tx.execute(
+            "DELETE FROM wiki_page_fts
+             WHERE page_id IN (SELECT id FROM wiki_page WHERE office_id = ?1)",
+            params![office_id],
+        )?;
+        tx.execute(
+            "DELETE FROM wiki_page WHERE office_id = ?1",
+            params![office_id],
+        )?;
+        tx.execute(
+            "DELETE FROM wiki_changelog WHERE office_id = ?1",
+            params![office_id],
+        )?;
+        for page in pages {
+            upsert_page_on(&tx, page)?;
+        }
+        for entry in changelog {
+            append_changelog_on(&tx, entry)?;
+        }
+        tx.commit()?;
+        Ok(())
+    }
+
     /// Every page for an office (the freshness-sweep input).
     pub fn pages_for_office(&self, office_id: &str) -> Result<Vec<WikiPage>> {
         let mut stmt = self.conn.prepare(
@@ -244,6 +283,15 @@ impl WikiCache for WikiStore {
         changelog: &[WikiChangelogEntry],
     ) -> std::result::Result<(), String> {
         WikiStore::apply_regeneration(self, pages, changelog).map_err(|e| e.to_string())
+    }
+
+    fn rebuild_office(
+        &self,
+        office_id: &str,
+        pages: &[WikiPage],
+        changelog: &[WikiChangelogEntry],
+    ) -> std::result::Result<(), String> {
+        WikiStore::rebuild_office(self, office_id, pages, changelog).map_err(|e| e.to_string())
     }
 
     fn pages_for_office(&self, office_id: &str) -> std::result::Result<Vec<WikiPage>, String> {
@@ -537,6 +585,112 @@ mod schema {
             .query_row("SELECT count(*) FROM wiki_changelog", [], |r| r.get(0))
             .unwrap();
         assert_eq!(cl_count, 1, "only the seed changelog row exists");
+    }
+
+    #[test]
+    fn rebuild_office_replaces_every_row_and_resyncs_fts() {
+        let store = WikiStore::open_in_memory().expect("open");
+
+        // Seed a prior wiki for the office (+ a changelog + FTS content).
+        let mut old = WikiPage::new(
+            "office-1:overview",
+            "office-1",
+            WikiPageKind::Overview,
+            "Old Overview",
+            "obsolete stale body",
+        );
+        old.citations = vec![WikiCitation::new("decision", "d-old")];
+        store
+            .apply_regeneration(&[old], &[changelog("cl-old")])
+            .expect("seed");
+        // A row for a DIFFERENT office must survive the rebuild untouched.
+        let other = WikiPage::new(
+            "office-2:overview",
+            "office-2",
+            WikiPageKind::Overview,
+            "Other",
+            "keep me",
+        );
+        store.upsert_page(&other).expect("other office");
+
+        // Rebuild office-1 from a fresh derived set.
+        let mut fresh = WikiPage::new(
+            "office-1:overview",
+            "office-1",
+            WikiPageKind::Overview,
+            "Fresh Overview",
+            "rebuilt current body",
+        );
+        fresh.citations = vec![WikiCitation::new("decision", "d-new")];
+        store
+            .rebuild_office("office-1", &[fresh.clone()], &[changelog("cl-new")])
+            .expect("rebuild");
+
+        // The office now holds exactly the rebuilt page — the old row is gone.
+        let pages = store.pages_for_office("office-1").unwrap();
+        assert_eq!(pages, vec![fresh], "office-1 holds only the rebuilt page");
+
+        // The changelog was replaced too (old entry dropped, new one present).
+        let cl = store.changelog("office-1", 10).unwrap();
+        assert_eq!(cl.len(), 1);
+        assert_eq!(cl[0].id, "cl-new");
+
+        // FTS reflects only the fresh body — the stale term no longer matches,
+        // the new term does.
+        assert!(
+            store.search("office-1", "obsolete", 10).unwrap().is_empty(),
+            "the dropped body's terms no longer match"
+        );
+        assert_eq!(
+            store
+                .search("office-1", "rebuilt", 10)
+                .unwrap()
+                .into_iter()
+                .map(|p| p.id)
+                .collect::<Vec<_>>(),
+            vec!["office-1:overview"]
+        );
+
+        // The other office is untouched.
+        assert!(
+            store.get_page("office-2:overview").unwrap().is_some(),
+            "a rebuild is office-scoped — other offices survive"
+        );
+    }
+
+    #[test]
+    fn rebuild_office_rolls_back_on_failure_leaving_prior_rows_intact() {
+        let store = WikiStore::open_in_memory().expect("open");
+        let mut original = WikiPage::new("p", "office-1", WikiPageKind::Overview, "T", "original");
+        original.citations = vec![WikiCitation::new("decision", "d1")];
+        store
+            .apply_regeneration(&[original.clone()], &[changelog("cl-1")])
+            .expect("seed");
+
+        // A rebuild whose changelog carries a DUPLICATE id within the batch
+        // fails the second INSERT mid-transaction (PRIMARY KEY violation) —
+        // after the DELETEs have already run, proving atomicity across the
+        // clear + reinsert.
+        let mut replacement = original.clone();
+        replacement.body = "SHOULD NOT PERSIST".to_string();
+        let dup = changelog("dup");
+        let result = store.rebuild_office("office-1", &[replacement], &[dup.clone(), dup]);
+        assert!(
+            result.is_err(),
+            "a duplicate changelog id must fail the batch"
+        );
+
+        // The clear was rolled back with the rest: the prior row is intact.
+        let got = store.get_page("p").expect("get").expect("present");
+        assert_eq!(
+            got.body, "original",
+            "a failed rebuild must not have cleared the prior rows"
+        );
+        let cl_count: i64 = store
+            .conn
+            .query_row("SELECT count(*) FROM wiki_changelog", [], |r| r.get(0))
+            .unwrap();
+        assert_eq!(cl_count, 1, "only the seed changelog row survives");
     }
 
     #[test]

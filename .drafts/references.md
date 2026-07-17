@@ -137,6 +137,7 @@
 - <https://github.com/janhq/jan>
 - <https://github.com/mountain-loop/yaak>
 - <https://github.com/aptakube/aptakube>
+- <https://github.com/affaan-m/ECC>
 
 ## Misc
 

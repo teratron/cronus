@@ -16,7 +16,7 @@ pub use cronus_domain::{
     memory_intelligence, mission, notes, office_control, orchestration, paths, quality, redact,
     research, resource_sharing, roles, router, sandbox_policy, scheduler, secrets,
     self_improvement, session, skills, state, store, telemetry, tool_security, trigger_triage,
-    version_control, voice, wiki_regen,
+    version_control, voice, wiki_access, wiki_regen,
 };
 
 // The facade-wiring modules whose default implementation reaches into an

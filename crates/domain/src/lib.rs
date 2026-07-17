@@ -62,6 +62,7 @@ pub mod tool_security;
 pub mod trigger_triage;
 pub mod version_control;
 pub mod voice;
+pub mod wiki_access;
 pub mod wiki_regen;
 
 /// The public capability contract that frontends invoke.

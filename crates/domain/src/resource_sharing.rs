@@ -20,6 +20,10 @@ pub enum ResourceKind {
     Channel,
     File,
     Prompt,
+    /// The client-facing project wiki, scoped per office (PW-7). The
+    /// `resource_id` is the `office_id`; a shared office gates every wiki read
+    /// through `has_access(Wiki, office_id, Read)`.
+    Wiki,
 }
 
 /// A principal type (RS-2).
