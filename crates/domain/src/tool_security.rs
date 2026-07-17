@@ -766,6 +766,20 @@ pub enum ToolPermitResult {
     Blocked(String),
 }
 
+/// BA-4's first structural barrier (`l2-service-activation` §4.5): whether
+/// `name` names an activation/autostart-shaped capability. No such tool is
+/// ever registered in this codebase today (verified by inspection, not just
+/// this predicate) — this function is the standing guard any future
+/// tool-registration code must consult, so a background-activation tool
+/// cannot slip in by omission, not a scan of an existing master registry
+/// (this project has no single central tool catalogue to scan; the
+/// allowlist-inversion this crate does implement, `PLAN_MODE_READONLY_TOOLS`,
+/// is asserted clean of activation-shaped names below).
+pub fn is_activation_tool_name(name: &str) -> bool {
+    let lower = name.to_lowercase();
+    lower.contains("activation") || lower.contains("autostart")
+}
+
 // ── SuspendedPermission ───────────────────────────────────────────────────────
 
 #[derive(Debug, Clone)]

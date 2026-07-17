@@ -1239,3 +1239,291 @@ pub trait WikiReadSurface {
     /// Change history newest-first (PW-5), at most `limit` entries.
     fn changelog(&self, office_id: &str, limit: usize) -> Result<Vec<WikiChangelogEntry>, String>;
 }
+
+// ── Service Activation seam (l2-service-activation §4.1, BA-1…BA-11) ────────
+
+/// One of the two background modes beyond manual launch (BA-2). Manual
+/// launch itself is not a variant — it is the absence of any registration.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum ActivationMode {
+    Login,
+    System,
+}
+
+/// Whether a single mode can be offered on this host (BA-10). Per-mode, not
+/// whole-host: a non-systemd Linux host offers `Login` (via XDG autostart)
+/// while reporting `System` unsupported (`l2-service-activation` §4.4).
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum ModeSupport {
+    Supported,
+    /// The mode cannot be offered here, and why — rendered to the user in
+    /// place of the toggle, never an inert or silently-failing control.
+    Unsupported {
+        reason: String,
+    },
+}
+
+/// What this host can offer, per mode (BA-10).
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct ActivationCapabilities {
+    pub login: ModeSupport,
+    pub system: ModeSupport,
+}
+
+/// The observed activation state (BA-8) — always read from the OS at the
+/// moment it is asked, never a stored or remembered value. `RequiresApproval`
+/// is a registered-but-vetoed state distinct from `Active`: the engine
+/// genuinely will not run until the user approves it, so it must never be
+/// folded into success.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum ActivationState {
+    Inactive,
+    Active(ActivationMode),
+    RequiresApproval(ActivationMode),
+    /// The facility could not be queried — never reported as `Active` (BA-8).
+    Unknown {
+        reason: String,
+    },
+}
+
+/// The per-OS activation seam (§4.1). No OS type (registry key, plist, unit
+/// file, service handle) crosses this trait. The domain tier holds the
+/// mutual-exclusion and consent-bookkeeping policy (§4.4/§4.6) and calls this
+/// seam without ever naming a registry key itself; the adapter crate
+/// (`cronus-activation-os`, minted by `l2-crate-topology` §4.4(a)) holds the
+/// OS calls.
+///
+/// There is no `set_state` and no persisted mirror: the only way to learn the
+/// activation state is `observe()`, and the only way to change it is
+/// `enable`/`disable` — both called only from an interactive frontend, never
+/// from agent-run code (BA-4).
+pub trait ActivationRegistry: Send + Sync {
+    /// What this host can offer, per mode. `Unsupported` on a spoke (BA-10).
+    fn capabilities(&self) -> ActivationCapabilities;
+
+    /// Read the OS. Never a cached value (BA-8).
+    fn observe(&self) -> ActivationState;
+
+    /// Register exactly `mode`. An adapter-level primitive — it does not
+    /// decide whether some other mode should first be removed; that
+    /// mutual-exclusion ordering (BA-3) is domain-tier policy, which calls
+    /// `disable()` and verifies via `observe()` before calling this. May
+    /// prompt for elevation for `System` (BA-6).
+    fn enable(&self, mode: ActivationMode) -> Result<(), String>;
+
+    /// Remove whatever is currently registered. An adapter-level primitive;
+    /// the caller verifies absence via `observe()` (BA-7).
+    fn disable(&self) -> Result<(), String>;
+}
+
+/// The honest do-nothing default (`l2-service-activation` §5: "seam and probe
+/// first ... gives the settings surface something honest to render"). Before
+/// the real per-OS adapter crate is wired in, this reports both modes
+/// `Unsupported` rather than exposing a toggle that silently does nothing
+/// (BA-10) — the settings surface renders the true "not available yet" state
+/// instead of a fabricated one. `enable`/`disable` refuse rather than pretend
+/// to register anything, so a caller can never observe a mode this adapter
+/// claims to support.
+pub struct NoOpActivationRegistry {
+    reason: String,
+}
+
+impl NoOpActivationRegistry {
+    pub fn new(reason: impl Into<String>) -> Self {
+        NoOpActivationRegistry {
+            reason: reason.into(),
+        }
+    }
+}
+
+impl Default for NoOpActivationRegistry {
+    fn default() -> Self {
+        Self::new("background activation is not wired on this build")
+    }
+}
+
+impl ActivationRegistry for NoOpActivationRegistry {
+    fn capabilities(&self) -> ActivationCapabilities {
+        ActivationCapabilities {
+            login: ModeSupport::Unsupported {
+                reason: self.reason.clone(),
+            },
+            system: ModeSupport::Unsupported {
+                reason: self.reason.clone(),
+            },
+        }
+    }
+
+    fn observe(&self) -> ActivationState {
+        ActivationState::Inactive
+    }
+
+    fn enable(&self, _mode: ActivationMode) -> Result<(), String> {
+        Err(self.reason.clone())
+    }
+
+    fn disable(&self) -> Result<(), String> {
+        Err(self.reason.clone())
+    }
+}
+
+#[cfg(test)]
+mod activation_tests {
+    use super::*;
+
+    /// A scriptable registry for tests: capabilities and the current state
+    /// are set at construction; `enable`/`disable` mutate the state, or fail
+    /// without mutating it when scripted to — enough to exercise the honest-
+    /// representation properties (BA-8, BA-10) and a transition round-trip
+    /// with no real OS calls.
+    struct ScriptedRegistry {
+        capabilities: ActivationCapabilities,
+        state: std::sync::Mutex<ActivationState>,
+        fail_transitions: bool,
+    }
+
+    impl ScriptedRegistry {
+        fn new(capabilities: ActivationCapabilities, state: ActivationState) -> Self {
+            ScriptedRegistry {
+                capabilities,
+                state: std::sync::Mutex::new(state),
+                fail_transitions: false,
+            }
+        }
+
+        /// Both modes supported, starting at `state`.
+        fn supported(state: ActivationState) -> Self {
+            Self::new(
+                ActivationCapabilities {
+                    login: ModeSupport::Supported,
+                    system: ModeSupport::Supported,
+                },
+                state,
+            )
+        }
+    }
+
+    impl ActivationRegistry for ScriptedRegistry {
+        fn capabilities(&self) -> ActivationCapabilities {
+            self.capabilities.clone()
+        }
+
+        fn observe(&self) -> ActivationState {
+            self.state.lock().unwrap().clone()
+        }
+
+        fn enable(&self, mode: ActivationMode) -> Result<(), String> {
+            if self.fail_transitions {
+                return Err("registration refused".to_string());
+            }
+            *self.state.lock().unwrap() = ActivationState::Active(mode);
+            Ok(())
+        }
+
+        fn disable(&self) -> Result<(), String> {
+            if self.fail_transitions {
+                return Err("removal refused".to_string());
+            }
+            *self.state.lock().unwrap() = ActivationState::Inactive;
+            Ok(())
+        }
+    }
+
+    #[test]
+    fn the_four_activation_states_round_trip_through_a_registry() {
+        let registry = ScriptedRegistry::supported(ActivationState::Inactive);
+        assert_eq!(registry.observe(), ActivationState::Inactive);
+
+        registry
+            .enable(ActivationMode::Login)
+            .expect("enable succeeds");
+        assert_eq!(
+            registry.observe(),
+            ActivationState::Active(ActivationMode::Login)
+        );
+
+        registry.disable().expect("disable succeeds");
+        assert_eq!(registry.observe(), ActivationState::Inactive);
+
+        let approval_pending =
+            ScriptedRegistry::supported(ActivationState::RequiresApproval(ActivationMode::System));
+        assert_eq!(
+            approval_pending.observe(),
+            ActivationState::RequiresApproval(ActivationMode::System)
+        );
+
+        let unknown = ScriptedRegistry::supported(ActivationState::Unknown {
+            reason: "facility unreadable".to_string(),
+        });
+        assert!(matches!(unknown.observe(), ActivationState::Unknown { .. }));
+    }
+
+    #[test]
+    fn a_spoke_host_reports_unsupported_for_both_modes() {
+        // BA-10: a host with no usable supervisor reports Unsupported with a
+        // reason, never an inert toggle.
+        let spoke = ScriptedRegistry::new(
+            ActivationCapabilities {
+                login: ModeSupport::Unsupported {
+                    reason: "mobile target".to_string(),
+                },
+                system: ModeSupport::Unsupported {
+                    reason: "mobile target".to_string(),
+                },
+            },
+            ActivationState::Inactive,
+        );
+        let caps = spoke.capabilities();
+        assert!(matches!(caps.login, ModeSupport::Unsupported { .. }));
+        assert!(matches!(caps.system, ModeSupport::Unsupported { .. }));
+    }
+
+    #[test]
+    fn an_unqueryable_facility_yields_unknown_never_active() {
+        // BA-8: where the OS cannot be queried, the state is Unknown, never
+        // silently reported as Active.
+        let registry = ScriptedRegistry::supported(ActivationState::Unknown {
+            reason: "registry key unreadable".to_string(),
+        });
+        let state = registry.observe();
+        assert!(matches!(state, ActivationState::Unknown { .. }));
+        assert_ne!(state, ActivationState::Active(ActivationMode::Login));
+        assert_ne!(state, ActivationState::Active(ActivationMode::System));
+    }
+
+    #[test]
+    fn requires_approval_is_representable_and_distinct_from_active() {
+        let active = ActivationState::Active(ActivationMode::System);
+        let pending = ActivationState::RequiresApproval(ActivationMode::System);
+        assert_ne!(
+            active, pending,
+            "a registered-but-vetoed state must never be folded into Active"
+        );
+    }
+
+    #[test]
+    fn a_failed_transition_leaves_the_prior_state_unchanged() {
+        let mut registry = ScriptedRegistry::supported(ActivationState::Inactive);
+        registry.fail_transitions = true;
+
+        let result = registry.enable(ActivationMode::System);
+        assert!(result.is_err());
+        assert_eq!(
+            registry.observe(),
+            ActivationState::Inactive,
+            "a failed enable must not mutate the observed state"
+        );
+    }
+
+    #[test]
+    fn the_noop_registry_reports_unsupported_and_refuses_every_transition() {
+        let registry = NoOpActivationRegistry::default();
+
+        let caps = registry.capabilities();
+        assert!(matches!(caps.login, ModeSupport::Unsupported { .. }));
+        assert!(matches!(caps.system, ModeSupport::Unsupported { .. }));
+        assert_eq!(registry.observe(), ActivationState::Inactive);
+        assert!(registry.enable(ActivationMode::Login).is_err());
+        assert!(registry.disable().is_err());
+    }
+}

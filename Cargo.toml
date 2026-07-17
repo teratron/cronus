@@ -7,6 +7,7 @@ members = [
     "crates/store-local",
     "crates/auth-local",
     "crates/model-local",
+    "crates/activation-os",
     "crates/codegraph",
     "crates/nodus",
     "crates/cli",
@@ -31,6 +32,7 @@ cronus-domain = { path = "crates/domain" }
 cronus-store-local = { path = "crates/store-local" }
 cronus-auth-local = { path = "crates/auth-local" }
 cronus-model-local = { path = "crates/model-local" }
+cronus-activation-os = { path = "crates/activation-os" }
 nodus = { path = "crates/nodus" }
 aes-gcm = "0.11.0"
 argon2 = "0.5.3"

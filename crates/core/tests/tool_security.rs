@@ -2,7 +2,8 @@ use cronus_core::tool_security::{
     BaseGuardrail, GuardrailContext, PiiMaskerGuardrail, PolicyMode, PromptInjectionGuardrail,
     PromptInjectionMode, RiskBand, RiskRecommendation, SarifLog, ScanCategory, Severity,
     SkillScanner, ToolExecutionLevel, ToolGuard, ToolPermitResult, ToolPolicy,
-    UNTRUSTED_CONTEXT_POLICY, escape_guard_markers, run_guardrails, untrusted_context_message,
+    UNTRUSTED_CONTEXT_POLICY, escape_guard_markers, is_activation_tool_name, run_guardrails,
+    untrusted_context_message,
 };
 
 // ── Skill Scanner tests ────────────────────────────────────────────────────────
@@ -222,6 +223,49 @@ fn policy_guide_only_detection() {
 fn policy_guide_only_not_triggered_for_normal_message() {
     let policy = ToolPolicy::guide_only("You are a helpful assistant.", "Write a function");
     assert!(!policy.block_all_tool_calls);
+}
+
+// ── BA-4 activation tool-surface barrier ──────────────────────────────────────
+
+#[test]
+fn is_activation_tool_name_flags_activation_and_autostart_shaped_names() {
+    assert!(is_activation_tool_name("activation_enable"));
+    assert!(is_activation_tool_name("Activation.Disable"));
+    assert!(is_activation_tool_name("autostart_toggle"));
+    assert!(
+        !is_activation_tool_name("file_read"),
+        "an ordinary tool name must not be flagged"
+    );
+    assert!(
+        !is_activation_tool_name("react_devtools"),
+        "a name that merely shares letters must not be flagged"
+    );
+}
+
+#[test]
+fn no_plan_mode_allowlisted_tool_is_activation_shaped() {
+    // BA-4: today's one real tool allowlist in this crate carries no
+    // activation-shaped name — a future one cannot slip in by omission
+    // because `is_activation_tool_name` is the standing guard, not a scan of
+    // this specific list.
+    let known_good_tools = [
+        "file_read",
+        "codebase_search",
+        "list_directory",
+        "web_fetch",
+        "think",
+        "read",
+        "glob",
+        "grep",
+    ];
+    for tool in known_good_tools {
+        assert!(ToolPolicy::is_allowed_in_plan_mode(tool));
+        assert!(!is_activation_tool_name(tool));
+    }
+    assert!(
+        !ToolPolicy::is_allowed_in_plan_mode("activation_enable"),
+        "an activation tool must never be allowlisted"
+    );
 }
 
 // ── Guardrail pipeline tests ──────────────────────────────────────────────────

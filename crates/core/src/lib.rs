@@ -9,12 +9,12 @@
 //! depend on this crate; it has no presentation dependencies of its own.
 
 pub use cronus_domain::{
-    Capabilities, Engine, acp, agent_migration, agent_registry, automation, autonomy, backup,
-    budget, checkpoint, config_hotreload, constitution, context_mgmt, context_router, deliberation,
-    development_workflow, doctor, egress, error_reporting, exec_workspace, extensions, file_store,
-    global_orch, hooks, inner_monologue, kanban, learning, lookahead, memory_capture,
-    memory_intelligence, mission, notes, office_control, orchestration, paths, quality, redact,
-    research, resource_sharing, roles, router, sandbox_policy, scheduler, secrets,
+    Capabilities, Engine, acp, activation, agent_migration, agent_registry, automation, autonomy,
+    backup, budget, checkpoint, config_hotreload, constitution, context_mgmt, context_router,
+    deliberation, development_workflow, doctor, egress, error_reporting, exec_workspace,
+    extensions, file_store, global_orch, hooks, inner_monologue, kanban, learning, lookahead,
+    memory_capture, memory_intelligence, mission, notes, office_control, orchestration, paths,
+    quality, redact, research, resource_sharing, roles, router, sandbox_policy, scheduler, secrets,
     self_improvement, session, skills, state, store, telemetry, tool_security, trigger_triage,
     version_control, voice, wiki_access, wiki_regen,
 };
@@ -25,6 +25,7 @@ pub use cronus_domain::{
 // `cronus-domain` to any adapter, so these shims cannot live there.
 pub mod auth;
 pub mod context_compaction;
+pub mod engine_lock;
 pub mod inbox;
 pub mod memory;
 pub mod model_bridge;

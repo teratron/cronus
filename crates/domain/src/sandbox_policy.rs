@@ -149,6 +149,64 @@ impl SandboxPolicy {
     }
 }
 
+/// The filesystem half of the sandbox schema (`l2-sandbox-policy` §4.1) —
+/// only `read_write` matters for BA-4: a location absent from every entry has
+/// no write path for agent-run code, regardless of what `read_only` or
+/// `include_workdir` (not modeled here — orthogonal to write access) exposes.
+/// Deny-by-default: absence means denied, never merely "not confirmed".
+#[derive(Debug, Clone, Default)]
+pub struct FilesystemPolicy {
+    read_write: BTreeSet<String>,
+}
+
+impl FilesystemPolicy {
+    pub fn new() -> Self {
+        Self::default()
+    }
+
+    pub fn with_read_write(mut self, path: impl Into<String>) -> Self {
+        self.read_write.insert(path.into());
+        self
+    }
+
+    /// Whether `path` (or a path under it) is mounted read-write by any
+    /// entry.
+    pub fn is_read_write(&self, path: &str) -> bool {
+        self.read_write.iter().any(|mount| {
+            path == mount
+                || path.starts_with(&format!("{mount}/"))
+                || path.starts_with(&format!("{mount}\\"))
+        })
+    }
+}
+
+/// OS activation-registration locations that are filesystem paths
+/// (`l2-service-activation` §4.5, BA-4's second structural barrier): none of
+/// these may ever appear in a `FilesystemPolicy`'s `read_write` set, or
+/// agent-run code would gain a write path to make the engine persistent and
+/// unattended.
+///
+/// The Windows registry `Run` key and the Windows Task Scheduler store are
+/// OS registration surfaces too, but are not filesystem paths — no
+/// `read_write` model can represent them. They are covered by a different
+/// mechanism (the OS's own registry/Task-Scheduler ACLs, which a sandboxed
+/// process does not hold by default), named here only for documentation
+/// completeness — never asserted against `FilesystemPolicy`, which has no
+/// vocabulary for them.
+pub const FILESYSTEM_REGISTRATION_LOCATIONS: &[&str] = &[
+    "~/Library/LaunchAgents",
+    "~/.config/systemd/user",
+    "/etc/systemd/system",
+    "~/.config/autostart",
+];
+
+/// Non-filesystem OS registration surfaces (§4.5), named for documentation
+/// completeness only — see [`FILESYSTEM_REGISTRATION_LOCATIONS`].
+pub const NON_FILESYSTEM_REGISTRATION_SURFACES: &[&str] = &[
+    r"HKCU\Software\Microsoft\Windows\CurrentVersion\Run",
+    "Windows Task Scheduler",
+];
+
 /// An access tier: a named combination of presets over the restricted baseline.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum PolicyTier {
@@ -499,6 +557,41 @@ mod tests {
         assert_eq!(result.kind, AccessFailureKind::Unknown);
         assert_eq!(result.confidence, Confidence::Low);
         assert!(result.matched_preset.is_none());
+    }
+
+    #[test]
+    fn no_activation_registration_location_is_read_write_in_the_baseline() {
+        // BA-4: the deny-by-default baseline (no entries at all) must leave
+        // every activation registration location without a write path.
+        let baseline = FilesystemPolicy::new();
+        for location in FILESYSTEM_REGISTRATION_LOCATIONS {
+            assert!(
+                !baseline.is_read_write(location),
+                "{location} must not be write-accessible in the deny-by-default baseline"
+            );
+        }
+    }
+
+    #[test]
+    fn a_registration_location_would_be_caught_if_misconfigured_as_read_write() {
+        // Self-test (mirrors check-domain-boundary.mjs --self-test): prove
+        // the mechanism itself would flag a violation, not just that today's
+        // baseline happens to be clean.
+        let misconfigured = FilesystemPolicy::new().with_read_write("~/.config/systemd/user");
+        assert!(misconfigured.is_read_write("~/.config/systemd/user"));
+        assert!(misconfigured.is_read_write("~/.config/systemd/user/cronus.service"));
+        assert!(!misconfigured.is_read_write("~/.config/systemd/system"));
+    }
+
+    #[test]
+    fn read_write_matches_the_mount_and_paths_under_it_only() {
+        let policy = FilesystemPolicy::new().with_read_write("/home/user/workspace");
+        assert!(policy.is_read_write("/home/user/workspace"));
+        assert!(policy.is_read_write("/home/user/workspace/file.txt"));
+        assert!(
+            !policy.is_read_write("/home/user/workspace-other"),
+            "a sibling path with the mount as a prefix must not match"
+        );
     }
 
     #[test]

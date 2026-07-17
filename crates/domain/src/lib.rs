@@ -11,6 +11,7 @@
 //! shims stay in `crates/core`, not here.
 
 pub mod acp;
+pub mod activation;
 pub mod agent_migration;
 pub mod agent_registry;
 pub mod automation;
