@@ -1,7 +1,7 @@
 # Archetype Catalog
 
-**Version:** 1.0.0
-**Status:** RFC
+**Version:** 1.0.1
+**Status:** Stable
 **Layer:** implementation
 **Implements:** l1-office-archetype.md
 
@@ -123,7 +123,7 @@ OA-10 forbids an archetype from defining a specialty inline; every `pool` and `s
 | `advertising-agency` | `marketing` | `account-manager`, `strategist`, `copywriter`, `art-director`, `media-planner` |
 | `finance-department` | `finance`, `data-analyst` | `accountant`, `controller`, `financial-analyst`, `tax-specialist` |
 
-Each missing role must enter the role catalog on its own merits, clearing the ROL-9 anti-sprawl gate — two independent axes of justification — before any archetype may reference it. `copywriter` versus the existing `marketing` role, for instance, clears on distinct expertise and context isolation; whether `strategist` clears against `marketing` at all is a genuine question for that amendment, not for this spec. <!-- TBD: the nine missing roles are an amendment to l2-role-catalog §4.2, each subject to ROL-9; that amendment is a prerequisite for unblocking these two archetypes and is deliberately not made here -->
+Each missing role must enter the role catalog on its own merits, clearing the ROL-9 anti-sprawl gate — two independent axes of justification — before any archetype may reference it. `copywriter` versus the existing `marketing` role, for instance, clears on distinct expertise and context isolation; whether `strategist` clears against `marketing` at all is a genuine question for that amendment, not for this spec. That `l2-role-catalog` §4.2 amendment — the nine missing roles, each subject to ROL-9 on its own merits — is a prerequisite for unblocking the two archetypes and is deliberately out of scope here.
 
 Shipping the two archetypes against invented, undefined specialties would violate OA-10 and would forge the catalog's quality gate — presenting nine unreviewed roles as though they had passed ROL-9 because an archetype named them. Blocking them is the honest state, and it names precisely what would unblock them.
 
@@ -232,4 +232,5 @@ There is deliberately **no** `archetype hire` verb. Hiring belongs to `role` (`l
 
 | Version | Date | Notes |
 | --- | --- | --- |
+| 1.0.1 | 2026-07-17 | Promoted RFC→Stable via `/magic.spec` adversarial review (spec-critic + prompt-engineer PASS). No requirement change: OA-1…OA-11 were reviewed as-authored and found substantively complete, coherent, and honest about their own coverage (the ship-one-of-three finding, the pool-read-by-recorder-not-gate discipline, the closed-schema enforcement of OA-4). The only edit was cosmetic — the §4.4 deferred-scope `<!-- TBD -->` marker was converted to visible prose, since a Stable spec should carry no dangling TBD and its content (the ROL-9-gated `l2-role-catalog` §4.2 amendment that would unblock the two blocked archetypes) was already fully stated in the surrounding text. Now buildable at its shipped scope: `software-engineering` archetype + the declared-blocked treatment of `advertising-agency`/`finance-department`. |
 | 1.0.0 | 2026-07-10 | Initial spec. Realizes OA-1…OA-11: two-artifact definition (`archetype.json` references + `NORMS.md` prose) split along the trust boundary, closed four-key schema that makes OA-4 unrepresentable rather than merely forbidden, pool consulted by the deviation recorder and never by the hire gate (OA-3), three deviation counters with an explicit *unvalidated* state (OA-9). Ships `software-engineering` (18-role pool, empty seed); declares `advertising-agency` and `finance-department` **blocked**, naming the nine roles each requires and deferring them to a ROL-9-gated amendment of `l2-role-catalog` §4.2. Records the finding that every examined domain seeds zero roles, since WSL-5's manager already performs all first-contact work. |

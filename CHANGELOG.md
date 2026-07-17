@@ -179,3 +179,4 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Updated specification `policy-governance` (main)
 - Updated specification `intent-resolution` (main)
 - Added specification `value-settlement` (main)
+- Updated specification `archetype-catalog` (main)
