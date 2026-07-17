@@ -4,7 +4,7 @@
 <!-- Maximum 100 lines. Agent updates AFTER each completed action. -->
 
 **Workspace:** main
-**Updated:** 2026-07-17 06:54
+**Updated:** 2026-07-17 10:55
 **Phase:** 18 — Service Activation
 **Status:** Active
 
@@ -12,7 +12,7 @@
 
 - **Task:** **`/magic.task main` done — opened Phase 18 (Service Activation), 8 tasks / 6 tracks, Todo.** `l2-service-activation` pulled from Backlog into an active build phase (C6). Prior `/magic.spec main` promoted it RFC→Stable (1.0.1) + 2 bundled amendments (tech-stack 1.2.1, crate-topology 1.0.1).
 - **Spec:** INDEX v1.0.119 (209 specs: **202 Stable, 6 RFC, 1 Draft**) · PLAN v2.25.0 · TASKS v1.27.0. **Phase 18 (Service Activation) is the open buildable phase.** Backlog: 7 (6 RFC + 1 Draft). 0 PLAN-orphans; Pre-flight ok:true; Pre-Planning Stabilization 0 promoted.
-- **Next Action:** Execute T-18A01 Activation seam + mock adapter (§4.1, BA-8/BA-10): `ActivationMode {Login, System}`, `ActivationState {Inactive, Active(mode), RequiresApproval(mode), Unknown{reason}}`, `ActivationCapabilities` (per-mode supported / `Unsupported{reason}`), and the `ActivationRegistry` trait (`capabilities` / `observe` / `enable` / `disable`) in `crates/contract` — no OS types cross the seam. Ship a scriptable no-op/mock adapter for tests. **Verify:** `cargo test -p cronus-contract activation` — the four states round-trip; a mock host with no supervisor reports `Unsupported` (BA-10); an unqueryable facility yields `Unknown`, never `Active` (BA-8); `RequiresApproval` is representable and distinct from `Active`. via /magic.run main
+- **Next Action:** Run /magic.task main to update the plan
 
 ## Progress
 

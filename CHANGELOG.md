@@ -178,3 +178,4 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Added specification `human-intervention` (main)
 - Updated specification `policy-governance` (main)
 - Updated specification `intent-resolution` (main)
+- Added specification `value-settlement` (main)
