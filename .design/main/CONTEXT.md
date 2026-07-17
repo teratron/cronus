@@ -67,6 +67,7 @@
 │   └── desktop/
 ├── biome.json
 ├── crates/
+│   ├── activation-os/
 │   ├── auth-local/
 │   ├── cli/
 │   ├── codegraph/
