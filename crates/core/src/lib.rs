@@ -29,6 +29,7 @@ pub mod auth;
 pub mod context_compaction;
 pub mod engine_lock;
 pub mod inbox;
+pub mod knowledge_bootstrap;
 pub mod loop_bootstrap;
 pub mod memory;
 pub mod model_bridge;

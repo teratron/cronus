@@ -178,6 +178,101 @@ impl RecordIngester {
     }
 }
 
+/// A seam over a one-shot HTTP fetch (I/O). The domain tier stays I/O-free —
+/// this trait is implemented by a concrete adapter in the facade
+/// (`cronus-core`); domain code only composes over it.
+pub trait UrlFetcher {
+    /// Fetch `url`, returning the raw response body (e.g. HTML) on success.
+    fn fetch(&self, url: &str) -> Result<String, String>;
+}
+
+/// Extracts plain text from a fetched web page (KB-5).
+pub struct UrlIngester;
+
+impl UrlIngester {
+    /// Fetch `url` via `fetcher`, then strip HTML down to plain text.
+    ///
+    /// **Disclosed scope:** the production `fetcher` performs a plain
+    /// HTTP/1.1 GET — `https://` (TLS), `robots.txt` compliance, and
+    /// rate-limiting (l2-knowledge-store §5.3) are deferred, separately-
+    /// scoped follow-ups. This proves the fetch→extract mechanics are real
+    /// against a hermetic local server, not simulated.
+    pub fn extract(fetcher: &dyn UrlFetcher, url: &str) -> Result<String, IngestError> {
+        let html = fetcher.fetch(url).map_err(IngestError::Extract)?;
+        Ok(html_to_text(&html))
+    }
+}
+
+/// A minimal HTML→text conversion: drops `<script>`/`<style>` block
+/// contents, strips remaining tags, decodes the handful of named/numeric
+/// entities that show up in ordinary web prose, and collapses whitespace.
+///
+/// **Disclosed simplification:** not a full HTML5 parser — malformed markup
+/// is not corrected, and only the entities listed in [`decode_entities`] are
+/// decoded.
+pub fn html_to_text(html: &str) -> String {
+    let without_scripts = strip_tag_block(html, "script");
+    let without_styles = strip_tag_block(&without_scripts, "style");
+    let stripped = strip_tags(&without_styles);
+    let decoded = decode_entities(&stripped);
+    collapse_whitespace(&decoded)
+}
+
+/// Drop every `<tag ...>...</tag>` block, contents included (case-insensitive
+/// tag matching). An unterminated opening tag drops the remainder of the
+/// input rather than looping — malformed markup degrades safely.
+fn strip_tag_block(input: &str, tag: &str) -> String {
+    let open = format!("<{tag}");
+    let close = format!("</{tag}>");
+    let mut out = String::with_capacity(input.len());
+    let mut rest = input;
+    loop {
+        let lower = rest.to_ascii_lowercase();
+        match lower.find(&open) {
+            Some(start) => {
+                out.push_str(&rest[..start]);
+                match lower[start..].find(&close) {
+                    Some(end_rel) => rest = &rest[start + end_rel + close.len()..],
+                    None => return out, // unterminated block: drop the remainder
+                }
+            }
+            None => {
+                out.push_str(rest);
+                return out;
+            }
+        }
+    }
+}
+
+fn strip_tags(input: &str) -> String {
+    let mut out = String::with_capacity(input.len());
+    let mut in_tag = false;
+    for ch in input.chars() {
+        match ch {
+            '<' => in_tag = true,
+            '>' => in_tag = false,
+            _ if !in_tag => out.push(ch),
+            _ => {}
+        }
+    }
+    out
+}
+
+fn decode_entities(input: &str) -> String {
+    input
+        .replace("&nbsp;", " ")
+        .replace("&amp;", "&")
+        .replace("&lt;", "<")
+        .replace("&gt;", ">")
+        .replace("&quot;", "\"")
+        .replace("&apos;", "'")
+        .replace("&#39;", "'")
+}
+
+fn collapse_whitespace(input: &str) -> String {
+    input.split_whitespace().collect::<Vec<_>>().join(" ")
+}
+
 static CHUNK_COUNTER: AtomicU64 = AtomicU64::new(0);
 
 /// A globally-unique chunk id (the `contract::MemoryId` counter idiom, local
@@ -565,5 +660,53 @@ mod tests {
         let fs = FileStore::new();
         let err = FileIngester::extract(&fs, "nope").expect_err("missing file");
         assert!(matches!(err, IngestError::Extract(_)));
+    }
+
+    struct FakeFetcher {
+        body: Result<String, String>,
+    }
+
+    impl UrlFetcher for FakeFetcher {
+        fn fetch(&self, _url: &str) -> Result<String, String> {
+            self.body.clone()
+        }
+    }
+
+    #[test]
+    fn url_ingester_extracts_plain_text_from_fetched_html() {
+        let fetcher = FakeFetcher {
+            body: Ok("<html><head><style>p{color:red}</style></head><body><p>Hello &amp; welcome.</p><script>track()</script></body></html>".to_string()),
+        };
+        let text = UrlIngester::extract(&fetcher, "http://example.test/page").expect("extract");
+        assert_eq!(text, "Hello & welcome.");
+    }
+
+    #[test]
+    fn url_ingester_propagates_a_fetch_failure() {
+        let fetcher = FakeFetcher {
+            body: Err("connection refused".to_string()),
+        };
+        let err = UrlIngester::extract(&fetcher, "http://example.test/page")
+            .expect_err("fetch failure must surface");
+        assert!(matches!(err, IngestError::Extract(_)));
+    }
+
+    #[test]
+    fn html_to_text_strips_tags_and_decodes_entities() {
+        let html = "<div class=\"x\">Price: &lt;$10&gt; &amp; free &nbsp;shipping.</div>";
+        assert_eq!(html_to_text(html), "Price: <$10> & free shipping.");
+    }
+
+    #[test]
+    fn html_to_text_drops_script_and_style_block_contents() {
+        let html = "<style>.a{}</style><p>Visible</p><script>var x = 1 < 2;</script>";
+        assert_eq!(html_to_text(html), "Visible");
+    }
+
+    #[test]
+    fn html_to_text_of_malformed_unterminated_markup_degrades_safely() {
+        // An unterminated <script> tag drops the remainder rather than looping.
+        let html = "<p>Before</p><script>oops, never closed";
+        assert_eq!(html_to_text(html), "Before");
     }
 }

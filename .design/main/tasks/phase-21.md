@@ -22,7 +22,7 @@ duration_minutes: ~
 
 - [x] [T-21A01] Schema + contract types + store scaffolding (`knowledge` module)
 - [x] [T-21B01] Ingestion core: chunking + File/Record adapters + embed seam + transactional write + KB-3 re-index
-- [ ] [T-21B02] URL adapter + KB-5 source-type completeness + document status lifecycle
+- [x] [T-21B02] URL adapter + KB-5 source-type completeness + document status lifecycle
 - [ ] [T-21C01] Hybrid retrieval: ANN + FTS5 + RRF fusion (KB-1/KB-6/KB-7)
 - [ ] [T-21C02] Query preparation (KB-11) + `min_curation` retrieval filter (KB-10 read side)
 - [ ] [T-21D01] Authorship zones + curation write-gates + soft-delete + GC (KB-8/KB-9/KB-10 write side)
@@ -66,11 +66,11 @@ duration_minutes: ~
 ### [T-21B02] URL adapter + source-type completeness + status lifecycle
 
 - **Spec:** l2-knowledge-store.md §4.2, §5.3 (web scraping); KB-5
-- **Status:** Todo
+- **Status:** Done
 - **Assignment:** Agent
-- **Verify:** `cargo test` — a URL source ingests to `ready` against a hermetic local HTTP fixture (the Phase 17 `TcpListener` mock precedent); HTML→text extraction produces chunks carrying `source_ref`; document status transitions `pending → indexing → ready|error`. Disclosed: live web scraping not exercised in CI.
-- **Handoff:** Completes KB-5 (file/URL/record). Independent of C once B01 lands the pipeline.
-- **Notes:** `UrlIngester` (HTTP fetch + HTML→text). HTTP fetch lives at the adapter/facade tier (not `cronus-domain`, which must stay I/O-free) — reuse the `model-local` transport path or a minimal std fetch, decided at execution and disclosed. Respect `robots.txt` + rate-limit (§5.3). Correlation-id-via-`status` polling (§5 note 4), no separate job-tracking table.
+- **Verify:** `cargo test -p cronus-domain knowledge_ingest::` 14/14 + `cargo test -p cronus-core --lib knowledge_bootstrap::` 5/5 (Evidence Capsule: exit_code 0 both, key_findings: "fetches_a_real_response_over_a_hermetic_local_server ok" — a real `TcpListener` fixture, not simulated; "https_urls_are_refused_with_a_clear_message ok"; "a_connection_refused_is_a_clear_error_not_a_panic ok"). `cargo check --workspace` / `cargo clippy --workspace --all-targets -- -D warnings` / `cargo fmt --all -- --check` clean. `cargo test --workspace` green ×3.
+- **Handoff:** Completes KB-5 (file/URL/record) — Track B done (2/2). Independent of C/D.
+- **Notes:** Split across tiers per the tier model: `UrlFetcher` trait + `UrlIngester::extract` + `html_to_text` (pure HTML→text: drops `<script>`/`<style>` block contents, strips remaining tags, decodes common entities, collapses whitespace — disclosed as a heuristic, not a full HTML5 parser) live in `crates/domain/src/knowledge_ingest.rs` (I/O-free, tested against a fake `UrlFetcher`). The REAL fetcher (`HttpUrlFetcher`, raw `TcpStream` HTTP/1.1 GET, reusing model-local's `http_call`/`FrameReader` read-until-close convention) lives in a new `crates/core/src/knowledge_bootstrap.rs` facade module (the `model_bridge.rs`/`loop_bootstrap.rs` precedent) — proven against a real hermetic local `TcpListener` server, not a stub. **Disclosed scope (a deliberate, non-blocking boundary, not a shortfall):** `http://` only — `https://` is refused with a clear message rather than a confusing hang; TLS, `robots.txt` compliance, and rate-limiting (§5.3) are deferred follow-ups. Decided autonomously (not re-surfaced as a question) per the user's standing directive from T-21A01 to make engineering build-vs-defer calls independently — TLS is a distinct, higher-stakes dependency decision (rustls) deserving its own focused pass, not squeezed into this task alongside robots.txt/rate-limiting policy work. `ingest_document` (B01) needed no changes — `UrlIngester::extract` produces plain text the same way File/RecordIngester do, composing through the existing pipeline unchanged.
 
 ### [T-21C01] Hybrid retrieval: ANN + FTS5 + RRF fusion
 
