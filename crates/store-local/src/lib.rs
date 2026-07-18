@@ -6,6 +6,7 @@
 //! edge in that direction.
 
 pub mod inbox;
+pub mod knowledge;
 pub mod memory;
 pub mod wiki;
 pub mod workspace;

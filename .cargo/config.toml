@@ -1,0 +1,10 @@
+[env]
+# Upstream packaging bug: sqlite-vec 0.1.10-alpha.4 (crates.io, the latest
+# published version — no fixed release exists) enables its DiskANN and
+# rescore features by default (`#ifndef`-guarded, defaulting to 1 in
+# sqlite-vec.c), but the published crate tarball omits their companion
+# source files (sqlite-vec-diskann.c, sqlite-vec-rescore.c) — the build
+# fails on "file not found" unless these are explicitly disabled via CFLAGS.
+# Neither feature is used: cronus-store-local's `vec0` table only needs
+# standard KNN search (`WHERE embedding MATCH ? AND k = ?`).
+CFLAGS = "-DSQLITE_VEC_ENABLE_DISKANN=0 -DSQLITE_VEC_ENABLE_RESCORE=0"

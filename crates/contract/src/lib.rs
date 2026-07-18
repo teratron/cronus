@@ -1527,3 +1527,364 @@ mod activation_tests {
         assert!(registry.disable().is_err());
     }
 }
+
+// ── Knowledge Store seam (l2-knowledge-store §4, KB-1…KB-11) ────────────────
+//
+// Named, access-controlled document collections with hybrid semantic+keyword
+// retrieval. The SQLite/sqlite-vec/FTS5 realization lives in
+// `cronus-store-local`; `cronus-domain` (ingestion, hybrid retrieval fusion,
+// query preparation) depends only on the `KnowledgeStore` port below, never on
+// the store crate directly (the `WikiCache` precedent, DN-2).
+
+/// Who authored a document — the KB-9 write-zone boundary. Assigned from the
+/// ingestion source at document creation, never chosen by a later agent
+/// write, so the agent cannot mint a `Human` row to smuggle authority.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum Origin {
+    Human,
+    Agent,
+}
+
+impl Origin {
+    pub fn as_str(self) -> &'static str {
+        match self {
+            Origin::Human => "human",
+            Origin::Agent => "agent",
+        }
+    }
+
+    pub fn from_db_str(s: &str) -> Option<Self> {
+        match s {
+            "human" => Some(Origin::Human),
+            "agent" => Some(Origin::Agent),
+            _ => None,
+        }
+    }
+}
+
+/// Editorial-trust state for an agent-synthesized document (KB-10), ordered
+/// `Draft < Reviewed < Stable` so a `min_curation` filter is a simple
+/// comparison. Absent (`None` on [`Document::curation`]) for `Origin::Human`
+/// rows — curation is an agent-document concept, distinct from the indexing
+/// `DocumentStatus`.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
+pub enum Curation {
+    Draft,
+    Reviewed,
+    Stable,
+}
+
+impl Curation {
+    pub fn as_str(self) -> &'static str {
+        match self {
+            Curation::Draft => "draft",
+            Curation::Reviewed => "reviewed",
+            Curation::Stable => "stable",
+        }
+    }
+
+    pub fn from_db_str(s: &str) -> Option<Self> {
+        match s {
+            "draft" => Some(Curation::Draft),
+            "reviewed" => Some(Curation::Reviewed),
+            "stable" => Some(Curation::Stable),
+            _ => None,
+        }
+    }
+}
+
+/// Index-pipeline state (KB-3/KB-5), distinct from the editorial-trust
+/// `Curation` above — this tracks ingestion progress, not trust.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum DocumentStatus {
+    Pending,
+    Indexing,
+    Ready,
+    Error,
+    Deleted,
+}
+
+impl DocumentStatus {
+    pub fn as_str(self) -> &'static str {
+        match self {
+            DocumentStatus::Pending => "pending",
+            DocumentStatus::Indexing => "indexing",
+            DocumentStatus::Ready => "ready",
+            DocumentStatus::Error => "error",
+            DocumentStatus::Deleted => "deleted",
+        }
+    }
+
+    pub fn from_db_str(s: &str) -> Option<Self> {
+        match s {
+            "pending" => Some(DocumentStatus::Pending),
+            "indexing" => Some(DocumentStatus::Indexing),
+            "ready" => Some(DocumentStatus::Ready),
+            "error" => Some(DocumentStatus::Error),
+            "deleted" => Some(DocumentStatus::Deleted),
+            _ => None,
+        }
+    }
+}
+
+/// A named, access-controlled document collection (KB-1). Every retrieval
+/// query targets an explicit set of collection ids; there is no
+/// implicit "search everything".
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct Collection {
+    pub id: String,
+    pub owner_id: String,
+    pub name: String,
+    pub description: String,
+    /// Arbitrary JSON metadata (tags, language hints, chunking overrides).
+    pub meta: Option<String>,
+    pub created_at: u64,
+    pub updated_at: u64,
+}
+
+impl Collection {
+    pub fn new(
+        id: impl Into<String>,
+        owner_id: impl Into<String>,
+        name: impl Into<String>,
+    ) -> Self {
+        let now = now_secs();
+        Collection {
+            id: id.into(),
+            owner_id: owner_id.into(),
+            name: name.into(),
+            description: String::new(),
+            meta: None,
+            created_at: now,
+            updated_at: now,
+        }
+    }
+}
+
+/// An optional per-collection directory tree (KB-2) — human navigation only;
+/// directory structure never affects retrieval ranking or chunking.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct Directory {
+    pub id: String,
+    pub collection_id: String,
+    pub parent_id: Option<String>,
+    pub name: String,
+}
+
+/// A source document within a collection (KB-5/KB-9/KB-10). Structure absent
+/// by default: a freshly-created document is `Origin::Agent`, `draft`
+/// curation, `pending` status, with no directory placement.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct Document {
+    pub id: String,
+    pub collection_id: String,
+    pub directory_id: Option<String>,
+    /// `FileId` when the source is an uploaded file (references the file subsystem).
+    pub source_file_id: Option<String>,
+    /// The URL when the source is a scraped web page.
+    pub source_url: Option<String>,
+    pub name: String,
+    pub status: DocumentStatus,
+    pub origin: Origin,
+    /// `None` for `Origin::Human` — editorial trust is an agent-document concept (KB-10).
+    pub curation: Option<Curation>,
+    pub error_msg: Option<String>,
+    pub meta: Option<String>,
+    pub created_at: u64,
+    pub updated_at: u64,
+}
+
+impl Document {
+    /// A new agent-synthesized document: `pending`, `draft`, no placement.
+    pub fn new_agent(
+        id: impl Into<String>,
+        collection_id: impl Into<String>,
+        name: impl Into<String>,
+    ) -> Self {
+        let now = now_secs();
+        Document {
+            id: id.into(),
+            collection_id: collection_id.into(),
+            directory_id: None,
+            source_file_id: None,
+            source_url: None,
+            name: name.into(),
+            status: DocumentStatus::Pending,
+            origin: Origin::Agent,
+            curation: Some(Curation::Draft),
+            error_msg: None,
+            meta: None,
+            created_at: now,
+            updated_at: now,
+        }
+    }
+
+    /// A new human-authored document (an upload or human-owned record):
+    /// `pending`, no curation (KB-10 is an agent-document concept).
+    pub fn new_human(
+        id: impl Into<String>,
+        collection_id: impl Into<String>,
+        name: impl Into<String>,
+    ) -> Self {
+        let now = now_secs();
+        Document {
+            id: id.into(),
+            collection_id: collection_id.into(),
+            directory_id: None,
+            source_file_id: None,
+            source_url: None,
+            name: name.into(),
+            status: DocumentStatus::Pending,
+            origin: Origin::Human,
+            curation: None,
+            error_msg: None,
+            meta: None,
+            created_at: now,
+            updated_at: now,
+        }
+    }
+}
+
+/// A locator for where in a source document a chunk came from (KB-6
+/// attribution). All fields optional — precision varies by source type (a
+/// PDF has pages, an HTML page has sections, a plain-text record has neither).
+#[derive(Debug, Clone, Default, PartialEq, Eq)]
+pub struct SourceRef {
+    pub page: Option<u32>,
+    pub section: Option<String>,
+    pub byte_start: Option<u64>,
+    pub byte_end: Option<u64>,
+}
+
+/// One retrievable, embedded slice of a document (KB-6).
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct Chunk {
+    pub id: String,
+    pub document_id: String,
+    pub text: String,
+    /// Ordinal position within the document.
+    pub position: i64,
+    pub source_ref: Option<SourceRef>,
+    pub created_at: u64,
+}
+
+/// A semantic+keyword retrieval request (KB-1/KB-11).
+#[derive(Debug, Clone)]
+pub struct RetrievalRequest {
+    pub query: String,
+    /// Explicit target collections — retrieval never implicitly searches
+    /// every collection (KB-1).
+    pub collection_ids: Vec<String>,
+    pub top_k: usize,
+    pub min_score: Option<f32>,
+    /// KB-10 trust floor: chunks whose document `curation` is below this are
+    /// excluded. `Origin::Human` documents (no curation) are always eligible.
+    pub min_curation: Option<Curation>,
+}
+
+impl RetrievalRequest {
+    pub fn new(query: impl Into<String>, collection_ids: Vec<String>) -> Self {
+        RetrievalRequest {
+            query: query.into(),
+            collection_ids,
+            top_k: 5,
+            min_score: None,
+            min_curation: None,
+        }
+    }
+}
+
+/// A retrieved, attributed chunk (KB-6/KB-7) — the API asserts no
+/// correctness, only "this text, from this source, at this score".
+#[derive(Debug, Clone, PartialEq)]
+pub struct RetrievedChunk {
+    pub chunk_id: String,
+    pub document_id: String,
+    pub collection_id: String,
+    pub text: String,
+    pub source_ref: Option<SourceRef>,
+    /// Fusion rank score (higher is better) — see [`KnowledgeStore::ann_search`]
+    /// / [`KnowledgeStore::fts_search`] for the pre-fusion per-source scores.
+    pub score: f32,
+}
+
+/// KB-9: the explicit, audited override required to write into an
+/// `Origin::Human` zone. `HumanDirected` carries an `audit_ref` so every
+/// override write is attributable on the durable audit path — never a silent
+/// default.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum WriteOverride {
+    None,
+    HumanDirected { audit_ref: String },
+}
+
+/// The knowledge-store seam (`l2-knowledge-store` §4). `cronus-domain`
+/// composes ingestion and hybrid retrieval over this port; the SQLite +
+/// sqlite-vec + FTS5 realization lives in `cronus-store-local`. No `Send +
+/// Sync` bound — `rusqlite::Connection` is not `Sync` (the `WikiCache` /
+/// `WikiReadSurface` precedent).
+pub trait KnowledgeStore {
+    // -- Collections / directories ---------------------------------------
+    fn create_collection(&self, collection: &Collection) -> Result<(), String>;
+    fn get_collection(&self, id: &str) -> Result<Option<Collection>, String>;
+    fn create_directory(&self, directory: &Directory) -> Result<(), String>;
+
+    // -- Documents (KB-9/KB-10 write-gated) -------------------------------
+    /// Insert or replace a document. Refused when the *existing* row (if
+    /// any) is `Origin::Human` and `override_` is not `HumanDirected` (KB-9)
+    /// — enforced here, the single write seam, never by caller convention.
+    /// A brand-new `Origin::Human` document (no existing row) is not gated —
+    /// the gate protects *rewriting* human material, not its initial ingest.
+    fn write_document(&self, document: &Document, override_: &WriteOverride) -> Result<(), String>;
+    fn get_document(&self, id: &str) -> Result<Option<Document>, String>;
+    /// KB-10: advance curation. `Draft` is agent-free; `Reviewed`/`Stable`
+    /// require `human_auth` (an opaque authorization reference) or the
+    /// transition is refused.
+    fn set_curation(
+        &self,
+        id: &str,
+        next: Curation,
+        human_auth: Option<&str>,
+    ) -> Result<(), String>;
+    /// KB-8: mark a document deleted — excluded from retrieval immediately;
+    /// physical cleanup is [`KnowledgeStore::gc`].
+    fn soft_delete_document(&self, id: &str) -> Result<(), String>;
+    /// KB-8: physically remove documents soft-deleted more than
+    /// `older_than_secs` ago, plus their chunk/FTS/vector rows. Returns the
+    /// number of documents removed.
+    fn gc(&self, older_than_secs: u64) -> Result<u64, String>;
+
+    // -- Chunks (KB-3 incremental re-index) -------------------------------
+    /// Delete every chunk for `document_id` — the KB-3 re-index precondition
+    /// (existing chunks removed before fresh ones are inserted).
+    fn delete_chunks(&self, document_id: &str) -> Result<(), String>;
+    /// Insert a chunk and its embedding, keeping the FTS and vector indices
+    /// in sync with the chunk row, atomically.
+    fn insert_chunk(&self, chunk: &Chunk, embedding: &[f32]) -> Result<(), String>;
+
+    // -- Retrieval primitives (KB-1-scoped; RRF fusion composed in domain) --
+    /// Vector nearest-neighbour candidates among `ready`, non-deleted
+    /// documents in `collection_ids`, ascending by distance (closest first).
+    fn ann_search(
+        &self,
+        collection_ids: &[String],
+        query_vector: &[f32],
+        top_k: usize,
+    ) -> Result<Vec<(String, f32)>, String>;
+    /// FTS5 keyword candidates, same scope, best match first.
+    fn fts_search(
+        &self,
+        collection_ids: &[String],
+        query_text: &str,
+        top_k: usize,
+    ) -> Result<Vec<(String, f32)>, String>;
+    /// Hydrate chunk ids into full [`RetrievedChunk`]s (KB-6 attribution),
+    /// applying the `min_curation` floor (KB-10) — `Origin::Human` documents
+    /// are always eligible regardless of the floor. `score` on each result is
+    /// left at `0.0`; the caller (domain-tier RRF fusion) sets it.
+    fn hydrate_chunks(
+        &self,
+        chunk_ids: &[String],
+        min_curation: Option<Curation>,
+    ) -> Result<Vec<RetrievedChunk>, String>;
+}
