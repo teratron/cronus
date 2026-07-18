@@ -1,13 +1,13 @@
 # Knowledge Store (Implementation)
 
-**Version:** 1.0.0
-**Status:** RFC
+**Version:** 1.1.0
+**Status:** Stable
 **Layer:** implementation
 **Implements:** l1-knowledge-base.md
 
 ## Overview
 
-Concrete implementation of the knowledge base subsystem: SQLite schema for collections, directories, and documents; sqlite-vec for dense vector search; FTS5 for keyword search; RRF fusion for hybrid retrieval; an async ingestion pipeline; and the Rust crate that exposes a `KnowledgeStore` service.
+Concrete implementation of the knowledge base subsystem: SQLite schema for collections, directories, and documents; sqlite-vec for dense vector search; FTS5 for keyword search; RRF fusion for hybrid retrieval; an async ingestion pipeline; storage-enforced authorship zones (human/agent write boundary) and a curation lifecycle (draft→reviewed→stable); an optional query-preparation seam; and the Rust crate that exposes a `KnowledgeStore` service.
 
 ## Related Specifications
 
@@ -27,6 +27,7 @@ The memory store is per-user, conversational, and ephemeral by design. A separat
 - sqlite-vec ANN indices are per-database-file; all collections live in one DB file for simplicity; the ANN index is partitioned by `collection_id` via a `WHERE` filter (post-ANN filtering).
 - Ingestion is async and non-blocking to the caller; status is polled or subscribed via the event bus.
 - Web URL sources are scraped at ingest time (one-shot); incremental re-scrape is a scheduled task.
+- Authorship (`origin`) and curation (`curation`) are enforced at the store write seam, not by caller discipline: a human-zone write requires an explicit audited override, and a curation promotion to `reviewed`/`stable` requires human authorization.
 
 ## 3. Invariant Compliance (Layer 2)
 
@@ -40,8 +41,9 @@ The memory store is per-user, conversational, and ephemeral by design. A separat
 | KB-6 Source attribution | Each chunk row carries `document_id`, `position`, and `source_ref` (page/section/byte). |
 | KB-7 Non-authoritative recall | Retrieval API returns `(text, source_ref, score)`; no assertion of correctness in the API surface. |
 | KB-8 Soft deletion | `document.status = 'deleted'`; chunks excluded from all queries; GC job deletes rows + vector entries. |
-| KB-9 Authorship zones | **Pending (v1.1.0 parent).** Add `document.origin` (`human`/`agent`); the `KnowledgeStore` write path must refuse writes to `origin = 'human'` rows unless an explicit override flag is passed. Not yet implemented — drives status RFC. |
-| KB-10 Curation lifecycle | **Pending (v1.1.0 parent).** Add `document.curation` (`draft`/`reviewed`/`stable`, agent docs default `draft`); human-gated transitions; expose a `min_curation` retrieval filter. Not yet implemented — drives status RFC. |
+| KB-9 Authorship zones | `knowledge_document.origin` (`human`/`agent`, NOT NULL). The `KnowledgeStore` write path refuses any update/replace of an `origin = 'human'` row unless an explicit `WriteOverride::HumanDirected` token (carrying an audit reference) is supplied — enforced at the single `db.rs` write seam, not by caller convention (§4.4). Orthogonal to KB-4: access-grants gate which workers reach the collection; the origin zone gates whether the agent may rewrite human material inside it. |
+| KB-10 Curation lifecycle | `knowledge_document.curation` (`draft`/`reviewed`/`stable`; NULL for `origin='human'` rows; agent docs default `draft`). The store lets the agent create/revise `draft` rows freely; a transition to `reviewed`/`stable` is refused unless the caller presents human authorization (§4.4). `RetrievalRequest.min_curation` applies a trust floor at retrieval. Editorial-trust `curation` is distinct from the indexing `status` column. |
+| KB-11 Query preparation | Optional `QueryPreparer` seam runs before embedding (§4.5): keyword extraction/expansion + compound-query decomposition. The prepared and raw queries are both recorded in the retrieval trace; an empty preparation falls back to the raw query (never an empty search). Sub-queries are retrieved independently and RRF-merged (§4.3). Preparation never alters `source_ref` attribution (KB-6) nor widens the access-bounded `collection_ids` set (KB-4). |
 
 ## 4. Detailed Design
 
@@ -80,7 +82,9 @@ CREATE TABLE knowledge_document (
     source_file_id TEXT,                   -- FileId if source is an uploaded file
     source_url    TEXT,                    -- URL if source is a web page
     name          TEXT NOT NULL,
-    status        TEXT NOT NULL DEFAULT 'pending',  -- pending|indexing|ready|error|deleted
+    status        TEXT NOT NULL DEFAULT 'pending',  -- pending|indexing|ready|error|deleted (index state)
+    origin        TEXT NOT NULL DEFAULT 'agent',    -- human|agent authorship zone (KB-9)
+    curation      TEXT,                             -- draft|reviewed|stable (KB-10); NULL for origin='human'
     error_msg     TEXT,
     meta          TEXT,                    -- JSON: word count, language, custom tags
     created_at    INTEGER NOT NULL,
@@ -88,6 +92,7 @@ CREATE TABLE knowledge_document (
 );
 CREATE INDEX ix_kdoc_collection ON knowledge_document(collection_id);
 CREATE INDEX ix_kdoc_status     ON knowledge_document(status);
+CREATE INDEX ix_kdoc_curation   ON knowledge_document(collection_id, curation);
 
 -- Chunks (split from documents)
 CREATE TABLE knowledge_chunk (
@@ -151,8 +156,9 @@ graph TD
 pub struct RetrievalRequest {
     pub query        : String,
     pub collection_ids: Vec<CollectionId>,
-    pub top_k        : usize,          // default 5
-    pub min_score    : Option<f32>,    // default 0.0
+    pub top_k        : usize,             // default 5
+    pub min_score    : Option<f32>,       // default 0.0
+    pub min_curation : Option<Curation>,  // KB-10 trust floor; None = no filter
 }
 
 pub struct RetrievedChunk {
@@ -167,33 +173,103 @@ pub struct RetrievedChunk {
 
 **Retrieval steps:**
 
-1. Embed `query` via `EmbeddingEngine`.
-2. ANN search in `knowledge_chunk_vec` filtered to chunks whose `document_id` is in a ready document from one of the target `collection_ids`. Return top `top_k * 2` candidates.
-3. FTS5 search in `knowledge_chunk_fts` with the same filter. Return top `top_k * 2` candidates.
-4. Merge the two result sets using Reciprocal Rank Fusion (RRF, k=60).
-5. Deduplicate by `chunk_id`, trim to `top_k`, apply `min_score` filter.
-6. Return `Vec<RetrievedChunk>`.
+1. (KB-11, optional) Prepare the query via the `QueryPreparer` (§4.5): derive `retrieval_query` + any `subqueries`, falling back to the raw query when preparation yields nothing usable. With no preparer wired, use the raw query unchanged.
+2. Embed the prepared (or raw) query — and each sub-query — via `EmbeddingEngine`, using the same model as ingestion.
+3. ANN search in `knowledge_chunk_vec` filtered to chunks whose `document_id` is in a ready document from one of the target `collection_ids`. Return top `top_k * 2` candidates.
+4. FTS5 search in `knowledge_chunk_fts` with the same filter. Return top `top_k * 2` candidates.
+5. Merge the vector, keyword, and per-sub-query result sets using Reciprocal Rank Fusion (RRF, k=60).
+6. Apply the `min_curation` trust floor (KB-10): drop chunks whose document `curation` is below the requested level; `origin='human'` rows (NULL curation) are treated as always-eligible authoritative sources.
+7. Deduplicate by `chunk_id`, trim to `top_k`, apply `min_score` filter.
+8. Return `Vec<RetrievedChunk>`.
 
-### 4.4 Soft Delete and GC
+### 4.4 Authorship Zones & Curation Lifecycle (KB-9 / KB-10)
+
+Two orthogonal columns on `knowledge_document` govern how the agent may write, layered on the indexing `status`. Both are enforced at the store's single write seam (`db.rs`), so the boundary survives agent drift rather than living in a prompt.
+
+**Authorship zone (KB-9).** `origin` places each document in a write-zone. Human-authored rows are agent-read-only; a write is refused unless the caller presents an explicit override — a typed token, never a default flag:
+
+```rust
+[REFERENCE]
+pub enum WriteOverride {
+    None,
+    HumanDirected { audit_ref: AuditRef },   // user-directed correction routed through the agent
+}
+
+fn write_document(doc: &Document, ov: WriteOverride) -> Result<(), StoreError> {
+    if let Some(existing) = get_document(doc.id)? {
+        if existing.origin == Origin::Human && matches!(ov, WriteOverride::None) {
+            return Err(StoreError::ReadOnlyZone);   // KB-9: refused at the store, not discouraged
+        }
+    }
+    persist(doc)
+}
+```
+
+`origin` is assigned from the ingestion source at document creation — an uploaded file or human-owned record is `human`, an agent-synthesized document is `agent` — not chosen by a later agent write, so the agent cannot mint a `human` row to smuggle authority. The `HumanDirected` override carries an `audit_ref` so every write into a human zone is attributable on the durable audit path — the override is audited, never a silent default.
+
+**Curation lifecycle (KB-10).** Agent-synthesized rows carry `curation` advancing `draft → reviewed → stable`. The agent owns `draft`; advancing requires human authorization presented to the store:
+
+```rust
+[REFERENCE]
+fn set_curation(id: DocumentId, next: Curation, auth: Option<HumanAuth>) -> Result<(), StoreError> {
+    match (next, auth) {
+        (Curation::Draft, _)                             => transition(id, next),  // agent-free
+        (Curation::Reviewed | Curation::Stable, Some(_)) => transition(id, next),
+        (Curation::Reviewed | Curation::Stable, None)    => Err(StoreError::HumanApprovalRequired),
+    }
+}
+```
+
+A new agent document defaults to `curation = 'draft'`; `origin = 'human'` rows leave `curation` NULL (editorial trust is an agent-document concept). Retrieval's `min_curation` filter (§4.3) lets a high-trust query exclude provisional `draft` chunks while keeping authoritative human sources always eligible.
+
+### 4.5 Query Preparation (KB-11)
+
+An optional preparation step sits between the caller's request and the embedding/search. It reshapes the query to improve recall but never narrows the caller's reach:
+
+```rust
+[REFERENCE]
+pub trait QueryPreparer {
+    /// Returns the prepared retrieval query plus any sub-queries; may return the
+    /// input unchanged. MUST NOT touch collection scope or attribution.
+    fn prepare(&self, raw: &str, meta: &CollectionMeta) -> PreparedQuery;
+}
+
+pub struct PreparedQuery {
+    pub retrieval_query: String,       // == raw when preparation yields nothing usable
+    pub subqueries     : Vec<String>,  // empty when the query is atomic
+    pub raw            : String,       // always preserved for transparency + fallback
+}
+```
+
+Three guarantees, all testable:
+
+1. **Transparent** — the prepared query and the raw query are recorded together in the retrieval trace, so a reader sees exactly what was searched; a poor preparation is diagnosable, not invisible.
+2. **Fallback-floored** — an empty or failed preparation degrades to `raw`; it can improve recall but never turns a real query into an empty search.
+3. **Scope-preserving** — preparation reshapes the query only. Each sub-query is retrieved independently and the results RRF-merged (§4.3); every chunk still carries its own `source_ref` (KB-6) and access stays bounded by the caller's `collection_ids` (KB-4). Preparation never widens the accessible set.
+
+Preparation is opt-in: with no `QueryPreparer` wired, retrieval embeds the raw query directly — the degenerate, always-available path.
+
+### 4.6 Soft Delete and GC
 
 - `DELETE /document/:id` sets `document.status = 'deleted'`. Chunks are excluded from all queries via `JOIN knowledge_document WHERE status != 'deleted'`.
 - A GC job (runs at startup and periodically) finds documents with `status = 'deleted'` older than the retention window, deletes their `knowledge_chunk`, `knowledge_chunk_vec`, and `knowledge_chunk_fts` entries, then deletes the document row.
 
-### 4.5 Crate Layout
+### 4.7 Crate Layout
 
 ```plaintext
 crates/
 └── knowledge-store/
     ├── src/
     │   ├── lib.rs            // KnowledgeStore service
-    │   ├── model.rs          // Collection, Document, Chunk, RetrievalRequest, …
-    │   ├── db.rs             // SQLite queries
+    │   ├── model.rs          // Collection, Document (origin/curation), Chunk, RetrievalRequest, …
+    │   ├── db.rs             // SQLite queries; authorship-zone + curation write guards (KB-9/KB-10)
     │   ├── ingest/
     │   │   ├── mod.rs
     │   │   ├── file.rs       // FileIngester
     │   │   ├── url.rs        // UrlIngester (HTTP fetch + HTML→text)
     │   │   └── record.rs     // RecordIngester (plain text / JSON)
-    │   ├── retrieval.rs      // hybrid search + RRF fusion
+    │   ├── query_prep.rs     // QueryPreparer seam (KB-11); no-op default
+    │   ├── retrieval.rs      // query prep → hybrid search + RRF fusion + min_curation filter
     │   └── gc.rs             // soft-delete garbage collector
     ├── tests/
     │   └── integration.rs
@@ -207,6 +283,8 @@ crates/
 2. ANN post-filtering (filtering by `collection_id` after the ANN pass) may cause score degradation for small collections; a collection-partitioned ANN index (one vec table per collection) is an alternative for large collections.
 3. Web scraping in `UrlIngester` should respect `robots.txt` and rate-limit requests.
 4. Mark ingestion jobs with a correlation ID so status can be polled via the document `status` field without a separate job-tracking table.
+5. Authorship-zone (KB-9) and curation (KB-10) checks live at the single `db.rs` write seam, never in the ingestion adapters or the service layer, so no caller can bypass them. The `WriteOverride::HumanDirected` path records an `audit_ref`; a human-zone write with no audit reference is a bug, not a fast path.
+6. Query preparation (KB-11) is a pure `QueryPreparer` seam with a no-op default; a wired preparer (keyword expansion / decomposition) is model-backed and MUST honor the fallback-to-raw floor so a preparer outage degrades recall rather than breaking retrieval.
 
 ## 7. Drawbacks & Alternatives
 
@@ -221,3 +299,10 @@ crates/
 | `[MEMORY]` | `.design/main/specifications/l2-memory-store.md` | Shared EmbeddingEngine pattern and sqlite-vec usage. |
 | `[FILES]` | `.design/main/specifications/l2-file-store.md` | FileId referenced in knowledge_document. |
 | `[SHARING]` | `.design/main/specifications/l2-resource-sharing.md` | Access grant enforcement for collections. |
+
+## Document History
+
+| Version | Date | Author | Notes |
+| --- | --- | --- | --- |
+| 1.1.0 | 2026-07-18 | Core Team | Completed Invariant Compliance to the full KB-1…KB-11 parent (`l1-knowledge-base` v1.2.0). KB-9 authorship zones (`knowledge_document.origin` + store-enforced read-only human zone with an audited `WriteOverride::HumanDirected` token, §4.4). KB-10 curation lifecycle (`knowledge_document.curation` draft→reviewed→stable, human-gated transitions, `RetrievalRequest.min_curation` trust floor, §4.4). KB-11 query preparation (`QueryPreparer` seam with fallback-to-raw floor, transparent prepared+raw recording, sub-query RRF merge, §4.5). Schema gains `origin`/`curation` columns + `ix_kdoc_curation`; retrieval flow gains the prep step + curation filter. Reconciled the stale "Pending (v1.1.0 parent)" rows — the parent has defined KB-9/KB-10 since v1.1.0 and KB-11 since v1.2.0. Promoted RFC→Stable. |
+| 1.0.0 | 2026-06-25 | Core Team | Initial RFC — SQLite schema (collection/directory/document/chunk), sqlite-vec ANN, FTS5 keyword, RRF hybrid fusion, async ingestion (file/URL/record adapters), soft-delete GC, crate layout. KB-1…KB-8 compliant; KB-9/KB-10 deferred pending the parent invariants. |
