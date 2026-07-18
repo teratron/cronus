@@ -216,6 +216,27 @@ impl KnowledgeDb {
         Ok(())
     }
 
+    /// Update only `status`/`error_msg` — never KB-9-gated (index-state
+    /// bookkeeping, not authored content). See the trait doc for why.
+    pub fn update_document_status(
+        &self,
+        document_id: &str,
+        status: DocumentStatus,
+        error_msg: Option<&str>,
+    ) -> Result<()> {
+        let now = now_secs() as i64;
+        let changed = self.conn.execute(
+            "UPDATE knowledge_document SET status = ?1, error_msg = ?2, updated_at = ?3 WHERE id = ?4",
+            params![status.as_str(), error_msg, now, document_id],
+        )?;
+        if changed == 0 {
+            return Err(KnowledgeError::Corrupt(format!(
+                "update_document_status: no such document {document_id}"
+            )));
+        }
+        Ok(())
+    }
+
     pub fn get_document(&self, id: &str) -> Result<Option<Document>> {
         self.conn
             .query_row(
@@ -573,6 +594,15 @@ impl KnowledgeStore for KnowledgeDb {
     }
     fn get_document(&self, id: &str) -> std::result::Result<Option<Document>, String> {
         KnowledgeDb::get_document(self, id).map_err(|e| e.to_string())
+    }
+    fn update_document_status(
+        &self,
+        document_id: &str,
+        status: DocumentStatus,
+        error_msg: Option<&str>,
+    ) -> std::result::Result<(), String> {
+        KnowledgeDb::update_document_status(self, document_id, status, error_msg)
+            .map_err(|e| e.to_string())
     }
     fn set_curation(
         &self,
@@ -1060,6 +1090,28 @@ mod schema {
             created_at: now_secs(),
         };
         db.insert_chunk(&chunk, &fake_embedding(seed)).unwrap();
+    }
+
+    #[test]
+    fn update_document_status_is_never_kb9_gated_even_for_a_human_origin_row() {
+        let db = KnowledgeDb::open_in_memory().expect("open");
+        db.create_collection(&Collection::new("col-1", "user-1", "A"))
+            .unwrap();
+        let human_doc = Document::new_human("doc-1", "col-1", "contract.pdf");
+        db.write_document(&human_doc, &WriteOverride::None)
+            .expect("initial human ingest is not gated");
+
+        // A pure index-state transition on a human-origin row, with NO
+        // override supplied — must succeed, unlike a `write_document` rewrite
+        // of the same row (which IS gated). Proves the KB-9/index-state
+        // separation directly at the store tier.
+        db.update_document_status("doc-1", DocumentStatus::Ready, None)
+            .expect("status-only updates are never KB-9-gated");
+
+        let got = db.get_document("doc-1").unwrap().unwrap();
+        assert_eq!(got.status, DocumentStatus::Ready);
+        assert_eq!(got.origin, Origin::Human, "content fields are untouched");
+        assert_eq!(got.name, "contract.pdf", "content fields are untouched");
     }
 
     #[test]

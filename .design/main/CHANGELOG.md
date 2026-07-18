@@ -2,6 +2,18 @@
 
 Internal phase journal. Each entry corresponds to a completed phase.
 
+## Phase 21 — Knowledge Store (2026-07-19)
+
+- T-21A01: schema + contract types + store scaffolding — `crates/store-local/src/knowledge.rs` (`knowledge_collection`/`directory`/`document`/`chunk`/`chunk_fts`/`chunk_vec`), `KnowledgeStore` contract port, real `sqlite-vec` `vec0` ANN (not a stub) after root-causing and fixing an upstream sqlite-vec packaging bug (DiskANN/rescore companion files missing from the published crate) via `.cargo/config.toml` CFLAGS; KB-8/9/10 write-gates + `ann_search`/`fts_search`/`hydrate_chunks` retrieval primitives
+- T-21B01: ingestion core — `crates/domain/src/knowledge_ingest.rs` (`chunk_text` sentence-boundary chunker, `FileIngester`/`RecordIngester`, `EmbeddingBackend` seam, `ingest_document` full KB-3 lifecycle); found and fixed a real atomicity gap in A01 by adding `KnowledgeStore::reindex_chunks` (one transaction, pre-validated) so a mid-embed failure can never leave a document in a half-updated chunk state
+- T-21B02: URL adapter — `UrlFetcher`/`UrlIngester`/`html_to_text` (domain, I/O-free) + the real `HttpUrlFetcher` (raw TCP HTTP/1.1 GET) in a new `crates/core/src/knowledge_bootstrap.rs` facade module, proven against a hermetic local server; `http://` only, TLS/robots.txt/rate-limiting disclosed-deferred; completes KB-5's three source types
+- T-21C01: hybrid retrieval RRF fusion — `crates/domain/src/knowledge_retrieval.rs::retrieve` composing A01's `ann_search`/`fts_search`/`hydrate_chunks` with Reciprocal Rank Fusion (k=60); KB-1 collection-scope isolation proven by construction (an empty scope never touches the store)
+- T-21C02: KB-11 query preparation — `QueryPreparer`/`PreparedQuery`, fallback-to-raw floor enforced defensively, N-way sub-query RRF merge; `min_curation` was already fully wired by C01
+- T-21D01: KB-8/9/10 write-gates verified — already delivered by A01's expanded scope; closed with a dedicated Evidence Capsule, no new code
+- T-21D02: KB-4 access gate + facade service + CLI — `crates/domain/src/knowledge_access.rs::GatedKnowledge` (the `GatedWiki` precedent), `crates/core/src/knowledge_bootstrap.rs::KnowledgeService` (real store + Ollama-default embedder + URL fetcher), `cronus knowledge collection-create|add|add-url|query` CLI, validated by a real CLI smoke run; found and fixed a genuine KB-9 design gap (index-state bookkeeping vs. authored-content writes were conflated) via a new never-gated `update_document_status`
+- T-21T01: validation sweep — `crates/core/tests/knowledge_invariants.rs`, one named test per KB-1…KB-11 through the real `KnowledgeDb` + domain pipeline; caught and fixed a test-design flaw (not an implementation bug) that surfaced a real, disclosed vector-search property — ANN k-nearest-neighbour search always returns *something* from a non-empty index regardless of true relevance, since no distance floor is applied by default (only the fused RRF `min_score`)
+- Verify: `cargo test --workspace` green across 3 consecutive runs (0 failed); `cargo clippy --workspace --all-targets -- -D warnings` clean; `cargo fmt --all --check` clean; a real CLI smoke run via the compiled binary
+
 ## Phase 17 — Model Transport & Provider Connectivity (2026-07-16)
 
 - T-17A01: `contract::InferenceBackend` — the streaming call surface (`generate_stream`/`embed`/`describe`/`pull`/`set_residency`) + `GenerateRequest`/`StreamEvent`/`InferenceError`/`ModelDescriptor`/`ResidencyHint`/`PullProgress`/`CancelHandle`, deliberately separate from the untouched routing-metadata `ModelProvider` (score vs. call, two facets)

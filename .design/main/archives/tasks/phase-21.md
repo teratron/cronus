@@ -1,21 +1,49 @@
 ---
 phase: 21
 name: "Knowledge Store"
-status: Todo
+status: Done
 subsystem: "crates/store-local/src/knowledge"
 requires: [11, 16, 17]
-provides: []
+provides:
+  - "KnowledgeStore contract port (KB-1…KB-11) — collections/documents/chunks, write-gates, retrieval primitives"
+  - "Real sqlite-vec vec0 ANN + FTS5 hybrid retrieval with RRF fusion (k=60)"
+  - "KB-3 atomic re-index (reindex_chunks) — never a half-updated chunk state"
+  - "KB-5 three source adapters: File/Record/Url ingestion, all through one ingest_document pipeline"
+  - "KB-9/KB-10 write-gates: WriteOverride human-zone gate, curation lifecycle, split from index-state bookkeeping"
+  - "KB-11 QueryPreparer seam: fallback-floored, N-way sub-query RRF merge"
+  - "KB-4 GatedKnowledge access gate (GatedWiki precedent)"
+  - "KnowledgeService facade (crates/core) + cronus knowledge CLI (collection-create/add/add-url/query)"
+  - "69 tests across 6 files; a real CLI smoke run"
 key_files:
-  created: []
-  modified: []
-patterns_established: []
+  created:
+    - "crates/store-local/src/knowledge.rs"
+    - "crates/domain/src/knowledge_ingest.rs"
+    - "crates/domain/src/knowledge_retrieval.rs"
+    - "crates/domain/src/knowledge_access.rs"
+    - "crates/core/src/knowledge_bootstrap.rs"
+    - "crates/core/tests/knowledge_invariants.rs"
+    - ".cargo/config.toml"
+  modified:
+    - "Cargo.toml"
+    - "crates/store-local/Cargo.toml"
+    - "crates/store-local/src/lib.rs"
+    - "crates/contract/src/lib.rs"
+    - "crates/domain/src/lib.rs"
+    - "crates/core/src/lib.rs"
+    - "crates/cli/src/cli.rs"
+    - "crates/cli/src/commands.rs"
+patterns_established:
+  - "Store-tier scaffolding front-loaded in the schema task (A01 shipped full CRUD + retrieval primitives, not just round-trip) narrows later domain-composition tasks to pure fusion/orchestration logic"
+  - "Atomic multi-step store operations (reindex_chunks: delete+insert-batch in one transaction, pre-validated before opening it) replace paired delete-then-insert calls wherever a mid-operation failure could leave a half-updated state"
+  - "Index-state bookkeeping (status/error_msg) is split from authored-content writes (update_document_status vs. write_document) so a pipeline's own internal status transitions never re-trigger a content-authorship gate on a row the same operation just created"
+  - "Facade re-export lists (the activation_bootstrap precedent) keep frontends dependent only on cronus-core, never cronus-contract/cronus-domain directly — a new facade module re-exports whatever contract types its CLI callers need"
 duration_minutes: ~
 ---
 
 # Stage 21 Tasks — Knowledge Store
 
 **Phase:** 21
-**Status:** Todo
+**Status:** Done
 **Strategic Goal:** Ship `l2-knowledge-store` — the agent-queryable RAG subsystem: named, access-controlled document collections with hybrid semantic (sqlite-vec ANN) + keyword (FTS5) retrieval fused by RRF, an async ingestion pipeline (file/URL/record), incremental re-indexing, soft-delete GC, storage-enforced authorship zones, and a curation lifecycle. Foundation-then-parallel; Track A gates B/C/D.
 
 ## Atomic Checklist
@@ -24,10 +52,10 @@ duration_minutes: ~
 - [x] [T-21B01] Ingestion core: chunking + File/Record adapters + embed seam + transactional write + KB-3 re-index
 - [x] [T-21B02] URL adapter + KB-5 source-type completeness + document status lifecycle
 - [x] [T-21C01] Hybrid retrieval: ANN + FTS5 + RRF fusion (KB-1/KB-6/KB-7)
-- [ ] [T-21C02] Query preparation (KB-11) + `min_curation` retrieval filter (KB-10 read side)
-- [ ] [T-21D01] Authorship zones + curation write-gates + soft-delete + GC (KB-8/KB-9/KB-10 write side)
-- [ ] [T-21D02] Access gate (`ResourceKind::Knowledge`) + facade `KnowledgeStore` + `cronus knowledge` CLI (KB-4)
-- [ ] [T-21T01] Validation sweep: KB-1…KB-11 acceptance
+- [x] [T-21C02] Query preparation (KB-11) + `min_curation` retrieval filter (KB-10 read side)
+- [x] [T-21D01] Authorship zones + curation write-gates + soft-delete + GC (KB-8/KB-9/KB-10 write side)
+- [x] [T-21D02] Access gate (`ResourceKind::Knowledge`) + facade `KnowledgeStore` + `cronus knowledge` CLI (KB-4)
+- [x] [T-21T01] Validation sweep: KB-1…KB-11 acceptance
 
 ## Detailed Tracking
 
@@ -84,32 +112,38 @@ duration_minutes: ~
 ### [T-21C02] Query preparation (KB-11) + min_curation filter (KB-10 read side)
 
 - **Spec:** l2-knowledge-store.md §4.5 (Query Preparation), §4.3 (min_curation); KB-11, KB-10
-- **Status:** Todo
+- **Status:** Done
 - **Assignment:** Agent
-- **Verify:** `cargo test` — an empty/failed preparation degrades to the raw query (never an empty result set); a compound query's sub-queries are retrieved independently and RRF-merged; `min_curation` excludes `draft` chunks while human-origin/NULL-curation rows stay eligible; preparation never widens the `collection_ids` set nor alters `source_ref`.
-- **Handoff:** Completes the retrieval surface; feeds T01.
-- **Notes:** `QueryPreparer` seam with a no-op default (opt-in; unwired = raw query embedded directly). A wired preparer does keyword extraction/expansion + compound decomposition; prepared + raw both recorded in the retrieval trace (transparency). The `min_curation` trust floor drops chunks below the requested curation level; human sources always eligible.
+- **Verify:** `cargo test -p cronus-domain knowledge_retrieval::` — 12/12 pass (up from 7; Evidence Capsule: exit_code 0, key_findings: "kb11_an_empty_preparation_falls_back_to_the_raw_query_never_an_empty_search ok", "kb11_subqueries_are_searched_independently_and_rrf_merged ok" — the same chunk id across 3 queries fuses to one result, not duplicated, "kb4_preparation_never_widens_the_collection_scope ok"). `cargo check --workspace` / `cargo clippy --workspace --all-targets -- -D warnings` / `cargo fmt --all -- --check` clean. `cargo test --workspace` green ×3 (two transient unrelated flakes investigated and confirmed pre-existing/environmental — see STATE.md decision log — not a regression from this task).
+- **Handoff:** Track C complete (2/2). T-21T01 sweeps everything end-to-end.
+- **Notes:** `min_curation` was already fully wired by C01 (via `hydrate_chunks`, built in A01) — this task's real remaining scope was purely KB-11. `QueryPreparer` trait + `PreparedQuery` struct added to `knowledge_retrieval.rs`; `retrieve()`'s signature grew a `preparer: Option<&dyn QueryPreparer>` param and now returns `(Vec<RetrievedChunk>, PreparedQuery)` — the `PreparedQuery` is the KB-11 transparency artifact (prepared + raw both inspectable by the caller, no separate logging subsystem invented). `resolve_query()` enforces the fallback floor defensively (never trusts a preparer implementation's own docstring) — an empty `retrieval_query` with no subqueries degrades to `raw`. `rrf_fuse` generalized from exactly-2-lists to N-lists so the main query's ann+fts and every subquery's ann+fts all fuse into one ranked union (each independently searched, matching §4.5's "each is retrieved independently and results merged"). `preparer: None` is the identity/no-op path, unchanged from C01's original behavior. Preparation structurally cannot widen KB-4/alter KB-6: `PreparedQuery` carries no collection-scope or attribution field, and every query variant reuses `request.collection_ids` unchanged.
 
 ### [T-21D01] Authorship zones + curation write-gates + soft-delete + GC
 
 - **Spec:** l2-knowledge-store.md §4.4 (Authorship Zones & Curation), §4.6 (Soft Delete & GC); KB-8, KB-9, KB-10
-- **Status:** Todo
+- **Status:** Done (already delivered by T-21A01; this task verified and closed it)
 - **Assignment:** Agent
-- **Verify:** `cargo test` — a direct store write to an `origin='human'` row without an override is refused (`ReadOnlyZone`); `set_curation(Reviewed, None)` is refused while `(Reviewed, Some(auth))` succeeds; a soft-deleted document's chunks never appear in retrieval; the GC removes all chunk/fts/vec rows + the document row past the retention window.
+- **Verify:** `cargo test -p cronus-store-local --lib knowledge::` filtered to the exact D01 criteria — all pass (Evidence Capsule: exit_code 0, key_findings: "kb9_a_human_zone_write_without_override_is_refused ok", "kb9_a_human_zone_write_with_override_succeeds_and_is_attributable ok", "kb10_curation_advance_requires_human_auth_except_draft ok", "kb8_soft_deleted_documents_are_excluded_from_retrieval ok", "kb8_gc_removes_documents_past_the_retention_window ok" — 17/17 knowledge tests total).
 - **Handoff:** Guards the B-track write path; T01 sweeps KB-8/9/10.
-- **Notes:** **KB-9 is the load-bearing security property** — the `origin='human'` read-only zone is enforced at the single store write seam (`store.rs`/`db.rs`) via a typed `WriteOverride::HumanDirected { audit_ref }`, never by caller convention (the BA-4 / OA-3 structural-enforcement lineage). `origin` is assigned from the ingestion source at creation, never chosen by a later agent write. KB-10: `set_curation` gates `reviewed`/`stable` transitions on human authorization; the agent owns `draft`. KB-8: soft-delete (`status='deleted'`, excluded via `JOIN … WHERE status != 'deleted'`) + a startup+periodic GC.
+- **Notes:** **No new code — this task's Verify line is word-for-word what T-21A01 already built and tested.** T-21A01's scope was deliberately expanded (per the sqlite-vec quality-over-speed decision) to include the full write-gated store surface, not just schema+round-trip — `write_document`'s KB-9 `WriteOverride::HumanDirected{audit_ref}` gate, `set_curation`'s KB-10 human-authorization gate, `soft_delete_document`+`gc`'s KB-8 lifecycle were all delivered and tested there. Rather than re-deriving or duplicating that work, this task re-ran the exact named tests standalone to produce a task-scoped Evidence Capsule and confirm the coverage explicitly, then closed D01 — an honest "already done" outcome, not a skipped task. **KB-9 remains the load-bearing security property** — the `origin='human'` read-only zone enforced at the single store write seam via a typed override, never by caller convention (the BA-4/OA-3 structural-enforcement lineage); `origin` is assigned from the ingestion source at creation, never chosen by a later agent write.
 
 ### [T-21D02] Access gate + facade service + `cronus knowledge` CLI
 
 - **Spec:** l2-knowledge-store.md §3 (KB-4), §4.7 (crate layout); l1-resource-sharing (RS-1…RS-8)
-- **Status:** Todo
+- **Status:** Done
 - **Assignment:** Agent
-- **Verify:** `cargo test` + 1 real CLI smoke — a denied read reports absent with no cross-collection leak; an owner reads their own collection (owner-wins via `is_owner`); `cronus knowledge query` returns cited chunks end-to-end through the real facade + store.
+- **Verify:** `cargo test -p cronus-domain knowledge_access::` 6/6 + `cargo test -p cronus-core --lib knowledge_bootstrap::` 8/8 (up from 5) + `cargo test -p cronus-store-local knowledge::` 18/18 (up from 17) + 1 real CLI smoke via the compiled binary (Evidence Capsule: `cronus knowledge collection-create smoke-col1 "…"` → exit 0, real row written to the on-disk store; `cronus knowledge add …` with no local model server running → exit 1, clean `"embedding failed: Timeout"` message, not a panic/hang — proves the fetch→facade→endpoint wiring is genuinely real, not simulated). `cargo check`/`clippy -D warnings`/`fmt --check` clean workspace-wide. `cargo test --workspace` green ×3.
 - **Handoff:** Completes the shipped surface; T01 validates the whole stack.
-- **Notes:** Add `ResourceKind::Knowledge` to the uniform grant model + a `GatedKnowledge` wrapper running `has_access(Knowledge, collection_id, Read)` before every retrieval/read — a denied read never reaches the store (the Phase 16 `GatedWiki` precedent). Facade (`crates/core`) re-exports a `KnowledgeStore` service wiring the real store + embedder (via `InferenceBackend`). `cronus knowledge collection create|list`, `knowledge doc add|remove`, `knowledge query` — verb-first per `l2-cli`, INV-9 shipped-surface honesty (no unbound verbs).
+- **Notes:** `ResourceKind::Knowledge` already existed in `resource_sharing.rs` (added speculatively in an earlier registry wave) — new `crates/domain/src/knowledge_access.rs` (`GatedKnowledge`, the `GatedWiki`/Phase-16 precedent exactly): `has_access(Knowledge, collection_id, Read)` before every read; a multi-collection request is narrowed to the authorized subset (never a hard failure unless ALL requested collections are denied); `filter_results` re-checks fused results as defense-in-depth. New `crates/core/src/knowledge_bootstrap.rs::KnowledgeService` — the assembled facade: real `KnowledgeDb`, a real `EndpointProfile` embedder (Ollama-convention default `http://localhost:11434` + `nomic-embed-text`, contacted lazily so a server started after the CLI still works; `EmbeddingBackend` is `Box<dyn>`-held so a test/alternate backend is injectable, not pinned to the concrete inference type), the already-built `HttpUrlFetcher`. `crates/cli`: `Command::Knowledge` + `KnowledgeCommand` (`collection-create`, `add`, `add-url`, `query` — verb-first, INV-9 shipped-surface honesty); `knowledge_cmd` dispatch module follows the `board` module's real-state-path pattern (`Paths::os_native().resolve(Root::State).join("knowledge")`), un-unit-tested for the same reason `board` isn't (an un-overridable real path) — validated instead by the real CLI smoke run. **CLI-facing types reach `cronus-cli` via `cronus_core`'s re-export list** (the `activation_bootstrap` precedent: a frontend depends only on `cronus-core`, never `cronus-contract`/`cronus-domain` directly) — `knowledge_access`/`knowledge_ingest`/`knowledge_retrieval` added to core's big `pub use cronus_domain::{...}` list, and `knowledge_bootstrap.rs` itself re-exports the `Collection`/`Document`/`RetrievalRequest`/etc. contract types the CLI constructs.
+
+  **Real bug found and fixed during this task itself (not user feedback), a genuine KB-9 design gap surfaced by the facade's own end-to-end test:** `ingest_document`'s two `write_document` calls (mark `Indexing`, then mark `Ready`) meant the SECOND call was a rewrite of the row the FIRST call had just created — for an `Origin::Human` document (a legitimate, ungated *initial* ingest per A01's own semantics), that second write was **incorrectly KB-9-refused**, since the row now existed with `origin=Human` and no override was threaded through. Root cause: KB-9 conflates two different things — *authored content* (name/source/origin — rightly gated) and *index-state bookkeeping* (`status`/`error_msg` — a system property no one "authors"). Fixed by adding a new, narrower, **never-KB-9-gated** `KnowledgeStore::update_document_status(document_id, status, error_msg)` (contract trait + `store-local::KnowledgeDb` + `FakeStore`/`ScriptedStore`/`NoopStore` test doubles across 3 files) and switching `ingest_document`'s status transitions (`Ready`/`Error`) to use it instead of a full `write_document` rewrite; the initial content-creating write (`Indexing`, which also lays down the document's real fields) stays on the gated `write_document` path, unchanged. Verified directly at the store tier (`update_document_status_is_never_kb9_gated_even_for_a_human_origin_row`) and end-to-end through the facade (the test that originally caught the bug now passes). This is a deliberate, load-bearing distinction, not a gate weakening — a caller still cannot rewrite a human document's *content* without an audited override; only the pipeline's own internal state bookkeeping is exempted.
+
+  **Disclosed scope boundary (not gated by KB-4 persistence, because it doesn't exist yet anywhere in this codebase):** `KnowledgeService::query` takes a caller-owned `GrantStore` rather than constructing one internally — no subsystem in this project has a *persisted* SQLite-backed access-grant store yet (the `l2-resource-sharing` domain algebra is built+tested, but its store-tier realization is unbuilt everywhere, matching `GatedWiki`'s own equally-unwired status). The CLI passes `KnowledgePrincipal::owner(LOCAL_USER)` with a fresh `GrantStore::new()` — correct for a single-user local CLI (RS-5: ownership alone authorizes), matching `board`/`memory`'s own no-multi-tenant-gating precedent; `GatedKnowledge` itself is fully real and ready for a future multi-user caller (e.g. a desktop app with real logged-in principals) to wire against a real grant store once one exists anywhere in the project.
 
 ### [T-21T01] Validation sweep: KB-1…KB-11 acceptance
 
 - **Goal:** Verify the assembled knowledge store against `l2-knowledge-store` — every KB invariant covered by a named test through the real facade export chain + real SQLite store (deterministic fake embedder; no live model in CI).
 - **Method:** New `crates/core/tests/knowledge_invariants.rs` — one named test per invariant: KB-1 collection isolation, KB-3 incremental re-index, KB-4 access gate, KB-5 three source types, KB-6 attribution, KB-7 non-authoritative surface, KB-8 soft-delete, KB-9 authorship-zone write refusal, KB-10 curation gating + `min_curation`, KB-11 query-prep fallback + scope-preservation. KB-2 (directory tree, retrieval-independent) covered structurally. Final gate: `cargo test -p cronus-core knowledge_invariants` green + `cargo test --workspace` exit 0 ×3 + `cargo clippy --workspace --all-targets -- -D warnings` + `cargo fmt --all -- --check`.
-- **Status:** Todo
+- **Status:** Done
+- **Verify:** `cargo test -p cronus-core --test knowledge_invariants` — 11/11 pass (Evidence Capsule: exit_code 0, key_findings: "kb1_a_query_never_returns_another_collections_chunk ok", "kb9_a_human_zone_rewrite_requires_an_audited_override_but_initial_ingest_and_status_updates_dont ok", "kb11_query_preparation_is_recorded_falls_back_when_empty_and_never_widens_scope ok"). `cargo test --workspace` green ×3; clippy + fmt clean workspace-wide.
+- **Notes:** All 11 KB invariants (KB-1…KB-11) mapped to one named test each, through the real `KnowledgeDb` (SQLite + genuine `vec0`) and the real domain pipeline exported via `cronus_core` — not fakes, matching the `wiki_invariants`/`activation_invariants` precedent. **A real, disclosed vector-search property caught and correctly handled, not papered over:** the first draft of `kb3_re_ingesting_a_document_replaces_its_chunks_not_accumulates` asserted that `retrieve()` returns nothing for the old (replaced) content — this failed, and investigation showed it was a **test-design flaw, not an implementation bug**: `vec0`'s KNN search always returns *something* from a non-empty index regardless of true semantic relevance (there is no distance floor by default — only `RetrievalRequest.min_score` on the *fused RRF score*, not a raw ANN distance threshold), so with only one chunk left in the collection, ANN returns it as the "nearest" match no matter how unrelated. Fixed by re-scoping the test to check the **FTS5 index directly** (`db.fts_search(...)`) — FTS5's `MATCH` genuinely is relevance-gated, making it the precise instrument for proving KB-3's actual claim (old terms are gone, not merely out-ranked). This is now a documented, load-bearing characteristic of `retrieve()`'s current design, worth keeping in mind for any future caller relying on retrieval to filter irrelevant results by default — it does not, unless `min_score` is explicitly set. No `unwrap()`/`panic!()` on production paths in the new test file (test-only `.expect()`s, as is standard). **Phase 21 (Knowledge Store) is now complete — 8/8 tasks.**

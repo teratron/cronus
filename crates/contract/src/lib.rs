@@ -1837,6 +1837,20 @@ pub trait KnowledgeStore {
     /// the gate protects *rewriting* human material, not its initial ingest.
     fn write_document(&self, document: &Document, override_: &WriteOverride) -> Result<(), String>;
     fn get_document(&self, id: &str) -> Result<Option<Document>, String>;
+    /// Update only the KB-3 index-state fields (`status`, `error_msg`) of an
+    /// existing document — **never KB-9-gated**, unlike [`write_document`].
+    /// Index state is system bookkeeping the ingestion pipeline maintains,
+    /// not authored content; an `origin = human` document's pipeline
+    /// (pending → indexing → ready/error) must be able to complete without
+    /// requiring a `WriteOverride` for every internal status transition, so
+    /// long as the *content* write that created/updated the row was itself
+    /// properly authorized.
+    fn update_document_status(
+        &self,
+        document_id: &str,
+        status: DocumentStatus,
+        error_msg: Option<&str>,
+    ) -> Result<(), String>;
     /// KB-10: advance curation. `Draft` is agent-free; `Reviewed`/`Stable`
     /// require `human_auth` (an opaque authorization reference) or the
     /// transition is refused.

@@ -24,13 +24,15 @@ pub trait EmbeddingBackend {
 /// Adapts a `contract::InferenceBackend` (bound to one model name) into an
 /// [`EmbeddingBackend`]. The facade wires this at the adapter boundary; this
 /// crate never depends on `cronus-model-local` directly (the tier model has
-/// no such edge).
-pub struct InferenceEmbeddingBackend<'a> {
-    pub backend: &'a dyn cronus_contract::InferenceBackend,
+/// no such edge). Holds the backend behind an `Arc` (the `NodusModelBridge`
+/// convention) so a facade-owned service can hold both the concrete backend
+/// and this adapter without a self-referential borrow.
+pub struct InferenceEmbeddingBackend {
+    pub backend: std::sync::Arc<dyn cronus_contract::InferenceBackend>,
     pub model: String,
 }
 
-impl EmbeddingBackend for InferenceEmbeddingBackend<'_> {
+impl EmbeddingBackend for InferenceEmbeddingBackend {
     fn embed(&self, text: &str) -> Result<Vec<f32>, String> {
         self.backend
             .embed(&self.model, text)
@@ -328,37 +330,39 @@ pub fn ingest_document(
                 };
                 embedded.push((chunk, vector));
             }
-            Err(e) => return Err(fail(store, &mut document, override_, IngestError::Embed(e))),
+            Err(e) => return Err(fail(store, &mut document, IngestError::Embed(e))),
         }
     }
 
     if let Err(e) = store.reindex_chunks(&document.id, &embedded) {
-        return Err(fail(store, &mut document, override_, IngestError::Store(e)));
+        return Err(fail(store, &mut document, IngestError::Store(e)));
     }
 
     document.status = DocumentStatus::Ready;
     document.error_msg = None;
     document.updated_at = now_secs();
+    // Index-state-only transition (never KB-9-gated): the content row was
+    // already authorized by the write above (or a pre-existing row's own
+    // prior authorization); flipping `status` is system bookkeeping, not a
+    // fresh authorship act, so it must not re-trigger the human-zone gate
+    // for the very row this same call just created or was permitted to touch.
     store
-        .write_document(&document, override_)
+        .update_document_status(&document.id, document.status, None)
         .map_err(IngestError::Store)?;
 
     Ok(document)
 }
 
 /// On any mid-pipeline failure: mark the document `Error` with a diagnostic
-/// message and best-effort persist that (if this write also fails, the
-/// original error is still what the caller sees — never silently swallowed).
-fn fail(
-    store: &dyn KnowledgeStore,
-    document: &mut Document,
-    override_: &WriteOverride,
-    err: IngestError,
-) -> IngestError {
+/// message and best-effort persist that via the ungated status-only update
+/// (if this write also fails, the original error is still what the caller
+/// sees — never silently swallowed).
+fn fail(store: &dyn KnowledgeStore, document: &mut Document, err: IngestError) -> IngestError {
     document.status = DocumentStatus::Error;
     document.error_msg = Some(err.to_string());
     document.updated_at = now_secs();
-    let _ = store.write_document(document, override_);
+    let _ =
+        store.update_document_status(&document.id, document.status, document.error_msg.as_deref());
     err
 }
 
@@ -398,6 +402,20 @@ mod tests {
         }
         fn get_document(&self, id: &str) -> Result<Option<Document>, String> {
             Ok(self.documents.borrow().get(id).cloned())
+        }
+        fn update_document_status(
+            &self,
+            document_id: &str,
+            status: DocumentStatus,
+            error_msg: Option<&str>,
+        ) -> Result<(), String> {
+            let mut docs = self.documents.borrow_mut();
+            let doc = docs
+                .get_mut(document_id)
+                .ok_or_else(|| format!("no such document {document_id}"))?;
+            doc.status = status;
+            doc.error_msg = error_msg.map(String::from);
+            Ok(())
         }
         fn set_curation(
             &self,

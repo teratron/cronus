@@ -153,6 +153,59 @@ pub enum Command {
         #[command(subcommand)]
         sub: ArchetypeCommand,
     },
+    /// Knowledge base: named collections with hybrid semantic+keyword retrieval (l2-knowledge-store)
+    Knowledge {
+        #[command(subcommand)]
+        sub: KnowledgeCommand,
+    },
+}
+
+#[derive(Subcommand)]
+pub enum KnowledgeCommand {
+    /// Create a named, access-controlled document collection (KB-1)
+    CollectionCreate {
+        /// Collection id
+        id: String,
+        /// Display name
+        name: String,
+    },
+    /// Ingest a plain-text/JSON record into a collection (KB-5)
+    Add {
+        /// Target collection id
+        #[arg(long)]
+        collection: String,
+        /// Document id
+        #[arg(long = "id")]
+        doc_id: String,
+        /// Document display name
+        #[arg(long)]
+        name: String,
+        /// The text content to chunk, embed, and index
+        text: String,
+    },
+    /// Ingest a web page by URL (KB-5). `http://` only — see the
+    /// `HttpUrlFetcher` disclosed scope (`https://` refused with a clear
+    /// message; no `robots.txt`/rate-limit policy yet)
+    AddUrl {
+        #[arg(long)]
+        collection: String,
+        #[arg(long = "id")]
+        doc_id: String,
+        #[arg(long)]
+        name: String,
+        url: String,
+    },
+    /// Hybrid semantic+keyword retrieval over one or more collections
+    /// (KB-1/KB-6/KB-7) — RRF-fused, KB-4-access-gated
+    Query {
+        /// Target collection ids (repeatable)
+        #[arg(long = "collection", required = true)]
+        collections: Vec<String>,
+        /// Result count
+        #[arg(long, default_value_t = 5)]
+        top_k: usize,
+        text: String,
+    },
 }
 
 #[derive(Subcommand)]

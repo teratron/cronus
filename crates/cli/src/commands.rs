@@ -30,6 +30,7 @@ pub fn dispatch(command: Command, ctx: &Context) -> i32 {
         Command::Activation { sub } => activation_cmd::dispatch(sub, ctx),
         Command::Loop { sub } => loop_cmd::dispatch(sub, ctx),
         Command::Archetype { sub } => archetype_cmd::dispatch(sub, ctx),
+        Command::Knowledge { sub } => knowledge_cmd::dispatch(sub, ctx),
     }
 }
 
@@ -3643,4 +3644,203 @@ mod archetype_cmd {
             }
         }
     }
+}
+
+// ─── knowledge ──────────────────────────────────────────────────────────────
+
+mod knowledge_cmd {
+    use std::path::PathBuf;
+
+    use cronus_core::knowledge_access::KnowledgePrincipal;
+    use cronus_core::knowledge_bootstrap::{
+        Collection, Document, KnowledgeService, RetrievalRequest,
+    };
+    use cronus_core::paths::{Paths, Root};
+    use cronus_core::resource_sharing::GrantStore;
+
+    use crate::cli::KnowledgeCommand;
+    use crate::output::Context;
+
+    /// The single local CLI operator's identity — see
+    /// `KnowledgeService::query`'s doc comment for why this CLI treats the
+    /// invoking user as the collection owner (RS-5) rather than wiring a
+    /// not-yet-existing persisted multi-user grant store, matching the
+    /// `board`/`memory` CLI modules' own no-multi-tenant-gating precedent.
+    const LOCAL_USER: &str = "local";
+
+    fn db_path() -> PathBuf {
+        Paths::os_native()
+            .resolve(Root::State)
+            .join("knowledge")
+            .join("knowledge.db")
+    }
+
+    fn open_service(ctx_err_prefix: &str) -> Option<KnowledgeService> {
+        if let Some(parent) = db_path().parent() {
+            let _ = std::fs::create_dir_all(parent);
+        }
+        match KnowledgeService::open_default(db_path()) {
+            Ok(s) => Some(s),
+            Err(e) => {
+                eprintln!("{ctx_err_prefix}: {e}");
+                None
+            }
+        }
+    }
+
+    pub fn dispatch(sub: KnowledgeCommand, ctx: &Context) -> i32 {
+        match sub {
+            KnowledgeCommand::CollectionCreate { id, name } => collection_create(id, name, ctx),
+            KnowledgeCommand::Add {
+                collection,
+                doc_id,
+                name,
+                text,
+            } => add_record(collection, doc_id, name, text, ctx),
+            KnowledgeCommand::AddUrl {
+                collection,
+                doc_id,
+                name,
+                url,
+            } => add_url(collection, doc_id, name, url, ctx),
+            KnowledgeCommand::Query {
+                collections,
+                top_k,
+                text,
+            } => query(collections, top_k, text, ctx),
+        }
+    }
+
+    fn collection_create(id: String, name: String, ctx: &Context) -> i32 {
+        let Some(svc) = open_service("cronus knowledge collection-create") else {
+            return 1;
+        };
+        let collection = Collection::new(id.clone(), LOCAL_USER, name);
+        match svc.create_collection(&collection) {
+            Ok(()) => {
+                if ctx.is_json() {
+                    println!("{{\"result\":\"created\",\"id\":\"{id}\"}}");
+                } else {
+                    println!("Created collection: {id}");
+                }
+                0
+            }
+            Err(e) => {
+                eprintln!("cronus knowledge collection-create: {e}");
+                1
+            }
+        }
+    }
+
+    fn add_record(
+        collection: String,
+        doc_id: String,
+        name: String,
+        text: String,
+        ctx: &Context,
+    ) -> i32 {
+        let Some(svc) = open_service("cronus knowledge add") else {
+            return 1;
+        };
+        let document = Document::new_agent(doc_id.clone(), collection, name);
+        match svc.ingest_record(document, &text) {
+            Ok(doc) => {
+                if ctx.is_json() {
+                    println!(
+                        "{{\"result\":\"ingested\",\"id\":\"{}\",\"status\":\"{}\"}}",
+                        doc.id,
+                        doc.status.as_str()
+                    );
+                } else {
+                    println!("Ingested: {} ({})", doc.id, doc.status.as_str());
+                }
+                0
+            }
+            Err(e) => {
+                eprintln!("cronus knowledge add: {e}");
+                1
+            }
+        }
+    }
+
+    fn add_url(
+        collection: String,
+        doc_id: String,
+        name: String,
+        url: String,
+        ctx: &Context,
+    ) -> i32 {
+        let Some(svc) = open_service("cronus knowledge add-url") else {
+            return 1;
+        };
+        let document = Document::new_agent(doc_id.clone(), collection, name);
+        match svc.ingest_url(document, &url) {
+            Ok(doc) => {
+                if ctx.is_json() {
+                    println!(
+                        "{{\"result\":\"ingested\",\"id\":\"{}\",\"status\":\"{}\"}}",
+                        doc.id,
+                        doc.status.as_str()
+                    );
+                } else {
+                    println!("Ingested: {} ({})", doc.id, doc.status.as_str());
+                }
+                0
+            }
+            Err(e) => {
+                eprintln!("cronus knowledge add-url: {e}");
+                1
+            }
+        }
+    }
+
+    fn query(collections: Vec<String>, top_k: usize, text: String, ctx: &Context) -> i32 {
+        let Some(svc) = open_service("cronus knowledge query") else {
+            return 1;
+        };
+        let mut request = RetrievalRequest::new(text, collections);
+        request.top_k = top_k;
+        let grants = GrantStore::new();
+        match svc.query(&grants, KnowledgePrincipal::owner(LOCAL_USER), &request) {
+            Ok(results) if results.is_empty() => {
+                if ctx.is_json() {
+                    println!("[]");
+                } else {
+                    println!("No results.");
+                }
+                0
+            }
+            Ok(results) => {
+                if ctx.is_json() {
+                    let items: Vec<String> = results
+                        .iter()
+                        .map(|c| {
+                            format!(
+                                "{{\"chunk_id\":\"{}\",\"document_id\":\"{}\",\"score\":{},\"text\":{:?}}}",
+                                c.chunk_id, c.document_id, c.score, c.text
+                            )
+                        })
+                        .collect();
+                    println!("[{}]", items.join(","));
+                } else {
+                    for c in &results {
+                        println!("[{:.4}] {} — {}", c.score, c.document_id, c.text);
+                    }
+                }
+                0
+            }
+            Err(e) => {
+                eprintln!("cronus knowledge query: {e}");
+                1
+            }
+        }
+    }
+
+    // No unit tests here: every command function resolves the real,
+    // un-overridable `Paths::os_native()` state directory (the `board`
+    // module's own precedent for the same reason) — `KnowledgeService`'s
+    // wiring itself is thoroughly tested in `crates/core`'s
+    // `knowledge_bootstrap` module (against `:memory:` + a deterministic
+    // fake embedder); this module's own job is arg-parsing/output-formatting
+    // composition over that already-proven service.
 }

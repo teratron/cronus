@@ -36,13 +36,68 @@ impl std::error::Error for RetrievalError {}
 /// Reciprocal Rank Fusion constant (l2-knowledge-store §4.3: "RRF, k=60").
 const RRF_K: f64 = 60.0;
 
-/// Run a hybrid retrieval request: embed the query, search both modalities
-/// (each over-fetched at `top_k * 2` beyond the final cut, giving RRF enough
-/// candidates per list to rank cross-modal matches well), fuse by
-/// Reciprocal Rank Fusion, then hydrate the fused top `top_k` ids into fully
-/// attributed [`RetrievedChunk`]s (KB-6) — `hydrate_chunks` also applies the
-/// KB-10 `min_curation` floor, so a chunk RRF ranked highly can still be
-/// absent from the final set if it falls below the requested curation level.
+/// KB-11: an optional pre-retrieval query transformation — keyword
+/// extraction/expansion and/or compound-query decomposition. Implementations
+/// MAY return the input unchanged; [`resolve_query`] enforces the
+/// fallback-floor guarantee regardless (never an empty search), so a
+/// preparer does not need to re-implement it defensively.
+pub trait QueryPreparer {
+    fn prepare(&self, raw: &str) -> PreparedQuery;
+}
+
+/// The result of query preparation (KB-11), always carrying the raw query
+/// alongside whatever was derived — the transparency requirement ("a reader
+/// sees exactly what was searched").
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct PreparedQuery {
+    pub retrieval_query: String,
+    /// Independently-retrieved, RRF-merged alongside `retrieval_query`.
+    /// Empty for an atomic (non-compound) query.
+    pub subqueries: Vec<String>,
+    pub raw: String,
+}
+
+impl PreparedQuery {
+    /// The identity preparation: `retrieval_query == raw`, no sub-queries.
+    /// What an unwired (`preparer: None`) retrieval uses.
+    fn identity(raw: &str) -> Self {
+        PreparedQuery {
+            retrieval_query: raw.to_string(),
+            subqueries: Vec::new(),
+            raw: raw.to_string(),
+        }
+    }
+}
+
+/// Resolve the query (or queries) to actually search: run `preparer` if
+/// given, then enforce the KB-11 fallback floor — an empty `retrieval_query`
+/// with no sub-queries degrades to `raw`, so a buggy or overzealous
+/// preparer can never turn a real query into an empty search. `preparer:
+/// None` is the no-op path (identity, embedded directly — matching pre-KB-11
+/// `retrieve` behavior exactly).
+fn resolve_query(preparer: Option<&dyn QueryPreparer>, raw: &str) -> PreparedQuery {
+    let mut prepared = match preparer {
+        Some(p) => p.prepare(raw),
+        None => return PreparedQuery::identity(raw),
+    };
+    if prepared.retrieval_query.trim().is_empty() && prepared.subqueries.is_empty() {
+        prepared.retrieval_query = raw.to_string();
+    }
+    prepared
+}
+
+/// Run a hybrid retrieval request: resolve the query via `preparer` (KB-11;
+/// `None` skips preparation), embed and search every resulting query
+/// (`retrieval_query` plus each sub-query, each independently) against both
+/// modalities (over-fetched at `top_k * 2` beyond the final cut, giving RRF
+/// enough candidates per list to rank cross-modal matches well), fuse *all*
+/// lists by Reciprocal Rank Fusion, then hydrate the fused top `top_k` ids
+/// into fully attributed [`RetrievedChunk`]s (KB-6) — `hydrate_chunks` also
+/// applies the KB-10 `min_curation` floor, so a chunk RRF ranked highly can
+/// still be absent from the final set if it falls below the requested
+/// curation level. Returns the results alongside the [`PreparedQuery`] used,
+/// so the caller can inspect/log exactly what was searched (KB-11
+/// transparency).
 ///
 /// `request.min_score` filters on the **fused RRF score** — a relative
 /// ranking signal (small positive reciprocals), not a normalized probability;
@@ -52,27 +107,40 @@ const RRF_K: f64 = 60.0;
 /// to an empty result without touching the store at all. KB-7 (non-
 /// authoritative recall) holds by construction: [`RetrievedChunk`] carries
 /// only `(text, source_ref, score)`, never an assertion of correctness.
+/// Preparation never alters `source_ref` (KB-6) nor widens `collection_ids`
+/// (KB-4): every query variant searches the exact same `collection_ids`, and
+/// attribution comes from the store unchanged.
 pub fn retrieve(
     store: &dyn KnowledgeStore,
     embedder: &dyn EmbeddingBackend,
+    preparer: Option<&dyn QueryPreparer>,
     request: &RetrievalRequest,
-) -> Result<Vec<RetrievedChunk>, RetrievalError> {
+) -> Result<(Vec<RetrievedChunk>, PreparedQuery), RetrievalError> {
     if request.collection_ids.is_empty() || request.top_k == 0 {
-        return Ok(Vec::new());
+        return Ok((Vec::new(), PreparedQuery::identity(&request.query)));
     }
 
-    let over_fetch = request.top_k.saturating_mul(2);
-    let query_vector = embedder
-        .embed(&request.query)
-        .map_err(RetrievalError::Embed)?;
-    let ann = store
-        .ann_search(&request.collection_ids, &query_vector, over_fetch)
-        .map_err(RetrievalError::Store)?;
-    let fts = store
-        .fts_search(&request.collection_ids, &request.query, over_fetch)
-        .map_err(RetrievalError::Store)?;
+    let prepared = resolve_query(preparer, &request.query);
+    let mut queries = vec![prepared.retrieval_query.clone()];
+    queries.extend(prepared.subqueries.iter().cloned());
 
-    let mut fused = rrf_fuse(&ann, &fts);
+    let over_fetch = request.top_k.saturating_mul(2);
+    let mut lists: Vec<Vec<(String, f32)>> = Vec::with_capacity(queries.len() * 2);
+    for q in &queries {
+        let query_vector = embedder.embed(q).map_err(RetrievalError::Embed)?;
+        lists.push(
+            store
+                .ann_search(&request.collection_ids, &query_vector, over_fetch)
+                .map_err(RetrievalError::Store)?,
+        );
+        lists.push(
+            store
+                .fts_search(&request.collection_ids, q, over_fetch)
+                .map_err(RetrievalError::Store)?,
+        );
+    }
+
+    let mut fused = rrf_fuse(&lists);
     fused.truncate(request.top_k);
     let score_by_id: HashMap<String, f64> = fused.iter().cloned().collect();
 
@@ -93,19 +161,19 @@ pub fn retrieve(
     // may drop some ids (the KB-10 curation floor) — re-sort by the fused
     // rank so the caller sees best-match-first regardless.
     results.sort_by(|a, b| b.score.total_cmp(&a.score));
-    Ok(results)
+    Ok((results, prepared))
 }
 
-/// Fuse two ranked (best-first) candidate lists by Reciprocal Rank Fusion:
-/// each list contributes `1 / (k + rank)` per appearance (rank 1-indexed), summed
-/// per chunk id. Returns pairs sorted by descending fused score.
-fn rrf_fuse(ann: &[(String, f32)], fts: &[(String, f32)]) -> Vec<(String, f64)> {
+/// Fuse any number of ranked (best-first) candidate lists by Reciprocal Rank
+/// Fusion: each list contributes `1 / (k + rank)` per appearance (rank
+/// 1-indexed), summed per chunk id across every list. Returns pairs sorted
+/// by descending fused score.
+fn rrf_fuse(lists: &[Vec<(String, f32)>]) -> Vec<(String, f64)> {
     let mut scores: HashMap<String, f64> = HashMap::new();
-    for (rank, (chunk_id, _)) in ann.iter().enumerate() {
-        *scores.entry(chunk_id.clone()).or_insert(0.0) += 1.0 / (RRF_K + (rank + 1) as f64);
-    }
-    for (rank, (chunk_id, _)) in fts.iter().enumerate() {
-        *scores.entry(chunk_id.clone()).or_insert(0.0) += 1.0 / (RRF_K + (rank + 1) as f64);
+    for list in lists {
+        for (rank, (chunk_id, _)) in list.iter().enumerate() {
+            *scores.entry(chunk_id.clone()).or_insert(0.0) += 1.0 / (RRF_K + (rank + 1) as f64);
+        }
     }
     let mut fused: Vec<(String, f64)> = scores.into_iter().collect();
     fused.sort_by(|a, b| b.1.total_cmp(&a.1));
@@ -144,6 +212,14 @@ mod tests {
         }
         fn get_document(&self, _id: &str) -> Result<Option<Document>, String> {
             Ok(None)
+        }
+        fn update_document_status(
+            &self,
+            _document_id: &str,
+            _status: cronus_contract::DocumentStatus,
+            _error_msg: Option<&str>,
+        ) -> Result<(), String> {
+            Ok(())
         }
         fn set_curation(
             &self,
@@ -238,7 +314,8 @@ mod tests {
             ..Default::default()
         };
         let request = RetrievalRequest::new("query", vec!["col-1".to_string()]);
-        let results = retrieve(&store, &FakeEmbedder, &request).expect("retrieve");
+        let (results, _prepared) =
+            retrieve(&store, &FakeEmbedder, None, &request).expect("retrieve");
 
         // "b" appears in BOTH lists (rank 2 in ann, rank 1 in fts) — its
         // summed reciprocal-rank score beats either single-list top hit.
@@ -253,7 +330,7 @@ mod tests {
     fn kb1_retrieve_scopes_both_searches_to_the_requested_collections() {
         let store = ScriptedStore::default();
         let request = RetrievalRequest::new("q", vec!["col-a".to_string(), "col-b".to_string()]);
-        retrieve(&store, &FakeEmbedder, &request).expect("retrieve");
+        retrieve(&store, &FakeEmbedder, None, &request).expect("retrieve");
         assert_eq!(
             *store.last_ann_collections.borrow(),
             vec!["col-a".to_string(), "col-b".to_string()]
@@ -272,7 +349,8 @@ mod tests {
             ..Default::default()
         };
         let request = RetrievalRequest::new("q", vec![]);
-        let results = retrieve(&store, &FakeEmbedder, &request).expect("retrieve");
+        let (results, _prepared) =
+            retrieve(&store, &FakeEmbedder, None, &request).expect("retrieve");
         assert!(
             results.is_empty(),
             "KB-1: no implicit search-everything on an empty collection scope"
@@ -291,7 +369,8 @@ mod tests {
             ..Default::default()
         };
         let request = RetrievalRequest::new("q", vec!["col-1".to_string()]);
-        let results = retrieve(&store, &FakeEmbedder, &request).expect("retrieve");
+        let (results, _prepared) =
+            retrieve(&store, &FakeEmbedder, None, &request).expect("retrieve");
         assert!(results[0].source_ref.is_some());
     }
 
@@ -311,7 +390,8 @@ mod tests {
         // Fused scores (ann-only, ranks 1/2/3): 1/61≈0.016393, 1/62≈0.016129,
         // 1/63≈0.015873. A floor of 0.0162 admits only rank 1 ("a").
         request.min_score = Some(0.0162);
-        let results = retrieve(&store, &FakeEmbedder, &request).expect("retrieve");
+        let (results, _prepared) =
+            retrieve(&store, &FakeEmbedder, None, &request).expect("retrieve");
         assert_eq!(results.len(), 1);
         assert_eq!(results[0].chunk_id, "a");
     }
@@ -326,7 +406,7 @@ mod tests {
         }
         let store = ScriptedStore::default();
         let request = RetrievalRequest::new("q", vec!["col-1".to_string()]);
-        let err = retrieve(&store, &FailingEmbedder, &request).expect_err("embed failure");
+        let err = retrieve(&store, &FailingEmbedder, None, &request).expect_err("embed failure");
         assert!(matches!(err, RetrievalError::Embed(_)));
     }
 
@@ -340,8 +420,132 @@ mod tests {
             ..Default::default()
         };
         let request = RetrievalRequest::new("q", vec!["col-1".to_string()]);
-        let results = retrieve(&store, &FakeEmbedder, &request).expect("retrieve");
+        let (results, _prepared) =
+            retrieve(&store, &FakeEmbedder, None, &request).expect("retrieve");
         let ids: Vec<&str> = results.iter().map(|c| c.chunk_id.as_str()).collect();
         assert_eq!(ids, vec!["a"]);
+    }
+
+    #[test]
+    fn kb11_unwired_preparer_uses_the_raw_query_unchanged() {
+        let store = ScriptedStore {
+            ann: vec![("a".into(), 0.0)],
+            chunks: vec![chunk("a", "col-1")],
+            ..Default::default()
+        };
+        let request = RetrievalRequest::new("raw query text", vec!["col-1".to_string()]);
+        let (_results, prepared) =
+            retrieve(&store, &FakeEmbedder, None, &request).expect("retrieve");
+        assert_eq!(prepared.retrieval_query, "raw query text");
+        assert_eq!(prepared.raw, "raw query text");
+        assert!(prepared.subqueries.is_empty());
+    }
+
+    struct ExpandingPreparer;
+    impl QueryPreparer for ExpandingPreparer {
+        fn prepare(&self, raw: &str) -> PreparedQuery {
+            PreparedQuery {
+                retrieval_query: format!("{raw} expanded"),
+                subqueries: vec!["sub one".to_string(), "sub two".to_string()],
+                raw: raw.to_string(),
+            }
+        }
+    }
+
+    #[test]
+    fn kb11_a_wired_preparer_records_both_prepared_and_raw_transparently() {
+        let store = ScriptedStore::default();
+        let request = RetrievalRequest::new("original", vec!["col-1".to_string()]);
+        let (_results, prepared) =
+            retrieve(&store, &FakeEmbedder, Some(&ExpandingPreparer), &request).expect("retrieve");
+        assert_eq!(prepared.retrieval_query, "original expanded");
+        assert_eq!(prepared.raw, "original");
+        assert_eq!(prepared.subqueries, vec!["sub one", "sub two"]);
+    }
+
+    #[test]
+    fn kb11_subqueries_are_searched_independently_and_rrf_merged() {
+        // Each of the 3 queries (main + 2 subqueries) contributes an
+        // independent ann_search call in this fake — but ScriptedStore
+        // always returns the SAME configured `ann`/`fts` list regardless of
+        // query text, so a chunk appearing in ann's list accumulates RRF
+        // score once per query issued. With 3 queries × (ann+fts) = 6 lists
+        // all containing "x" at rank 1, "x" must still be a single ranked
+        // result, not duplicated.
+        let store = ScriptedStore {
+            ann: vec![("x".into(), 0.0)],
+            fts: vec![("x".into(), 0.0)],
+            chunks: vec![chunk("x", "col-1")],
+            ..Default::default()
+        };
+        let request = RetrievalRequest::new("original", vec!["col-1".to_string()]);
+        let (results, prepared) =
+            retrieve(&store, &FakeEmbedder, Some(&ExpandingPreparer), &request).expect("retrieve");
+        assert_eq!(prepared.subqueries.len(), 2);
+        assert_eq!(
+            results.len(),
+            1,
+            "the same chunk id across multiple queries is fused, not duplicated"
+        );
+        assert_eq!(results[0].chunk_id, "x");
+    }
+
+    struct EmptyPreparer;
+    impl QueryPreparer for EmptyPreparer {
+        fn prepare(&self, raw: &str) -> PreparedQuery {
+            PreparedQuery {
+                retrieval_query: String::new(),
+                subqueries: Vec::new(),
+                raw: raw.to_string(),
+            }
+        }
+    }
+
+    #[test]
+    fn kb11_an_empty_preparation_falls_back_to_the_raw_query_never_an_empty_search() {
+        let store = ScriptedStore {
+            ann: vec![("a".into(), 0.0)],
+            chunks: vec![chunk("a", "col-1")],
+            ..Default::default()
+        };
+        let request = RetrievalRequest::new("fallback me", vec!["col-1".to_string()]);
+        let (results, prepared) =
+            retrieve(&store, &FakeEmbedder, Some(&EmptyPreparer), &request).expect("retrieve");
+        assert_eq!(
+            prepared.retrieval_query, "fallback me",
+            "an empty preparation must fall back to the raw query"
+        );
+        assert_eq!(
+            results.len(),
+            1,
+            "the fallback query must still actually search, never an empty result"
+        );
+    }
+
+    #[test]
+    fn kb4_preparation_never_widens_the_collection_scope() {
+        struct WideningAttemptPreparer;
+        impl QueryPreparer for WideningAttemptPreparer {
+            fn prepare(&self, raw: &str) -> PreparedQuery {
+                // A preparer has no field to name collections at all — its
+                // output type structurally cannot widen KB-4's scope. This
+                // test documents that guarantee via the type shape, plus
+                // confirms the searched scope matches the request exactly.
+                PreparedQuery::identity(raw)
+            }
+        }
+        let store = ScriptedStore::default();
+        let request = RetrievalRequest::new("q", vec!["col-1".to_string()]);
+        retrieve(
+            &store,
+            &FakeEmbedder,
+            Some(&WideningAttemptPreparer),
+            &request,
+        )
+        .expect("retrieve");
+        assert_eq!(
+            *store.last_ann_collections.borrow(),
+            vec!["col-1".to_string()]
+        );
     }
 }
