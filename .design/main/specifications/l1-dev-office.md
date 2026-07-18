@@ -1,7 +1,7 @@
 # Developer (Self-Hosting) Office
 
-**Version:** 0.1.0
-**Status:** RFC
+**Version:** 1.0.0
+**Status:** Stable
 **Layer:** concept
 
 ## Overview
@@ -18,8 +18,9 @@ Because the dev office acts on the product's own source and engine, its capabili
 are elevated — and elevated capability is an attack surface. The contract therefore
 pairs the capability with hard gates: it exists only in a genuine clone of the
 canonical repository, it is admitted only by the human principal (never self-granted
-by an agent), it never appears in a default user install, and the most a
-non-developer can ever reach through it is a constrained feedback surface. Self-hosting
+by an agent), it never appears in a default user install, and — by default — a
+non-developer reaches nothing at all: the constrained feedback surface is a *ceiling* a
+deployment may optionally expose, never a default-shipped surface. Self-hosting
 maintenance becomes a first-class office without becoming a backdoor.
 
 ## Related Specifications
@@ -53,9 +54,12 @@ The developer office resolves both: a real, first-class maintenance office that 
 materializes in a genuine checkout of the project's repository, only for an admitted
 developer, and never in a default user install. It makes "the product works on
 itself" a governed capability rather than either an unguarded backdoor or an informal
-side-channel. The one deliberately-open question — whether ordinary users see nothing
-at all, or see a constrained feedback-only surface — is a security/openness trade-off
-recorded here for decision, not silently settled (DVO-5).
+side-channel. The feedback-tier default (DVO-5) is resolved in favor of the smaller
+surface: by default ordinary users see nothing at all, because the feedback need is
+already met by the product's shipped consent-gated reporting pipeline
+(`l1-issue-reporting`) independent of the dev office — a default-exposed dev-office
+feedback surface would be redundant attack surface, not additive value. The feedback
+tier remains defined as an opt-in ceiling a deployment may enable.
 
 ## 2. Constraints & Assumptions
 
@@ -66,8 +70,9 @@ recorded here for decision, not silently settled (DVO-5).
 - Elevated access is admitted by the human principal; no agent can admit itself.
 - The dev office's scope is the bound repository only; it is never a lever over user
   project data or other workspaces.
-- Whether the feedback-only tier is exposed to all users by default is an open policy
-  decision (DVO-5), not assumed here.
+- The feedback-only tier is **not** exposed by default (DVO-5, resolved): ordinary-user
+  feedback flows through the shipped `l1-issue-reporting` pipeline, so the dev-office
+  feedback surface is an opt-in ceiling, absent unless a deployment enables it.
 
 ## 3. Core Invariants
 
@@ -112,7 +117,15 @@ Rules every Layer 2 implementation MUST NOT violate:
   ability to read or modify the product's source, engine, or the dev office's work. The
   elevated tier and the feedback tier are distinct admission levels; no path promotes
   the feedback tier into the elevated tier without a fresh DVO-3 admission.
-  <!-- TBD: default exposure of the feedback tier — hidden-entirely (developer-credential-only, dev office absent for everyone else) vs available-to-all-users-in-feedback-mode (a report/improve surface ships to every install). Security/abuse-surface vs community-feedback trade-off; to decide before Stable. -->
+  **Default exposure (resolved):** the feedback tier is **off by default** — a normal
+  install ships no dev-office surface at all, feedback or otherwise. The tiebreaker is
+  the security-minimization principle this whole contract rests on (DVO-2/DVO-4: remove
+  the surface where it does not belong), and the decision is non-lossy because
+  ordinary-user feedback is already fully served by the shipped consent-gated reporting
+  pipeline (`l1-issue-reporting`), independent of the dev office — a default-exposed
+  dev-office feedback surface would be redundant attack surface, not additive signal.
+  The feedback tier stays *defined* so a deployment MAY opt into exposing it; the
+  DEFAULT is absent.
 
 - **DVO-6 (Purpose confinement — self-maintenance only):** the dev office exists to
   improve, fix, and support Cronus itself. Its work targets the product's own codebase
@@ -137,8 +150,8 @@ Rules every Layer 2 implementation MUST NOT violate:
   human delivery checkpoints as any other software work. The dev office changes *who is
   admitted* and *where the work happens*, never *how rigorously it is done*.
 
-> This is an L1 concept with one open policy question (DVO-5); L2 realizations should
-> not lock the feedback-exposure default until it is resolved.
+> DVO-5's feedback-exposure default is resolved (off by default); L2 realizations bind
+> the feedback tier as an opt-in, absent unless a deployment explicitly enables it.
 
 ## 4. Detailed Design
 
@@ -163,9 +176,9 @@ graph TD
     START[app start / connection trigger] --> REPO{genuine canonical repo? .git + bound upstream — DVO-2}
     REPO -->|no| HIDE[dev office absent — never renders]
     REPO -->|yes| ADMIT{admitted developer identity? — DVO-3}
-    ADMIT -->|no| TIER{feedback tier exposed? — DVO-5 TBD}
-    TIER -->|no| HIDE
-    TIER -->|yes| FEEDBACK[feedback-only surface: report bug / suggest improvement]
+    ADMIT -->|no| TIER{feedback tier opted-in? — DVO-5: default NO}
+    TIER -->|no default| HIDE
+    TIER -->|opt-in| FEEDBACK[feedback-only surface: report bug / suggest improvement]
     ADMIT -->|yes| LOADED[load dev office module — DVO-4: full self-maintenance office]
 ```
 
@@ -179,9 +192,9 @@ nor an ordinary user can satisfy the identity gate on its own.
 [REFERENCE]
 elevated tier   (admitted developer): full dev office — read/modify source, run the
                 dev workflow, deliver changes under human checkpoints (DVO-7/DVO-8).
-feedback tier   (non-developer, IF exposed): submit bug reports / improvement ideas
-                through the consent-gated reporting path only. No source access, no
-                engine access, no visibility into dev-office work.
+feedback tier   (non-developer, only if a deployment opts in — default OFF): submit bug
+                reports / improvement ideas through the consent-gated reporting path
+                only. No source access, no engine access, no visibility into dev work.
 
 no promotion: feedback → elevated requires a fresh DVO-3 admission; there is no
               in-band upgrade path.
@@ -198,10 +211,12 @@ gate (DVO-3) then governs *who*, among people who do have the source, may act.
 
 ## 5. Drawbacks & Alternatives
 
-- **Open question — feedback-tier default (DVO-5).** Whether every install ships a
-  feedback surface (more community signal, larger surface) or the whole capability is
-  developer-credential-only (smaller surface, less signal) is a real trade-off,
-  deliberately left open and flagged rather than silently chosen.
+- **Resolved — feedback-tier default (DVO-5): off by default.** The trade-off (every
+  install ships a feedback surface for more community signal vs. developer-credential-only
+  for a smaller surface) resolves to the smaller surface: the community-signal side is
+  already met by the shipped `l1-issue-reporting` pipeline independent of the dev office,
+  so default-off loses no signal while removing redundant attack surface. A deployment
+  may still opt the feedback tier on where it wants a dev-office-attached report surface.
 - **Alternative — no special office; maintain Cronus like any external project.**
   Rejected: loses the repository-authenticity gate and the hidden-by-default property,
   so self-maintenance capability would leak into ordinary installs.
@@ -227,3 +242,4 @@ gate (DVO-3) then governs *who*, among people who do have the source, may act.
 | Version | Date | Author | Notes |
 | --- | --- | --- | --- |
 | 0.1.0 | 2026-07-07 | Core Team | Initial RFC — the developer (self-hosting) office: a conditional system floor beside home/project (DVO-1); repository-authenticity binding to a genuine canonical-repo checkout, local + network-free (DVO-2); identity-gated, human-admitted elevated access never self-granted (DVO-3, SEC-10); hidden-by-default, trigger-loaded module (DVO-4); tiered admission with a feedback-only ceiling for non-developers (DVO-5, with the feedback-exposure default left as an open TBD); purpose-confined to Cronus self-maintenance (DVO-6, QLY-6 dogfooding); contained & audited elevated authority isolated from user offices (DVO-7, INV-8); runs the standard dev workflow with no exception lane (DVO-8, DW). Status RFC pending resolution of the DVO-5 exposure policy. |
+| 1.0.0 | 2026-07-19 | Core Team | RFC→Stable — resolved the sole open policy question (DVO-5) to **feedback tier off by default** (developer-credential-only; a normal install ships no dev-office surface at all). Tiebreaker: the security-minimization principle the whole contract rests on (DVO-2/DVO-4 — remove the surface where it does not belong), and the decision is non-lossy because ordinary-user feedback is already fully served by the shipped `l1-issue-reporting` consent-gated pipeline independent of the dev office, so a default-exposed dev-office feedback surface would be redundant attack surface, not additive signal. The feedback tier stays defined as an opt-in ceiling a deployment MAY enable. DVO-1…DVO-8 otherwise unchanged; §1/§2/§4.2/§4.3/§5 reconciled to the resolved default; the L2-realization caution note updated to "resolved". No new invariants. |
