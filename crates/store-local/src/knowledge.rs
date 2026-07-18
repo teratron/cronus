@@ -310,6 +310,29 @@ impl KnowledgeDb {
         Ok(())
     }
 
+    /// KB-3, transactionally: replace every chunk for `document_id` with
+    /// `chunks` as one all-or-nothing unit. Every embedding is validated
+    /// *before* the transaction opens, so a malformed batch never touches the
+    /// store at all — the prior chunks stay intact, never a half-deleted,
+    /// half-inserted intermediate state.
+    pub fn reindex_chunks(&self, document_id: &str, chunks: &[(Chunk, Vec<f32>)]) -> Result<()> {
+        for (_, embedding) in chunks {
+            if embedding.len() != EMBEDDING_DIM {
+                return Err(KnowledgeError::DimensionMismatch {
+                    expected: EMBEDDING_DIM,
+                    actual: embedding.len(),
+                });
+            }
+        }
+        let tx = self.conn.unchecked_transaction()?;
+        delete_chunks_on(&tx, document_id)?;
+        for (chunk, embedding) in chunks {
+            insert_chunk_on(&tx, chunk, embedding)?;
+        }
+        tx.commit()?;
+        Ok(())
+    }
+
     // -- Retrieval primitives (KB-1-scoped) --------------------------------
 
     /// Vector nearest-neighbour candidates among `ready`, non-deleted
@@ -570,6 +593,13 @@ impl KnowledgeStore for KnowledgeDb {
     }
     fn insert_chunk(&self, chunk: &Chunk, embedding: &[f32]) -> std::result::Result<(), String> {
         KnowledgeDb::insert_chunk(self, chunk, embedding).map_err(|e| e.to_string())
+    }
+    fn reindex_chunks(
+        &self,
+        document_id: &str,
+        chunks: &[(Chunk, Vec<f32>)],
+    ) -> std::result::Result<(), String> {
+        KnowledgeDb::reindex_chunks(self, document_id, chunks).map_err(|e| e.to_string())
     }
     fn ann_search(
         &self,
@@ -1030,6 +1060,108 @@ mod schema {
             created_at: now_secs(),
         };
         db.insert_chunk(&chunk, &fake_embedding(seed)).unwrap();
+    }
+
+    #[test]
+    fn reindex_chunks_is_all_or_nothing_on_a_malformed_batch() {
+        let db = KnowledgeDb::open_in_memory().expect("open");
+        db.create_collection(&Collection::new("col-1", "user-1", "A"))
+            .unwrap();
+        let mut doc = Document::new_agent("doc-1", "col-1", "notes.md");
+        doc.status = DocumentStatus::Ready;
+        db.write_document(&doc, &WriteOverride::None).unwrap();
+
+        // Seed one prior chunk via the atomic path itself.
+        let seed = Chunk {
+            id: "chk-old".into(),
+            document_id: "doc-1".into(),
+            text: "original".into(),
+            position: 0,
+            source_ref: None,
+            created_at: now_secs(),
+        };
+        db.reindex_chunks("doc-1", &[(seed.clone(), fake_embedding(0.2))])
+            .expect("seed reindex");
+
+        // A batch where one embedding has the wrong dimension must fail
+        // WITHOUT touching the store at all — the prior chunk survives.
+        let good = Chunk {
+            id: "chk-new-1".into(),
+            document_id: "doc-1".into(),
+            text: "new one".into(),
+            position: 0,
+            source_ref: None,
+            created_at: now_secs(),
+        };
+        let bad_embedding = vec![0.0f32; 3]; // wrong dimension
+        let err = db
+            .reindex_chunks(
+                "doc-1",
+                &[(good, fake_embedding(0.3)), (seed.clone(), bad_embedding)],
+            )
+            .expect_err("a malformed batch must be refused");
+        assert!(matches!(err, KnowledgeError::DimensionMismatch { .. }));
+
+        // The prior chunk is untouched; no partial new chunk was inserted.
+        let chunks: Vec<String> = db
+            .conn
+            .prepare("SELECT id FROM knowledge_chunk ORDER BY id")
+            .unwrap()
+            .query_map([], |r| r.get::<_, String>(0))
+            .unwrap()
+            .map(|r| r.unwrap())
+            .collect();
+        assert_eq!(
+            chunks,
+            vec!["chk-old".to_string()],
+            "a rejected batch must leave the prior chunk set exactly as it was"
+        );
+    }
+
+    #[test]
+    fn reindex_chunks_replaces_the_full_prior_set() {
+        let db = KnowledgeDb::open_in_memory().expect("open");
+        db.create_collection(&Collection::new("col-1", "user-1", "A"))
+            .unwrap();
+        let mut doc = Document::new_agent("doc-1", "col-1", "notes.md");
+        doc.status = DocumentStatus::Ready;
+        db.write_document(&doc, &WriteOverride::None).unwrap();
+
+        let old = Chunk {
+            id: "chk-old".into(),
+            document_id: "doc-1".into(),
+            text: "stale content".into(),
+            position: 0,
+            source_ref: None,
+            created_at: now_secs(),
+        };
+        db.reindex_chunks("doc-1", &[(old, fake_embedding(0.1))])
+            .unwrap();
+
+        let fresh = Chunk {
+            id: "chk-fresh".into(),
+            document_id: "doc-1".into(),
+            text: "fresh content".into(),
+            position: 0,
+            source_ref: None,
+            created_at: now_secs(),
+        };
+        db.reindex_chunks("doc-1", &[(fresh, fake_embedding(0.4))])
+            .expect("second reindex");
+
+        let chunks: Vec<String> = db
+            .conn
+            .prepare("SELECT id FROM knowledge_chunk ORDER BY id")
+            .unwrap()
+            .query_map([], |r| r.get::<_, String>(0))
+            .unwrap()
+            .map(|r| r.unwrap())
+            .collect();
+        assert_eq!(
+            chunks,
+            vec!["chk-fresh".to_string()],
+            "the second reindex must fully replace the first, no duplication"
+        );
     }
 
     #[test]

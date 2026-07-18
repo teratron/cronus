@@ -1861,6 +1861,16 @@ pub trait KnowledgeStore {
     /// Insert a chunk and its embedding, keeping the FTS and vector indices
     /// in sync with the chunk row, atomically.
     fn insert_chunk(&self, chunk: &Chunk, embedding: &[f32]) -> Result<(), String>;
+    /// KB-3, transactionally: delete every existing chunk for `document_id`
+    /// (if any) and insert the given fresh set, as one all-or-nothing unit.
+    /// A failure anywhere in the batch leaves the document's *prior* chunk
+    /// set intact — never a half-deleted, half-inserted state (the
+    /// `WikiCache::apply_regeneration` precedent). This is the atomicity
+    /// primitive the ingestion pipeline's re-index composes over;
+    /// [`KnowledgeStore::delete_chunks`] alone remains for the standalone
+    /// removal case (soft-delete follow-up, KB-8).
+    fn reindex_chunks(&self, document_id: &str, chunks: &[(Chunk, Vec<f32>)])
+    -> Result<(), String>;
 
     // -- Retrieval primitives (KB-1-scoped; RRF fusion composed in domain) --
     /// Vector nearest-neighbour candidates among `ready`, non-deleted

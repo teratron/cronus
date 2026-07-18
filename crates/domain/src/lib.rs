@@ -36,6 +36,7 @@ pub mod global_orch;
 pub mod hooks;
 pub mod inner_monologue;
 pub mod kanban;
+pub mod knowledge_ingest;
 pub mod learning;
 pub mod lookahead;
 pub mod loop_runner;
