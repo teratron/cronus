@@ -25,6 +25,7 @@ pub mod constitution;
 pub mod context_mgmt;
 pub mod context_router;
 pub mod deliberation;
+pub mod dev_office;
 pub mod development_workflow;
 pub mod doctor;
 pub mod egress;

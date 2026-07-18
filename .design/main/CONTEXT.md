@@ -15,6 +15,8 @@
 │   ├── rules/
 │   ├── skills/
 │   └── workflows/
+├── .cargo/
+│   └── config.toml
 ├── .claude/
 │   ├── commands/
 │   ├── rules/
@@ -108,4 +110,3 @@
 - T-15B03: caller capture directives (MI-11) — `include`/`exclude`/`custom-instruction` steering with the safety-suppression guard enforced structurally (an excluded safety-relevant sentence is retained regardless) and the honesty-floor invariant holding by construction (the function has no confidence parameter at all)
 - T-15T01: cross-layer validation — 4 new integration tests through the real facade and SQLite adapter proving MI-6's metadata and cross-ref edges, the confidence gate's real unrecallability, MI-10/12's degrade reaching an actually-recallable row, and MI-11's safety guard reaching real storage
 - Verify: `cargo test --workspace` green, 1,360 passed / 0 failed (1,333 Phase-14 baseline + 27 new across the phase); `cargo clippy --workspace --all-targets -- -D warnings` clean; `cargo fmt --all -- --check` clean
-
