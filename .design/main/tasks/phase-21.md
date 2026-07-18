@@ -23,7 +23,7 @@ duration_minutes: ~
 - [x] [T-21A01] Schema + contract types + store scaffolding (`knowledge` module)
 - [x] [T-21B01] Ingestion core: chunking + File/Record adapters + embed seam + transactional write + KB-3 re-index
 - [x] [T-21B02] URL adapter + KB-5 source-type completeness + document status lifecycle
-- [ ] [T-21C01] Hybrid retrieval: ANN + FTS5 + RRF fusion (KB-1/KB-6/KB-7)
+- [x] [T-21C01] Hybrid retrieval: ANN + FTS5 + RRF fusion (KB-1/KB-6/KB-7)
 - [ ] [T-21C02] Query preparation (KB-11) + `min_curation` retrieval filter (KB-10 read side)
 - [ ] [T-21D01] Authorship zones + curation write-gates + soft-delete + GC (KB-8/KB-9/KB-10 write side)
 - [ ] [T-21D02] Access gate (`ResourceKind::Knowledge`) + facade `KnowledgeStore` + `cronus knowledge` CLI (KB-4)
@@ -75,11 +75,11 @@ duration_minutes: ~
 ### [T-21C01] Hybrid retrieval: ANN + FTS5 + RRF fusion
 
 - **Spec:** l2-knowledge-store.md §4.3 (Retrieval); KB-1, KB-6, KB-7
-- **Status:** Todo
+- **Status:** Done
 - **Assignment:** Agent
-- **Verify:** `cargo test -p cronus-domain knowledge::retrieval` — a query returns only chunks from the requested `collection_ids` (KB-1: never another collection's chunk), RRF fuses vector + keyword hits, every `RetrievedChunk` carries `source_ref` (KB-6) and the API asserts no correctness (KB-7). Against a fake embedder with deterministic vectors.
-- **Handoff:** C02 layers query-prep + curation filter on this; T01 sweeps it end-to-end.
-- **Notes:** Domain `knowledge::retrieval` — embed the query via the `EmbeddingBackend` seam, ANN over `knowledge_chunk_vec` scoped to ready documents in the target `collection_ids` (top_k*2), FTS5 over `knowledge_chunk_fts` (top_k*2), RRF fusion (k=60), dedup by `chunk_id`, trim to `top_k`, apply `min_score`. **KB-1 collection isolation is the acceptance spine.** If the sqlite-vec extension is deferred (T-21A01 flag), retrieval ships FTS-first with the vector half a documented seam — the query still returns cited keyword hits, never an empty/broken result.
+- **Verify:** `cargo test -p cronus-domain knowledge_retrieval::` — 7/7 pass (Evidence Capsule: exit_code 0, key_findings: "retrieve_fuses_ann_and_fts_by_reciprocal_rank ok" — a chunk ranked in both lists outranks a single-list top hit; "kb1_no_collection_ids_returns_empty_without_touching_the_store ok"; "min_score_filters_out_low_ranked_fused_results ok"). `cargo check --workspace` / `cargo clippy --workspace --all-targets -- -D warnings` / `cargo fmt --all -- --check` clean. `cargo test --workspace` green ×3.
+- **Handoff:** C02 layers query-prep on this (min_curation/KB-1 already applied via the composed store primitives). T01 sweeps end-to-end.
+- **Notes:** New `crates/domain/src/knowledge_retrieval.rs`. **Narrower than originally scoped** (per T-21A01's addendum): A01 already built real `ann_search`/`fts_search`/`hydrate_chunks` against genuine `vec0`/FTS5 with KB-1 collection-scoping and the KB-10 curation floor baked in — so this task is purely the RRF **fusion** composition, not raw ANN/FTS implementation. `retrieve()`: embed query → `ann_search`/`fts_search` each over-fetched at `top_k*2` (a fusion-quality over-fetch, distinct from and additional to A01's own internal 4x over-fetch for post-ANN collection filtering) → `rrf_fuse` (k=60, `1/(k+rank)` summed per chunk id, `f64::total_cmp`-sorted — no NaN-unsafe `partial_cmp`/`unwrap`) → truncate to `top_k` → `hydrate_chunks` (KB-6 attribution + KB-10 floor) → assign the fused score onto each `RetrievedChunk` → apply `min_score` as a floor on the **fused RRF score** (documented as a relative ranking signal, not a normalized probability) → re-sort (hydrate order isn't guaranteed rank-preserving). KB-1 spine: an empty `collection_ids` short-circuits to `Ok(vec![])` *before* touching the store at all — proven by a test asserting the store's search methods are never called. KB-7 holds by construction (`RetrievedChunk`'s shape carries no correctness assertion, unchanged from A01). sqlite-vec is NOT deferred (per the T-21A01 dependency decision), so the "FTS-first degrade" contingency from the original plan note didn't apply — both real ANN and FTS are live.
 
 ### [T-21C02] Query preparation (KB-11) + min_curation filter (KB-10 read side)
 
