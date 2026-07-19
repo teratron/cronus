@@ -40,6 +40,11 @@
 - <https://github.com/nexu-io/open-design>
 - <https://github.com/linear/linear>
 - <https://github.com/nextlevelbuilder/goclaw>
+- <https://github.com/lobehub/lobehub>
+- <https://github.com/infiniflow/ragflow>
+- <https://github.com/FoundationAgents/MetaGPT>
+- <https://github.com/langgenius/dify>
+- <https://github.com/langchain-ai/langchain>
 
 ## Spec-Driven Development
 
@@ -95,6 +100,22 @@
 - <https://github.com/modelcontextprotocol/typescript-sdk>
 - <https://github.com/nextlevelbuilder/ui-ux-pro-max-skill>
 - <https://github.com/upstash/context7>
+- <https://github.com/arturitu/the-delegation>
+- <https://github.com/2noise/ChatTTS>
+- <https://github.com/unslothai/unsloth>
+- <https://github.com/alibaba/arthas>
+- <https://github.com/CherryHQ/cherry-studio>
+- <https://github.com/khoj-ai/khoj>
+- <https://github.com/labring/FastGPT>
+- <https://github.com/assafelovic/gpt-researcher>
+- <https://github.com/CopilotKit/CopilotKit>
+- <https://github.com/OpenHands/OpenHands>
+- <https://github.com/AntonOsika/gpt-engineer>
+- <https://github.com/Significant-Gravitas/AutoGPT>
+- <https://github.com/AUTOMATIC1111/stable-diffusion-webui>
+- <https://github.com/hiyouga/LlamaFactory>
+- <https://github.com/netdata/netdata>
+- <https://github.com/Comfy-Org/ComfyUI>
 
 ## Harness
 
