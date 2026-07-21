@@ -45,6 +45,7 @@
 - <https://github.com/FoundationAgents/MetaGPT>
 - <https://github.com/langgenius/dify>
 - <https://github.com/langchain-ai/langchain>
+- <https://github.com/aaif-goose/goose>
 
 ## Spec-Driven Development
 
