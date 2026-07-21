@@ -11,13 +11,13 @@
 pub use cronus_domain::{
     Capabilities, Engine, acp, activation, agent_migration, agent_registry, archetype, automation,
     autonomy, backup, budget, checkpoint, config_hotreload, constitution, context_mgmt,
-    context_router, deliberation, development_workflow, doctor, egress, error_reporting,
-    exec_workspace, extensions, file_store, global_orch, hooks, inner_monologue, kanban,
-    knowledge_access, knowledge_ingest, knowledge_retrieval, learning, lookahead, loop_runner,
-    memory_capture, memory_intelligence, mission, notes, office_control, orchestration, paths,
-    quality, redact, research, resource_sharing, roles, router, sandbox_policy, scheduler, secrets,
-    self_improvement, session, skills, state, store, telemetry, tool_security, trigger_triage,
-    version_control, voice, wiki_access, wiki_regen,
+    context_router, deliberation, dev_office, development_workflow, doctor, egress,
+    error_reporting, exec_workspace, extensions, file_store, global_orch, hooks, inner_monologue,
+    kanban, knowledge_access, knowledge_ingest, knowledge_retrieval, learning, lookahead,
+    loop_runner, memory_capture, memory_intelligence, mission, notes, office_control,
+    orchestration, paths, quality, redact, research, resource_sharing, roles, router,
+    sandbox_policy, scheduler, secrets, self_improvement, session, skills, state, store, telemetry,
+    tool_security, trigger_triage, version_control, voice, wiki_access, wiki_regen,
 };
 
 // The facade-wiring modules whose default implementation reaches into an
@@ -28,6 +28,7 @@ pub use cronus_domain::{
 pub mod activation_bootstrap;
 pub mod auth;
 pub mod context_compaction;
+pub mod dev_office_gate;
 pub mod engine_lock;
 pub mod inbox;
 pub mod knowledge_bootstrap;

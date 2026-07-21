@@ -20,10 +20,10 @@ duration_minutes: ~
 
 ## Atomic Checklist
 
-- [ ] [T-22A01] Domain gate + tier + `WorkspaceKind::Developer` + read-only `AdmissionReader` port
-- [ ] [T-22B01] `repo_authenticity` facade — network-free canonical-repo check (DVO-2)
-- [ ] [T-22C01] Admission on the human-write-only auth plane + reader impl (DVO-3)
-- [ ] [T-22C02] Trigger-loaded module: load on `Elevated`, clean unload (DVO-4)
+- [x] [T-22A01] Domain gate + tier + `WorkspaceKind::Developer` + read-only `AdmissionReader` port
+- [x] [T-22B01] `repo_authenticity` facade — network-free canonical-repo check (DVO-2)
+- [x] [T-22C01] Admission on the human-write-only auth plane + reader impl (DVO-3)
+- [x] [T-22C02] Trigger-loaded module: load on `Elevated`, clean unload (DVO-4)
 - [ ] [T-22D01] Workspace-kind registration + confinement/audit wiring (DVO-1/6/7)
 - [ ] [T-22D02] `cronus dev status|admit|revoke` CLI surface
 - [ ] [T-22T01] Validation sweep: DVO-1…DVO-8 acceptance
@@ -33,38 +33,42 @@ duration_minutes: ~
 ### [T-22A01] Domain gate + tier + workspace kind + reader port
 
 - **Spec:** l2-dev-office.md §4.1 (tier split), §4.2 (activation gate), §4.4 (AdmissionReader); DVO-1, DVO-3, DVO-5
-- **Status:** Todo
+- **Status:** Done
 - **Assignment:** Agent
 - **Verify:** `cargo test -p cronus-domain dev_office` — the resolution table proven against fabricated inputs: `(Genuine, admitted)` → `Elevated`; a credential in a `NotCanonical`/`NotARepo` tree → `Absent`; `feedback_tier_enabled=false` (default) + not admitted → `Absent`; `feedback_tier_enabled=true` + not admitted → `Feedback`; and `WorkspaceKind::Developer` classifies as system-owned/non-deletable/not-project-creatable. `cargo clippy -p cronus-domain --all-targets -- -D warnings` clean.
+- **Evidence Capsule:** `crates/domain/src/dev_office.rs` (new, ~230 lines) — `RepoAuthenticity` (Genuine{upstream}/NotCanonical/NotARepo), `AdmissionTier` (Absent/Feedback/Elevated), `GateInputs`, `DevOfficeGate::resolve` (exact match arms from spec §4.2), `AdmissionReader` trait (read-only, no mint method), `WorkspaceKind` (Project/Developer) with `is_system_owned`/`max_instances`/`is_deletable`/`is_project_creatable`. Registered in `crates/domain/src/lib.rs` (alphabetical, between `deliberation` and `development_workflow`). 11 unit tests incl. the wrong-tree-never-downgrades-to-Feedback edge case. `cargo test -p cronus-domain dev_office`: 11 passed. `cargo check -p cronus-domain`: clean. `cargo clippy -p cronus-domain --all-targets -- -D warnings`: clean.
 - **Handoff:** Gates T-22B01/C01/C02/D01 — the gate + tier + kind types are the shared foundation.
 - **Notes:** New `crates/domain/src/dev_office.rs`, pure/I/O-free: `RepoAuthenticity` (Genuine{upstream}/NotCanonical/NotARepo), `AdmissionTier` (Absent/Feedback/Elevated), `GateInputs`, `DevOfficeGate::resolve` (the exact match from §4.2 — `Elevated` reachable **only** via the `(Genuine, admitted)` arm, so a credential outside the canonical repo grants nothing). `WorkspaceKind::Developer` added to the workspace-kind enum (0..1, system-owned). **Load-bearing move (DVO-3):** the domain gate depends only on a read-only `trait AdmissionReader { fn is_admitted(&self) -> bool; }` — no mint/write method exists on it, so agent self-escalation is *unrepresentable* at the type level (the BA-4/OA-4 structural-enforcement pattern), not a bypassable runtime check. Tested against a scriptable fake reader.
 
 ### [T-22B01] `repo_authenticity` facade (DVO-2)
 
 - **Spec:** l2-dev-office.md §4.3; DVO-2
-- **Status:** Todo
+- **Status:** Done
 - **Assignment:** Agent
 - **Verify:** `cargo test -p cronus-core dev_office_gate` — a `.git/config` bound to the canonical upstream → `Genuine`; a non-canonical upstream → `NotCanonical`; no `.git` marker → `NotARepo`; an ambiguous/multi-remote config with no unambiguous canonical match → `NotCanonical` (fail-closed, AT-6). Exercised against real temporary `.git` fixtures; **no network call**.
+- **Evidence Capsule:** `crates/core/src/dev_office_gate.rs` (new, ~150 lines): `CANONICAL_UPSTREAM = "https://github.com/teratron/cronus"` (the value already declared in root `Cargo.toml`'s `repository` field — not a new identity); `repo_authenticity(cwd)` walks upward for the nearest `.git` marker (resolving linked-worktree/submodule `.git` files too), `read_bound_upstream` treats `origin` as the unambiguous bound remote even alongside others, falling back to a sole remote or `None` (ambiguous → `NotCanonical`) otherwise; `upstream_matches_canonical` normalizes scheme/SSH-shorthand/`.git`-suffix/trailing-slash/case before comparing, so `git@github.com:teratron/cronus.git` and the canonical HTTPS form match as one identity. Registered in `crates/core/src/lib.rs` (alphabetical `dev_office_gate` mod + `dev_office` added to the domain re-export list, the `activation_bootstrap` precedent — CLI reaches `cronus_core::dev_office::*` without a direct `cronus-domain` dependency). 8 unit tests against real temporary `.git` fixtures (the `cronus-<tag>-{pid}` house pattern), no network call, incl. the ambiguous-multi-remote and genuine-from-a-nested-subdirectory cases. `cargo test -p cronus-core dev_office_gate`: 8/8 passed. `cargo check -p cronus-core` clean. `cargo clippy -p cronus-core --all-targets -- -D warnings` clean (one collapsible-if nesting fixed via let-chains). `cargo fmt --all` clean.
 - **Handoff:** Feeds the gate (A01) at the facade; independent of C once A01 lands.
 - **Notes:** New `crates/core/src/dev_office_gate.rs`: `repo_authenticity(cwd) -> RepoAuthenticity` — `find_worktree_marker` (local `.git`), `read_bound_upstream` (parse `.git/config` remotes), `upstream_matches_canonical` against a compiled-in `CANONICAL_UPSTREAM` **build constant** (not user config — un-retargetable by an end user, §5 note 1). Conservative on ambiguity: `Genuine` only on an unambiguous match. Local filesystem read only.
 
 ### [T-22C01] Admission on the human-write-only plane (DVO-3)
 
 - **Spec:** l2-dev-office.md §4.4; DVO-3, SEC-10
-- **Status:** Todo
+- **Status:** Done
 - **Assignment:** Agent
 - **Verify:** `cargo test` — a `DeveloperAdmission` is minted only through the human-principal path and read back by the `AdmissionReader` impl; `is_admitted()` reflects mint then revoke; there is **no agent-reachable write path** — the domain gate holds only `&dyn AdmissionReader`, structurally unable to mint (asserted by the fact that the reader trait exposes no write method; the write API lives only on the human-principal auth surface).
 - **Handoff:** Supplies the `admitted` input to the gate; C02 keys the module trigger off it.
 - **Notes:** `DeveloperAdmission` on the `crates/auth-local` SEC-10 human-write-only plane (the background-activation-consent precedent — the same plane the agent has no write path to). **Disclosed execution question (surfaces here, not a design gap):** whether `auth-local` already exposes a generic human-write-only grant store the record can ride, or whether a small dedicated `DeveloperAdmission` record is added — an implementation reuse detail resolved at execution, flagged not guessed.
+- **Evidence Capsule:** Resolved the disclosed question first: `auth-local` has zero pre-existing consent/grant-store abstraction (confirmed by grep — `AuthStore`/`SessionStore` are pure in-memory, no persistence anywhere in the crate, and `AuthStore` has no caller anywhere in `cronus-cli` either) — a small dedicated record was the right call, not a guess. New `crates/auth-local/src/developer_admission.rs`: `HumanPrincipal(())` — a marker constructible only via `assert_human_operated()`, called solely from a human-operated entry point (T-22D02's future CLI verb), never from any agent-tool-reachable path; `DeveloperAdmissionStore` — file-backed (`admitted=<bool>\nchanged_at=<unix_secs>\n`, hand-rolled, no new serde dependency for a two-field format), `open(path)` takes a caller-supplied path (no built-in resolution, the `KnowledgeService::open_default(path)` precedent), `mint`/`revoke` require a `&HumanPrincipal`, `is_admitted()` fails closed on a missing/corrupt file. New `crates/core/src/dev_office_gate.rs` addition: `AuthLocalAdmissionReader` wraps the store and implements `cronus_domain::dev_office::AdmissionReader` — the facade-side "admission read over auth-local" half of the §4.1 crate split. Registered `pub mod developer_admission` + flat re-export in `crates/auth-local/src/lib.rs` (matching that crate's existing flat-API convention). 5 new auth-local tests (incl. a cross-handle persistence test proving the record is genuinely file-backed, not held in-memory — required for a real `admit` CLI run and a later `status` run to agree) + 2 new core tests exercising the reader strictly through the `&dyn AdmissionReader` trait object. `cargo test -p cronus-auth-local`: 25/25 passed (0 regressions in the pre-existing 20). `cargo test -p cronus-core dev_office`: 10/10 passed. `cargo check`/`cargo clippy --all-targets -- -D warnings`/`cargo fmt --all` clean on both crates. No `unwrap()`/`panic!()` on production paths.
 
 ### [T-22C02] Trigger-loaded module: load/unload (DVO-4)
 
 - **Spec:** l2-dev-office.md §4.5; DVO-4
-- **Status:** Todo
+- **Status:** Done
 - **Assignment:** Agent
 - **Verify:** `cargo test` — a transition into `Elevated` loads the dev-office module (and marks the floor present); a transition out (admission revoked, or the cwd is no longer the canonical repo) unloads it cleanly with **no stale elevated surface**; the gate is re-evaluated on its input-changing events and never cached as a remembered "was elevated" value.
 - **Handoff:** Completes the DVO-4 lifecycle; D01 registers what the loaded module surfaces.
 - **Notes:** Compose the extension/module loader (`l1-extensions`); the trigger predicate is `DevOfficeGate::resolve(...) == Elevated`. Clean unload leaves no capability/registration/rendered surface behind. **Observe-not-remember** (the `l2-service-activation` BA-8 precedent): a revoked admission must never leave a stale elevated surface, so the gate result is recomputed, not stored.
+- **Evidence Capsule:** Added `DevOfficeModule` to `crates/core/src/dev_office_gate.rs` (per the §4.1 crate split naming "module load/unload wiring" as a facade-tier responsibility, not domain) — composes the already-shipped `cronus_domain::extensions::ExtensionRegistry` (a single `"dev-office"` entry, `Discovered→Permitted` at construction, `Permitted/Inactive↔Active` toggled by `sync(tier)`) rather than inventing a parallel loader. `sync(tier: AdmissionTier)` takes the gate's output fresh on every call — the struct holds no "was elevated" field, only the loader's own live Active/Inactive fact, so DVO-4 observe-not-remember is structural (there is nothing to go stale) rather than a discipline the caller has to maintain. A same-tier resync is a guarded no-op (never hits `ExtensionRegistry::transition`'s invalid-edge error). 6 new tests: fresh-registered-not-loaded, Elevated loads, transition-out unloads (`Absent`), `Feedback` never counts as loaded (a lesser tier, not a degraded-Elevated), idempotent repeated resync at the same tier, and a 5-step alternating-tier sequence proving `is_loaded()` tracks every toggle with no stuck value. `cargo test -p cronus-core dev_office`: 16/16 passed (10 prior + 6 new). `cargo clippy -p cronus-core --all-targets -- -D warnings` / `cargo fmt --all` clean.
 
 ### [T-22D01] Workspace registration + confinement/audit wiring (DVO-1/6/7)
 

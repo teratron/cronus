@@ -21,6 +21,9 @@ use std::time::{Duration, Instant};
 use hmac::{Hmac, KeyInit, Mac};
 use sha1::Sha1;
 
+pub mod developer_admission;
+pub use developer_admission::{DeveloperAdmissionStore, HumanPrincipal};
+
 type HmacSha1 = Hmac<Sha1>;
 
 #[cfg(not(test))]
