@@ -1,6 +1,6 @@
 # Evaluation Suites
 
-**Version:** 1.2.0
+**Version:** 1.3.0
 **Status:** Stable
 **Layer:** concept
 
@@ -23,6 +23,9 @@ This spec defines the suite model and the grader taxonomy. It does not define a 
 - [l2-quality-pipeline.md](l2-quality-pipeline.md) — static document lint (the complementary half) and the behavior-probe grader precedent
 - [l2-self-improvement.md](l2-self-improvement.md) — skill-evolution training runs suites each rollout and gates on their scores; baseline comparison is the best-vs-current check
 - [l1-agent-coevaluation.md](l1-agent-coevaluation.md) — the model×harness co-evaluation methodology this suite's grading machinery drives; ES-17 per-slice reporting shares its orthogonal-label discipline (ACE-3/ACE-4)
+- [l1-harness-optimization.md](l1-harness-optimization.md) — its acceptance rule (HX-8) consumes a reference-free preference (ES-18) when a task has no held-out labels; the outer optimization loop this signal feeds
+- [l1-competitive-execution.md](l1-competitive-execution.md) — CE-4 stated-preference selection is a consumer of the ES-18 pairwise signal (a preference criterion selecting one whole winner, distinct from CE-4's rejected majority vote)
+- [l1-claim-verification.md](l1-claim-verification.md) — CV-5 verifier-independence / oracle-ownership discipline that ES-18's self-enhancement guard reuses
 
 ## 1. Motivation
 
@@ -81,6 +84,8 @@ Rules every Layer 2 implementation MUST NOT violate:
 - **ES-16 Signed metrics**: a metric declares its direction, and a minimization metric measures *unnecessary* volume, not total volume. An output that is a positive signal — a test written, an explanation the user explicitly requested — MUST NOT be counted against a size/cost metric. A suite never penalizes a necessary addition as bloat.
 
 - **ES-17 Sliceable results by orthogonal labels**: [ADDED v1.2.0] a task carries labels on a fixed set of **orthogonal** dimensions (ES-2 tags, sharpened into declared slice axes — e.g. capability, complexity, scenario, modality, environment, source), and a run reports **per-slice macro-averaged** scores over those dimensions, not only the aggregate suite verdict. A regression MUST be localizable to a slice; the aggregate is a summary, never the only signal. Macro-averaging (mean of per-value means) prevents a populous slice from masking a small brittle one. This is the suite-level companion to the cross-harness co-evaluation matrix (`l1-agent-coevaluation.md`): a suite slices one customization's results; the co-evaluation matrix slices across the model×harness grid using the same label discipline.
+
+- **ES-18 Reference-free comparative judgment**: [ADDED v1.3.0] where a task has **no ground-truth reference** (an open-ended artifact — prose, a design, a summary, the output of an unlabeled prompt being tuned), a judgment grader (ES-3) MAY produce a **relative pairwise preference** between two candidate artifacts (A vs B) instead of an absolute score against a reference — the only judgment mode available when no reference exists (the regime ES-15's reference-pair self-test cannot serve). Because a bare model preference is systematically biased, a reference-free comparison MUST mitigate the known pairwise biases to be counted: **order/position** — each pair is judged in **both** orders and a preference that **flips with order is discarded as a tie**, never counted as a win; **verbosity** — length alone is not a preference (a longer answer is not preferred for being longer); **self-enhancement** — a judge sharing model lineage with a candidate's producer is recorded as **reduced confidence** (composing the CV-5 / loop-governance oracle-ownership discipline — a producer does not grade its own faithfulness). Aggregating many pairwise preferences into a ranking (win-rate/tournament) MUST **surface non-transitive cycles** (A≻B≻C≻A) rather than flatten them into a fabricated total order. A reference-free preference is a **relative, non-authoritative** signal — it states "B beat A on this axis", never "B is correct" — consumed as such by the optimization/selection layers (harness-optimization acceptance where no labels exist, an iterative-refinement grader, a competitive-execution stated-preference selector); it is never promoted to an absolute metric nor a ground-truth claim.
 
 > L2 specs cannot reach RFC status until all invariants here are addressed in their "Invariant Compliance" section.
 
@@ -209,6 +214,31 @@ Quality-tier tasks may leave the requirement **implicit** (the way a real ticket
 
 This methodology is customization-agnostic: it scores a skill, a role, or a workflow definition (including a workflow authored in the agent workflow DSL) the same way — candidate against baseline and naive controls, efficiency separate from a quality floor.
 
+### 4.10 Reference-Free Comparative Judgment (ES-18)
+
+ES-15's judge trust rests on a **reference pair** — a known-worse and known-better artifact the judge must separate. Many real customizations produce artifacts with **no reference at all**: open-ended writing, a design document, a summary, the output of a prompt being tuned on an unlabeled task. For these, absolute grading has nothing to grade against, but **relative** grading still works — a judge can say which of two candidates is better even when it cannot say whether either is "correct". This is the label-free evaluation regime, and it is what lets a customization improve on tasks that have no golden answer.
+
+The catch is that a raw pairwise model preference is systematically biased, so the signal is trusted only with the guards ES-18 mandates:
+
+| Bias | Guard |
+| --- | --- |
+| Position (prefers the A or the B slot) | judge both orders; an order-flipped preference is a tie, not a win |
+| Verbosity (prefers the longer answer) | length is not a preference axis; a win must rest on the judged construct |
+| Self-enhancement (prefers own lineage) | a same-lineage judge is reduced-confidence (CV-5 oracle-ownership) |
+| Non-transitivity (A≻B≻C≻A) | surfaced as a cycle, never flattened into a false total order |
+
+```text
+[REFERENCE]
+prefer(A, B, axis):
+    ab := judge(A, B, axis); ba := judge(B, A, axis)       // ES-18 both orders
+    if winner(ab) != winner(ba):   return TIE               // order-sensitive → not counted
+    if decided_only_by_length(ab): return TIE               // verbosity guard
+    conf := reduced if judge_lineage == producer_lineage(winner(ab)) else normal  // self-enhancement
+    return { winner: winner(ab), axis, conf }               // relative, non-authoritative
+```
+
+A reference-free preference is a **relative** signal others act on — the optimizer's acceptance rule when no held-out labels exist (HX-8), an iterative-refinement grader, a competitive-execution stated-preference selector (CE-4) — never an absolute score and never a ground-truth claim. Where a reference *does* exist, ES-15's reference-anchored trust gate is preferred; ES-18 is the regime for when it does not.
+
 ## 5. Drawbacks & Alternatives
 
 - **Maintenance cost.** Suites rot if the customization changes and tasks do not. Mitigation: scaffold-assisted authoring (ES-12), and reserve suites for customizations whose behavior materially matters rather than every trivial skill.
@@ -235,6 +265,7 @@ This methodology is customization-agnostic: it scores a skill, a role, or a work
 | Separated non-negotiable quality/safety tier (implicit requirement, adversarial exec) | ES-14, §4.9 |
 | Judge trust self-test + cite-the-construct auditability | ES-15, §4.9 — strengthens ES-3 Judgment |
 | Signed metrics (tests / requested explanation never counted as bloat) | ES-16, §4.9 |
+| Reference-free comparative judgment (bias-guarded pairwise preference for unlabeled/open-ended tasks) | ES-18, §4.10 — extends ES-3 Judgment / ES-15 for the no-reference regime |
 
 ## Canonical References
 
@@ -252,4 +283,5 @@ This methodology is customization-agnostic: it scores a skill, a role, or a work
 | --- | --- | --- |
 | 1.0.0 | 2026-06-25 | Initial spec — evaluation suites as companion artifacts (ES-1, ES-2); typed grader taxonomy across five families composing existing validators (ES-3); global/task grader scopes (ES-4); weighted thresholded metrics with hard-gate (ES-5); stability via trials (ES-6); frozen+isolated runs (ES-7); immutable diffable results (ES-8); baseline/regression gate (ES-9); first-class activation-correctness testing (ES-10); sandboxed no-production-side-effects (ES-11); scaffold-then-maintain authoring (ES-12); static-vs-dynamic quality framing (§4.8). |
 | 1.1.0 | 2026-06-25 | Minor — control-arm attribution: credit a customization only for its margin over the best naive same-intent control (ES-13); separated non-negotiable quality/safety tier with implicit-requirement adversarial tasks, no efficiency gain buys back a quality regression (ES-14); judge trust self-test + auditable cite-the-construct verdicts (ES-15); signed metrics that never penalize necessary additions as bloat (ES-16); §4.9 added; fixed a stray "ES-13" phrasing in §4.8. Mined from an external code-minimalism customization's benchmark methodology. Re-reviewed (spec-critic + prompt-engineer PASS). |
+| 1.3.0 | 2026-07-22 | Minor — ES-18 reference-free comparative judgment: where a task has no ground-truth reference (open-ended prose/design/summary, an unlabeled prompt output), a judgment grader MAY produce a relative pairwise preference (A vs B) instead of an absolute reference score — the only mode available when ES-15's reference pair does not exist — guarded against the known pairwise biases (order/position via both-orders-or-tie, verbosity, self-enhancement via CV-5 oracle-ownership reduced-confidence) and honest about non-transitivity (cycles surfaced, not flattened); a relative non-authoritative signal consumed by harness-optimization acceptance (HX-8) / an iterative-refinement grader / a competitive-execution stated-preference selector (CE-4), never promoted to an absolute metric. §4.10 added; Related links to l1-harness-optimization/l1-competitive-execution/l1-claim-verification. Mined from an external multi-agent framework's self-supervised (label-free) prompt-optimization method; the optimization loop itself was already saturated by l1-harness-optimization (HX-1…HX-11), so ES-18 captures the genuine delta — the reference-free comparative signal that loop consumes. Re-reviewed (spec-critic + prompt-engineer PASS). L1 stays Stable (C9, additive). |
 | 1.2.0 | 2026-07-02 | Minor — ES-17 sliceable results: a task carries orthogonal declared slice labels and a run reports per-slice macro-averaged scores (not only the aggregate), so a regression localizes to a slice; macro-average prevents a large slice masking a small brittle one. Suite-level companion to the new l1-agent-coevaluation model×harness matrix (shared ACE-3/ACE-4 label discipline). Related Specification link added. Mined from an external model×harness benchmark methodology. |
