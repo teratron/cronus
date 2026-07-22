@@ -27,6 +27,7 @@
   },
   "include": [
     "src",
-    "vitest.setup.ts"
+    "vitest.setup.ts",
+    "vite.config.ts"
   ]
 }

@@ -60,6 +60,12 @@ importers:
       '@tauri-apps/cli':
         specifier: ^2.11.4
         version: 2.11.4
+      '@types/react':
+        specifier: 'catalog:'
+        version: 19.2.17
+      '@types/react-dom':
+        specifier: 'catalog:'
+        version: 19.2.3(@types/react@19.2.17)
       '@vitejs/plugin-react':
         specifier: 'catalog:'
         version: 6.0.4(vite@8.1.5(@types/node@26.1.1)(jiti@2.7.0))
