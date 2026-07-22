@@ -183,3 +183,4 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Updated specification `knowledge-store` (main)
 - Updated specification `agent-tool-ergonomics` (main)
 - Updated specification `content-segmentation` (main)
+- Updated specification `knowledge-base` (main)

@@ -1,6 +1,6 @@
 # Knowledge Base
 
-**Version:** 1.3.0
+**Version:** 1.4.0
 **Status:** Stable
 **Layer:** concept
 
@@ -50,6 +50,7 @@ Rules every Layer 2 implementation MUST NOT violate:
 - **KB-13 (Structure-aware segmentation):** chunking is structure-aware ([l1-content-segmentation.md](l1-content-segmentation.md)) — boundaries follow document structure, each chunk carries its heading breadcrumb, and tables/figures stay atomic. Fixed-window overlap is the fallback for unstructured runs, not the default; chunk attribution (KB-6) is preserved through segmentation.
 - **KB-14 (Multi-representation index):** a collection MAY be indexed into more than the flat chunk/vector representation — additionally a corpus knowledge graph ([l1-knowledge-graph.md](l1-knowledge-graph.md)) and/or a hierarchical summary tree ([l1-hierarchical-summarization.md](l1-hierarchical-summarization.md)). These are opt-in enrichments; the flat chunk/vector index is mandatory and a collection is fully usable with it alone. Every representation grounds back to the same source chunks.
 - **KB-15 (Multi-channel fused retrieval + rerank):** retrieval MAY fan out across the available representations — vector, lexical, graph-local/global, summary-tree — fuse their results by rank fusion, then optionally rerank the fused top set with a stronger relevance model before returning. Fusion and reranking improve precision only; they never widen the accessible set (KB-4) and never fabricate attribution (KB-6). Every returned item still carries its source reference.
+- **KB-16 (Structured-constraint separation — self-query & metadata filter):** a natural-language query often conflates **semantic intent** with **structured constraints** ("recent security papers by Smith" carries the topic *security* plus author=*Smith* and date≈*recent*). Retrieval MAY separate the two: a query-preparation step (composing KB-11) extracts the structured constraints into a **metadata-filter predicate** over the collection's declared document metadata (§4.1 `meta`), leaving a residual **semantic query** for the vector/fused search (KB-15). The predicate **filters** the candidate set — it restricts, never ranks — so a document whose metadata fails it is excluded regardless of semantic similarity. Three guards keep it safe: **transparent** — the parsed filter is recorded beside the raw query (the KB-11 discipline); **fallback-floored** — an unparseable or empty filter degrades to plain semantic search, never an empty result; and **narrow-only** — the filter can only restrict the already access-bounded set (KB-4), never reaching a document the caller could not otherwise retrieve, with attribution preserved (KB-6). Filtering improves precision on constraint-bearing queries; it never fabricates a source and never widens the accessible set.
 
 > L2 specs cannot reach RFC status until all invariants here are addressed in their "Invariant Compliance" section.
 
@@ -202,6 +203,26 @@ The flat chunk/vector index answers local, lookup-style questions, but two class
 
 Retrieval (KB-15) fans a query out across whichever representations exist, fuses their results by rank fusion, and optionally reranks the fused top set with a stronger cross-encoder before returning. The enrichments never change the access model: fusion and reranking reshape *ranking*, never the accessible set (KB-4), and every returned item still carries its source attribution (KB-6). A collection with only the flat index behaves exactly as before — the enrichments are additive, and their construction (l1-document-understanding and l1-content-segmentation feeding l1-knowledge-graph and l1-hierarchical-summarization) is a bounded, observable, host-supplied, local-first pipeline.
 
+### 4.10 Structured-Constraint Separation (KB-16)
+
+Semantic search is powerful for topical intent but blind to structured constraints. Ask for "papers on retrieval from 2024" and a pure vector search happily returns a 2019 paper that is topically perfect — the "2024" was embedded as just more topic text, not enforced as a constraint. Self-query separation refuses that failure by splitting the query along its two natures:
+
+```text
+[REFERENCE]
+prepare_with_filter(query_text, collection_meta_schema):
+    filter, semantic := separate(query_text, collection_meta_schema)     // structured vs semantic
+    if filter is unparseable or empty:
+        return { semantic: query_text, filter: none }                    // KB-16 fallback-floor
+    return { semantic, filter, raw: query_text }                         // transparent: both recorded
+
+retrieve(prepared, collection_ids):
+    candidates := access_bounded(collection_ids)                         // KB-4 already narrowed
+    candidates := candidates where doc.meta satisfies prepared.filter    // KB-16 narrow-only
+    return fused_rank(candidates, prepared.semantic)                     // KB-15 over the filtered set
+```
+
+Two properties keep it honest. First, **narrow-only**: the filter can only restrict the set access control already bounded (KB-4) — it never reaches a document the caller could not otherwise retrieve, so a metadata filter is never a privilege-escalation path. Second, **fallback-floored**: an extraction that yields no usable filter degrades to plain semantic search (the KB-11 discipline), so a mis-parsed constraint never turns a real query into an empty result. The extracted filter is recorded beside the raw query, so a reader sees exactly what was enforced — and a claim grounded on a filtered result still traces to its source (KB-6).
+
 ## 5. Implementation Notes
 
 1. Embedding model selection: use the same model for ingestion and query; a model change requires full re-indexing of the collection.
@@ -224,6 +245,7 @@ Retrieval (KB-15) fans a query out across whichever representations exist, fuses
 
 | Version | Date | Author | Notes |
 | --- | --- | --- | --- |
+| 1.4.0 | 2026-07-22 | Core Team | Added KB-16 (structured-constraint separation — self-query & metadata filter): a NL query MAY be split into a structured metadata-filter predicate over declared document metadata (§4.1) plus a residual semantic query (composing KB-11 query preparation), the predicate applied as a narrow-only filter on the already-access-bounded candidate set (KB-4) with attribution preserved (KB-6), transparent (parsed filter recorded) and fallback-floored (unparseable/empty filter → plain semantic search, never an empty result); resolves the tension where a semantic blob under-enforces structured constraints embedded in NL ("papers from 2024" returning a 2019 hit). §4.10 added. Mined from a studied LLM-orchestration framework's self-query / metadata-filter retriever. |
 | 1.3.0 | 2026-07-22 | Core Team | Opened the ingestion black box and added optional multi-representation retrieval. New invariants: KB-12 (deep document-understanding stage before chunking — l1-document-understanding, with plain text extraction as the honest, fidelity-recording fallback), KB-13 (structure-aware segmentation — l1-content-segmentation: breadcrumb-carrying chunks, atomic tables/figures), KB-14 (multi-representation index — optional corpus knowledge graph l1-knowledge-graph and/or hierarchical summary tree l1-hierarchical-summarization beside the mandatory flat index), KB-15 (multi-channel fused retrieval + rerank). §4.4 ingestion deepened to understand→segment→embed→index→optional-enrich; §4.5 retrieval generalized to multi-channel fuse+rerank; new §4.9. Mined from a studied retrieval/document-intelligence engine; enrichments are opt-in, source-faithful, access-preserving, and local-first. |
 | 1.2.0 | 2026-07-09 | Core Team | Added KB-11 (optional pre-retrieval query preparation) — a raw query MAY be transformed into an optimized retrieval query via keyword extraction/expansion (multi-language where the collection is multilingual) and/or compound-query decomposition with merged sub-query results; transparent (prepared query recorded), fallback-floored (degrades to the raw query, never an empty search), and attribution/access-preserving (never alters KB-6 attribution nor bypasses KB-4 access); §4.5 retrieval flow gains the prep step, new §4.8. Mined from a studied agent framework's pre-retrieval keyword-generation strategy; recall-improving, source-faithful. |
 | 1.1.0 | 2026-06-26 | Core Team | Added KB-9 (authorship zones — storage-enforced human/agent write boundary) and KB-10 (curation lifecycle draft→reviewed→stable); Document model gains `origin` + `curation` fields; new §4.7. |
