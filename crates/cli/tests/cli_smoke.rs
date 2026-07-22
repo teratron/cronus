@@ -569,3 +569,84 @@ fn there_is_no_archetype_hire_subcommand() {
         "there must be no `archetype hire` subcommand"
     );
 }
+
+#[test]
+fn workspace_create_refuses_the_reserved_dev_office_id() {
+    // DVO-1: `WorkspaceKind::Developer` is not creatable through the
+    // ordinary project-creation flow — the reserved id is refused before
+    // any real workspace row is written.
+    let output = bin()
+        .args(["workspace", "create", "dev-office"])
+        .output()
+        .expect("failed to spawn binary");
+    assert!(
+        !output.status.success(),
+        "creating the reserved 'dev-office' workspace id must fail"
+    );
+    let stderr = String::from_utf8_lossy(&output.stderr);
+    assert!(stderr.contains("reserved"), "stderr: {stderr}");
+}
+
+#[test]
+fn dev_status_admit_revoke_round_trip_through_the_real_gate() {
+    // Real end-to-end smoke: this test binary's own cwd IS a genuine
+    // checkout of the canonical repo (the workspace this test runs from),
+    // so `repo_authenticity` resolves `Genuine` for real — no fixture. The
+    // sequence ends on `revoke`, restoring the on-disk admission record to
+    // its default `absent` state (the `knowledge` smoke test's own
+    // clean-up-what-you-touch precedent for real `%APPDATA%` side effects).
+    let status_before = bin()
+        .args(["dev", "status"])
+        .output()
+        .expect("failed to spawn binary");
+    assert!(status_before.status.success(), "dev status must exit 0");
+
+    let admit = bin()
+        .args(["dev", "admit"])
+        .output()
+        .expect("failed to spawn binary");
+    assert!(admit.status.success(), "dev admit must exit 0");
+
+    let status_elevated = bin()
+        .args(["dev", "status"])
+        .output()
+        .expect("failed to spawn binary");
+    assert!(status_elevated.status.success());
+    let stdout = String::from_utf8_lossy(&status_elevated.stdout);
+    assert!(
+        stdout.contains("elevated"),
+        "genuine repo + admitted must resolve elevated, got: {stdout}"
+    );
+
+    let revoke = bin()
+        .args(["dev", "revoke"])
+        .output()
+        .expect("failed to spawn binary");
+    assert!(revoke.status.success(), "dev revoke must exit 0");
+
+    let status_after = bin()
+        .args(["dev", "status"])
+        .output()
+        .expect("failed to spawn binary");
+    assert!(status_after.status.success());
+    let stdout = String::from_utf8_lossy(&status_after.stdout);
+    assert!(
+        stdout.contains("absent"),
+        "revoked admission must resolve absent again, got: {stdout}"
+    );
+}
+
+#[test]
+fn workspace_delete_refuses_the_reserved_dev_office_id() {
+    // DVO-1: non-deletable through the ordinary flow, symmetric with create.
+    let output = bin()
+        .args(["workspace", "delete", "dev-office"])
+        .output()
+        .expect("failed to spawn binary");
+    assert!(
+        !output.status.success(),
+        "deleting the reserved 'dev-office' workspace id must fail"
+    );
+    let stderr = String::from_utf8_lossy(&output.stderr);
+    assert!(stderr.contains("reserved"), "stderr: {stderr}");
+}

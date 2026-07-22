@@ -31,6 +31,7 @@ pub fn dispatch(command: Command, ctx: &Context) -> i32 {
         Command::Loop { sub } => loop_cmd::dispatch(sub, ctx),
         Command::Archetype { sub } => archetype_cmd::dispatch(sub, ctx),
         Command::Knowledge { sub } => knowledge_cmd::dispatch(sub, ctx),
+        Command::Dev { sub } => dev_office_cmd::dispatch(sub, ctx),
     }
 }
 
@@ -930,6 +931,10 @@ mod workspace {
     }
 
     fn create_inner(id: &str, name: Option<&str>, path: Option<&Path>, ctx: &Context) -> i32 {
+        if cronus_core::dev_office_workspace::is_reserved_dev_workspace_id(id) {
+            eprintln!("error: '{id}' is a reserved system workspace id and cannot be created here");
+            return 1;
+        }
         let ws_id = match parse_id(id) {
             Ok(i) => i,
             Err(e) => {
@@ -1041,6 +1046,10 @@ mod workspace {
     }
 
     fn delete(id: String, ctx: &Context) -> i32 {
+        if cronus_core::dev_office_workspace::is_reserved_dev_workspace_id(&id) {
+            eprintln!("error: '{id}' is a reserved system workspace and cannot be deleted here");
+            return 1;
+        }
         let ws_id = match parse_id(&id) {
             Ok(i) => i,
             Err(e) => {
@@ -3843,4 +3852,120 @@ mod knowledge_cmd {
     // `knowledge_bootstrap` module (against `:memory:` + a deterministic
     // fake embedder); this module's own job is arg-parsing/output-formatting
     // composition over that already-proven service.
+}
+
+// ─── dev ──────────────────────────────────────────────────────────────────────
+
+mod dev_office_cmd {
+    use std::path::{Path, PathBuf};
+
+    use cronus_core::auth::{DeveloperAdmissionStore, HumanPrincipal};
+    use cronus_core::dev_office::{AdmissionReader, AdmissionTier, DevOfficeGate, GateInputs};
+    use cronus_core::dev_office_gate::{AuthLocalAdmissionReader, repo_authenticity};
+    use cronus_core::paths::{Paths, Root};
+
+    use crate::cli::DevCommand;
+    use crate::output::Context;
+
+    /// The shipped default (DVO-5): the feedback tier is off. A build/deploy
+    /// opt-in, not something this CLI exposes as a runtime flag.
+    const FEEDBACK_TIER_ENABLED: bool = false;
+
+    fn admission_path() -> PathBuf {
+        Paths::os_native()
+            .resolve(Root::State)
+            .join("dev_office")
+            .join("admission.txt")
+    }
+
+    fn resolve_tier(cwd: &Path) -> AdmissionTier {
+        let repo = repo_authenticity(cwd);
+        let reader = AuthLocalAdmissionReader::open(admission_path());
+        let inputs = GateInputs {
+            repo,
+            admitted: reader.is_admitted(),
+            feedback_tier_enabled: FEEDBACK_TIER_ENABLED,
+        };
+        DevOfficeGate::resolve(&inputs)
+    }
+
+    fn tier_label(tier: AdmissionTier) -> &'static str {
+        match tier {
+            AdmissionTier::Absent => "absent",
+            AdmissionTier::Feedback => "feedback",
+            AdmissionTier::Elevated => "elevated",
+        }
+    }
+
+    pub fn dispatch(sub: DevCommand, ctx: &Context) -> i32 {
+        match sub {
+            DevCommand::Status => status(ctx),
+            DevCommand::Admit => admit(ctx),
+            DevCommand::Revoke => revoke(ctx),
+        }
+    }
+
+    fn status(ctx: &Context) -> i32 {
+        let cwd = std::env::current_dir().unwrap_or_else(|_| PathBuf::from("."));
+        let label = tier_label(resolve_tier(&cwd));
+        if ctx.is_json() {
+            println!("{{\"tier\":\"{label}\"}}");
+        } else {
+            println!("Developer office: {label}");
+        }
+        0
+    }
+
+    /// The CLI operator running this command themselves IS the DVO-3 human
+    /// principal — a legitimate admission path, distinct from an *agent*
+    /// self-granting through a tool call (no such tool call exists).
+    fn admit(ctx: &Context) -> i32 {
+        let path = admission_path();
+        if let Some(parent) = path.parent() {
+            let _ = std::fs::create_dir_all(parent);
+        }
+        match DeveloperAdmissionStore::open(path).mint(&HumanPrincipal::assert_human_operated()) {
+            Ok(()) => {
+                if ctx.is_json() {
+                    println!("{{\"result\":\"admitted\"}}");
+                } else {
+                    println!("Developer office admission granted.");
+                }
+                0
+            }
+            Err(e) => {
+                eprintln!("cronus dev admit: {e}");
+                1
+            }
+        }
+    }
+
+    fn revoke(ctx: &Context) -> i32 {
+        let path = admission_path();
+        if let Some(parent) = path.parent() {
+            let _ = std::fs::create_dir_all(parent);
+        }
+        match DeveloperAdmissionStore::open(path).revoke(&HumanPrincipal::assert_human_operated()) {
+            Ok(()) => {
+                if ctx.is_json() {
+                    println!("{{\"result\":\"revoked\"}}");
+                } else {
+                    println!("Developer office admission revoked.");
+                }
+                0
+            }
+            Err(e) => {
+                eprintln!("cronus dev revoke: {e}");
+                1
+            }
+        }
+    }
+
+    // No unit tests here: every command function resolves the real,
+    // un-overridable `Paths::os_native()` state directory (the `board`/
+    // `knowledge_cmd` precedent) — `DevOfficeGate::resolve`/`repo_authenticity`/
+    // `DeveloperAdmissionStore` are all thoroughly tested in `crates/domain`
+    // and `crates/core`; this module's own job is arg-parsing/output-formatting
+    // composition over that already-proven machinery, validated by a real CLI
+    // smoke run instead.
 }

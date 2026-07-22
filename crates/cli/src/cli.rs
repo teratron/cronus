@@ -158,6 +158,22 @@ pub enum Command {
         #[command(subcommand)]
         sub: KnowledgeCommand,
     },
+    /// Self-hosting developer office: conditional, human-admitted, canonical-repo-only
+    Dev {
+        #[command(subcommand)]
+        sub: DevCommand,
+    },
+}
+
+#[derive(Subcommand)]
+pub enum DevCommand {
+    /// Print the resolved admission tier for the current directory
+    Status,
+    /// Grant developer-office admission — a human-operator act; run this
+    /// yourself, never through an agent-invoked path (DVO-3)
+    Admit,
+    /// Revoke developer-office admission
+    Revoke,
 }
 
 #[derive(Subcommand)]

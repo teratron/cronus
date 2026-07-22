@@ -15,7 +15,9 @@
 
 use std::path::Path;
 
-use cronus_domain::tool_security::{AuditEntry, ToolPermitResult, ToolPolicy, append_audit_entry, now_ms};
+use cronus_domain::tool_security::{
+    AuditEntry, ToolPermitResult, ToolPolicy, append_audit_entry, now_ms,
+};
 use cronus_store_local::workspace::{
     Workspace, WorkspaceError, WorkspaceId, WorkspaceManager, WorkspaceTemplate,
 };
@@ -46,7 +48,12 @@ pub fn register_dev_workspace(
 ) -> Result<Workspace, WorkspaceError> {
     let id = WorkspaceId::new(DEV_OFFICE_WORKSPACE_ID)
         .expect("DEV_OFFICE_WORKSPACE_ID is a valid kebab-case constant");
-    mgr.create(&id, "Developer Office", bound_repo, WorkspaceTemplate::Empty)
+    mgr.create(
+        &id,
+        "Developer Office",
+        bound_repo,
+        WorkspaceTemplate::Empty,
+    )
 }
 
 /// Run one elevated dev-office action through the confinement/audit chain
@@ -55,6 +62,12 @@ pub fn register_dev_workspace(
 /// recorded, because an audit trail that only remembers successes isn't one.
 /// If the audit write itself fails, the action is refused (fail-closed):
 /// an unaudited elevated action is never allowed to proceed silently.
+///
+/// `action_name` rides `category` rather than `tool_name`/`finding_id`:
+/// `tool_security::append_audit_entry` only serializes
+/// `ts`/`layer`/`category`/`severity`/`outcome` today, so those two fields
+/// would be silently dropped — composing the real shipped behavior, not the
+/// full `AuditEntry` shape it happens to accept.
 ///
 /// Nothing here reaches the workspace registry at all — an elevated action
 /// has no parameter or capability that could touch another workspace's
@@ -76,7 +89,7 @@ pub fn run_elevated_action(
         layer: "dev-office",
         tool_name: Some(action_name.to_string()),
         finding_id: format!("dev-office:{action_name}"),
-        category: "elevated-action".to_string(),
+        category: format!("elevated-action:{action_name}"),
         severity: "info".to_string(),
         outcome,
     };

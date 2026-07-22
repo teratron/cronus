@@ -4,5 +4,6 @@
 //! directly (only frontends, through this facade re-export).
 
 pub use cronus_auth_local::{
-    AuthError, AuthStore, PrivilegeMap, RESERVED_USERNAMES, SessionStore, SingleUserIdentity, login,
+    AuthError, AuthStore, DeveloperAdmissionStore, HumanPrincipal, PrivilegeMap,
+    RESERVED_USERNAMES, SessionStore, SingleUserIdentity, login,
 };
