@@ -1,6 +1,6 @@
 # Knowledge Base
 
-**Version:** 1.2.0
+**Version:** 1.3.0
 **Status:** Stable
 **Layer:** concept
 
@@ -14,6 +14,10 @@ Named collections of documents — files, web pages, structured records — orga
 - [l1-resource-sharing.md](l1-resource-sharing.md) - Knowledge collections are shareable resources governed by the access grant model.
 - [l1-file-management.md](l1-file-management.md) - Files are the source documents for a knowledge collection.
 - [l1-extensions.md](l1-extensions.md) - A retrieval skill may query the knowledge base as a tool.
+- [l1-document-understanding.md](l1-document-understanding.md) - The deep, layout-aware front of ingestion (KB-12); turns raw sources into structured documents.
+- [l1-content-segmentation.md](l1-content-segmentation.md) - Structure-aware chunking (KB-13); how understood documents become retrieval units.
+- [l1-knowledge-graph.md](l1-knowledge-graph.md) - Optional graph representation of a collection (KB-14) for relational/global questions.
+- [l1-hierarchical-summarization.md](l1-hierarchical-summarization.md) - Optional summary-tree representation (KB-14) for multi-resolution retrieval.
 - [l2-knowledge-store.md](l2-knowledge-store.md) - Concrete implementation: schema, indexing pipeline, retrieval.
 
 ## 1. Motivation
@@ -42,6 +46,10 @@ Rules every Layer 2 implementation MUST NOT violate:
 - **KB-9 (Authorship zones):** within a collection, documents carry an authorship origin that places them in a zone with a declared agent write-boundary — *human-authored* documents (uploaded sources, human-owned records) are agent-read-only, while *agent-synthesized* documents are agent-read-write. The boundary is enforced mechanically at the storage layer: a write to a read-only zone is refused unless an explicit override is supplied, never merely discouraged by guidance. This authorship boundary is orthogonal to KB-4 — KB-4 governs which *workers* may access a collection (resource-sharing), KB-9 governs whether the *agent* may rewrite human-authored material within a collection it can already access.
 - **KB-10 (Curation lifecycle):** every agent-synthesized document carries a curation status advancing `draft → reviewed → stable`. The agent may freely create and revise `draft` documents; advancing to `reviewed` or `stable` requires explicit human action. Downstream consumers MUST treat `draft` content as provisional, and retrieval MAY filter or down-weight by curation status. This editorial-trust lifecycle is distinct from the per-document indexing `status` (pending/indexing/ready/error/deleted), which tracks index state, not trust.
 - **KB-11 (Optional query preparation):** before retrieval, a raw query MAY be transformed into an optimized retrieval query — extracting or expanding search keywords (including multi-language terms where the collection is multilingual) and/or decomposing a compound query into sub-queries whose results are merged. Preparation is optional and, when applied, MUST be transparent (the prepared query is recorded alongside the raw one), MUST preserve the caller's original query as a fallback (a preparation yielding nothing usable degrades to the raw query, never to an empty search), and MUST NOT alter chunk attribution (KB-6) or bypass access control (KB-4). Query preparation improves recall; it never fabricates sources and never widens the accessible set.
+- **KB-12 (Deep document-understanding stage):** before segmentation, a source document passes through a document-understanding stage ([l1-document-understanding.md](l1-document-understanding.md)) that reconstructs structure, reading order, tables, and figures with positional provenance. Plain "parse & extract text" is the explicitly-degraded fallback when deep understanding is unavailable, and reduced fidelity is recorded, never masked.
+- **KB-13 (Structure-aware segmentation):** chunking is structure-aware ([l1-content-segmentation.md](l1-content-segmentation.md)) — boundaries follow document structure, each chunk carries its heading breadcrumb, and tables/figures stay atomic. Fixed-window overlap is the fallback for unstructured runs, not the default; chunk attribution (KB-6) is preserved through segmentation.
+- **KB-14 (Multi-representation index):** a collection MAY be indexed into more than the flat chunk/vector representation — additionally a corpus knowledge graph ([l1-knowledge-graph.md](l1-knowledge-graph.md)) and/or a hierarchical summary tree ([l1-hierarchical-summarization.md](l1-hierarchical-summarization.md)). These are opt-in enrichments; the flat chunk/vector index is mandatory and a collection is fully usable with it alone. Every representation grounds back to the same source chunks.
+- **KB-15 (Multi-channel fused retrieval + rerank):** retrieval MAY fan out across the available representations — vector, lexical, graph-local/global, summary-tree — fuse their results by rank fusion, then optionally rerank the fused top set with a stronger relevance model before returning. Fusion and reranking improve precision only; they never widen the accessible set (KB-4) and never fabricate attribution (KB-6). Every returned item still carries its source reference.
 
 > L2 specs cannot reach RFC status until all invariants here are addressed in their "Invariant Compliance" section.
 
@@ -105,15 +113,16 @@ Chunk {
 
 ```mermaid
 graph LR
-    IN[File / URL / Record] --> PARSE[Parse & extract text]
-    PARSE --> CHUNK[Chunk with overlap]
-    CHUNK --> EMBED[Embed each chunk]
+    IN[File / URL / Record] --> UNDERSTAND[Understand: layout-aware structured document]
+    UNDERSTAND --> SEGMENT[Segment: structure-aware chunks + breadcrumb]
+    SEGMENT --> EMBED[Embed each chunk]
     EMBED --> STORE[Store chunks + embeddings]
-    STORE --> IDX[Update collection index]
-    IDX --> READY[Document status: ready]
+    STORE --> IDX[Update flat index]
+    IDX --> ENRICH[Optional enrichment: knowledge graph and/or summary tree]
+    ENRICH --> READY[Document status: ready]
 ```
 
-Errors at any stage leave the document in `error` status with a diagnostic message; the collection remains queryable from its prior state.
+The understand and segment stages are the deep front of ingestion (KB-12/KB-13); flat "parse & extract text → chunk with overlap" is their explicitly-degraded fallback. The optional enrichment representations (KB-14) are built beside — never in place of — the mandatory flat index. Errors at any stage leave the document in `error` status with a diagnostic message; the collection remains queryable from its prior state, and a failed optional enrichment never blocks the flat index from becoming `ready`.
 
 ### 4.5 Retrieval
 
@@ -122,10 +131,11 @@ Query flow for a semantic retrieval request:
 1. Caller provides: `{query_text, collection_ids[], top_k, min_score?}`.
 2. Optional query preparation (KB-11): transform `query_text` into a prepared retrieval query — keyword extraction/expansion and/or compound-query decomposition — recording both and falling back to the raw query if preparation yields nothing usable.
 3. Embed the prepared (or raw) query using the same embedding model used at ingestion.
-4. ANN (Approximate Nearest Neighbour) search across all `ready` chunks in the targeted collections.
-5. Optional keyword filter (BM25 or FTS) fused with the vector results (RRF fusion).
-6. Return `top_k` chunks ranked by relevance, each carrying `{text, source_ref, score, document_id, collection_id}`.
-7. The caller injects the chunks into the model context with attribution.
+4. Fan out across the collection's available representations (KB-15): ANN (Approximate Nearest Neighbour) over `ready` chunks; a keyword channel (BM25 or FTS); and, where built, the knowledge-graph channels (local/global) and the hierarchical-summary channel.
+5. Fuse the per-channel results by rank fusion (e.g. RRF) into one candidate set.
+6. Optionally rerank the fused top candidates with a stronger relevance model, then keep the `top_k` above `min_score`.
+7. Return `top_k` results, each carrying `{text, source_ref, score, document_id, collection_id}` and its originating channel.
+8. The caller injects the results into the model context with attribution.
 
 ### 4.6 Lifecycle Summary
 
@@ -180,6 +190,18 @@ prepare(query_text, collection_meta):
 
 Two properties keep it safe. First, **transparent and reversible**: the prepared query is recorded next to the raw one, so a reader can see exactly what was searched and a poor preparation is diagnosable rather than invisible. Second, **fallback-floored**: preparation that yields nothing usable degrades to the raw query — it can improve recall but never turn a real query into an empty search. When `decompose_if_compound` returns sub-queries, each is retrieved independently and the results are merged (the same RRF fusion of §4.5), with every chunk still carrying its own attribution (KB-6) and access already bounded by KB-4 — preparation reshapes the query, never the accessible set.
 
+### 4.9 Multi-Representation Index & Fused Retrieval (KB-14, KB-15)
+
+The flat chunk/vector index answers local, lookup-style questions, but two classes of question defeat it: relational/corpus-global questions (no single chunk holds the connective evidence) and gestalt questions (no chunk holds the overview). A collection MAY therefore be indexed into additional, opt-in representations, each grounded back to the same source chunks:
+
+| Representation | Answers | Contract |
+| --- | --- | --- |
+| Flat chunk/vector (mandatory) | Local, lookup — "what does it say about X" | this spec |
+| Knowledge graph (optional) | Relational, corpus-global — "how do A and B connect" | [l1-knowledge-graph.md](l1-knowledge-graph.md) |
+| Hierarchical summary tree (optional) | Gestalt / multi-resolution — "what is this collection about" | [l1-hierarchical-summarization.md](l1-hierarchical-summarization.md) |
+
+Retrieval (KB-15) fans a query out across whichever representations exist, fuses their results by rank fusion, and optionally reranks the fused top set with a stronger cross-encoder before returning. The enrichments never change the access model: fusion and reranking reshape *ranking*, never the accessible set (KB-4), and every returned item still carries its source attribution (KB-6). A collection with only the flat index behaves exactly as before — the enrichments are additive, and their construction (l1-document-understanding and l1-content-segmentation feeding l1-knowledge-graph and l1-hierarchical-summarization) is a bounded, observable, host-supplied, local-first pipeline.
+
 ## 5. Implementation Notes
 
 1. Embedding model selection: use the same model for ingestion and query; a model change requires full re-indexing of the collection.
@@ -202,6 +224,7 @@ Two properties keep it safe. First, **transparent and reversible**: the prepared
 
 | Version | Date | Author | Notes |
 | --- | --- | --- | --- |
+| 1.3.0 | 2026-07-22 | Core Team | Opened the ingestion black box and added optional multi-representation retrieval. New invariants: KB-12 (deep document-understanding stage before chunking — l1-document-understanding, with plain text extraction as the honest, fidelity-recording fallback), KB-13 (structure-aware segmentation — l1-content-segmentation: breadcrumb-carrying chunks, atomic tables/figures), KB-14 (multi-representation index — optional corpus knowledge graph l1-knowledge-graph and/or hierarchical summary tree l1-hierarchical-summarization beside the mandatory flat index), KB-15 (multi-channel fused retrieval + rerank). §4.4 ingestion deepened to understand→segment→embed→index→optional-enrich; §4.5 retrieval generalized to multi-channel fuse+rerank; new §4.9. Mined from a studied retrieval/document-intelligence engine; enrichments are opt-in, source-faithful, access-preserving, and local-first. |
 | 1.2.0 | 2026-07-09 | Core Team | Added KB-11 (optional pre-retrieval query preparation) — a raw query MAY be transformed into an optimized retrieval query via keyword extraction/expansion (multi-language where the collection is multilingual) and/or compound-query decomposition with merged sub-query results; transparent (prepared query recorded), fallback-floored (degrades to the raw query, never an empty search), and attribution/access-preserving (never alters KB-6 attribution nor bypasses KB-4 access); §4.5 retrieval flow gains the prep step, new §4.8. Mined from a studied agent framework's pre-retrieval keyword-generation strategy; recall-improving, source-faithful. |
 | 1.1.0 | 2026-06-26 | Core Team | Added KB-9 (authorship zones — storage-enforced human/agent write boundary) and KB-10 (curation lifecycle draft→reviewed→stable); Document model gains `origin` + `curation` fields; new §4.7. |
 | 1.0.0 | 2026-06-25 | Core Team | Initial spec — collections, ingestion pipeline, retrieval, KB-1…KB-8. |
