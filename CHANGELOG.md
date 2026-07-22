@@ -181,3 +181,4 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Added specification `value-settlement` (main)
 - Updated specification `archetype-catalog` (main)
 - Updated specification `knowledge-store` (main)
+- Updated specification `agent-tool-ergonomics` (main)
