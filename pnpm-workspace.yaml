@@ -54,15 +54,15 @@ minimumReleaseAgeExclude:
   - "@typescript/typescript-win32-arm64@7.0.2"
   - "@typescript/typescript-win32-x64@7.0.2"
   - typescript@7.0.2
-  - "@biomejs/biome@2.5.4"
-  - "@biomejs/cli-darwin-arm64@2.5.4"
-  - "@biomejs/cli-darwin-x64@2.5.4"
-  - "@biomejs/cli-linux-arm64-musl@2.5.4"
-  - "@biomejs/cli-linux-arm64@2.5.4"
-  - "@biomejs/cli-linux-x64-musl@2.5.4"
-  - "@biomejs/cli-linux-x64@2.5.4"
-  - "@biomejs/cli-win32-arm64@2.5.4"
-  - "@biomejs/cli-win32-x64@2.5.4"
+  - '@biomejs/biome@2.5.4 || 2.5.5'
+  - '@biomejs/cli-darwin-arm64@2.5.4 || 2.5.5'
+  - '@biomejs/cli-darwin-x64@2.5.4 || 2.5.5'
+  - '@biomejs/cli-linux-arm64-musl@2.5.4 || 2.5.5'
+  - '@biomejs/cli-linux-arm64@2.5.4 || 2.5.5'
+  - '@biomejs/cli-linux-x64-musl@2.5.4 || 2.5.5'
+  - '@biomejs/cli-linux-x64@2.5.4 || 2.5.5'
+  - '@biomejs/cli-win32-arm64@2.5.4 || 2.5.5'
+  - '@biomejs/cli-win32-x64@2.5.4 || 2.5.5'
   - "@tailwindcss/node@4.3.3"
   - "@tailwindcss/oxide-android-arm64@4.3.3"
   - "@tailwindcss/oxide-darwin-arm64@4.3.3"
@@ -79,3 +79,6 @@ minimumReleaseAgeExclude:
   - "@tailwindcss/oxide@4.3.3"
   - "@tailwindcss/vite@4.3.3"
   - tailwindcss@4.3.3
+  - '@vitejs/plugin-react@6.0.4'
+  - react-dom@19.2.8
+  - react@19.2.8

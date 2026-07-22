@@ -118,6 +118,7 @@
 - <https://github.com/netdata/netdata>
 - <https://github.com/Comfy-Org/ComfyUI>
 - <https://github.com/firecrawl/firecrawl>
+- <https://github.com/jamiepine/voicebox>
 
 ## Harness
 
