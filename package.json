@@ -19,17 +19,8 @@
     "audit:review": "fallow review --brief",
     "typecheck": "tsc --noEmit"
   },
-  "dependencies": {
-    "react": "^19.2.8",
-    "react-dom": "^19.2.8"
-  },
   "devDependencies": {
     "@biomejs/biome": "^2.5.5",
-    "@types/react": "^19.2.17",
-    "@types/react-dom": "^19.2.3",
-    "@vitejs/plugin-react": "^6.0.4",
-    "fallow": "^3.7.1",
-    "typescript": "^7.0.2",
-    "vite": "^8.1.5"
+    "fallow": "^3.7.1"
   }
 }

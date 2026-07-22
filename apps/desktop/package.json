@@ -12,11 +12,16 @@
   },
   "dependencies": {
     "@cronus/ui": "workspace:*",
-    "@tauri-apps/api": "^2.11.1"
+    "@tauri-apps/api": "^2.11.1",
+    "react": "catalog:",
+    "react-dom": "catalog:"
   },
   "devDependencies": {
     "@tailwindcss/vite": "^4.3.3",
     "@tauri-apps/cli": "^2.11.4",
-    "tailwindcss": "^4.3.3"
+    "@vitejs/plugin-react": "catalog:",
+    "tailwindcss": "^4.3.3",
+    "typescript": "catalog:",
+    "vite": "catalog:"
   }
 }

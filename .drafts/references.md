@@ -144,6 +144,7 @@
 - <https://github.com/ant-design/ant-design>
 - <https://github.com/mantinedev/mantine>
 - <https://github.com/radix-ui/themes>
+- <https://github.com/facebook/astryx>
 
 ### Tauri
 
