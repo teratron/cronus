@@ -1,6 +1,6 @@
 # Live Diagnostics
 
-**Version:** 1.0.0
+**Version:** 1.1.0
 **Status:** Stable
 **Layer:** concept
 
@@ -18,6 +18,8 @@ On-demand, targeted, deep, non-suspending diagnosis of a *running* agent or offi
 - [l1-simulation.md](l1-simulation.md) - Modeled play-out with substituted providers; a diagnostic replay re-executes a *real* captured invocation, marked by execution mode (distinct from a simulated run).
 - [l1-context-provenance.md](l1-context-provenance.md) - The data-safety boundary a deep capture temporarily, consentfully crosses under audit.
 - [../../nodus/specifications/l1-nodus-observability.md](../../nodus/specifications/l1-nodus-observability.md) - Observer neutrality (HO-5), sequence/correlation (HO-7), execution-mode provenance (HO-12), and the replay-based-validation seam a probe reuses.
+- [l1-change-attribution.md](l1-change-attribution.md) - [ADDED v1.1.0] Names *which* signals moved during a window; a probe then answers what one implicated operation actually did. Ranking narrows, probing explains.
+- [l1-declarative-configuration.md](l1-declarative-configuration.md) - [ADDED v1.1.0] A published introspection routine (LD-10) declares its authority level and timeout through the same declaration-and-registry discipline configuration surfaces use.
 
 ## 1. Motivation
 
@@ -43,6 +45,7 @@ Rules every Layer 2 implementation MUST NOT violate:
 - **LD-7 (Capture-and-replay, deterministic & mode-marked):** a probe MAY capture a specific invocation's full inputs + context so it can be deterministically **re-executed (replayed)** — reproducing a transient failure a restart or a test environment would not, or checking a fix against the exact invocation that failed. A replay carries execution-mode provenance (HO-12) so it is never mistaken for a fresh real invocation, and reuses the always-on plane's replay-based-validation seam rather than a parallel one. Replay is opt-in; a probe that only observes never re-executes.
 - **LD-8 (Non-authoritative & traceable):** a diagnostic finding is a **signal** an operator or the doctor acts on; the probe repairs nothing and steers nothing. Every diagnostic session — target, opener, consent grant, bound, captures, detach — is itself traceable, so diagnosis is auditable and its data-safety exception is accountable (composing HEAL-5).
 - **LD-9 (Host-supplied, local-first, opt-in):** the probe mechanism is host-supplied and on-device by default; a diagnostic session performs no egress unless the host authorizes it. Absent the capability the system is still fully observable via the always-on plane — live diagnostics is an opt-in deepening, never a runtime dependency.
+- **LD-10 (Published introspection routines — the anticipated half):** [ADDED v1.1.0] besides the ad-hoc probe, a component MAY **publish** named, catalogued, on-demand introspection routines — read-only "show me the live state of X" answers (the work items in flight, the open connections, the queue contents, the connected peers) that a caller invokes **by name** and receives as a structured result. A published routine: (a) is **discoverable from a catalogue**, never guessed at; (b) declares the **authority level** it requires, so a sensitive routine is simply unavailable over a lower-trust channel rather than being offered and then refused; (c) declares a **timeout** and is cancellable; (d) returns a **snapshot of live state and mutates nothing** — a routine that writes is not an introspection routine. Where the system spans a supervision hierarchy, catalogues **propagate toward the supervisor**, so a routine may be invoked on a subordinate through the supervising node, and every answer **names the node that produced it**. Published routines are the *anticipated* half of live diagnosis — a stable, permissioned, always-available read surface, cheap enough to be a first move; the probe (LD-1/LD-4) remains the *unanticipated* half, for the question nobody declared in advance. A routine lacking a declared authority level or timeout, or capable of writing, is forbidden.
 
 > L2 specs cannot reach RFC status until all invariants here are addressed in their "Invariant Compliance" section.
 
@@ -56,6 +59,16 @@ Rules every Layer 2 implementation MUST NOT violate:
 | Diagnostic probe (this spec) | High — full raw content, redacted secrets | One target, on demand | Bounded session | Opened by operator/doctor |
 
 The two are complementary: the trace tells you *which* operation to suspect (cheaply, always); the probe tells you *exactly* what that operation did (deeply, briefly, on demand).
+
+[ADDED v1.1.0] A third surface sits between them — the **published introspection routine** (LD-10). It is neither always-on nor ad-hoc: it is a pre-declared, catalogued, permissioned, read-only answer that is *always available* and costs nothing until asked.
+
+| Surface | Declared in advance? | Fidelity | Cost when unused | Typical first question |
+| --- | --- | --- | --- | --- |
+| Always-on trace | Yes, uniformly | Low — counts and descriptors | Continuous | "Where should I look?" |
+| Published routine (LD-10) | Yes, by name | Live state, structured | None | "What is this component doing *right now*?" |
+| Diagnostic probe (LD-1/LD-4) | No — attached to an unanticipated target | Full raw content, consent-gated | None | "What exactly did *that* operation do?" |
+
+The escalation order is the cheap-to-expensive order: read the trace, call the routine, and only then open a probe with its consent gate and its retention obligations.
 
 ### 4.2 Probe Lifecycle
 
@@ -102,4 +115,5 @@ A diagnostic probe is a host-supplied observer variant: the always-on `AuditProv
 
 | Version | Date | Author | Notes |
 | --- | --- | --- | --- |
+| 1.1.0 | 2026-07-23 | Core Team | LD-10 added — **published introspection routines** as the *anticipated* half of live diagnosis, beside the probe's unanticipated half: named, catalogued, discoverable-not-guessed read-only routines returning a live-state snapshot, each declaring the authority level it requires (so a sensitive routine is unavailable rather than offered-then-refused over a lower-trust channel) and a timeout, cancellable, mutating nothing; catalogues propagate toward the supervisor in a supervision hierarchy so a routine can be invoked on a subordinate through its supervisor, with every answer naming the producing node. §4.1 extended with the three-surface escalation table (trace → routine → probe, cheap to expensive). |
 | 1.0.0 | 2026-07-22 | Core Team | Initial spec — live diagnostics as the active, on-demand, targeted, non-suspending complement to the always-on observability plane: opened against one target for a bounded window (LD-1), non-suspending observer (LD-2), deep full-fidelity capture under a consent-gated/session-confined/secret-redacted data-safety exception (LD-3), attach-to-a-running-target without pre-instrumentation or restart (LD-4), bounded self-terminating (LD-5), caller + latency attribution composing HO-7/RD-5 (LD-6), deterministic mode-marked capture-and-replay reusing the replay-validation seam (LD-7), non-authoritative + traceable (LD-8), host-supplied local-first opt-in (LD-9). Mined from a studied production runtime-diagnostics tool's live method-observation / trace / time-tunnel commands; the "attach a debugger to production without a restart" capability Cronus's passive planes (telemetry/forensic-log/self-healing) did not cover. Concept-only. |
