@@ -185,3 +185,4 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Updated specification `content-segmentation` (main)
 - Updated specification `knowledge-base` (main)
 - Added specification `live-diagnostics` (main)
+- Added specification `incremental-execution` (main)
