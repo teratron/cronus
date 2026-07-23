@@ -1,6 +1,6 @@
 # Voice Input
 
-**Version:** 1.1.0
+**Version:** 1.1.1
 **Status:** Stable
 **Layer:** concept
 
@@ -17,6 +17,7 @@ Voice input supplements text input; it does not replace it. The user explicitly 
 - [l1-navigation-model.md](l1-navigation-model.md) — Chat tab (primary surface for voice input)
 - [l1-model-runtime.md](l1-model-runtime.md) — on-device model lifecycle (acquire/load/idle-unload) reused for speech models (VI-8)
 - [l1-file-management.md](l1-file-management.md) — content-addressed, deduplicated model-blob storage for speech models (VI-8)
+- [l1-voice-output.md](l1-voice-output.md) — [ADDED v1.1.1] the output sibling that completes the voice loop (text → speech); mirrors VI-1/VI-3/VI-7/VI-8 and adds the voice-identity consent/disclosure contract input does not face.
 - [l2-model-router.md](l2-model-router.md) — routing + egress gate for an opt-in language-model post-transcription transform (VI-6)
 - [l2-app-ui.md](l2-app-ui.md) — global shortcut binding system; per-binding action mapping (plain vs. post-processed)
 
