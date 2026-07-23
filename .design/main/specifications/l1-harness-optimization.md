@@ -1,6 +1,6 @@
 # Harness Optimization
 
-**Version:** 1.1.0
+**Version:** 1.2.0
 **Status:** Stable
 **Layer:** concept
 
@@ -32,6 +32,7 @@ re-implements, evolution, scoring, and attestation.
 - [l1-agent-coevaluation.md](l1-agent-coevaluation.md) — scores + comparability (ACE-5) + slices the optimizer's candidates read; measurement, which this spec turns into a search signal.
 - [l1-evaluation-suites.md](l1-evaluation-suites.md) — grading machinery (ES-5 weighted metrics, ES-9 baseline/regression, ES-14 quality-tier) the acceptance rule and objective vector reuse.
 - [l1-attestation.md](l1-attestation.md) — content-addressed candidate/config hashes (AT-2) the archive and frontier key on.
+- [l1-staged-rollout.md](l1-staged-rollout.md) — [ADDED v1.2.0] the release contract HX-12 defers to: an accepted candidate reaches live work behind a named revertible switch at a declared exposure fraction, with a holdout on the prior default.
 - [l1-nodus-environment.md](../../nodus/specifications/l1-nodus-environment.md) — a graded run (reward + trajectory) is one candidate's evaluation; NE-12 makes it an archivable candidate result.
 - [l2-self-improvement.md](l2-self-improvement.md) — best-vs-current rollout gating; a scalar-best special case of the frontier here.
 
@@ -153,6 +154,22 @@ Rules every Layer 2 implementation MUST NOT violate:
   what the metric measures (a metric a mutation can redefine lets the search optimize
   the metric's blind spot rather than the outcome, a criteria-drift sibling of the
   loop-governance oracle-ownership rule).
+
+- **HX-12 Offline acceptance is necessary, never sufficient — an accepted candidate ships staged**: [ADDED v1.2.0]
+  HX-8's held-out, regression-bounded acceptance admits a candidate into the archive; it
+  MUST NOT by itself promote that candidate to the default for live work. An accepted
+  candidate reaches real work through a **named, instantly revertible switch at a declared
+  exposure fraction**, with assignment computed deterministically and a reserved holdout
+  left on the prior default — so a regression the held-out set could not see is bounded to
+  the exposed fraction and reversible without shipping anything. The reason the offline
+  gate cannot carry the whole decision is structural, not a matter of gate strength: the
+  held-out set is a *sample of tasks*, while live work is a *distribution that moves* — the
+  cases that matter most are the ones no evaluation set contained, and they arrive only in
+  production. A candidate promoted straight to 100% on a held-out win has been validated
+  against the past and deployed against the future. The exposure fraction, its guardrails,
+  and its stopping rule are declared before exposure begins and frozen for its lifetime, so
+  the search cannot select the moment its candidate looked best (the live analog of HX-8's
+  held-out honesty and of the criteria-immutability discipline HX-11 invokes).
 
 > L2 specs cannot reach RFC status until all invariants here are addressed in their "Invariant Compliance" section.
 
@@ -281,5 +298,6 @@ evolver, or a runtime.
 
 | Version | Date | Author | Notes |
 | --- | --- | --- | --- |
+| 1.2.0 | 2026-07-23 | Core Team | Added HX-12 — **offline acceptance is necessary, never sufficient**: HX-8's held-out regression-bounded acceptance admits a candidate to the archive but may not by itself promote it to the default for live work; an accepted candidate reaches real work behind a named, instantly revertible switch at a declared exposure fraction with deterministic assignment and a reserved holdout on the prior default, so a regression the held-out set could not see is bounded to the exposed fraction and reversible without shipping. The reason is structural rather than a matter of gate strength — the held-out set is a *sample of tasks* while live work is a *distribution that moves*, so a candidate promoted straight to 100% on a held-out win has been validated against the past and deployed against the future. Exposure fraction, guardrails, and stopping rule are declared before exposure and frozen for its lifetime (the live analog of HX-8's held-out honesty and HX-11's criteria-immutability). Related Specifications extended with `l1-staged-rollout`. |
 | 1.1.0 | 2026-07-09 | Core Team | Added HX-11 (budget-normalized evaluation & mutation-invariant metric) — when candidates in one search differ in resource-affecting dimensions, evaluations MUST be budget-comparable: preferred design is budget normalization (the evaluation contract fixes the resource budget — wall-clock/compute/tokens/trials — not the workload, every candidate measured on outcome-within-fixed-budget), so radically heterogeneous candidates compete directly, efficiency is absorbed into the outcome rather than hand-weighed as a second axis, and the optimum is honestly platform-relative (budget + platform recorded with every score, composing MR-14 estimate-vs-measurement honesty); differing budgets partition the frontier (HX-7, sharpening the ACE-5 a-longer-budget-is-a-different-task row into a design principle), scores under different budgets never competing; and the scoring metric MUST be mutation-invariant — chosen to remain meaningful across the entire mutable candidate space, a mutation never able to change what the metric measures (a criteria-drift sibling of the loop-governance oracle-ownership rule). Invariant-only addition. Distilled from an adoption pass over an external autonomous-experimentation-loop reference whose core (autonomous modify→run→measure→keep/discard loop, mutable-surface restriction with an immutable oracle, experiment journal) was already realized by HX-1…HX-10 + l1-loop-governance mutation-rights/oracle-ownership + NE-12 — HX-11 captures the genuine delta (fixed-budget comparability + metric invariance). L1 stays Stable (C9, additive); the nodus realization is l1-nodus-environment NE-13. |
 | 1.0.0 | 2026-07-02 | Core Team | Initial spec — harness optimization as an outer-loop search over a candidate space, the third activity beside harness-engineering (evolve one) and agent-coevaluation (measure): searchable space (HX-1); outer-loop/inner-runtime separation (HX-2); content-addressed archived candidates with provenance (HX-3); trace-rich proposer reading source+scores+traces (HX-4); declared bounded wrapper-first mutation space (HX-5); frontier of non-dominated candidates across the objective vector, not a scalar best (HX-6); comparability-partitioned frontier + task-selection-hash-guarded baseline reuse or fresh run (HX-7); regression-bounded, held-out-honest, train/eval-disjoint, reward-hacking-guarded acceptance (HX-8); budgeted terminating search (HX-9); durable, concurrency-safe, resumable, observable frontier (HX-10). Composes harness-engineering / agent-coevaluation / evaluation-suites / attestation / nodus-environment; adds the search+frontier layer none owned. HX-8 also formalizes the reward-hacking-filter + train/eval-disjointness mechanic. |
