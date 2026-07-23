@@ -15,6 +15,7 @@ OS-level confinement of the code and commands the agent runs. Where client secur
 - [l2-sandbox-policy.md](l2-sandbox-policy.md) - The network-egress + binary-allowlist slice of sandbox enforcement; this spec covers the syscall/privilege/resource/image slice.
 - [l2-execution-workspace.md](l2-execution-workspace.md) - The isolated filesystem environment the sandboxed code runs inside; confinement applies within it.
 - [l1-policy-governance.md](l1-policy-governance.md) - Posture tiers may select how strict the confinement profile is.
+- [l1-environment-lifecycle.md](l1-environment-lifecycle.md) - The independent lifetime axis: this spec governs *what code may do* once running, that one governs *when the environment exists* and what happens to its work when it ends.
 
 ## 1. Motivation
 

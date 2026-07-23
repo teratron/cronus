@@ -1,6 +1,6 @@
 # Iterative Refinement
 
-**Version:** 1.0.0
+**Version:** 1.1.0
 **Status:** Stable
 **Layer:** concept
 
@@ -20,6 +20,7 @@ The three fan-out modes trade **width** for quality — parallel staffing fans d
 - [l1-requirement-checklists.md](l1-requirement-checklists.md) — the explicit, itemized criteria form the rubric applies (IR-3).
 - [l1-claim-verification.md](l1-claim-verification.md) — grounded checking (IR-4): a criterion checkable against ground truth is actually checked, not judged for plausibility.
 - [l1-output-contracts.md](l1-output-contracts.md) — deterministic schema/criteria validators; a rubric item MAY be a deterministic oracle rather than a judge.
+- [l1-outcome-confidence.md](l1-outcome-confidence.md) — [ADDED v1.1.0] supplies the first-pass quality signal IR-8 requires before a loop may be entered, and its named contributors become the loop's revision targets (IR-9).
 - [l1-orchestration.md](l1-orchestration.md) — the independent-judge machinery (ORC-6) the grader reuses; a refinement loop is a delegation decision (ORC-5 context isolation for the grader).
 - [l1-operational-ledger.md](l1-operational-ledger.md) — the append-only record the refinement trace (IR-7) writes to.
 - [l1-generation-budget.md](l1-generation-budget.md) — the spend bound (IR-5) and the uncertainty-vs-habit spend discipline (IR-8).
@@ -58,6 +59,8 @@ Rules every Layer 2 implementation MUST NOT violate. They are technology-neutral
 - **IR-7 (Observable, attributed refinement trace):** every iteration records the artifact version, the grader's verdict and feedback, and what the revision changed, so the convergence — or the failure to converge — is auditable and a human can see *why* the loop stopped. Intermediate versions are retained in the trace (append-only, composing the operational ledger), never silently overwritten; the trace distinguishes a *pass* exit from a *budget-exhausted* exit.
 
 - **IR-8 (Uncertainty-justified, not reflexive):** one pass is the default. Entering a refinement loop is an explicit decision justified by a **first-pass quality-uncertainty** signal — an ambiguous/high-stakes artifact, low producer confidence, a prior gate failure — and is recorded with its budget. A single high-confidence output does not enter a refine loop; refinement is spent where quality uncertainty warrants the extra cycles, mirroring competitive execution's uncertainty-justified rule (CE-1).
+
+- **IR-9 (The entry signal is measured, and its contributors are the revision targets):** [ADDED v1.1.0] the "first-pass quality-uncertainty" IR-8 requires is a **measured estimate, not an impression** — an outcome-confidence assessment produced independently of the producer, with named contributors. Two consequences bind the loop. **Entry**: a loop is entered on a low measured estimate or a failed gate, never on a producer's self-report that it feels unsure — a self-declared uncertainty is a claim, and using it as the trigger lets a producer choose its own budget. **Targeting**: the estimate's named contributors are carried into the loop as the **specific things the revision must address**, so an iteration is aimed rather than a generic retry; a loop that re-attempts the whole artifact without naming what it is fixing burns budget on the parts that were already fine. The estimate informs entry and targeting only — it MUST NOT relax the rubric (IR-6 criteria stay frozen), MUST NOT extend the budget (IR-5's ceiling is independent of any score), and MUST NOT itself decide the pass/continue verdict, which remains the independent grader's (IR-2). A high estimate is likewise never a reason to skip a mandated gate — a rubric pass and a definition-of-done pass remain separate (IR-3, §4.5).
 
 > L2 specs cannot reach RFC status until all invariants here are addressed in their "Invariant Compliance" section.
 
@@ -134,4 +137,5 @@ The first three fan out (width); iterative refinement deepens (time). Because it
 
 | Version | Date | Author | Notes |
 | --- | --- | --- | --- |
+| 1.1.0 | 2026-07-23 | Core Team | Added IR-9 — the IR-8 entry signal is a **measured** outcome-confidence estimate produced independently of the producer, never a producer's self-report (a self-declared uncertainty is a claim, and letting it trigger the loop lets a producer choose its own budget); and the estimate's **named contributors become the loop's revision targets**, so an iteration is aimed at what was actually weak rather than being a generic whole-artifact retry that spends budget on the parts already fine. The estimate informs entry and targeting only: it may not relax the frozen rubric (IR-6), may not extend the independent budget ceiling (IR-5), may not decide the pass/continue verdict (IR-2, still the grader's), and a high estimate never waives a mandated definition-of-done gate (IR-3). Related Specifications extended with `l1-outcome-confidence`. |
 | 1.0.0 | 2026-07-09 | Core Team | Initial stable spec — iterative refinement (generate–evaluate–refine): the temporal coordination-family member trading depth for quality beside the three width fan-outs. One artifact improved in place (IR-1), producer/grader independence (IR-2), rubric-driven actionable feedback (IR-3), grounded verification not plausibility (IR-4), bounded convergence with an honest best-so-far exit (IR-5), frozen criteria / no goalpost drift (IR-6), observable attributed refinement trace (IR-7), uncertainty-justified not reflexive (IR-8). Composes l1-loop-governance / l1-competitive-execution / l1-deliberation / l1-quality-standards / l1-claim-verification. Distilled from an adoption pass over an external agent-recipe reference (evaluator-optimizer / outcome-graded revision). |

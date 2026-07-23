@@ -1,6 +1,6 @@
 # Implementation Plan
 
-**Version:** 2.36.0
+**Version:** 2.37.0
 **Generated:** 2026-07-22
 **Based on:** .design/main/INDEX.md v1.0.124
 **Status:** Active
@@ -203,6 +203,11 @@ Execution mode: **Parallel** (C3); tracks grouped by file independence. Critical
 - [x] **Knowledge Graph** ([l1-knowledge-graph.md](specifications/l1-knowledge-graph.md)) [L1] — `concept-only` — corpus-derived entity–relation graph as a complementary retrieval substrate beside the flat chunk/vector index, for relational and corpus-global questions flat retrieval cannot answer
 
 *Registry-parity fix (v2.36.0): four Stable L1 specs were present in `INDEX.md` but absent from both the plan and the backlog — orphaned by C6's definition and therefore a standing planning blocker. Absorbed here as `concept-only`; no scope change, only registry parity.*
+
+- [x] **Outcome Confidence** ([l1-outcome-confidence.md](specifications/l1-outcome-confidence.md)) [L1] — `concept-only` — calibrated, decomposed completion-likelihood at the delivery boundary as the instrument against **silent incompleteness**: judgement of the outcome read from the whole trajectory rather than the final artifact (OC-1); named contributors from a closed vocabulary, never a bare scalar (OC-2); anticipated-follow-up as a first-class family — the only question that reaches past the checks that were run (OC-3); calibration as an obligation, with an unmeasured value shown as an ordinal or withheld rather than dressed as a probability (OC-4); **confidence never substitutes for evidence** (OC-5); a low estimate carries a declared behavioural consequence, never a hedged sentence (OC-6); producer-independent, never self-declared (OC-7); bounded, degradable, never default-confident (OC-8); reproducible from a recorded evidence span (OC-9); comparable across candidate outcomes but never a reputation score (OC-10)
+- [x] **Execution Environment Lifecycle** ([l1-environment-lifecycle.md](specifications/l1-environment-lifecycle.md)) [L1] — `concept-only` — the lifetime contract for ephemeral execution environments, distinct from sandbox confinement (authority) and from office workspace lifecycle (durable): specification/instance split (EL-1); closed observable status set with provisioning as a progress-bearing state and *failed* distinct from *gone* (EL-2); intent accepted under a provisional identity before the environment exists (EL-3) and reconciled exactly-once in arrival order (EL-4); **every exit path names its capture owner** — destroy, idle/expiry reap, quota eviction, host crash, failed resume, abandonment — ownership following the power to destroy, not the intention to preserve (EL-5); residue as a verifiable base-anchored delta, cheap enough to be mandatory (EL-6); suspension preserves, destruction captures, a resume restores the same instance or reports a failed resume (EL-7); bounded lifetime with a declared reaper (EL-8); scoped revocable credentials with named exposed services (EL-9); provisioning secrets injected, never recorded (EL-10)
+
+*Concept absorbed in v2.37.0 (registry sync INDEX v1.0.135 → v1.0.136) — the two L1 concepts of the self-uncertainty pass. Stable, `concept-only` (C28) — no authored `Implements:` L2 yet. Their L2 landing points differ: outcome-confidence belongs with the verification/refinement cluster (it supplies the IR-8/IR-9 entry signal), while environment-lifecycle already has most of its realization in `l2-execution-workspace` — that L2's `Implements:` line should be re-pointed at this L1 when the next planning pass touches it, since `l1-orchestration` + `l1-storage-model` were only ever a proxy parent for a lifetime contract.*
 
 ## Phase 1 — Seed I: Foundation
 
