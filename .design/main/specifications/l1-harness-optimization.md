@@ -1,6 +1,6 @@
 # Harness Optimization
 
-**Version:** 1.2.0
+**Version:** 1.2.1
 **Status:** Stable
 **Layer:** concept
 
@@ -35,6 +35,7 @@ re-implements, evolution, scoring, and attestation.
 - [l1-staged-rollout.md](l1-staged-rollout.md) — [ADDED v1.2.0] the release contract HX-12 defers to: an accepted candidate reaches live work behind a named revertible switch at a declared exposure fraction, with a holdout on the prior default.
 - [l1-nodus-environment.md](../../nodus/specifications/l1-nodus-environment.md) — a graded run (reward + trajectory) is one candidate's evaluation; NE-12 makes it an archivable candidate result.
 - [l2-self-improvement.md](l2-self-improvement.md) — best-vs-current rollout gating; a scalar-best special case of the frontier here.
+- [l1-model-adaptation.md](l1-model-adaptation.md) - [ADDED v1.2.1] A model-plane adaptation passes the same held-out, regression-bounded acceptance (HX-8) before adoption (MA-6); offline acceptance is necessary, never sufficient (HX-12).
 
 ## 1. Motivation
 

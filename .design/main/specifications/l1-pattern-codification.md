@@ -1,6 +1,6 @@
 # Pattern Codification
 
-**Version:** 1.0.0
+**Version:** 1.0.1
 **Status:** Stable
 **Layer:** concept
 
@@ -22,6 +22,7 @@ The load-bearing rule is that promotion is **earned, not automatic**. Repetition
 - [l1-facilitation.md](l1-facilitation.md), [l1-inner-monologue.md](l1-inner-monologue.md) — decide *when* to surface a promotion proposal without interrupting (PC-2).
 - [../../nodus/specifications/l1-nodus-dialog.md](../../nodus/specifications/l1-nodus-dialog.md) — DG-10 promotable remembered decision is the nodus-workflow realization: a stably-repeated `+remember` decision surfaced as a host-promotable rule candidate.
 
+- [l1-model-adaptation.md](l1-model-adaptation.md) - [ADDED v1.0.1] The **model-plane** sibling: this codifies experience into inspectable *rules* (context plane); that distils verified experience into a reversible weight *adaptation*, under the same earned-and-ratified discipline (PC-1/PC-2) at higher consequence (MA-5).
 ## 1. Motivation
 
 Without a codification discipline, an agent handles recurring patterns in one of two bad ways. It ignores them — so the human re-states the same preference every week and the agent never internalizes it. Or it over-reacts — it sees a pattern three times and silently hardens it into a rule, then enforces a "rule" the human never agreed to, on evidence too thin to bear it. The first wastes the relationship's accumulated signal; the second manufactures governance the human did not author, which is both wrong (the pattern may be coincidence) and dangerous (the agent has effectively granted itself a new law).

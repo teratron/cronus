@@ -1,6 +1,6 @@
 # Model Runtime
 
-**Version:** 1.2.0
+**Version:** 1.2.1
 **Status:** Stable
 **Layer:** concept
 
@@ -34,6 +34,7 @@ the substrate that routing schedules onto and that the provider catalog implemen
 - [l2-dashboard.md](l2-dashboard.md) - Runtime analytics (measured residency/throughput) that recalibrate fit estimates (MR-14).
 - [l1-telemetry.md](l1-telemetry.md) - Consent gate governing any opt-in sharing of measured performance beyond the device (MR-14).
 - [l1-reproduction-recipe.md](l1-reproduction-recipe.md) - [ADDED v1.2.0] Consumes MR-3 content-addressed identity and MR-12 versioned references (RR-3); a degradation tier that would alter outputs is a recipe field, not an operational choice (MR-15).
+- [l1-model-adaptation.md](l1-model-adaptation.md) - [ADDED v1.2.1] Owns the lifecycle of the **optional adapters** MR-5 names as a definition field: produce, evaluate, attach, detach, version; MR-6 load/unload realizes attach/detach over the frozen base.
 
 ## 1. Motivation
 

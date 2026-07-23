@@ -1,6 +1,6 @@
 # Implementation Plan
 
-**Version:** 2.42.0
+**Version:** 2.43.0
 **Generated:** 2026-07-22
 **Based on:** .design/main/INDEX.md v1.0.124
 **Status:** Active
@@ -228,6 +228,10 @@ Execution mode: **Parallel** (C3); tracks grouped by file independence. Critical
 - [x] **Review Checkpoint** ([l1-review-checkpoint.md](specifications/l1-review-checkpoint.md)) [L1] — `concept-only` — the solicited, in-band human review: work halts and the system asks a human for a bounded decision at a declared lifecycle point (RC-1); a closed decision set with a **revise arm** — approve/request-revision/reject — since approve-or-reject discards the common “yes, but change this” (RC-2); the producer neither configures nor clears the review of its own work (RC-3); **request-revision returns to the same producer with feedback threaded and the prior attempt preserved** (RC-4); the loop bounded with an honest exit (RC-5); the terminal/expensive/irreversible step checkpointed by default with auto-approve an explicit opt-out (RC-6); the reviewer shown the actual artifact, not a claim about it (RC-7); every review attributed and recorded (RC-8); a held item pausing itself and its dependents but never the whole office (RC-9); pending review a distinct, visible, owned state (RC-10)
 
 *Concept absorbed in v2.42.0 (registry sync INDEX v1.0.140 → v1.0.141). Stable, `concept-only` (C28) — no authored `Implements:` L2 yet. Like convergence-gate it sits between the two concept-only populations: `l1-iterative-refinement` gained IR-10 pointing *to* it, but IR-10 is a composition note (a human review *is* an instance of grader-gated refinement), not a hard `Implements:` dependency. The deferred-to implementation wave (reproduction-recipe, fault-lifecycle, staged-rollout, environment-lifecycle) is unchanged; convergence-gate and review-checkpoint are the two “recommended-but-not-required” concepts adjacent to it.*
+
+- [x] **Model Adaptation** ([l1-model-adaptation.md](specifications/l1-model-adaptation.md)) [L1] — `concept-only` — the office's second plane of learning: specializing the local model itself to the office's domain, the deep complement to context-plane improvement (rules/skills/prompts/harness), by distilling verified own experience into a **separable reversible adaptation over a frozen base**. Two planes never conflated (MA-1); frozen base + separable delta, never a base mutation (MA-2); composable, per-task attachable (MA-3); distilled from **verified** own experience with provenance, avoiding the self-training collapse trap (MA-4); earned and ratified, never automatic or self-adopted, gated at least as strictly as the context plane (MA-5); held-out-evaluated against the base and staged reversibly, never adopted on a training-loss number (MA-6); content-addressed/versioned/attested (MA-7); reversible and non-destructive — detach returns exactly to the base (MA-8); changes dispositions not knowledge or correctness, never relaxes a safety gate, measured against ground truth not self-consistency (MA-9); optional, local-first, never a dependency (MA-10)
+
+*Concept absorbed in v2.43.0 (registry sync INDEX v1.0.141 → v1.0.142). Stable, `concept-only` (C28) — no authored `Implements:` L2 yet. Sits in the deferred-to-adjacent “recommended” band with convergence-gate and review-checkpoint: `l1-model-runtime` (MR-5) already names an optional-adapters field this concept gives a lifecycle to, but that is a field mention, not a hard `Implements:` dependency. The deferred-to implementation wave (reproduction-recipe, fault-lifecycle, staged-rollout, environment-lifecycle — each a prerequisite for Stable specs already committed to it) is unchanged.*
 
 ## Phase 1 — Seed I: Foundation
 
