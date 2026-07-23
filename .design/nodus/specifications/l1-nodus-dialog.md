@@ -1,6 +1,6 @@
 # Nodus Human-in-the-Loop Dialog Contract
 
-**Version:** 1.3.0
+**Version:** 1.3.1
 **Status:** Stable
 **Layer:** concept
 
@@ -29,6 +29,7 @@ into a full concept contract; the crate-side realisation is itemized in
 - [l1-nodus-portability.md](l1-nodus-portability.md) — the dialog backend is an LP-2 extension point and an LP-8 capability-manifest role (host neutrality, LP-1)
 - [l1-nodus-observability.md](l1-nodus-observability.md) — dialog prompts/answers emit execution events under the same trace protocol, bound by the data-safety boundary
 - [l1-nodus-testing.md](l1-nodus-testing.md) — `@test:` blocks must run dialog-bearing workflows deterministically, without a live human (provider neutrality)
+- [../../main/specifications/l1-review-checkpoint.md](../../main/specifications/l1-review-checkpoint.md) — [ADDED v1.3.1] the main concept the ASK/CONFIRM dialog seam realizes for a human reviewer: a solicited review pause over Status::Paused (NL-12), its revise loop the grader-gated `~UNTIL +grade` with feedback threading (NL-14). No new dialog surface — review checkpoints compose the existing seams.
 
 ## 1. Motivation
 

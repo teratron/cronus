@@ -1,6 +1,6 @@
 # Action Gating
 
-**Version:** 1.0.0
+**Version:** 1.0.1
 **Status:** Stable
 **Layer:** concept
 
@@ -20,6 +20,7 @@ The load-bearing insight is that **uniform friction is the failure mode in both 
 - [l1-operational-ledger.md](l1-operational-ledger.md) — the auditable record of each gate decision, tier, and approver (AG-7).
 - [l2-agent-autonomy.md](l2-agent-autonomy.md) — durable allow-rules are the concrete de-escalation mechanism (AG-6).
 - [../../nodus/specifications/l1-nodus-portability.md](../../nodus/specifications/l1-nodus-portability.md) — LP-16 effect risk-class declaration is the nodus-workflow realization: an effectful step declares its consequence descriptors so a host graduated gate can tier it.
+- [l1-review-checkpoint.md](l1-review-checkpoint.md) — [ADDED v1.0.1] RC-6 defers to this spec for which terminal/expensive step is checkpointed by default; a review decision (approve/revise/reject) is richer than the permit/deny of an effect gate.
 
 ## 1. Motivation
 

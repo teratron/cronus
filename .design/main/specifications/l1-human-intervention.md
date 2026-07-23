@@ -1,6 +1,6 @@
 # Human Intervention & Reconciliation
 
-**Version:** 1.0.0
+**Version:** 1.0.1
 **Status:** Stable
 **Layer:** concept
 
@@ -33,6 +33,7 @@ wheel on this artifact" contract.
 - [l1-storage-model.md](l1-storage-model.md) — STO-9 versioned state + timestamped pre-write backups is the version/timestamp baseline HI-2 compares against, and the safety net if a reconciliation must be undone.
 - [l1-operational-ledger.md](l1-operational-ledger.md) — the provenance/audit record HI-6 writes the intervention and its reconciliation into.
 - [l1-kanban-model.md](l1-kanban-model.md) / [l1-work-convergence.md](l1-work-convergence.md) — the board/cards a human most often hand-edits; a manual card move/edit is an HI event that converges through the same board of record.
+- [l1-review-checkpoint.md](l1-review-checkpoint.md) — [ADDED v1.0.1] the *in-band, solicited* complement: there the system pauses and asks for a review decision; here (HI) the human acts out of band and the system detects it. Two halves of human steering.
 
 ## 1. Motivation
 
