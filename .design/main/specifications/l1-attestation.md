@@ -1,6 +1,6 @@
 # Verifiable Attestation
 
-**Version:** 1.0.0
+**Version:** 1.0.1
 **Status:** Stable
 **Layer:** concept
 
@@ -38,6 +38,7 @@ artifact**, checkable by a third party.
 - [l1-quality-standards.md](l1-quality-standards.md) — passed quality gates are attestable typed claims (AT-4).
 - [l1-context-provenance.md](l1-context-provenance.md) — the complementary content-trust boundary (composition safety vs artifact integrity).
 - [l1-nodus-portability.md](../../nodus/specifications/l1-nodus-portability.md) — the nodus realization: LP-9 extraction-bundle witness.
+- [l1-reproduction-recipe.md](l1-reproduction-recipe.md) — [ADDED v1.0.1] the complementary claim: a witness proves an artifact is genuine, a recipe states how to make it again; RR-10 forbids substituting one for the other.
 
 ## 1. Motivation
 

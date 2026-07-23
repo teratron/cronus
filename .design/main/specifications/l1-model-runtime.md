@@ -1,6 +1,6 @@
 # Model Runtime
 
-**Version:** 1.1.0
+**Version:** 1.2.0
 **Status:** Stable
 **Layer:** concept
 
@@ -33,6 +33,7 @@ the substrate that routing schedules onto and that the provider catalog implemen
 - [l1-architecture.md](l1-architecture.md) - Layered core + frontends; the runtime is a core subsystem fronted by thin clients (MR-11).
 - [l2-dashboard.md](l2-dashboard.md) - Runtime analytics (measured residency/throughput) that recalibrate fit estimates (MR-14).
 - [l1-telemetry.md](l1-telemetry.md) - Consent gate governing any opt-in sharing of measured performance beyond the device (MR-14).
+- [l1-reproduction-recipe.md](l1-reproduction-recipe.md) - [ADDED v1.2.0] Consumes MR-3 content-addressed identity and MR-12 versioned references (RR-3); a degradation tier that would alter outputs is a recipe field, not an operational choice (MR-15).
 
 ## 1. Motivation
 
@@ -148,6 +149,23 @@ Layer 2 realizations and concrete backends MUST NOT violate these.
   an estimate and a measurement remain distinguishable in everything the runtime reports.
   Sharing measurements beyond the device is opt-in under the telemetry consent gate and is
   never a precondition for local calibration.
+
+- **MR-15 Degrade before refusing.** [ADDED v1.2.0] Where a model does not fit the fastest
+  placement, the runtime MUST consider a **named degradation tier** — a declared placement
+  that trades throughput for capacity by keeping only the working portion in the fastest
+  memory — before refusing under the MR-7 fit gate. Refusal stays for what no tier can serve;
+  it is the last answer, not the first. The reason is a product one: this is a local-first
+  system on hardware the user already owns, so "your machine cannot run this" is a failure of
+  the runtime far more often than a fact about the machine, and a system that only ever
+  refuses is unusable on exactly the modest hardware it was built to serve.
+  Three obligations bind the tier. Its **cost is stated before the run**, as a calibrated
+  estimate carrying its own basis (MR-14) — a user choosing a slow run must be choosing it,
+  not discovering it. The **tier used is recorded on the run**, so a slow result is
+  attributable to the placement rather than mistaken for a model or prompt regression, which
+  is the misattribution this invariant exists to prevent. And a tier **changes speed, never
+  outputs**: a placement that alters results is not a degradation but a *different
+  configuration*, and it is then a recipe field (RR-2 ambient layer) rather than an
+  invisible operational choice.
 
 > A Layer 2 spec cannot reach RFC status until every MR-n invariant above is addressed in
 > its "Invariant Compliance" section.
@@ -316,3 +334,4 @@ named by structural idea, not by product.
 | --- | --- | --- |
 | 1.0.0 | 2026-06-25 | Initial model: local-first provider-abstracted serving runtime — content-addressed model store with verifiable registry acquisition, portable declarative model definition, explicit load/unload lifecycle with fit-gated hardware scheduling, streaming inference contract with an industry-compatible surface, managed observable server, thin clients, and digest-reproducible references (MR-1…MR-12). |
 | 1.1.0 | 2026-06-25 | MR-13…MR-14 added — multi-device placement (split across an accelerator set before CPU fallback) with mixture-of-expert footprint sizing (resident-total vs active-per-token); calibrated honest estimates (figures labeled estimate vs measurement, recalibrated by recorded `(model, placement, hardware)` residency/throughput, community sharing opt-in under the telemetry gate). §5.5 extended; ideas-to-adopt rows added for multi-accelerator fit, MoE sizing, measured calibration, hardware-preset simulation, and a community-measured corpus. |
+| 1.2.0 | 2026-07-23 | Added MR-15 (degrade before refusing) — where a model does not fit the fastest placement the runtime MUST consider a **named degradation tier** trading throughput for capacity before refusing under the MR-7 fit gate, refusal becoming the last answer rather than the first; the reason is a product one, since on a local-first system running on hardware the user already owns "your machine cannot run this" is far more often a failure of the runtime than a fact about the machine, and a runtime that only refuses is unusable on exactly the modest hardware it exists to serve. Three obligations: the tier's cost is **stated before the run** as a calibrated basis-carrying estimate (MR-14) so a slow run is chosen rather than discovered; the tier used is **recorded on the run** so a slow result is attributable to the placement instead of being mistaken for a model or prompt regression; and a tier **changes speed, never outputs** — a placement that alters results is a different configuration, and therefore a reproduction-recipe field (RR-2 ambient layer), not an invisible operational choice. |

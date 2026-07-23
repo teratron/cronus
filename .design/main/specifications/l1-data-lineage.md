@@ -1,6 +1,6 @@
 # Data Lineage
 
-**Version:** 1.0.0
+**Version:** 1.0.1
 **Status:** Stable
 **Layer:** concept
 
@@ -21,6 +21,7 @@ The enabling granularity is the **item**: data moves between steps not as one op
 - [l1-output-contracts.md](l1-output-contracts.md) — the typed shape of the items a derivation link connects.
 - [l1-security.md](l1-security.md), [l1-storage-model.md](l1-storage-model.md) — the retention/consent boundary lineage records stay within (LN-8).
 - [../../nodus/specifications/l1-nodus-observability.md](../../nodus/specifications/l1-nodus-observability.md) — HO-13 per-item derivation lineage is the nodus-workflow realization: an optional side-band derivation descriptor on collection-mapping execution events.
+- [l1-reproduction-recipe.md](l1-reproduction-recipe.md) — [ADDED v1.0.1] the deliberately opposite placement: lineage stays in the trace as side-band metadata (LN-5), the recipe travels embedded with the artifact once it leaves the system.
 
 ## 1. Motivation
 
