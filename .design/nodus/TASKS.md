@@ -1,9 +1,9 @@
 # Master Task Index (Registry)
 
-**Version:** 2.6.0
-**Generated:** 2026-07-10
-**Based on:** .design/nodus/PLAN.md v1.14.0
-**Based on RULES:** .design/RULES.md v1.5.0
+**Version:** 2.8.0
+**Generated:** 2026-07-24
+**Based on:** .design/nodus/PLAN.md v1.16.0
+**Based on RULES:** .design/RULES.md v1.6.0
 **Execution Mode:** Sequential
 **Status:** Active
 
@@ -63,10 +63,11 @@ Tactical registry of all phases. Atomic checklists live in `tasks/phase-{N}.md`.
 | --- | --- | --- |
 | [Phase 11](archives/tasks/phase-11.md) | Control-Flow Constructs (l2-nodus-control-flow): ?SWITCH / ~MAP / ~RETRY:n / !HALT / !PAUSE — lexer tokens + SwitchBlock/MapBlock AST + action flags + retry; parser/executor/transpiler/validator; implemented as per-construct vertical slices | `Done (Archived)` |
 | [Phase 12](archives/tasks/phase-12.md) | Environment & Evaluation (l2-nodus-environment): EnvironmentProvider + StubEnvironment + lifecycle, Reward/EnvInteraction trajectory side-band (no new ExecutionEvent variant), ExtensionRole::Environment manifest, run_with_environment frozen boundary + Profile/Budget/GradingMode + CandidateResult digest → 9 tasks / 5 tracks (A–D, T); all-additive, zero-dep preserved | `Done (Archived)` |
+| [Phase 13](tasks/phase-13.md) | Declarative Configuration Surface (l2-nodus-config): §config field-declaration AST + `parse_config` (replaces the parser stub), pure `check_config_values` shape check, `AcceptedConfig` provenance/secret value model, `ConfigProvider` + `ExtensionRole::Config` + `DefaultConfigProvider`, `run_with_config[_and_audit]`, `CONFIG_INVALID` code → 9 tasks / 4 tracks (A–C, T); all-additive, zero-dep (LP-1), reuses LP-8 manifest + error taxonomy | `Todo` |
 
 ## Meta Information
 
-- **Last Updated**: 2026-07-10 (Phase 12 — Environment & Evaluation complete: all 9 tasks / 5 tracks (A–D, T) landed in `crates/nodus` — EnvironmentProvider + StubEnvironment, Reward/GradingMode/Budget/CandidateResult, ExtensionRole::Environment, run_with_environment public API, EnvInteraction trajectory side-band (no new ExecutionEvent variant). All-additive; zero new dependency (LP-1 preserved). Gates green: 292 tests (was 265) + clippy + fmt + doc; downstream cronus-cli unaffected. Prior v2.6.0: phase opened. Prior v2.5.1: l1-nodus-environment absorbed into Phase 0, Phase 11 reconciled → Done+Archived, RULES parity v1.4.0 → v1.5.0.)
+- **Last Updated**: 2026-07-24 (v2.8.0: opened **Phase 13 — Declarative Configuration Surface** (l2-nodus-config), 9 tasks / 4 tracks (A–C, T), Sequential — realizes NL-20 (§config), the net-new-weight obligation flagged by the prior sync; INDEX v1.0.57 → v1.0.58, PLAN v1.15.0 → v1.16.0, RULES parity v1.6.0 held. Prior v2.7.0 Sync: registry INDEX v1.0.47 → v1.0.57; RULES parity re-synced v1.5.0 → v1.6.0. New additive invariants NL-19/20/21 · LP-17/18/19 · HO-14…HO-20 carried as pending L2 Invariant-Compliance obligations — no new phase opened (no Stable L2 spec to decompose into verifiable tasks); NL-20 §config flagged for a dedicated l2-nodus-config spec. All 12 phases remain Done (Archived). Prior 2026-07-10 (v2.6.0): Phase 12 — Environment & Evaluation complete: all 9 tasks / 5 tracks (A–D, T) landed in `crates/nodus` — EnvironmentProvider + StubEnvironment, Reward/GradingMode/Budget/CandidateResult, ExtensionRole::Environment, run_with_environment public API, EnvInteraction trajectory side-band (no new ExecutionEvent variant). All-additive; zero new dependency (LP-1 preserved). Gates green: 292 tests (was 265) + clippy + fmt + doc; downstream cronus-cli unaffected. Prior v2.6.0: phase opened. Prior v2.5.1: l1-nodus-environment absorbed into Phase 0, Phase 11 reconciled → Done+Archived, RULES parity v1.4.0 → v1.5.0.)
 - **Phase 3 Planned**: 2026-06-24 (9 tasks, tracks A/B/C/D/T)
 - **Phase 4 Complete**: 2026-06-24 (9 tasks, tracks A/B/C/T; all archived)
 - **Phase 5 Complete**: 2026-06-24 (7 tasks, tracks A/B/C/T; all archived)

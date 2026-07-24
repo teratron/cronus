@@ -1,6 +1,6 @@
 # Project Context
 
-**Generated:** 2026-07-10
+**Generated:** 2026-07-24
 
 ## Active Technologies
 
@@ -15,6 +15,8 @@
 │   ├── rules/
 │   ├── skills/
 │   └── workflows/
+├── .cargo/
+│   └── config.toml
 ├── .claude/
 │   ├── commands/
 │   ├── rules/
@@ -30,12 +32,15 @@
 │   ├── .version
 │   ├── INDEX.md
 │   ├── RULES.md
+│   ├── graph-before.json
 │   ├── main/
 │   ├── nodus/
 │   ├── wiki/
 │   └── workspace.json
 ├── .drafts/
 │   ├── TODO.md
+│   ├── UX-UI - разбор 3 кейсов.md
+│   ├── UX-дизайн - 6 психологических принципов.md
 │   ├── desktop.drawio.svg
 │   ├── heartbeat.md
 │   ├── project-names.md
@@ -64,21 +69,28 @@
 │   └── desktop/
 ├── biome.json
 ├── crates/
+│   ├── activation-os/
+│   ├── auth-local/
 │   ├── cli/
 │   ├── codegraph/
+│   ├── contract/
 │   ├── core/
+│   ├── domain/
+│   ├── model-local/
 │   ├── nodus/
+│   ├── store-local/
 │   └── tui/
 ├── docs/
 │   └── README.md
-├── firebase-debug.log
 ├── installer/
 ├── package.json
 ├── packages/
 │   └── ui/
 ├── pnpm-lock.yaml
 ├── pnpm-workspace.yaml
-└── rust-toolchain.toml
+├── rust-toolchain.toml
+└── scripts/
+    └── check-domain-boundary.mjs
 ```
 
 ## Recent Changes
@@ -98,3 +110,4 @@
 - T-10D: Added `ExtensionRole::Dialog`; `CapabilityManifest::from_workflow` requires it for an `ASK`/`CONFIRM` lacking `+default` (refactored the command walker to inspect modifiers); `HostCapabilities::builtin()` omits Dialog
 - T-10E: Added `run_with_dialog` / `run_with_dialog_and_audit` (workflows.rs) + `lib.rs` re-exports of `DialogProvider`/`DialogOutcome`/`DefaultDialogProvider`/`ResumeDescriptor`
 - T-10T: `tests/dialog.rs` — 7 DG-invariant integration tests (default resolution, pause+resume descriptor, typed binding, timeout/rejection errors, manifest Dialog derivation); `cargo test -p nodus` — 237 passed (was 228; +9); clippy `-D warnings` clean; fmt clean; doc only the pre-existing baseline; SDD §6 clean
+
