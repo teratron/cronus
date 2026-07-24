@@ -1,8 +1,8 @@
 # Implementation Plan
 
-**Version:** 1.17.0
+**Version:** 1.18.0
 **Generated:** 2026-07-24
-**Based on:** .design/nodus/INDEX.md v1.0.59
+**Based on:** .design/nodus/INDEX.md v1.0.60
 **Status:** Active
 
 ## Overview
@@ -11,6 +11,8 @@ Strategic plan for maturing nodus from an in-tree vendored crate to an independe
 
 Execution mode: **Sequential** (spec correctness must precede hardening; hardening must precede extraction).
 
+> **Sync (v1.18.0, 2026-07-24):** opened **Phase 15 — Aggregation-Safe Event Stream**, decomposing the newly-authored `l2-nodus-observability` §4.8 (v1.3.0, INDEX v1.0.60) into 6 atomic tasks across tracks A→C + validation (Sequential). This realizes **HO-7** (dense `seq` + run-scoped `correlation_id`) and **HO-14** (two-state `Measurement`) — the two *cross-cutting* members of the deferred event batch, batched so the all-variant churn happens once and Pass-2's HO-8 token classes are born already-typed. Like Phase 14 this is a spec-ahead-of-code L2 update, not a new orphan (`l2-nodus-observability` has been planned since Phase 4). **Pass 2** of the event batch (HO-8, HO-9, HO-10, HO-11, HO-13, HO-16, HO-17 — additive optional fields + read-side rules) remains deferred to a follow-up spec pass; the language/portability clusters (NL-19/21, LP-17/18/19) remain lighter Backlog closures.
+>
 > **Sync (v1.17.0, 2026-07-24):** opened **Phase 14 — Run-Manifest Identity & Reproducibility**, decomposing the newly-authored `l2-nodus-observability` §4.7 (v1.2.0, INDEX v1.0.59) into 7 atomic tasks across tracks A→C + validation (Sequential). This realizes the observability **manifest/identity cluster HO-12/15/18/19/20** — the net-new-weight batch flagged after Phase 13 (a spec-ahead-of-code L2 update, not a new orphan spec: `l2-nodus-observability` was already planned in Phase 4 for HO-1…HO-6, and §4.7 adds the manifest-enrichment realization). The observability **event-stream batch** (HO-7…HO-11, HO-13, HO-14, HO-16, HO-17) is deferred to a follow-up spec pass; the language/portability compliance clusters (NL-19/21, LP-17/18/19) remain lighter Backlog closures.
 >
 > **Sync (v1.16.0, 2026-07-24):** opened **Phase 13 — Declarative Configuration Surface**, decomposing the newly-authored `l2-nodus-config` (Stable, INDEX v1.0.58) into 9 atomic tasks across tracks A→C + validation (Sequential). This realizes **NL-20** — the net-new-weight obligation the v1.15.0 sync flagged: the `§config` field-declaration grammar now has a Stable L2 spec and a phased plan (parser stub → real parser + shape check + provider seam + `run_with_config`). The remaining v1.15.0 obligations (NL-19/21, LP-17/18/19, HO-14…HO-20) stay pending L2 realization specs in the Backlog.
@@ -196,14 +198,23 @@ stub-level runner to an assertion-evaluating test facility (NT-1…NT-10).*
 
 - [x] **L2 Nodus Observability §4.7** ([l2-nodus-observability.md](specifications/l2-nodus-observability.md)) [L2] — Track A: manifest types+fields (`ExecutionMode`/`ReproRecipe`, `RunManifest.{execution_mode,exposure_switches,repro}`) + event types+fields (`FaultIdentity`, `step_identity`/`fault_identity`). Track B: `step_identity(&Step)` derivation+emission (HO-15) + `fault_identity` population (HO-19). Track C: nodus-computed `repro` (digest/version/determinism) + host-supplied `execution_mode`/`exposure_switches` entry path. Track T: cross-run identity + message-independence + repro honesty + neutrality + zero-dep validation suite
 
+## Phase 15 — Aggregation-Safe Event Stream (l2-nodus-observability §4.8) ✓
+
+*Implement the two cross-cutting members of the observability event batch (`l2-nodus-observability.md` §4.8, Stable v1.3.0) in `crates/nodus`, per HO-7 + HO-14. Makes the event stream statistically trustworthy: a run-monotonic dense `seq` + run-scoped `correlation_id` on every event (order it, detect dropped events, `RunManifest.event_count` as the gap check), and a two-state `Measurement { Taken(u64), Unavailable }` replacing every numeric that can fail to be obtained (aggregate without a fabricated zero corrupting mean/min/coverage). Batched because both rewrite all 10 `ExecutionEvent` variants — one round of churn, and Pass-2's HO-8 token classes are then born as `Measurement` rather than added raw and retyped. Concrete bite: `handle_dialog`'s hardcoded `elapsed_ms: 0` — the crate's single fabricated zero — becomes `Unavailable`. Streaming chunk-merge is vacuous in core (nothing to implement; host obligation). No new `ExecutionEvent` variant (HO-6), no `RunResult` change (HO-5), zero new dependency (LP-1). Decomposed into tracks A→C + validation (Sequential); Track A first as the type surface is referenced everywhere. Atomic tasks in [archives/tasks/phase-15.md](archives/tasks/phase-15.md).*
+
+> **Status:** Complete — all tracks A/B/C/T delivered. 352 tests pass (was 345; +7); clippy/fmt/doc clean; LP-1 zero-dep preserved. Atomic tasks in [archives/tasks/phase-15.md](archives/tasks/phase-15.md).
+
+- [x] **L2 Nodus Observability §4.8** ([l2-nodus-observability.md](specifications/l2-nodus-observability.md)) [L2] — Track A: `Measurement` type + retype of the 5 obtainable-failure numerics (HO-14), then `seq`/`correlation_id` on all 10 variants + run-scoped binding (HO-7). Track B: single `seq`-assigning emission choke point (replacing 20 hand-paired `event_count += 1` calls) + manifest gap-check identity. Track C: the `handle_dialog` fabricated-zero fix. Track T: dense-seq + correlation-identity + measurement-honesty + neutrality + zero-dep validation suite
+
 ## Backlog
 
-<!-- Pending L2 Invariant-Compliance obligations (additive invariants on already-Done L1 concept specs, INDEX v1.0.57) — awaiting L2 realization specs before they can be decomposed into verifiable atomic tasks:
+<!-- Pending L2 Invariant-Compliance obligations (additive invariants on already-Done L1 concept specs; catalogued at INDEX v1.0.57, current as of v1.0.59) — awaiting L2 realization specs before they can be decomposed into verifiable atomic tasks:
   - NL-19 (tokenization-boundary seam discipline) + NL-21 (confidentiality-flow label side-band + per-sink gating): largely host-supplied, small nodus-core contribution — absorb into l2-nodus-runtime Invariant-Compliance in a focused pass.
   - NL-20 (§config declarative-configuration field-declaration grammar): RESOLVED — l2-nodus-config authored (Stable) and phased as Phase 13.
   - LP-17/LP-18/LP-19 (settlement effect-sink, exposure-switch seam): l2-nodus-portability Invariant-Compliance obligations.
   - HO-12/15/18/19/20 (execution mode, cross-run step identity, exposure-switch recording, fault identity, reproduction recipe): RESOLVED — l2-nodus-observability §4.7 (v1.2.0) implemented in Phase 14.
-  - HO-7/8/9/10/11/13/14/16/17 (sequence+correlation, cost token classes, execution receipt, trace-completeness read-side, dual-legibility message, per-item lineage, two-state Measurement, anomaly annotation, transient/durable separation): DEFERRED event-stream-descriptor batch — a follow-up /magic.spec pass updating l2-nodus-observability, then a phase. -->
+  - HO-7 (sequence+correlation) + HO-14 (two-state Measurement): RESOLVED — l2-nodus-observability §4.8 (v1.3.0) implemented in Phase 15.
+  - HO-8/9/10/11/13/16/17 (cost token classes, execution receipt, trace-completeness read-side, dual-legibility message, per-item lineage, anomaly annotation, transient/durable separation): DEFERRED Pass-2 of the event batch — all additive optional fields + read-side rules riding on §4.8's seq/Measurement foundation; needs a follow-up /magic.spec pass updating l2-nodus-observability, then a phase. -->
 <!-- Upstream parity gap v0.4.6 → v0.7 (l1-nodus-language §4.6 / l2-nodus-runtime §4.7) — remaining clusters needing focused spec authoring before they can be planned: operators/expressions (MATCHES/?./??/WHERE/FIRST/LAST/string-interpolation — note MATCHES/PCRE vs the zero-dependency LP-1 constraint is an open design fork), @needs selective schema loading (blocked: no external-schema loading yet), @ON(priority=N) (triggers not dispatched yet), macro execution (RUN(@x) body expansion — needs structured macro-body parsing). Addressed: error taxonomy → Phase 8; closed registries → Phase 9; HITL dialog → Phase 10 (l2-nodus-dialog, Stable); control constructs → Phase 11 (l2-nodus-control-flow, Stable). -->
 <!-- StorageProvider/PolicyProvider executor integration deferred pending LP-3 satisfied (interfaces present in portability.rs; hook points + run_with_storage/run_with_policy variants pending the second documented host context). -->
 <!-- Future: l2-nodus-transpiler.md — dedicated transpiler L2 spec (currently covered by l2-nodus-runtime.md §4). -->

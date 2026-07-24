@@ -19,7 +19,7 @@
 use crate::ast::{AbsoluteRule, CommandCall, RuleKind, Step, Stmt, WorkflowFile};
 use crate::observability::{
     AuditProvider, EnvInteraction, ExecutionEvent, ExecutionMode, FaultIdentity, FieldDescriptor,
-    LoopType, NoopAuditProvider, ReproRecipe, RunManifest, RunStatus, step_identity,
+    LoopType, Measurement, NoopAuditProvider, ReproRecipe, RunManifest, RunStatus, step_identity,
 };
 use crate::vocab;
 use std::collections::HashMap;
@@ -285,10 +285,13 @@ struct ExecutionContext {
     event_count: u32,
     start_instant: Instant,
     paused_at: Option<u32>,
+    /// Bound once at run construction (HO-7); shared by every event this run
+    /// emits and equal to `RunManifest.run_id`. Never re-derived per event.
+    correlation_id: String,
 }
 
 impl ExecutionContext {
-    fn new() -> Self {
+    fn new(correlation_id: String) -> Self {
         ExecutionContext {
             variables: HashMap::new(),
             rules: Vec::new(),
@@ -299,6 +302,7 @@ impl ExecutionContext {
             event_count: 0,
             start_instant: Instant::now(),
             paused_at: None,
+            correlation_id,
         }
     }
 
@@ -400,6 +404,27 @@ fn digest_ast(ast: &WorkflowFile) -> String {
     let mut hasher = std::collections::hash_map::DefaultHasher::new();
     format!("{ast:?}").hash(&mut hasher);
     format!("{:016x}", hasher.finish())
+}
+
+/// Resolve the run's `correlation_id` (HO-7): the caller-supplied `run_id`
+/// verbatim when non-empty, or a generated fallback when it is not — no event
+/// is ever emitted uncorrelated, even from the plain `execute()`/
+/// `execute_with_params("", "")` callers. The fallback is a process-local
+/// monotonic counter (`"run-{n}"`) rather than a UUID: zero-dep (LP-1, no
+/// crate added), and it introduces no wall-clock reading into run metadata at
+/// all — not even for a generated id — so nothing time-based enters the
+/// picture. It is unique within one process, not globally; a host that needs
+/// global uniqueness already supplies its own `run_id`. This resolved value
+/// also becomes `RunManifest.run_id`, so the HO-7 identity
+/// (`correlation_id == RunManifest.run_id`) holds even on the empty-id path.
+fn resolve_correlation_id(run_id: &str) -> String {
+    if !run_id.is_empty() {
+        return run_id.to_string();
+    }
+    use std::sync::atomic::{AtomicU64, Ordering};
+    static COUNTER: AtomicU64 = AtomicU64::new(0);
+    let n = COUNTER.fetch_add(1, Ordering::Relaxed);
+    format!("run-{n}")
 }
 
 // ─── Executor ─────────────────────────────────────────────────────────────────
@@ -577,6 +602,18 @@ impl Executor {
 
     /// Returns `(result, budget_halted)` — `budget_halted` is `true` only when
     /// `max_steps`/`wall_clock_ms` cut the run short (NE-13); it is always
+    /// The single emission choke point (HO-7, T-15B01). Assigns `seq` from
+    /// `ctx.event_count` and the run's bound `correlation_id`, dispatches to
+    /// the audit provider, then increments the counter — so a mismatch
+    /// between the assigned `seq` and the counter is unrepresentable, not
+    /// merely absent. Every `record_event` call in this module goes through
+    /// here; none calls `self.audit.record_event` directly.
+    fn emit(&self, ctx: &mut ExecutionContext, build: impl FnOnce(u64, String) -> ExecutionEvent) {
+        let event = build(ctx.event_count as u64, ctx.correlation_id.clone());
+        self.audit.record_event(event);
+        ctx.event_count += 1;
+    }
+
     /// `false` for the plain `execute`/`execute_with_params` paths (`None`
     /// budget parameters).
     #[allow(clippy::too_many_arguments)]
@@ -592,7 +629,7 @@ impl Executor {
         execution_mode: ExecutionMode,
         exposure_switches: Vec<(String, String)>,
     ) -> (RunResult, bool) {
-        let mut ctx = ExecutionContext::new();
+        let mut ctx = ExecutionContext::new(resolve_correlation_id(run_id));
 
         // Boot step 1: identify workflow.
         let workflow_id = ast
@@ -747,9 +784,11 @@ impl Executor {
         self.audit.run_complete(RunManifest {
             workflow_name: workflow_id.clone(),
             schema_version: crate::vocab::BUILTIN_SCHEMA_VERSION.to_string(),
-            run_id: run_id.to_string(),
+            // HO-7 identity: correlation_id == RunManifest.run_id, even on the
+            // empty-run_id path (resolve_correlation_id already ran).
+            run_id: ctx.correlation_id.clone(),
             started_at: started_at.to_string(),
-            elapsed_ms: ctx.start_instant.elapsed().as_millis() as u64,
+            elapsed_ms: Measurement::Taken(ctx.start_instant.elapsed().as_millis() as u64),
             status: run_status,
             error_code: ctx.errors.first().map(|e| e.code.clone()),
             total_steps: ctx.log.len() as u32,
@@ -869,12 +908,13 @@ impl Executor {
         step_num: u32,
     ) -> Option<Signal> {
         if Self::evaluate_condition(ctx, &cond.condition) {
-            self.audit.record_event(ExecutionEvent::BranchTaken {
+            self.emit(ctx, |seq, correlation_id| ExecutionEvent::BranchTaken {
                 step_index: step_num,
                 branch_label: "if".to_string(),
                 condition_result: true,
+                seq,
+                correlation_id,
             });
-            ctx.event_count += 1;
             if let Some(action) = &cond.action {
                 let sig = self.execute_command(ctx, action, step_num);
                 if sig.is_some() {
@@ -892,12 +932,13 @@ impl Executor {
 
         for elif_br in &cond.elif_branches {
             if Self::evaluate_condition(ctx, &elif_br.condition) {
-                self.audit.record_event(ExecutionEvent::BranchTaken {
+                self.emit(ctx, |seq, correlation_id| ExecutionEvent::BranchTaken {
                     step_index: step_num,
                     branch_label: "elif".to_string(),
                     condition_result: true,
+                    seq,
+                    correlation_id,
                 });
-                ctx.event_count += 1;
                 if let Some(action) = &elif_br.action {
                     let sig = self.execute_command(ctx, action, step_num);
                     if sig.is_some() {
@@ -915,12 +956,13 @@ impl Executor {
         }
 
         if let Some(else_br) = &cond.else_branch {
-            self.audit.record_event(ExecutionEvent::BranchTaken {
+            self.emit(ctx, |seq, correlation_id| ExecutionEvent::BranchTaken {
                 step_index: step_num,
                 branch_label: "else".to_string(),
                 condition_result: false,
+                seq,
+                correlation_id,
             });
-            ctx.event_count += 1;
             if let Some(action) = &else_br.action {
                 let sig = self.execute_command(ctx, action, step_num);
                 if sig.is_some() {
@@ -952,13 +994,15 @@ impl Executor {
 
         for (iter_idx, item) in collection.into_iter().enumerate() {
             ctx.set_var(&fl.variable, item);
-            self.audit.record_event(ExecutionEvent::LoopIteration {
+            let fl_variable = fl.variable.clone();
+            self.emit(ctx, |seq, correlation_id| ExecutionEvent::LoopIteration {
                 step_index: step_num,
                 loop_type: LoopType::For,
-                iteration_number: iter_idx as u32,
-                bound_vars: vec![fl.variable.clone()],
+                iteration_number: Measurement::Taken(iter_idx as u64),
+                bound_vars: vec![fl_variable],
+                seq,
+                correlation_id,
             });
-            ctx.event_count += 1;
             let mut skip_rest = false;
             for child in &fl.body {
                 let sig = self.execute_node(ctx, child, step_num);
@@ -987,13 +1031,14 @@ impl Executor {
         let max_iter = ul.max_iterations.unwrap_or(5) as usize;
 
         for iter_idx in 0..max_iter {
-            self.audit.record_event(ExecutionEvent::LoopIteration {
+            self.emit(ctx, |seq, correlation_id| ExecutionEvent::LoopIteration {
                 step_index: step_num,
                 loop_type: LoopType::Until,
-                iteration_number: iter_idx as u32,
+                iteration_number: Measurement::Taken(iter_idx as u64),
                 bound_vars: vec![],
+                seq,
+                correlation_id,
             });
-            ctx.event_count += 1;
             for child in &ul.body {
                 match self.execute_node(ctx, child, step_num) {
                     Some(Signal::Halt) => return Some(Signal::Halt),
@@ -1039,22 +1084,25 @@ impl Executor {
         for (value, action) in &sw.arms {
             let arm_val = Self::resolve_value(ctx, value);
             if Self::compare_values(&scrutinee, "=", &arm_val) {
-                self.audit.record_event(ExecutionEvent::BranchTaken {
+                let branch_label = format!("switch:{value}");
+                self.emit(ctx, |seq, correlation_id| ExecutionEvent::BranchTaken {
                     step_index: step_num,
-                    branch_label: format!("switch:{value}"),
+                    branch_label,
                     condition_result: true,
+                    seq,
+                    correlation_id,
                 });
-                ctx.event_count += 1;
                 return self.execute_command(ctx, action, step_num);
             }
         }
         if let Some(default) = &sw.default {
-            self.audit.record_event(ExecutionEvent::BranchTaken {
+            self.emit(ctx, |seq, correlation_id| ExecutionEvent::BranchTaken {
                 step_index: step_num,
                 branch_label: "switch:*".to_string(),
                 condition_result: false,
+                seq,
+                correlation_id,
             });
-            ctx.event_count += 1;
             return self.execute_command(ctx, default, step_num);
         }
         ctx.flags
@@ -1220,25 +1268,29 @@ impl Executor {
         step_num: u32,
     ) -> Option<Signal> {
         if let Some(violation) = ctx.check_rules(&cmd.name, &cmd.args) {
-            self.audit.record_event(ExecutionEvent::ConstraintHit {
-                rule_name: violation.clone(),
+            let rule_name = violation.clone();
+            self.emit(ctx, |seq, correlation_id| ExecutionEvent::ConstraintHit {
+                rule_name,
                 triggering_step_index: step_num,
                 halt: true,
+                seq,
+                correlation_id,
             });
-            ctx.event_count += 1;
-            self.audit.record_event(ExecutionEvent::StepError {
+            let error_detail = violation.clone();
+            self.emit(ctx, |seq, correlation_id| ExecutionEvent::StepError {
                 step_index: step_num,
                 step_command: cmd.name.clone(),
                 error_code: vocab::error_code::RULE_VIOLATION.to_string(),
-                error_detail: violation.clone(),
+                error_detail,
                 step_identity: step_identity(step_num, &cmd.name),
                 fault_identity: FaultIdentity {
                     step_identity: step_identity(step_num, &cmd.name),
                     code: vocab::error_code::RULE_VIOLATION.to_string(),
                     discriminator: None,
                 },
+                seq,
+                correlation_id,
             });
-            ctx.event_count += 1;
             ctx.errors.push(RuntimeError {
                 code: vocab::error_code::RULE_VIOLATION.to_string(),
                 step: step_num,
@@ -1255,26 +1307,28 @@ impl Executor {
 
         let input_vars: Vec<String> = ctx.variables.keys().cloned().collect();
         let step_start = Instant::now();
-        self.audit.record_event(ExecutionEvent::StepStart {
+        self.emit(ctx, |seq, correlation_id| ExecutionEvent::StepStart {
             step_index: step_num,
             step_command: cmd.name.clone(),
             input_vars,
             step_identity: step_identity(step_num, &cmd.name),
+            seq,
+            correlation_id,
         });
-        ctx.event_count += 1;
 
         let result = self.dispatch(ctx, cmd, step_num);
 
-        let elapsed_ms = step_start.elapsed().as_millis() as u64;
+        let elapsed_ms = Measurement::Taken(step_start.elapsed().as_millis() as u64);
         let output_vars: Vec<String> = cmd.pipeline_target.iter().cloned().collect();
-        self.audit.record_event(ExecutionEvent::StepEnd {
+        self.emit(ctx, |seq, correlation_id| ExecutionEvent::StepEnd {
             step_index: step_num,
             step_command: cmd.name.clone(),
             output_vars,
             elapsed_ms,
             step_identity: step_identity(step_num, &cmd.name),
+            seq,
+            correlation_id,
         });
-        ctx.event_count += 1;
 
         ctx.log_step(step_num, &cmd.name, result.clone());
 
@@ -1302,13 +1356,14 @@ impl Executor {
         step_num: u32,
     ) -> Option<Signal> {
         let input_vars: Vec<String> = ctx.variables.keys().cloned().collect();
-        self.audit.record_event(ExecutionEvent::StepStart {
+        self.emit(ctx, |seq, correlation_id| ExecutionEvent::StepStart {
             step_index: step_num,
             step_command: cmd.name.clone(),
             input_vars,
             step_identity: step_identity(step_num, &cmd.name),
+            seq,
+            correlation_id,
         });
-        ctx.event_count += 1;
 
         let prompt = cmd
             .args
@@ -1323,12 +1378,14 @@ impl Executor {
             .unwrap_or_default();
 
         // DG-7: emit only a length descriptor, never the raw prompt text.
-        self.audit.record_event(ExecutionEvent::ModelCall {
+        let prompt_len = prompt.len() as u32;
+        self.emit(ctx, |seq, correlation_id| ExecutionEvent::ModelCall {
             step_index: step_num,
             command: cmd.name.clone(),
-            input_summary: FieldDescriptor::text(prompt.len() as u32),
+            input_summary: FieldDescriptor::text(prompt_len),
+            seq,
+            correlation_id,
         });
-        ctx.event_count += 1;
 
         let outcome = if cmd.name == "ASK" {
             self.dialog.ask(&prompt, &cmd.modifiers)
@@ -1368,14 +1425,18 @@ impl Executor {
         };
 
         let output_vars: Vec<String> = cmd.pipeline_target.iter().cloned().collect();
-        self.audit.record_event(ExecutionEvent::StepEnd {
+        // T-15C01 / HO-14: the dialog path never times its own step (it may
+        // suspend the run awaiting a human) — Unavailable is the honest
+        // value, never a fabricated 0 that would bias a downstream average.
+        self.emit(ctx, |seq, correlation_id| ExecutionEvent::StepEnd {
             step_index: step_num,
             step_command: cmd.name.clone(),
             output_vars,
-            elapsed_ms: 0,
+            elapsed_ms: Measurement::Unavailable,
             step_identity: step_identity(step_num, &cmd.name),
+            seq,
+            correlation_id,
         });
-        ctx.event_count += 1;
 
         signal
     }
@@ -1418,19 +1479,22 @@ impl Executor {
             "RUN" => {
                 let macro_name = cmd.args.first().cloned().unwrap_or_default();
                 let macro_start = Instant::now();
-                self.audit.record_event(ExecutionEvent::MacroEnter {
-                    macro_name: macro_name.clone(),
+                let macro_name_enter = macro_name.clone();
+                self.emit(ctx, |seq, correlation_id| ExecutionEvent::MacroEnter {
+                    macro_name: macro_name_enter,
                     call_step_index: step_num,
+                    seq,
+                    correlation_id,
                 });
-                ctx.event_count += 1;
                 ctx.flags.push(format!("RUN:{macro_name}"));
-                let elapsed_ms = macro_start.elapsed().as_millis() as u64;
-                self.audit.record_event(ExecutionEvent::MacroExit {
+                let elapsed_ms = Measurement::Taken(macro_start.elapsed().as_millis() as u64);
+                self.emit(ctx, |seq, correlation_id| ExecutionEvent::MacroExit {
                     macro_name,
                     call_step_index: step_num,
                     elapsed_ms,
+                    seq,
+                    correlation_id,
                 });
-                ctx.event_count += 1;
                 Value::Null
             }
             "ASSIGN" => {
@@ -1492,22 +1556,26 @@ impl Executor {
             }
         });
         let prompt_str = prompt.as_deref().unwrap_or("").to_string();
-        self.audit.record_event(ExecutionEvent::ModelCall {
+        let input_len = prompt_str.len() as u32;
+        self.emit(ctx, |seq, correlation_id| ExecutionEvent::ModelCall {
             step_index: step_num,
             command: cmd.name.clone(),
-            input_summary: FieldDescriptor::text(prompt_str.len() as u32),
+            input_summary: FieldDescriptor::text(input_len),
+            seq,
+            correlation_id,
         });
-        ctx.event_count += 1;
         let call_start = Instant::now();
         let result = self.provider.generate(&prompt_str, &cmd.modifiers);
-        let elapsed_ms = call_start.elapsed().as_millis() as u64;
-        self.audit.record_event(ExecutionEvent::ModelResponse {
+        let elapsed_ms = Measurement::Taken(call_start.elapsed().as_millis() as u64);
+        let output_len = result.len() as u32;
+        self.emit(ctx, |seq, correlation_id| ExecutionEvent::ModelResponse {
             step_index: step_num,
             command: cmd.name.clone(),
-            output_summary: FieldDescriptor::text(result.len() as u32),
+            output_summary: FieldDescriptor::text(output_len),
             elapsed_ms,
+            seq,
+            correlation_id,
         });
-        ctx.event_count += 1;
         Value::Text(result)
     }
 
@@ -1522,28 +1590,31 @@ impl Executor {
             .first()
             .map(|a| ctx.get_var(a).as_text())
             .unwrap_or_default();
-        self.audit.record_event(ExecutionEvent::ModelCall {
+        let text_len = text.len() as u32;
+        self.emit(ctx, |seq, correlation_id| ExecutionEvent::ModelCall {
             step_index: step_num,
             command: cmd.name.clone(),
-            input_summary: FieldDescriptor::text(text.len() as u32),
+            input_summary: FieldDescriptor::text(text_len),
+            seq,
+            correlation_id,
         });
-        ctx.event_count += 1;
         let call_start = Instant::now();
         let result = self.provider.analyze(&text, &cmd.flags);
-        let elapsed_ms = call_start.elapsed().as_millis() as u64;
+        let elapsed_ms = Measurement::Taken(call_start.elapsed().as_millis() as u64);
         let output_summary = match &result {
             Value::Map(entries) => {
                 FieldDescriptor::map_like(entries.len() as u32, format!("{result:?}").len() as u32)
             }
             _ => FieldDescriptor::text(result.as_text().len() as u32),
         };
-        self.audit.record_event(ExecutionEvent::ModelResponse {
+        self.emit(ctx, |seq, correlation_id| ExecutionEvent::ModelResponse {
             step_index: step_num,
             command: cmd.name.clone(),
             output_summary,
             elapsed_ms,
+            seq,
+            correlation_id,
         });
-        ctx.event_count += 1;
         result
     }
 
@@ -1719,7 +1790,7 @@ mod tests {
 
         #[test]
         fn value_dot_notation_resolves_nested() {
-            let mut ctx = ExecutionContext::new();
+            let mut ctx = ExecutionContext::new("test-corr".to_string());
             ctx.variables.insert(
                 "in".to_string(),
                 Value::Map(vec![("query".to_string(), Value::Text("test".to_string()))]),
@@ -1924,7 +1995,7 @@ mod tests {
         #[test]
         fn map_transforms_each_element_into_a_list() {
             use crate::ast::{CommandCall, MapBlock};
-            let mut ctx = ExecutionContext::new();
+            let mut ctx = ExecutionContext::new("test-corr".to_string());
             ctx.variables.insert(
                 "items".to_string(),
                 Value::List(vec![
@@ -1952,7 +2023,7 @@ mod tests {
         #[test]
         fn map_over_non_list_yields_empty_list() {
             use crate::ast::{CommandCall, MapBlock};
-            let mut ctx = ExecutionContext::new();
+            let mut ctx = ExecutionContext::new("test-corr".to_string());
             ctx.variables
                 .insert("items".to_string(), Value::Text("scalar".to_string()));
             let mb = MapBlock {
@@ -1999,7 +2070,7 @@ mod tests {
 
         #[test]
         fn condition_evaluator_comparisons() {
-            let mut ctx = ExecutionContext::new();
+            let mut ctx = ExecutionContext::new("test-corr".to_string());
             ctx.variables
                 .insert("score".to_string(), Value::Float(0.75));
             ctx.variables

@@ -4,8 +4,8 @@
 //! T-4T02: Public API — run_with_audit / run_with_provider_and_audit contracts.
 
 use nodus::{
-    AuditProvider, Determinism, ExecutionEvent, ExecutionMode, Executor, RunManifest, RunResult,
-    SimFidelity, Status,
+    AuditProvider, Determinism, ExecutionEvent, ExecutionMode, Executor, Measurement, RunManifest,
+    RunResult, SimFidelity, Status,
     workflows::{run_with_audit, run_with_provider_and_audit},
 };
 use std::sync::{Arc, Mutex};
@@ -566,5 +566,297 @@ fn repro_workflow_digest_is_deterministic_and_distinguishing() {
     assert_ne!(
         digest_a, digest_other,
         "a materially different workflow must yield a different digest"
+    );
+}
+
+// ─── T-15T01: Aggregation-Safe Event Stream (HO-7 + HO-14) ───────────────────
+
+const MULTI_EVENT_WF: &str = "\
+§wf:multi_event v1.0
+§runtime: { core: schema.nodus }
+@in: { items: list }
+@out: $out
+@err: ESCALATE(human)
+@steps:
+  1. GEN(\"summarize\") → $out
+  2. ~FOR $item IN $in.items
+       LOG($item)
+     ~END
+  3. LOG($out)
+";
+
+const ASK_DEFAULT_WF: &str = "\
+§wf:ask_default v1.0
+§runtime: { core: schema.nodus }
+@out: $answer
+@err: ESCALATE(human)
+@steps:
+  1. ASK(question) +default=yes → $answer
+  2. LOG($answer)
+";
+
+/// Extract `(seq, correlation_id)` from any `ExecutionEvent` variant — every
+/// one of the 10 carries both (HO-7).
+fn event_seq_and_correlation(e: &ExecutionEvent) -> (u64, &str) {
+    match e {
+        ExecutionEvent::StepStart {
+            seq,
+            correlation_id,
+            ..
+        }
+        | ExecutionEvent::StepEnd {
+            seq,
+            correlation_id,
+            ..
+        }
+        | ExecutionEvent::StepError {
+            seq,
+            correlation_id,
+            ..
+        }
+        | ExecutionEvent::ConstraintHit {
+            seq,
+            correlation_id,
+            ..
+        }
+        | ExecutionEvent::BranchTaken {
+            seq,
+            correlation_id,
+            ..
+        }
+        | ExecutionEvent::LoopIteration {
+            seq,
+            correlation_id,
+            ..
+        }
+        | ExecutionEvent::MacroEnter {
+            seq,
+            correlation_id,
+            ..
+        }
+        | ExecutionEvent::MacroExit {
+            seq,
+            correlation_id,
+            ..
+        }
+        | ExecutionEvent::ModelCall {
+            seq,
+            correlation_id,
+            ..
+        }
+        | ExecutionEvent::ModelResponse {
+            seq,
+            correlation_id,
+            ..
+        } => (*seq, correlation_id.as_str()),
+    }
+}
+
+#[test]
+fn seq_is_dense_and_gap_free_across_a_multi_event_run() {
+    let recorder = RecordingProvider::new();
+    let input = nodus::executor::Value::Map(vec![(
+        "items".to_string(),
+        nodus::executor::Value::List(vec![
+            nodus::executor::Value::Text("a".to_string()),
+            nodus::executor::Value::Text("b".to_string()),
+        ]),
+    )]);
+    let result = run_with_audit(
+        MULTI_EVENT_WF,
+        "multi_event.nodus",
+        Some(input),
+        recorder.clone(),
+        "run-dense",
+        "2026-07-24T00:00:00Z",
+    )
+    .expect("run_with_audit");
+    assert_eq!(result.status, Status::Ok, "errors: {:?}", result.errors);
+
+    let events = recorder.events.lock().unwrap();
+    assert!(
+        events.len() >= 10,
+        "expected a rich multi-event trace (loop x2 + GEN + LOG); got {} events",
+        events.len()
+    );
+
+    let mut seqs: Vec<u64> = events
+        .iter()
+        .map(|e| event_seq_and_correlation(e).0)
+        .collect();
+    seqs.sort_unstable();
+    let expected: Vec<u64> = (0..seqs.len() as u64).collect();
+    assert_eq!(
+        seqs, expected,
+        "seq must be dense and gap-free (0..N-1, no duplicates, no holes)"
+    );
+}
+
+#[test]
+fn correlation_id_is_one_per_run_and_equals_manifest_run_id() {
+    let recorder = RecordingProvider::new();
+    let input = nodus::executor::Value::Map(vec![(
+        "items".to_string(),
+        nodus::executor::Value::List(vec![nodus::executor::Value::Text("a".to_string())]),
+    )]);
+    run_with_audit(
+        MULTI_EVENT_WF,
+        "multi_event.nodus",
+        Some(input),
+        recorder.clone(),
+        "run-corr",
+        "2026-07-24T00:00:00Z",
+    )
+    .expect("run_with_audit");
+
+    let events = recorder.events.lock().unwrap();
+    let manifests = recorder.manifests.lock().unwrap();
+    assert_eq!(manifests[0].run_id, "run-corr");
+    assert!(
+        events
+            .iter()
+            .all(|e| event_seq_and_correlation(e).1 == "run-corr"),
+        "every event's correlation_id must equal RunManifest.run_id"
+    );
+}
+
+#[test]
+fn manifest_event_count_is_highest_seq_plus_one() {
+    let recorder = RecordingProvider::new();
+    let input = nodus::executor::Value::Map(vec![(
+        "items".to_string(),
+        nodus::executor::Value::List(vec![
+            nodus::executor::Value::Text("a".to_string()),
+            nodus::executor::Value::Text("b".to_string()),
+        ]),
+    )]);
+    run_with_audit(
+        MULTI_EVENT_WF,
+        "multi_event.nodus",
+        Some(input),
+        recorder.clone(),
+        "run-gapcheck",
+        "2026-07-24T00:00:00Z",
+    )
+    .expect("run_with_audit");
+
+    let events = recorder.events.lock().unwrap();
+    let manifests = recorder.manifests.lock().unwrap();
+    let highest_seq = events
+        .iter()
+        .map(|e| event_seq_and_correlation(e).0)
+        .max()
+        .expect("at least one event");
+    assert_eq!(
+        manifests[0].event_count as u64,
+        highest_seq + 1,
+        "event_count must equal the highest emitted seq + 1 (the HO-7 gap check)"
+    );
+}
+
+#[test]
+fn correlation_id_generated_when_run_id_empty() {
+    // The plain execute() path (run_id == "") must not emit an uncorrelated
+    // event — a fallback correlation_id is generated, and RunManifest.run_id
+    // is set to the same value (the HO-7 identity, even on this path).
+    let recorder = RecordingProvider::new();
+    run_with_audit(
+        DETERMINISTIC_WF,
+        "obs_test.nodus",
+        None,
+        recorder.clone(),
+        "",
+        "",
+    )
+    .expect("run with empty run_id");
+    let events = recorder.events.lock().unwrap();
+    let manifests = recorder.manifests.lock().unwrap();
+    assert!(
+        !manifests[0].run_id.is_empty(),
+        "a run_id must be generated"
+    );
+    assert!(
+        events
+            .iter()
+            .all(|e| event_seq_and_correlation(e).1 == manifests[0].run_id),
+        "every event's correlation_id must equal the generated run_id"
+    );
+}
+
+#[test]
+fn dialog_step_elapsed_is_unavailable_timed_step_is_taken() {
+    // T-15C01: the dialog path never times its own step (it may suspend
+    // awaiting a human) — Unavailable, not a fabricated 0.
+    let recorder_dialog = RecordingProvider::new();
+    run_with_audit(
+        ASK_DEFAULT_WF,
+        "ask_default.nodus",
+        None,
+        recorder_dialog.clone(),
+        "",
+        "",
+    )
+    .expect("ask_default run");
+    let dialog_events = recorder_dialog.events.lock().unwrap();
+    let dialog_step_end_unavailable = dialog_events.iter().any(|e| {
+        matches!(
+            e,
+            ExecutionEvent::StepEnd {
+                elapsed_ms: Measurement::Unavailable,
+                ..
+            }
+        )
+    });
+    assert!(
+        dialog_step_end_unavailable,
+        "dialog StepEnd must carry Measurement::Unavailable, not a fabricated 0"
+    );
+
+    // Control: an ordinary timed step (GEN) is distinguishably Taken(_).
+    let recorder_timed = RecordingProvider::new();
+    run_with_audit(
+        DETERMINISTIC_WF,
+        "obs_test.nodus",
+        None,
+        recorder_timed.clone(),
+        "",
+        "",
+    )
+    .expect("timed run");
+    let timed_events = recorder_timed.events.lock().unwrap();
+    let gen_step_end_taken = timed_events.iter().any(|e| {
+        matches!(
+            e,
+            ExecutionEvent::StepEnd {
+                step_command,
+                elapsed_ms: Measurement::Taken(_),
+                ..
+            } if step_command == "GEN"
+        )
+    });
+    assert!(
+        gen_step_end_taken,
+        "an ordinary timed StepEnd must carry Measurement::Taken(_), distinguishable from Unavailable"
+    );
+}
+
+#[test]
+fn measurement_unavailable_is_never_equal_to_taken_zero() {
+    // The whole point of HO-14: Unavailable must never compare equal to a
+    // fabricated Taken(0) — they are fully distinct states.
+    assert_ne!(Measurement::Unavailable, Measurement::Taken(0));
+}
+
+#[test]
+fn emit_choke_point_is_the_only_record_event_call_site() {
+    // Structural guard for T-15B01: executor.rs must route every emission
+    // through the single choke point, not call self.audit.record_event
+    // directly at N scattered sites. This test pins the source-level
+    // discipline so a future edit that bypasses it is caught in review.
+    let src = include_str!("../src/executor.rs");
+    let direct_calls = src.matches("self.audit.record_event(").count();
+    assert_eq!(
+        direct_calls, 1,
+        "expected exactly one self.audit.record_event( call site (inside emit() itself); found {direct_calls}"
     );
 }

@@ -67,8 +67,8 @@ pub use executor::{
 pub use lexer::{Lexer, Token, TokenType};
 pub use observability::{
     AuditProvider, Determinism, EnvInteraction, EnvInteractionKind, ExecutionEvent, ExecutionMode,
-    FaultIdentity, FieldDescriptor, LoopType, NoopAuditProvider, ReproRecipe, RunManifest,
-    RunStatus, SimFidelity, step_identity,
+    FaultIdentity, FieldDescriptor, LoopType, Measurement, NoopAuditProvider, ReproRecipe,
+    RunManifest, RunStatus, SimFidelity, step_identity,
 };
 pub use parser::Parser;
 pub use portability::{

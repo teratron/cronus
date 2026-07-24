@@ -2,6 +2,15 @@
 
 Internal phase journal. Each entry corresponds to a completed phase.
 
+## Phase 15 — Aggregation-Safe Event Stream (l2-nodus-observability §4.8) (2026-07-24)
+
+- T-15A01: Added `Measurement { Taken(u64), Unavailable }` to `observability.rs`; retyped `StepEnd`/`MacroExit`/`ModelResponse`/`RunManifest.elapsed_ms` and `LoopIteration.iteration_number`; `FieldDescriptor` counts left as plain `u32` (obtainable by construction)
+- T-15A02: Added `seq: u64` + `correlation_id: String` to all 10 `ExecutionEvent` variants; `ExecutionContext` gained a `correlation_id` field bound once at run construction via `resolve_correlation_id(run_id)` (zero-dep process-local counter fallback for an empty `run_id`, never a wall-clock read); `RunManifest.run_id` now reads the resolved `ctx.correlation_id` so the HO-7 identity holds even on the empty-id path
+- T-15B01: Added `Executor::emit` — the single `seq`-assigning emission choke point; converted all 20 former `record_event`+manual-`event_count`-increment pairs across the executor to route through it, making a counter/seq mismatch unrepresentable
+- T-15B02: Pinned `RunManifest.event_count == highest emitted seq + 1` with a doc comment + dedicated integration test
+- T-15C01: Fixed the crate's one hardcoded zero — `handle_dialog`'s `StepEnd { elapsed_ms: 0 }` → `Measurement::Unavailable` (the dialog path legitimately has no own-duration; `Unavailable` is honest, not a placeholder)
+- T-15T01: Extended `tests/observability.rs` with 7 integration tests (dense gap-free `seq`, one `correlation_id` per run, manifest gap-check identity, generated-id-on-empty-run_id, dialog-vs-timed `Measurement` distinguishability, `Unavailable` ≠ `Taken(0)`, a structural source-grep guard pinning the single-choke-point discipline); caught and fixed a real fixture bug during authoring (`LOG` unconditionally locks `$out`, so a loop-body `LOG` before a later `GEN(...) → $out` produced a spurious `RULE_VIOLATION` — reordered `GEN` first); `cargo test -p nodus` — 352 passed (was 345; +7), 0 failed; clippy `-D warnings` clean; fmt clean; `Cargo.toml [dependencies]` still empty (LP-1 zero-dep preserved)
+
 ## Phase 14 — Run-Manifest Identity & Reproducibility (l2-nodus-observability §4.7) (2026-07-24)
 
 - T-14A01: Added `ExecutionMode`/`SimFidelity`/`Determinism`/`ReproRecipe` to `observability.rs`; added `execution_mode`, `exposure_switches: Vec<(String, String)>`, `repro: ReproRecipe` to `RunManifest`

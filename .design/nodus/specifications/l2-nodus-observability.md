@@ -1,6 +1,6 @@
 # Nodus Observability Implementation (Rust)
 
-**Version:** 1.2.0
+**Version:** 1.3.0
 **Status:** Stable
 **Layer:** implementation
 **Implements:** l1-nodus-observability.md
@@ -24,7 +24,20 @@ that is the same step across runs (HO-15), the resolved exposure-switch values a
 recipe that states what re-running the workflow requires (HO-20). All additive and optional — a run
 that declares none behaves exactly as v1.1.0 (HO-5/HO-6 preserved). This is the intended realization
 (the spec-ahead-of-code pattern); it awaits its implementation phase. The per-event-descriptor batch
-(HO-7…HO-11, HO-13, HO-14, HO-16, HO-17) is deferred to a follow-up pass (§4.7).
+(HO-7…HO-11, HO-13, HO-14, HO-16, HO-17) is deferred to follow-up passes — its cross-cutting members
+HO-7 and HO-14 are now specified in §4.8 below; the rest remain deferred.
+
+<!-- [ADDED] v1.3.0 -->
+**v1.3.0 — Aggregation-Safe Event Stream (HO-7, HO-14).** The two *cross-cutting* members of the
+deferred event batch, taken together because both rewrite every `ExecutionEvent` variant: a
+run-monotonic dense `seq` plus a run-scoped `correlation_id` on every event (HO-7), and a two-state
+`Measurement` replacing every raw numeric that could fail to be obtained (HO-14). Together they make
+the stream *statistically trustworthy* — a consumer can order it, detect dropped events, and
+aggregate it without a fabricated zero corrupting the result. Batching them does the all-variant
+churn once, so the remaining riders (HO-8's token classes especially) are **born** as `Measurement`
+rather than added raw and retyped later. Intended realization, awaiting its phase. The remaining
+riders — HO-8, HO-9, HO-10, HO-11, HO-13, HO-16, HO-17 — are additive optional fields and read-side
+rules that build on this foundation; deferred to a Pass-2 spec update (§4.8).
 
 ## Related Specifications
 
@@ -70,9 +83,11 @@ taxonomy from `l1-nodus-observability.md` into the executor.
 | HO-15 Cross-run step identity <!-- [ADDED] v1.2.0 --> | `step_identity(&Step)` derived from the definition (number + command name), carried on `StepStart`/`StepEnd`/`StepError` and the manifest; the *same* step across runs is one comparable series. Stable across retries/resumes (NL-12)/recursive children (NL-18); changes only when the definition changes. Distinct from HO-7's within-run `(correlation_id, seq)`. §4.7 |
 | HO-18 Variant provenance <!-- [ADDED] v1.2.0 --> | `RunManifest.exposure_switches: Vec<(String, String)>` — the resolved `(name, value)` pairs the host froze once at run start (LP-19; non-straddling, one value per switch). Empty = prevailing defaults. Names/values only (§4.4). §4.7 |
 | HO-19 Fault-identity contribution <!-- [ADDED] v1.2.0 --> | `StepError.fault_identity: FaultIdentity { step_identity, code, discriminator? }` — a stable, message-independent grouping input, **never** derived from `error_detail` rendered text; the optional workflow-declared `discriminator` outranks the code. nodus computes no grouping. §4.7 |
+| HO-7 Sequence & correlation <!-- [ADDED] v1.3.0 --> | Every `ExecutionEvent` variant carries `seq: u64` (run-monotonic, dense, gap-free) and `correlation_id: String` (bound once at run construction from the same value as `RunManifest.run_id`). `RunManifest.event_count` doubles as the gap check — it equals `highest seq + 1` for an undamaged trace. Streaming chunk-merge is vacuous in core (the `ModelProvider` returns a complete `String`; no chunks exist) and remains a host obligation. §4.8 |
+| HO-14 Aggregation-safe measurement <!-- [ADDED] v1.3.0 --> | `Measurement { Taken(u64), Unavailable }` replaces every raw numeric whose value could fail to be obtained: `StepEnd`/`MacroExit`/`ModelResponse`/`RunManifest`'s `elapsed_ms` and `LoopIteration.iteration_number`. `Unavailable` is never `0`, never omitted, never carried forward. Concrete bite: `handle_dialog`'s hardcoded `elapsed_ms: 0` (the one fabricated zero in the crate) becomes `Unavailable`. `FieldDescriptor`'s counts stay plain `u32` — obtainable by construction, never a stand-in. §4.8 |
 | HO-20 Re-execution recipe <!-- [ADDED] v1.2.0 --> | `RunManifest.repro: ReproRecipe` — workflow content digest, the LP-8 capability set that satisfied the manifest, exposure switches (HO-18), execution mode (HO-12), nodus version, and a stated `determinism`. Uncapturable fields (e.g. resolved `@needs` vocabulary while `@needs` is unimplemented) are `None`, never omitted. nodus embeds nothing and performs no replay. §4.7 |
 
-> **Realization status.** HO-1…HO-6 are realized in `crates/nodus` (§4.1–§4.6). HO-12/15/18/19/20 are **specified here as the intended realization (§4.7) and await their implementation phase** — the spec-ahead-of-code pattern this project uses (cf. `l2-nodus-config.md`). The remaining L1 invariants — HO-7…HO-11, HO-13, HO-14, HO-16, HO-17 — are a distinct per-event-descriptor batch reconciled in a follow-up spec pass, not covered here.
+> **Realization status.** HO-1…HO-6 are realized in `crates/nodus` (§4.1–§4.6); HO-12/15/18/19/20 are realized per §4.7 (Phase 14). HO-7 and HO-14 are **specified here as the intended realization (§4.8) and await their implementation phase** — the spec-ahead-of-code pattern this project uses (cf. `l2-nodus-config.md`, §4.7). The remaining L1 invariants — **HO-8, HO-9, HO-10, HO-11, HO-13, HO-16, HO-17** — are additive optional fields and read-side rules that build on §4.8's foundation; they are reconciled in a Pass-2 spec update, not covered here.
 
 ## 4. Detailed Design
 
@@ -381,6 +396,95 @@ numerics), HO-16 (anomaly annotation), and HO-17 (transient/durable separation) 
 per-event-descriptor batch, reconciled in a follow-up spec pass. This section realizes the
 manifest/identity cluster only.
 
+### 4.8 Aggregation-Safe Event Stream [ADDED v1.3.0]
+
+Realization of HO-7 and HO-14 — the two cross-cutting invariants of the deferred event batch. Both
+rewrite every `ExecutionEvent` variant, so they land together: one round of churn, and the Pass-2
+riders (notably HO-8's token classes) are born already-typed. Together they make the stream
+aggregatable: HO-7 lets a consumer order it and detect drops; HO-14 lets it compute a mean, a
+minimum, and a coverage ratio without a fabricated zero silently corrupting all three.
+
+#### Sequence & correlation (HO-7)
+
+```text
+[REFERENCE]
+// Every ExecutionEvent variant gains:
+seq            : u64      // run-monotonic, dense, gap-free emission counter
+correlation_id : String   // shared by every event of one run (== RunManifest.run_id)
+```
+
+`correlation_id` is bound **once**, at run construction, from the same value the manifest reports as
+`run_id`; a run entered without an explicit id has one generated at the root before the first event,
+so no event is ever emitted uncorrelated. `seq` is assigned at emission, densely — a gap in the
+recorded range is exactly the signal that an event was dropped, which is why it must never be
+sparse or re-used.
+
+`RunManifest.event_count` becomes the gap check: for an undamaged trace it equals **highest `seq` +
+1**. A consumer comparing the two detects in-range loss; combined with manifest presence/absence
+(HO-10, Pass 2) this classifies every trace as complete, gap-damaged, or truncated.
+
+> **Emission choke point.** The crate today pairs each of its 20 `record_event` calls with a manual
+> `ctx.event_count += 1` — currently correct (verified 20/20) but fragile: `seq` correctness now
+> depends on that pairing never drifting. The realization routes emission through a single helper
+> that assigns `seq` from the counter and increments it atomically, making a mismatch
+> unrepresentable rather than merely absent. This is a refactor of existing call sites, not new
+> hot-path work.
+
+**Streaming merge is vacuous in core.** The L1 requires many streamed chunks to merge into one
+logical `model_response`. `ModelProvider::generate` returns a complete `String` synchronously — no
+chunk ever exists at this layer — so nodus has nothing to merge and adds no merge machinery. A host
+wrapping a streaming backend performs the fold on its side before the value reaches the executor;
+this is recorded as a host obligation (LP-2), not silently omitted.
+
+#### Aggregation-safe measurement (HO-14)
+
+```text
+[REFERENCE]
+/// A numeric that was either genuinely measured, or explicitly could not be.
+/// `Unavailable` is NEVER rendered as 0, omitted, or carried forward from a
+/// previous observation — each of those corrupts a downstream aggregate while
+/// looking like data.
+pub enum Measurement {
+    Taken(u64),
+    Unavailable,
+}
+```
+
+Applied to every defined numeric whose value can fail to be obtained:
+
+| Site | Field | Why it can be `Unavailable` |
+| --- | --- | --- |
+| `StepEnd` | `elapsed_ms` | the dialog path does not time its step (see below) |
+| `MacroExit` | `elapsed_ms` | measured today; typed for uniformity and future host-supplied timings |
+| `ModelResponse` | `elapsed_ms` | measured today; a host-substituted provider may not time its call |
+| `LoopIteration` | `iteration_number` | typed for uniformity — always taken in-core |
+| `RunManifest` | `elapsed_ms` | measured today; typed for uniformity |
+
+**The concrete defect this fixes.** `handle_dialog` currently emits `StepEnd { elapsed_ms: 0 }` — a
+hardcoded zero standing in for "this path never measured the duration". That is exactly the
+substitution HO-14 forbids: a consumer averaging step durations silently biases toward zero, and a
+minimum becomes meaningless. It becomes `Measurement::Unavailable`, which is the honest value.
+
+**What stays a plain number.** `FieldDescriptor`'s `field_count` and `total_bytes` are computed by
+construction from a value already in hand — they can never fail to be obtained, so wrapping them
+would add ceremony while communicating nothing. *Not applicable* stays distinct from *unavailable*:
+a field the taxonomy does not define for an event type is simply absent from that variant, and never
+carries the marker.
+
+**Pass-2 coupling.** HO-8's token classes (`input` / `output` / `cache_read?` / `cache_creation?`)
+are the L1's own canonical example of this rule — `ModelProvider` exposes no token-accounting seam
+(the documented gap `Budget.max_tokens` already records, `l2-nodus-environment`), so those fields
+will be `Unavailable`, never `0`, when they land. Introducing `Measurement` first means they are
+born correct.
+
+#### Deferred to Pass 2
+
+HO-8 (cost token classes), HO-9 (execution-authenticity receipt), HO-10 (trace-completeness
+classification, read-side), HO-11 (dual-legibility `message`), HO-13 (per-item derivation lineage),
+HO-16 (anomaly annotation), and HO-17 (transient/durable separation) are additive optional fields
+and read-side rules. Each rides on the `seq`/`Measurement` foundation this section lays; none
+requires re-touching the variants once §4.8 is realized.
+
 ## 5. Implementation Notes
 
 1. Implement `observability.rs` first (pure types, no executor dependency). All 10 variants and
@@ -423,6 +527,7 @@ manifest/identity cluster only.
 
 | Version | Date | Author | Notes |
 | --- | --- | --- | --- |
+| 1.3.0 | 2026-07-24 | Core Team | Added §4.8 Aggregation-Safe Event Stream — the intended realization (spec-ahead-of-code) of **HO-7** (`seq: u64` run-monotonic dense counter + run-scoped `correlation_id` on every `ExecutionEvent`; `RunManifest.event_count` = highest `seq` + 1 as the gap check; streaming chunk-merge recorded as vacuous in core — `ModelProvider::generate` returns a complete `String`, so no chunk exists to merge, and the fold is a host obligation) and **HO-14** (two-state `Measurement { Taken(u64), Unavailable }` replacing every raw numeric that can fail to be obtained — `elapsed_ms` on `StepEnd`/`MacroExit`/`ModelResponse`/`RunManifest` and `LoopIteration.iteration_number`; `FieldDescriptor`'s counts deliberately stay plain `u32`, obtainable by construction). Batched because both rewrite every variant — one round of churn, and Pass-2's HO-8 token classes are born as `Measurement` rather than added raw and retyped. Records two findings from the current crate: emission must route through a single `seq`-assigning choke point (20 `record_event` calls each paired with a manual `event_count += 1` — correct today, fragile once `seq` depends on it), and `handle_dialog`'s hardcoded `elapsed_ms: 0` is the exact fabricated-zero HO-14 forbids and becomes `Unavailable`. Pass 2 (HO-8, HO-9, HO-10, HO-11, HO-13, HO-16, HO-17) explicitly deferred. |
 | 1.2.0 | 2026-07-24 | Core Team | Added §4.7 Run-Manifest Identity & Reproducibility — the intended realization (spec-ahead-of-code) of HO-12 (`execution_mode`), HO-15 (definition-derived `step_identity` on events + manifest), HO-18 (`exposure_switches` resolved-and-frozen variant provenance), HO-19 (`StepError.fault_identity`, message-independent), and HO-20 (`RunManifest.repro: ReproRecipe` — workflow digest, capability set, exposure, mode, nodus version, stated determinism, `None`-not-omitted uncapturable fields). All additive/optional (HO-5/HO-6 preserved); awaits its implementation phase. The per-event-descriptor batch (HO-7…HO-11, HO-13, HO-14, HO-16, HO-17) is explicitly deferred to a follow-up pass. Reconciles the standing pending Invariant-Compliance obligation for HO-12/15/18/19/20. |
 | 1.1.0 | 2026-07-04 | Core Team | Added `BufferedAuditProvider` adapter (§4.3): opt-in bounded-channel + writer-thread sink honoring the `(correlation_id, seq)` ordering contract; blocking backpressure (never drops); flush-and-join on drop with `run_complete` as the final delivered event; synchronous in-path recording remains the default |
 | 1.0.0 | 2026-06-24 | Core Team | Initial spec — HO-1…HO-6 compliance table, `observability.rs` type system, executor hook-point mapping, `workflows.rs` API additions, full test plan |

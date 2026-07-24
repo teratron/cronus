@@ -43,6 +43,22 @@ impl AuditProvider for NoopAuditProvider {
     fn run_complete(&self, _manifest: RunManifest) {}
 }
 
+// ─── Aggregation-safe measurement (HO-14) ─────────────────────────────────────
+
+/// A numeric that was either genuinely measured, or explicitly could not be.
+///
+/// `Unavailable` is **never** rendered as `0`, omitted, or carried forward from
+/// a previous observation — each of those corrupts a downstream aggregate
+/// (mean, minimum, coverage) while looking exactly like data. *Not
+/// applicable* is a different thing entirely: a field the taxonomy does not
+/// define for a given event type is simply absent from that variant, and
+/// never carries this marker.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum Measurement {
+    Taken(u64),
+    Unavailable,
+}
+
 // ─── Event taxonomy ───────────────────────────────────────────────────────────
 
 /// Discriminant for loop types (used in [`ExecutionEvent::LoopIteration`]).
@@ -91,6 +107,12 @@ impl FieldDescriptor {
 
 /// Closed set of observable execution events. Adding a new variant is a
 /// spec-level minor-version amendment (HO-6).
+///
+/// Every variant carries `seq` (run-monotonic, dense, gap-free — HO-7) and
+/// `correlation_id` (shared by every event of one run, equal to
+/// `RunManifest.run_id` — HO-7). Both are assigned by
+/// [`crate::executor::Executor`]'s single emission choke point, never by a
+/// caller — there is no public constructor that lets a caller pick either.
 #[derive(Debug, Clone)]
 pub enum ExecutionEvent {
     /// Before a step's command is dispatched.
@@ -101,6 +123,8 @@ pub enum ExecutionEvent {
         input_vars: Vec<String>,
         /// Definition-derived, stable cross-run identity (HO-15).
         step_identity: String,
+        seq: u64,
+        correlation_id: String,
     },
     /// After a step's command returns successfully.
     StepEnd {
@@ -108,9 +132,11 @@ pub enum ExecutionEvent {
         step_command: String,
         /// Pipeline target names written by this step (empty if no `→`).
         output_vars: Vec<String>,
-        elapsed_ms: u64,
+        elapsed_ms: Measurement,
         /// Definition-derived, stable cross-run identity (HO-15).
         step_identity: String,
+        seq: u64,
+        correlation_id: String,
     },
     /// When a step produces a NODUS error code.
     StepError {
@@ -123,6 +149,8 @@ pub enum ExecutionEvent {
         step_identity: String,
         /// Stable, message-independent grouping input (HO-19).
         fault_identity: FaultIdentity,
+        seq: u64,
+        correlation_id: String,
     },
     /// When a hard (`!!NEVER`/`!!ALWAYS`) constraint fires.
     ConstraintHit {
@@ -130,6 +158,8 @@ pub enum ExecutionEvent {
         triggering_step_index: u32,
         /// `true` when the executor halted execution as a result.
         halt: bool,
+        seq: u64,
+        correlation_id: String,
     },
     /// When a conditional (`?IF`/`?ELIF`/`?ELSE`) resolves.
     BranchTaken {
@@ -137,25 +167,33 @@ pub enum ExecutionEvent {
         /// `"if"`, `"elif"`, or `"else"`.
         branch_label: String,
         condition_result: bool,
+        seq: u64,
+        correlation_id: String,
     },
     /// At the start of each `~FOR`/`~UNTIL` loop body.
     LoopIteration {
         step_index: u32,
         loop_type: LoopType,
-        iteration_number: u32,
+        iteration_number: Measurement,
         /// Variables bound for this iteration (e.g. the `~FOR` loop variable).
         bound_vars: Vec<String>,
+        seq: u64,
+        correlation_id: String,
     },
     /// When `RUN(@macro_name)` begins execution.
     MacroEnter {
         macro_name: String,
         call_step_index: u32,
+        seq: u64,
+        correlation_id: String,
     },
     /// When a macro body completes.
     MacroExit {
         macro_name: String,
         call_step_index: u32,
-        elapsed_ms: u64,
+        elapsed_ms: Measurement,
+        seq: u64,
+        correlation_id: String,
     },
     /// Immediately before dispatching to the `ModelProvider` (GEN, ANALYZE, …).
     ModelCall {
@@ -164,6 +202,8 @@ pub enum ExecutionEvent {
         command: String,
         /// Structural descriptor — no raw user text (data-safety boundary).
         input_summary: FieldDescriptor,
+        seq: u64,
+        correlation_id: String,
     },
     /// Immediately after the `ModelProvider` returns.
     ModelResponse {
@@ -171,7 +211,9 @@ pub enum ExecutionEvent {
         command: String,
         /// Structural descriptor of the response — no raw content.
         output_summary: FieldDescriptor,
-        elapsed_ms: u64,
+        elapsed_ms: Measurement,
+        seq: u64,
+        correlation_id: String,
     },
 }
 
@@ -333,13 +375,16 @@ pub struct RunManifest {
     /// ISO-8601 timestamp supplied by the caller at run construction.
     pub started_at: String,
     /// Wall-clock duration of the run.
-    pub elapsed_ms: u64,
+    pub elapsed_ms: Measurement,
     pub status: RunStatus,
     /// First NODUS:* error code encountered, if any.
     pub error_code: Option<String>,
     /// Number of steps that reached execution (excludes unentered branches).
     pub total_steps: u32,
     /// Total events emitted to [`AuditProvider::record_event`] during this run.
+    /// Doubles as the HO-7 gap-check: for an undamaged trace this equals the
+    /// highest emitted `seq` + 1 (both derive from the same counter through
+    /// the executor's single emission choke point — T-15B01/T-15B02).
     pub event_count: u32,
     /// Environment-lifecycle interactions for this run (NE-3). Empty for every
     /// run that did not go through [`crate::environment`]'s combinators —
@@ -388,22 +433,36 @@ mod tests {
 
     // ── NoopAuditProvider ────────────────────────────────────────────────────
 
+    /// Test-only helper: a fixed seq/correlation pair, since these tests
+    /// exercise event *shape*, not the executor's real assignment discipline
+    /// (that lives in `executor.rs`'s integration tests).
+    fn sc(seq: u64) -> (u64, String) {
+        (seq, "corr-test".to_string())
+    }
+
     #[test]
     fn noop_provider_discards_all() {
         let noop = NoopAuditProvider;
+        let (seq, cid) = sc(0);
         noop.record_event(ExecutionEvent::StepStart {
             step_index: 1,
             step_command: "GEN".to_string(),
             input_vars: vec!["query".to_string()],
             step_identity: step_identity(1, "GEN"),
+            seq,
+            correlation_id: cid,
         });
+        let (seq, cid) = sc(1);
         noop.record_event(ExecutionEvent::StepEnd {
             step_index: 1,
             step_command: "GEN".to_string(),
             output_vars: vec!["$out".to_string()],
-            elapsed_ms: 5,
+            elapsed_ms: Measurement::Taken(5),
             step_identity: step_identity(1, "GEN"),
+            seq,
+            correlation_id: cid,
         });
+        let (seq, cid) = sc(2);
         noop.record_event(ExecutionEvent::StepError {
             step_index: 1,
             step_command: "PUBLISH".to_string(),
@@ -415,55 +474,81 @@ mod tests {
                 code: "NODUS:RULE_VIOLATION".to_string(),
                 discriminator: None,
             },
+            seq,
+            correlation_id: cid,
         });
+        let (seq, cid) = sc(3);
         noop.record_event(ExecutionEvent::ConstraintHit {
             rule_name: "!!NEVER: publish".to_string(),
             triggering_step_index: 1,
             halt: true,
+            seq,
+            correlation_id: cid,
         });
+        let (seq, cid) = sc(4);
         noop.record_event(ExecutionEvent::BranchTaken {
             step_index: 2,
             branch_label: "if".to_string(),
             condition_result: true,
+            seq,
+            correlation_id: cid,
         });
+        let (seq, cid) = sc(5);
         noop.record_event(ExecutionEvent::LoopIteration {
             step_index: 3,
             loop_type: LoopType::For,
-            iteration_number: 0,
+            iteration_number: Measurement::Taken(0),
             bound_vars: vec!["$item".to_string()],
+            seq,
+            correlation_id: cid,
         });
+        let (seq, cid) = sc(6);
         noop.record_event(ExecutionEvent::LoopIteration {
             step_index: 4,
             loop_type: LoopType::Until,
-            iteration_number: 1,
+            iteration_number: Measurement::Taken(1),
             bound_vars: vec![],
+            seq,
+            correlation_id: cid,
         });
+        let (seq, cid) = sc(7);
         noop.record_event(ExecutionEvent::MacroEnter {
             macro_name: "refine".to_string(),
             call_step_index: 5,
+            seq,
+            correlation_id: cid,
         });
+        let (seq, cid) = sc(8);
         noop.record_event(ExecutionEvent::MacroExit {
             macro_name: "refine".to_string(),
             call_step_index: 5,
-            elapsed_ms: 2,
+            elapsed_ms: Measurement::Taken(2),
+            seq,
+            correlation_id: cid,
         });
+        let (seq, cid) = sc(9);
         noop.record_event(ExecutionEvent::ModelCall {
             step_index: 1,
             command: "GEN".to_string(),
             input_summary: FieldDescriptor::text(42),
+            seq,
+            correlation_id: cid,
         });
+        let (seq, cid) = sc(10);
         noop.record_event(ExecutionEvent::ModelResponse {
             step_index: 1,
             command: "GEN".to_string(),
             output_summary: FieldDescriptor::text(100),
-            elapsed_ms: 10,
+            elapsed_ms: Measurement::Taken(10),
+            seq,
+            correlation_id: cid,
         });
         noop.run_complete(RunManifest {
             workflow_name: "test".to_string(),
             schema_version: "0.4.6".to_string(),
             run_id: "run-0".to_string(),
             started_at: "2026-06-24T00:00:00Z".to_string(),
-            elapsed_ms: 20,
+            elapsed_ms: Measurement::Taken(20),
             status: RunStatus::Ok,
             error_code: None,
             total_steps: 5,
@@ -481,18 +566,24 @@ mod tests {
     #[test]
     fn step_start_end_emitted_in_order() {
         let recording = RecordingProvider::new();
+        let (seq, cid) = sc(0);
         recording.record_event(ExecutionEvent::StepStart {
             step_index: 1,
             step_command: "GEN".to_string(),
             input_vars: vec![],
             step_identity: step_identity(1, "GEN"),
+            seq,
+            correlation_id: cid,
         });
+        let (seq, cid) = sc(1);
         recording.record_event(ExecutionEvent::StepEnd {
             step_index: 1,
             step_command: "GEN".to_string(),
             output_vars: vec!["$out".to_string()],
-            elapsed_ms: 3,
+            elapsed_ms: Measurement::Taken(3),
             step_identity: step_identity(1, "GEN"),
+            seq,
+            correlation_id: cid,
         });
 
         let events = recording.events.lock().unwrap();
@@ -510,10 +601,13 @@ mod tests {
     #[test]
     fn constraint_hit_halt_true() {
         let recording = RecordingProvider::new();
+        let (seq, cid) = sc(0);
         recording.record_event(ExecutionEvent::ConstraintHit {
             rule_name: "!!NEVER: DELETE".to_string(),
             triggering_step_index: 2,
             halt: true,
+            seq,
+            correlation_id: cid,
         });
         let events = recording.events.lock().unwrap();
         match &events[0] {
@@ -525,15 +619,21 @@ mod tests {
     #[test]
     fn branch_taken_if_and_else() {
         let recording = RecordingProvider::new();
+        let (seq, cid) = sc(0);
         recording.record_event(ExecutionEvent::BranchTaken {
             step_index: 1,
             branch_label: "if".to_string(),
             condition_result: true,
+            seq,
+            correlation_id: cid,
         });
+        let (seq, cid) = sc(1);
         recording.record_event(ExecutionEvent::BranchTaken {
             step_index: 2,
             branch_label: "else".to_string(),
             condition_result: false,
+            seq,
+            correlation_id: cid,
         });
         let events = recording.events.lock().unwrap();
         assert!(matches!(
@@ -555,12 +655,15 @@ mod tests {
     #[test]
     fn loop_iteration_for() {
         let recording = RecordingProvider::new();
-        for i in 0u32..3 {
+        for i in 0u64..3 {
+            let (seq, cid) = sc(i);
             recording.record_event(ExecutionEvent::LoopIteration {
                 step_index: 1,
                 loop_type: LoopType::For,
-                iteration_number: i,
+                iteration_number: Measurement::Taken(i),
                 bound_vars: vec!["$item".to_string()],
+                seq,
+                correlation_id: cid,
             });
         }
         let events = recording.events.lock().unwrap();
@@ -572,7 +675,7 @@ mod tests {
                     iteration_number,
                     ..
                 } => {
-                    assert_eq!(*iteration_number, i as u32);
+                    assert_eq!(*iteration_number, Measurement::Taken(i as u64));
                 }
                 other => panic!("expected LoopIteration(For), got {other:?}"),
             }
@@ -582,11 +685,14 @@ mod tests {
     #[test]
     fn loop_iteration_until() {
         let recording = RecordingProvider::new();
+        let (seq, cid) = sc(0);
         recording.record_event(ExecutionEvent::LoopIteration {
             step_index: 2,
             loop_type: LoopType::Until,
-            iteration_number: 0,
+            iteration_number: Measurement::Taken(0),
             bound_vars: vec![],
+            seq,
+            correlation_id: cid,
         });
         let events = recording.events.lock().unwrap();
         assert!(matches!(
@@ -601,14 +707,20 @@ mod tests {
     #[test]
     fn macro_enter_exit_pair() {
         let recording = RecordingProvider::new();
+        let (seq, cid) = sc(0);
         recording.record_event(ExecutionEvent::MacroEnter {
             macro_name: "summarize".to_string(),
             call_step_index: 3,
+            seq,
+            correlation_id: cid,
         });
+        let (seq, cid) = sc(1);
         recording.record_event(ExecutionEvent::MacroExit {
             macro_name: "summarize".to_string(),
             call_step_index: 3,
-            elapsed_ms: 7,
+            elapsed_ms: Measurement::Taken(7),
+            seq,
+            correlation_id: cid,
         });
         let events = recording.events.lock().unwrap();
         assert!(
@@ -627,10 +739,13 @@ mod tests {
         assert_eq!(desc.type_hints, vec!["Text"]);
         assert_eq!(desc.total_bytes, 256);
 
+        let (seq, cid) = sc(0);
         let event = ExecutionEvent::ModelCall {
             step_index: 1,
             command: "GEN".to_string(),
             input_summary: desc,
+            seq,
+            correlation_id: cid,
         };
         // Verify debug output contains no prose that could be mistaken for content.
         let debug = format!("{event:?}");
@@ -645,7 +760,7 @@ mod tests {
             schema_version: "0.4.6".to_string(),
             run_id: "r-001".to_string(),
             started_at: "2026-06-24T12:00:00Z".to_string(),
-            elapsed_ms: 42,
+            elapsed_ms: Measurement::Taken(42),
             status: RunStatus::Ok,
             error_code: None,
             total_steps: 3,
@@ -663,5 +778,35 @@ mod tests {
         assert_eq!(manifests[0].event_count, 6);
         assert_eq!(manifests[0].status, RunStatus::Ok);
         assert_eq!(manifests[0].execution_mode, ExecutionMode::Real);
+    }
+
+    // ── Measurement (HO-14) ──────────────────────────────────────────────────
+
+    #[test]
+    fn measurement_unavailable_is_not_taken_zero() {
+        assert_ne!(Measurement::Unavailable, Measurement::Taken(0));
+    }
+
+    #[test]
+    fn measurement_round_trips_through_recording_provider() {
+        let recording = RecordingProvider::new();
+        let (seq, cid) = sc(0);
+        recording.record_event(ExecutionEvent::StepEnd {
+            step_index: 1,
+            step_command: "ASK".to_string(),
+            output_vars: vec![],
+            elapsed_ms: Measurement::Unavailable,
+            step_identity: step_identity(1, "ASK"),
+            seq,
+            correlation_id: cid,
+        });
+        let events = recording.events.lock().unwrap();
+        assert!(matches!(
+            &events[0],
+            ExecutionEvent::StepEnd {
+                elapsed_ms: Measurement::Unavailable,
+                ..
+            }
+        ));
     }
 }
