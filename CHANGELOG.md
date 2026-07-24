@@ -186,3 +186,4 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Updated specification `knowledge-base` (main)
 - Added specification `live-diagnostics` (main)
 - Added specification `incremental-execution` (main)
+- Added specification `extension-points` (main)
