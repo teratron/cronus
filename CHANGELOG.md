@@ -188,3 +188,4 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Added specification `incremental-execution` (main)
 - Added specification `extension-points` (main)
 - Updated specification `office-visualization` (main)
+- Added specification `conversation-rewind` (main)
