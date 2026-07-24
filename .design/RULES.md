@@ -1,6 +1,6 @@
 # Project Specification Rules
 
-**Version:** 1.5.0
+**Version:** 1.6.0
 **Status:** Active
 
 ## Overview
@@ -303,3 +303,17 @@ This project deliberately authors L1 concept specifications ahead of implementat
 3. **Advisory exemption**: `concept-only` specs are excluded from the "Stable L1 without L2 child" coverage-gap advisory in `/magic.analyze` and are never treated as orphaned-implementation blockers by `/magic.task` (they remain listed in `PLAN.md` to satisfy the no-orphan invariant).
 4. **Auto-revert**: the moment an L2 spec declaring `Implements: {this L1}` is authored, the `concept-only` tag is dropped and the L1 re-enters normal coverage tracking. The marker is a statement about *plan intent*, not a permanent property.
 5. **Honesty over suppression**: the marker exists to surface the concept-vs-code delta on every audit, not to silence it. A rising count of `concept-only` specs is itself a health signal worth narrating in the Advisory Report.
+
+### C29 — SDD Engine as Provisional Scaffolding
+
+The SDD engine (`.magic/`, `workflows/`, `skills/`, `rules/`) and the `.design/` specification layer are **build scaffolding for Cronus, not part of the Cronus product or its core**. They exist to drive the project's initial-stage implementation and are provisional: once Cronus is capable enough to host its own development (self-application / dogfooding), the product itself supersedes this external engine as the tool that carries the project forward. This convention records the *ontological status* of the scaffolding; C1 governs how it is safely modified and §6 (SDD Reference Containment) governs how product artifacts must avoid referencing it — this rule is the shared rationale beneath both.
+
+1. **Not product, not core**: no shipped product artifact (source, binaries, user-facing docs, release bundles) may depend on, embed, or require the SDD engine or `.design/` to function. The product MUST remain fully operational and self-describing without them — a release that excludes `.design/` and the engine directories loses no product capability.
+2. **Scaffolding, handled as scaffolding**: the engine is a means, not a deliverable. It is maintained to serve implementation and MUST NOT be elevated into the product's own architecture, feature set, or public surface.
+3. **Provisional by design**: the current external-tool arrangement is a bootstrapping phase, not a permanent dependency. Design and planning SHOULD anticipate the eventual handoff in which Cronus drives its own development, so no product component is built assuming the SDD engine will always sit alongside it.
+
+## Document History
+
+| Version | Date | Change |
+| --- | --- | --- |
+| 1.6.0 | 2026-07-24 | Added C29 — SDD Engine as Provisional Scaffolding: the SDD engine (`.magic/`, `workflows/`, `skills/`, `rules/`) and the `.design/` layer are build scaffolding, not part of the Cronus product or core; provisional, to be superseded once Cronus self-hosts its own development; product artifacts must remain fully functional without them (the shared rationale beneath C1 and §6). Document History table introduced with this entry. |
