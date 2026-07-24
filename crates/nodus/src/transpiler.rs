@@ -10,8 +10,8 @@
 //! the transpiler stays in sync with the schema without duplicating data.
 
 use crate::ast::{
-    CommandCall, Conditional, ForLoop, MapBlock, RuleKind, Step, Stmt, SwitchBlock, UntilLoop,
-    WorkflowFile,
+    CommandCall, Conditional, ConfigDecl, FieldConstraint, ForLoop, MapBlock, RuleKind, Step, Stmt,
+    SwitchBlock, UntilLoop, WorkflowFile,
 };
 use crate::vocab::TRANSPILER_VERB_MAP;
 
@@ -474,6 +474,54 @@ impl Transpiler {
         }
         parts.join(" ")
     }
+
+    // ─── §config: round-trip (NL-20) ────────────────────────────────────────
+
+    /// Render a [`ConfigDecl`] back to its compact `§config:` NODUS form.
+    ///
+    /// Round-trip safe: `Parser::parse_config(&Transpiler::config_to_nodus(&decl))`
+    /// reproduces `decl`. `secret` and `describe:` survive the trip; a `describe:`
+    /// value is re-quoted so it re-lexes as a `StringLit`.
+    pub fn config_to_nodus(decl: &ConfigDecl) -> String {
+        let mut lines: Vec<String> = Vec::new();
+
+        if let Some(h) = &decl.header {
+            if h.version.is_empty() {
+                lines.push(format!("§config:{}", h.name));
+            } else {
+                lines.push(format!("§config:{} {}", h.name, h.version));
+            }
+        }
+
+        for f in &decl.fields {
+            lines.push(format!("{} : {}", f.name, f.type_name));
+            if let Some(d) = &f.default {
+                lines.push(format!("  default: {d}"));
+            }
+            match &f.constraint {
+                Some(FieldConstraint::Range { lo, hi }) => {
+                    lines.push(format!("  range: {lo}, {hi}"))
+                }
+                Some(FieldConstraint::OneOf(vals)) => {
+                    lines.push(format!("  one_of: {}", vals.join(" | ")))
+                }
+                None => {}
+            }
+            if f.required {
+                lines.push("  required".to_string());
+            }
+            if f.secret {
+                lines.push("  secret".to_string());
+            }
+            if let Some(desc) = &f.describe {
+                lines.push(format!("  describe: \"{desc}\""));
+            }
+        }
+
+        let mut out = lines.join("\n");
+        out.push('\n');
+        out
+    }
 }
 
 #[cfg(test)]
@@ -794,5 +842,54 @@ mod tests {
             "escalate to human"
         );
         assert_eq!(Transpiler::humanize_error("LOG($error)"), "LOG($error)");
+    }
+
+    // ── §config: round-trip (NL-20) ─────────────────────────────────────────
+
+    #[test]
+    fn config_round_trips_through_nodus() {
+        use crate::parser::Parser;
+
+        let src = "\
+§config:settings v1.0
+max_retries : int
+  default: 3
+  range: 1, 10
+  describe: \"Maximum retry attempts\"
+api_key : str
+  required
+  secret
+  describe: \"External API credential\"
+level : str
+  default: medium
+  one_of: low | medium | high
+";
+        let decl = Parser::parse_config(src).expect("parse_config");
+        let emitted = Transpiler::config_to_nodus(&decl);
+        let decl2 = Parser::parse_config(&emitted).expect("re-parse emitted §config");
+        assert_eq!(decl, decl2, "round-trip must reproduce the declaration");
+
+        // Secret and describe survive the trip.
+        assert!(decl2.fields[1].secret);
+        assert_eq!(
+            decl2.fields[1].describe.as_deref(),
+            Some("External API credential")
+        );
+    }
+
+    #[test]
+    fn config_to_nodus_emits_header() {
+        use crate::ast::{ConfigDecl, FileHeader, FileType};
+
+        let decl = ConfigDecl {
+            header: Some(FileHeader {
+                file_type: FileType::Config,
+                name: "settings".to_string(),
+                version: "v1.0".to_string(),
+            }),
+            fields: vec![],
+        };
+        let out = Transpiler::config_to_nodus(&decl);
+        assert!(out.contains("§config:settings v1.0"), "header: {out}");
     }
 }

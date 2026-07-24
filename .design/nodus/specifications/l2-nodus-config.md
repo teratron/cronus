@@ -1,6 +1,6 @@
 # Nodus Declarative Configuration Surface (Rust)
 
-**Version:** 1.0.0
+**Version:** 1.0.1
 **Status:** Stable
 **Layer:** implementation
 **Implements:** l1-nodus-language.md
@@ -132,9 +132,11 @@ impl Parser {
 `parse_config` reuses `parse_header(FileType::Config)`, then reads field
 declarations per the §4.1 grammar: `name : type` followed by any of the optional
 clauses (`default:`, `range:` | `one-of:`, `required`, `secret`, `describe:`).
-The existing `parse`/`parse_with_schema` `§config` branch is rewritten to
-delegate to `parse_config` (a `§config` header no longer errors); the `§schema`
-branch keeps the deferral message. The transpiler gains a `§config` round-trip
+`Parser::parse`/`parse_with_schema` stay typed to `WorkflowFile` — a `§config`
+file is not a workflow, so they do not (and cannot) return a `ConfigDecl`.
+Their `§config` arm is rewritten from the generic deferral message to a precise
+redirect naming `parse_config` as the dedicated entry point; the `§schema` arm
+keeps the original deferral message (schema parsing remains unimplemented). The transpiler gains a `§config` round-trip
 (`to_nodus` re-emits the declaration; `describe:` and `secret` survive the trip)
 so a host editor can serialize an amended declaration back to source.
 
@@ -296,4 +298,5 @@ appears in a `CONFIG_INVALID` payload — only the offending field name and reas
 
 | Version | Date | Author | Notes |
 | --- | --- | --- | --- |
+| 1.0.1 | 2026-07-24 | Core Team | Patch clarification (no logic change): §4.3 realigned to the actual `Parser::parse`/`parse_with_schema` return type (`Result<WorkflowFile>`) — their `§config` arm cannot return a `ConfigDecl`, so it is rewritten to a precise redirect error naming `parse_config` rather than literally "delegating"; the `§schema` arm is unchanged. |
 | 1.0.0 | 2026-07-24 | Core Team | Initial spec — Rust realization of the `§config` declarative-configuration surface (`l1-nodus-language.md` §4.1 / NL-20): `ConfigDecl`/`ConfigField` AST, `parse_config` replacing the parser deferral, pure pre-run `check_config_values` shape check, provenance-carrying + write-only-secret value model, `ConfigProvider`/`ExtensionRole::Config` host-acceptance seam with a deterministic `DefaultConfigProvider`, `run_with_config[_and_audit]` sequencing declaration → proposed → shape check → host acceptance → run, and the `CONFIG_INVALID` validation code. |

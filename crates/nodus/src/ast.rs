@@ -274,6 +274,71 @@ pub struct MacroBlock {
     pub raw_lines: Vec<String>,
 }
 
+// ─── Config AST (`§config:`) ────────────────────────────────────────────────
+
+/// A field's value constraint: a bounded range or a closed enumeration (NL-20).
+///
+/// Bounds and members are kept as raw literal strings — matching
+/// [`InputField::default`]'s raw-string precedent — and are coerced to a typed
+/// `Value` against the field's declared type at shape-check time, keeping this
+/// module free of a dependency on `crate::executor`.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum FieldConstraint {
+    /// `range: lo, hi` — inclusive bounds.
+    Range {
+        /// The lower bound (raw literal).
+        lo: String,
+        /// The upper bound (raw literal).
+        hi: String,
+    },
+    /// `one_of: a | b | c` — a closed set of accepted literals.
+    OneOf(Vec<String>),
+}
+
+/// A single field declared in a `§config:` file (NL-20).
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct ConfigField {
+    /// Field name.
+    pub name: String,
+    /// Declared primitive type (defaults to `any`).
+    pub type_name: String,
+    /// The default value (raw literal), if declared.
+    pub default: Option<String>,
+    /// An optional range or enumeration constraint.
+    pub constraint: Option<FieldConstraint>,
+    /// Whether the field is `required` (present unless a default covers it).
+    pub required: bool,
+    /// Whether the field is `secret` — write-only, never rendered or traced.
+    pub secret: bool,
+    /// The `describe:` human-readable purpose, if declared.
+    pub describe: Option<String>,
+}
+
+impl Default for ConfigField {
+    fn default() -> Self {
+        ConfigField {
+            name: String::new(),
+            type_name: "any".to_string(),
+            default: None,
+            constraint: None,
+            required: false,
+            secret: false,
+            describe: None,
+        }
+    }
+}
+
+/// The parsed body of a `§config:` file: an ordered set of field declarations
+/// (NL-20). Field order is preserved for deterministic rendering and stable
+/// diagnostics.
+#[derive(Debug, Clone, PartialEq, Eq, Default)]
+pub struct ConfigDecl {
+    /// The `§config:` header.
+    pub header: Option<FileHeader>,
+    /// The declared fields, in declaration order.
+    pub fields: Vec<ConfigField>,
+}
+
 /// A statement: any node that can appear as a step body, sub-step, branch, or
 /// loop-body element.
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -404,6 +469,68 @@ mod tests {
         assert!(cond.else_branch.is_some());
         // Round-trips through clone unchanged.
         assert_eq!(cond, cond.clone());
+    }
+
+    #[test]
+    fn config_field_defaults_to_any_and_unrestricted() {
+        let f = ConfigField::default();
+        assert_eq!(f.type_name, "any");
+        assert!(!f.required);
+        assert!(!f.secret);
+        assert!(f.default.is_none());
+        assert!(f.constraint.is_none());
+        assert!(f.describe.is_none());
+    }
+
+    #[test]
+    fn config_decl_preserves_field_order() {
+        let decl = ConfigDecl {
+            header: Some(FileHeader {
+                file_type: FileType::Config,
+                name: "settings".to_string(),
+                version: "v1.0".to_string(),
+            }),
+            fields: vec![
+                ConfigField {
+                    name: "max_retries".to_string(),
+                    type_name: "int".to_string(),
+                    default: Some("3".to_string()),
+                    constraint: Some(FieldConstraint::Range {
+                        lo: "1".to_string(),
+                        hi: "10".to_string(),
+                    }),
+                    ..Default::default()
+                },
+                ConfigField {
+                    name: "api_key".to_string(),
+                    type_name: "str".to_string(),
+                    required: true,
+                    secret: true,
+                    ..Default::default()
+                },
+            ],
+        };
+        assert_eq!(decl.fields[0].name, "max_retries");
+        assert_eq!(decl.fields[1].name, "api_key");
+        assert!(decl.fields[1].secret);
+        assert_eq!(decl, decl.clone());
+    }
+
+    #[test]
+    fn config_field_one_of_constraint() {
+        let f = ConfigField {
+            name: "level".to_string(),
+            constraint: Some(FieldConstraint::OneOf(vec![
+                "low".to_string(),
+                "medium".to_string(),
+                "high".to_string(),
+            ])),
+            ..Default::default()
+        };
+        match &f.constraint {
+            Some(FieldConstraint::OneOf(vals)) => assert_eq!(vals.len(), 3),
+            _ => panic!("expected OneOf constraint"),
+        }
     }
 
     #[test]

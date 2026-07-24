@@ -4,23 +4,25 @@
 <!-- Maximum 100 lines. Agent updates AFTER each completed action. -->
 
 **Workspace:** nodus
-**Updated:** 2026-07-24
+**Updated:** 2026-07-24 11:31
 **Phase:** 13 — Declarative Configuration Surface
-**Status:** Active
+**Status:** Done
 
 ## Current Position
 
-- **Task:** Phase 13 planned — Declarative Configuration Surface (l2-nodus-config); 9 tasks / 4 tracks A→C+T, Sequential; not started
-- **Spec:** PLAN v1.16.0 / TASKS v2.8.0 / INDEX v1.0.58; RULES v1.6.0. 16 nodus specs Stable, phases 1–12 Done (Archived), Phase 13 Todo. l2-nodus-config authored (Stable) + phased — realizes NL-20 (§config). Remaining pending obligations: NL-19/21, LP-17/18/19, HO-14…HO-20 (see PLAN Backlog)
-- **Next Action:** Run /magic.run nodus to execute Phase 13 — Track A first (Config AST `ConfigDecl`/`ConfigField` + `parse_config` replacing the §config parser stub)
+- **Task:** Phase 13 complete — Declarative Configuration Surface (l2-nodus-config)
+- **Spec:** PLAN v1.16.0 / TASKS v2.8.0 / INDEX v1.0.58; RULES v1.6.0. 16 nodus specs Stable, phases 1–13 Done. l2-nodus-config implemented — realizes NL-20 (§config). Remaining pending obligations: NL-19/21, LP-17/18/19, HO-14…HO-20 (see PLAN Backlog)
+- **Next Action:** Phase complete; run /magic.task nodus to plan the next phase (Backlog: NL-19/21 + LP-17/18/19 fold into l2-nodus-runtime/portability compliance passes; HO-14…HO-20 into l2-nodus-observability)
 
 ## Progress
 
 ```
-Build phases 1–12 Done (Seed → Testing → Capability Manifest → Dialog → Control-Flow → Environment & Evaluation); Phase 13 planned (Declarative Configuration Surface / l2-nodus-config — 9 tasks A→C+T, Sequential, not started) | Baseline gates: cargo 292 tests + clippy + fmt + doc; LP-1 zero-dep preserved
+Build phases 1–13 Done (Seed → Testing → Capability Manifest → Dialog → Control-Flow → Environment & Evaluation → Declarative Configuration Surface) | Phase 13: 9/9 tasks, Sequential A→B→C→T, all archived | Gates green: cargo 335 tests (was 292; +43) + clippy + fmt + doc; LP-1 zero-dep preserved
 ```
 
 ## Recent Decisions
+
+- 2026-07-24 **Decision:** Phase 13 complete. `l2-nodus-config` implemented in `crates/nodus`: `ConfigDecl`/`ConfigField`/`FieldConstraint` AST + `Parser::parse_config` (replaces the `§config` parser stub) + `Transpiler::config_to_nodus` round-trip; `NODUS:CONFIG_INVALID` code; pure `check_config_values` shape check + `AcceptedConfig` value model; `ConfigProvider`/`ConfigOutcome`/`DefaultConfigProvider` + `ExtensionRole::Config` (LP-8, `builtin()` provides it); `run_with_config`/`run_with_config_and_audit` public API. Two design decisions caught during implementation: (1) `Parser::parse`/`parse_with_schema` stay typed to `WorkflowFile` and give `§config` a precise redirect error naming `parse_config`, rather than the spec draft's literal "delegate" (which would require bolting an `Option<ConfigDecl>` onto the workflow AST) — `l2-nodus-config.md` patched 1.0.0→1.0.1 (no logic/status change) to match; (2) secret write-only is realized as an omission (never merged into `$in.config`) rather than a redaction filter, and full `Value`-level provenance tagging (NL-11) is explicitly scoped out as a pre-existing system-wide obligation, not something this feature could or should close alone. 335 tests pass (was 292; +43); clippy/fmt/doc clean; zero new dependency (LP-1 preserved).
 
 - 2026-07-24 **Decision:** Phase 13 opened — Declarative Configuration Surface. `l2-nodus-config` (Stable) was an ORPHANED_SPEC (in INDEX, absent from PLAN); the No-Orphans guard pulled it into a new phase. Decomposed into 9 atomic tasks / 4 tracks (A AST+parser, B shape-check+error-code+value-model, C provider-seam+API, T validation), Sequential per the spec's §6 implementation order; each task carries a concrete Verify line (C10). Reuses LP-8 manifest + error taxonomy; all-additive, zero-dep (LP-1). Realizes NL-20 — clears the net-new-weight obligation from the v1.15.0 sync. INDEX v1.0.57 → v1.0.58, PLAN v1.15.0 → v1.16.0, TASKS v2.7.0 → v2.8.0.
 

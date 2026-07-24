@@ -2,6 +2,18 @@
 
 Internal phase journal. Each entry corresponds to a completed phase.
 
+## Phase 13 — Declarative Configuration Surface (l2-nodus-config) (2026-07-24)
+
+- T-13A01: Added `ConfigDecl`/`ConfigField`/`FieldConstraint` to `ast.rs` — field default/constraint values kept as raw `String` (mirrors `InputField::default`'s precedent), coerced to a typed `Value` at shape-check time; keeps `ast.rs` free of a dependency on `executor.rs`
+- T-13A02: Added `Parser::parse_config` — replaces the `§config` parser deferral stub; field boundaries disambiguated structurally (a closed clause-keyword set vs. anything else starts a new field), not by indentation (the lexer emits no indent/dedent tokens); the enumeration clause lexes as `one_of` (underscore) since `-` is not a valid identifier character in this lexer. `Parser::parse`/`parse_with_schema` stay typed to `WorkflowFile` and give the `§config` arm a precise redirect error naming `parse_config`, rather than returning a `ConfigDecl` they cannot type — `l2-nodus-config.md` patched to v1.0.1 to match (no logic/status change)
+- T-13A03: Added `Transpiler::config_to_nodus` — round-trip safe; `secret`/`describe:`/constraints survive the trip
+- T-13B01: Added `NODUS:CONFIG_INVALID` (validation category) to `vocab.rs`'s error taxonomy; lockstep test extended to 26 canonical codes
+- T-13B02: Added pure `check_config_values(decl, proposed) -> Result<AcceptedConfig, Vec<ConfigViolation>>` to `validator.rs` — reports every violation (`UnknownField`/`MissingRequired`/`TypeMismatch`/`OutOfRange`/`NotInEnum`/`BadDefault`) in one pass, applies none
+- T-13B03: Added `AcceptedConfig` value model — `get`/`is_secret`/`non_secret_fields()`; secret write-only guarantee realized as omission (never merged into `$in.config`), not a redaction filter — documented as a phase-scoped realization of NL-11 rather than crate-wide `Value` provenance tagging, which remains a standing system-wide obligation across all prior phases
+- T-13C01: Added `ConfigProvider`/`ConfigOutcome`/`DefaultConfigProvider` to `portability.rs`; new `ExtensionRole::Config`, provided by `HostCapabilities::builtin()` (like `Environment`, unlike `Dialog`)
+- T-13C02: Added `run_with_config`/`run_with_config_and_audit` to `workflows.rs` — sequences declaration → proposed → shape check → host acceptance → executor boot; a rejected/invalid set returns `Status::Failed` + `CONFIG_INVALID` with zero steps run and zero audit events emitted, before the executor ever boots; accepted non-secret values merge into `$in.config` (mirrors `merge_observation`'s `"observation"` key)
+- T-13T01: `crates/nodus/tests/config.rs` — 13 integration tests (NL-20 shape-check coverage, secret-neutrality gate, LP-8 `ExtensionRole::Config` fail-fast, full declaration→proposed→acceptance→run happy path, rejection-emits-no-audit-events); `cargo test -p nodus` — 335 passed (was 292; +43), 0 failed; clippy `-D warnings` clean; fmt clean; doc clean; `Cargo.toml [dependencies]` still empty (LP-1 zero-dep preserved)
+
 ## Phase 12 — Environment & Evaluation (l2-nodus-environment) (2026-07-10)
 
 - T-12A01: Created `environment.rs` — `EnvironmentProvider` trait (task_ids/profile/open/reset/step/evaluate/release) + `TaskId`/`Seed`/`Observation`/`Action`/`Instance` types + built-in `StubEnvironment` (single stub task, empty profile, `step` echoes the action, `evaluate` returns the NE-9 no-op reward)

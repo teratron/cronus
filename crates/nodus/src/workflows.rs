@@ -8,7 +8,7 @@
 //! to the lower-level modules.
 
 use crate::Error;
-use crate::ast::{TestBlock, WorkflowFile};
+use crate::ast::{ConfigDecl, TestBlock, WorkflowFile};
 use crate::environment::{EnvRunResult, EnvironmentProvider, Observation, Reward, Seed, TaskId};
 use crate::executor::{
     DialogProvider, Executor, ModelProvider, RunResult, RuntimeError, Status, StubProvider, Value,
@@ -16,10 +16,11 @@ use crate::executor::{
 use crate::observability::{AuditProvider, EnvInteraction, EnvInteractionKind, FieldDescriptor};
 use crate::parser::Parser;
 use crate::portability::{
-    CapabilityManifest, ExtensionRole, HostCapabilities, Missing, SchemaProvider, validate_manifest,
+    CapabilityManifest, ConfigOutcome, ConfigProvider, ExtensionRole, HostCapabilities, Missing,
+    SchemaProvider, validate_manifest,
 };
 use crate::transpiler::Transpiler;
-use crate::validator::{Diagnostic, Severity, Validator};
+use crate::validator::{ConfigViolation, Diagnostic, Severity, Validator, check_config_values};
 use crate::vocab;
 use std::collections::HashMap;
 
@@ -823,6 +824,167 @@ fn value_descriptor(v: &Value) -> FieldDescriptor {
     }
 }
 
+/// Parse, validate, shape-check + host-gate a `§config` value set, then
+/// execute with the accepted non-secret values merged into `$in.config`
+/// (NL-20).
+///
+/// Sequence: parse workflow → lint validate → `check_config_values` (pure
+/// shape check) → `provider.accept` (host acceptance) → executor boot. A
+/// shape-check failure or a host `Rejected` outcome returns a
+/// `NODUS:CONFIG_INVALID` [`RunResult`] **before** the executor boots — no
+/// step executes and no audit events are emitted, mirroring
+/// [`run_with_manifest`]'s capability-rejection path — so a rejected proposal
+/// never partially configures a run. `decl` is parsed once by the caller via
+/// [`Parser::parse_config`] and passed in, matching how [`run_with_manifest`]
+/// takes an already-built [`CapabilityManifest`] rather than re-deriving one.
+pub fn run_with_config(
+    source: &str,
+    filename: &str,
+    input: Option<Value>,
+    decl: &ConfigDecl,
+    proposed: &[(String, Value)],
+    provider: &dyn ConfigProvider,
+) -> Result<RunResult, Vec<Diagnostic>> {
+    run_with_config_impl(
+        source, filename, input, decl, proposed, provider, None, "", "",
+    )
+}
+
+/// Like [`run_with_config`] but with a custom [`AuditProvider`]. `run_id` and
+/// `started_at` are forwarded to the run manifest on an accepted run.
+#[allow(clippy::too_many_arguments)]
+pub fn run_with_config_and_audit(
+    source: &str,
+    filename: &str,
+    input: Option<Value>,
+    decl: &ConfigDecl,
+    proposed: &[(String, Value)],
+    provider: &dyn ConfigProvider,
+    audit: impl AuditProvider + 'static,
+    run_id: &str,
+    started_at: &str,
+) -> Result<RunResult, Vec<Diagnostic>> {
+    run_with_config_impl(
+        source,
+        filename,
+        input,
+        decl,
+        proposed,
+        provider,
+        Some(Box::new(audit)),
+        run_id,
+        started_at,
+    )
+}
+
+/// Shared implementation for [`run_with_config`] / [`run_with_config_and_audit`].
+#[allow(clippy::too_many_arguments)]
+fn run_with_config_impl(
+    source: &str,
+    filename: &str,
+    input: Option<Value>,
+    decl: &ConfigDecl,
+    proposed: &[(String, Value)],
+    provider: &dyn ConfigProvider,
+    audit: Option<Box<dyn AuditProvider>>,
+    run_id: &str,
+    started_at: &str,
+) -> Result<RunResult, Vec<Diagnostic>> {
+    let ast = Parser::parse(source).map_err(|e| {
+        vec![Diagnostic {
+            severity: Severity::Error,
+            code: "PARSE_ERROR".to_string(),
+            message: e.to_string(),
+            line: 0,
+            column: 0,
+            filename: filename.to_string(),
+        }]
+    })?;
+
+    let report = ValidationReport::new(Validator::validate(&ast, filename));
+    if report.has_errors {
+        return Err(report.diagnostics);
+    }
+
+    let outcome = match check_config_values(decl, proposed) {
+        Ok(candidate) => provider.accept(decl, candidate),
+        Err(violations) => ConfigOutcome::Rejected(violations),
+    };
+    let accepted = match outcome {
+        ConfigOutcome::Accepted(a) => a,
+        ConfigOutcome::Rejected(violations) => return Ok(config_rejection(&ast, &violations)),
+    };
+
+    let merged_input = merge_config(input, &accepted);
+
+    Ok(match audit {
+        Some(a) => Executor::with_boxed_audit(StubProvider, a).execute_with_params(
+            &ast,
+            merged_input,
+            run_id,
+            started_at,
+        ),
+        None => Executor::with_stub().execute(&ast, merged_input),
+    })
+}
+
+/// Overlay the accepted config's non-secret fields under a stable `"config"`
+/// key onto `input` — mirroring `merge_observation`'s `"observation"` overlay.
+/// `secret` fields are deliberately excluded: this is the only projection
+/// merged into the workflow's variable surface, so an ordinary `GEN`/`REFINE`
+/// step has no path to a secret value at all (DC-9's write-only guarantee).
+fn merge_config(
+    input: Option<Value>,
+    accepted: &crate::validator::AcceptedConfig,
+) -> Option<Value> {
+    let mut entries: Vec<(String, Value)> = match input {
+        Some(Value::Map(m)) => m,
+        _ => Vec::new(),
+    };
+    let config_map: Vec<(String, Value)> = accepted
+        .non_secret_fields()
+        .map(|(k, v)| (k.to_string(), v.clone()))
+        .collect();
+    if let Some(pos) = entries.iter().position(|(k, _)| k == "config") {
+        entries[pos] = ("config".to_string(), Value::Map(config_map));
+    } else {
+        entries.push(("config".to_string(), Value::Map(config_map)));
+    }
+    Some(Value::Map(entries))
+}
+
+/// Build the fail-fast rejection result for an invalid `§config` value set:
+/// status `Failed`, no steps logged, one `NODUS:CONFIG_INVALID` error naming
+/// every violation.
+fn config_rejection(ast: &WorkflowFile, violations: &[ConfigViolation]) -> RunResult {
+    let workflow = ast
+        .header
+        .as_ref()
+        .map(|h| format!("wf:{}", h.name))
+        .unwrap_or_default();
+
+    let names: Vec<String> = violations
+        .iter()
+        .map(|v| format!("{}: {:?}", v.field, v.reason))
+        .collect();
+    let reason = format!("invalid §config value set: {}", names.join(", "));
+
+    RunResult {
+        workflow,
+        status: Status::Failed,
+        out: Value::Null,
+        log: Vec::new(),
+        errors: vec![RuntimeError {
+            code: vocab::error_code::CONFIG_INVALID.to_string(),
+            step: 0,
+            reason,
+        }],
+        flags: Vec::new(),
+        vars: HashMap::new(),
+        resume: None,
+    }
+}
+
 /// Build the fail-fast rejection result for an unsatisfiable manifest: status
 /// `Failed`, no steps logged, one `NODUS:CAPABILITY_UNMET` error naming each
 /// missing capability.
@@ -1289,5 +1451,101 @@ mod tests {
         // RunResult.vars exposes all pipeline variables after execution
         let result = run(VALID_WF, "api_test.nodus", None).expect("run");
         assert!(result.vars.contains_key("out"), "vars must include $out");
+    }
+
+    // ── run_with_config (NL-20) ─────────────────────────────────────────────
+
+    fn sample_config_decl_for_workflows() -> ConfigDecl {
+        use crate::ast::ConfigField;
+        ConfigDecl {
+            header: None,
+            fields: vec![
+                ConfigField {
+                    name: "tone".to_string(),
+                    type_name: "str".to_string(),
+                    default: Some("warm".to_string()),
+                    ..Default::default()
+                },
+                ConfigField {
+                    name: "api_key".to_string(),
+                    type_name: "str".to_string(),
+                    required: true,
+                    secret: true,
+                    ..Default::default()
+                },
+            ],
+        }
+    }
+
+    #[test]
+    fn run_with_config_rejects_before_boot_on_missing_required() {
+        let decl = sample_config_decl_for_workflows();
+        let provider = crate::portability::DefaultConfigProvider;
+        let result = run_with_config(VALID_WF, "api_test.nodus", None, &decl, &[], &provider)
+            .expect("run_with_config should not fail-fast on lint (VALID_WF is clean)");
+        assert_eq!(result.status, Status::Failed);
+        assert!(
+            result
+                .errors
+                .iter()
+                .any(|e| e.code == vocab::error_code::CONFIG_INVALID),
+            "missing required field must reject with CONFIG_INVALID: {:?}",
+            result.errors
+        );
+        assert!(
+            result.log.is_empty(),
+            "a rejected config run must execute zero steps"
+        );
+    }
+
+    #[test]
+    fn run_with_config_happy_path_merges_non_secret_into_in_config() {
+        let decl = sample_config_decl_for_workflows();
+        let provider = crate::portability::DefaultConfigProvider;
+        let proposed = vec![("api_key".to_string(), Value::Text("sk-live".to_string()))];
+        let result = run_with_config(
+            VALID_WF,
+            "api_test.nodus",
+            None,
+            &decl,
+            &proposed,
+            &provider,
+        )
+        .expect("run_with_config");
+        assert_eq!(result.status, Status::Ok, "errors: {:?}", result.errors);
+    }
+
+    #[test]
+    fn run_with_config_excludes_secret_from_merged_input() {
+        let decl = sample_config_decl_for_workflows();
+        let accepted = check_config_values(
+            &decl,
+            &[("api_key".to_string(), Value::Text("sk-live".to_string()))],
+        )
+        .expect("shape check should pass");
+        let merged = merge_config(None, &accepted).expect("merged input");
+        match merged {
+            Value::Map(entries) => {
+                let config_val = entries
+                    .iter()
+                    .find(|(k, _)| k == "config")
+                    .map(|(_, v)| v.clone())
+                    .expect("config key present");
+                match config_val {
+                    Value::Map(fields) => {
+                        assert!(
+                            fields.iter().any(|(k, _)| k == "tone"),
+                            "non-secret field must be present"
+                        );
+                        assert!(
+                            !fields.iter().any(|(k, _)| k == "api_key"),
+                            "secret field must NOT be merged into $in.config: {fields:?}"
+                        );
+                    }
+                    other => panic!("expected config to be a Map, got {other:?}"),
+                }
+            }
+            other => panic!("expected merged input to be a Map, got {other:?}"),
+        }
     }
 }

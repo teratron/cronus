@@ -71,19 +71,22 @@ pub use observability::{
 };
 pub use parser::Parser;
 pub use portability::{
-    BuiltinSchemaProvider, CapabilityManifest, ExtensionRole, HostCapabilities, Missing,
-    NoopPolicyProvider, NoopStorageProvider, PolicyProvider, SchemaProvider, StorageProvider,
-    validate_manifest,
+    BuiltinSchemaProvider, CapabilityManifest, ConfigOutcome, ConfigProvider,
+    DefaultConfigProvider, ExtensionRole, HostCapabilities, Missing, NoopPolicyProvider,
+    NoopStorageProvider, PolicyProvider, SchemaProvider, StorageProvider, validate_manifest,
 };
 pub use transpiler::Transpiler;
-pub use validator::{Diagnostic, Severity, Validator};
+pub use validator::{
+    AcceptedConfig, ConfigReason, ConfigViolation, Diagnostic, Severity, Validator,
+    check_config_values,
+};
 pub use vocab::Schema;
 pub use workflows::{
-    TestReport, TestResult, TranspileMode, ValidationReport, run, run_with_audit, run_with_dialog,
-    run_with_dialog_and_audit, run_with_environment, run_with_environment_and_audit,
-    run_with_manifest, run_with_manifest_and_audit, run_with_provider, run_with_provider_and_audit,
-    run_with_schema, run_with_schema_and_audit, scaffold, test, test_with_tags, transpile,
-    validate,
+    TestReport, TestResult, TranspileMode, ValidationReport, run, run_with_audit, run_with_config,
+    run_with_config_and_audit, run_with_dialog, run_with_dialog_and_audit, run_with_environment,
+    run_with_environment_and_audit, run_with_manifest, run_with_manifest_and_audit,
+    run_with_provider, run_with_provider_and_audit, run_with_schema, run_with_schema_and_audit,
+    scaffold, test, test_with_tags, transpile, validate,
 };
 
 #[cfg(test)]

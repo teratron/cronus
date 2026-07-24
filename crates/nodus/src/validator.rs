@@ -11,7 +11,10 @@
 //! report `line = 0, column = 0`. When the parser is extended to attach spans,
 //! the diagnostic helpers below will naturally carry real positions.
 
-use crate::ast::{Conditional, ForLoop, ParallelBlock, Stmt, UntilLoop, WorkflowFile};
+use crate::ast::{
+    Conditional, ConfigDecl, FieldConstraint, ForLoop, ParallelBlock, Stmt, UntilLoop, WorkflowFile,
+};
+use crate::executor::Value;
 use crate::vocab;
 
 // ─── Diagnostic types ─────────────────────────────────────────────────────────
@@ -1093,6 +1096,228 @@ fn max_conditional_depth(node: &Stmt, depth: usize) -> usize {
     }
 }
 
+// ─── §config: shape check (NL-20) ─────────────────────────────────────────────
+
+/// Why a proposed `§config` value set failed the shape check.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum ConfigReason {
+    /// A proposed key names no declared field.
+    UnknownField,
+    /// A `required` field has neither a proposed value nor a default.
+    MissingRequired,
+    /// A proposed value's runtime type does not match the field's declared type.
+    TypeMismatch,
+    /// A proposed (or defaulted) value falls outside its declared `range`.
+    OutOfRange,
+    /// A proposed (or defaulted) value is not a member of its declared `one_of` set.
+    NotInEnum,
+    /// A field's own declared `default` fails its declared type or constraint.
+    BadDefault,
+}
+
+/// A single shape-check failure, naming the offending field and why (NL-20).
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct ConfigViolation {
+    /// The field name the violation concerns.
+    pub field: String,
+    /// Why the value set was rejected for this field.
+    pub reason: ConfigReason,
+}
+
+/// A `§config` value set that passed the shape check (NL-20): every field
+/// resolves to a value (proposed or defaulted), readable by name. `secret`
+/// fields are retrievable via [`AcceptedConfig::get`] (the value is *usable*)
+/// but this type exposes no separate accessor that renders a value into a
+/// model-facing prompt — [`crate::workflows::run_with_config`] deliberately
+/// does not merge `secret` fields into the workflow's `$in.config` surface,
+/// so an ordinary step has no path to a secret at all (DC-9's write-only
+/// guarantee, realized as an omission rather than a redaction filter).
+#[derive(Debug, Clone, Default)]
+pub struct AcceptedConfig {
+    values: Vec<(String, Value, bool)>,
+}
+
+impl AcceptedConfig {
+    /// The resolved value for `name`, if it is a declared field.
+    pub fn get(&self, name: &str) -> Option<&Value> {
+        self.values
+            .iter()
+            .find(|(n, _, _)| n == name)
+            .map(|(_, v, _)| v)
+    }
+
+    /// Whether `name` is a declared `secret` field.
+    pub fn is_secret(&self, name: &str) -> bool {
+        self.values.iter().any(|(n, _, s)| n == name && *s)
+    }
+
+    /// The non-secret fields, in declaration order — the set
+    /// [`crate::workflows::run_with_config`] merges into `$in.config`.
+    pub fn non_secret_fields(&self) -> impl Iterator<Item = (&str, &Value)> {
+        self.values
+            .iter()
+            .filter(|(_, _, secret)| !secret)
+            .map(|(n, v, _)| (n.as_str(), v))
+    }
+}
+
+/// Coerce a raw config literal (from a declared `default` or a `range`/`one_of`
+/// bound — always a raw `String` in the AST, per `ConfigField`'s doc) into a
+/// typed [`Value`], directed by the field's declared primitive type. Returns
+/// `None` when the literal cannot be coerced to that type (`BadDefault`).
+fn coerce_config_literal(type_name: &str, raw: &str) -> Option<Value> {
+    match type_name {
+        "int" => raw.parse::<i64>().ok().map(Value::Int),
+        "float" => raw.parse::<f64>().ok().map(Value::Float),
+        "bool" => match raw {
+            "true" => Some(Value::Bool(true)),
+            "false" => Some(Value::Bool(false)),
+            _ => None,
+        },
+        "null" => (raw == "null").then_some(Value::Null),
+        // str/url/ts/any/list/obj: config field values captured by the parser
+        // are always single literal tokens (no `[…]`/`{…}` value syntax), so
+        // list/obj-typed fields carry no literal default/constraint members —
+        // only a proposed `Value::List`/`Value::Map` from the caller is valid.
+        _ => Some(Value::Text(raw.to_string())),
+    }
+}
+
+/// Does `value`'s runtime shape match `type_name`?
+fn config_type_matches(value: &Value, type_name: &str) -> bool {
+    match type_name {
+        "int" => matches!(value, Value::Int(_)),
+        "float" => matches!(value, Value::Float(_) | Value::Int(_)),
+        "bool" => matches!(value, Value::Bool(_)),
+        "str" | "url" | "ts" => matches!(value, Value::Text(_)),
+        "list" => matches!(value, Value::List(_)),
+        "obj" => matches!(value, Value::Map(_)),
+        "null" => matches!(value, Value::Null),
+        // "any" and any non-canonical type name: unrestricted (advisory
+        // unknown-type warnings are W013's concern, not this pre-run gate).
+        _ => true,
+    }
+}
+
+/// Does `value` satisfy `constraint`, given the field's declared type (used to
+/// coerce the constraint's raw literal bounds/members)?
+fn config_satisfies_constraint(
+    value: &Value,
+    constraint: &FieldConstraint,
+    type_name: &str,
+) -> bool {
+    match constraint {
+        FieldConstraint::Range { lo, hi } => {
+            let (Some(lo_v), Some(hi_v)) = (
+                coerce_config_literal(type_name, lo),
+                coerce_config_literal(type_name, hi),
+            ) else {
+                return false;
+            };
+            match (value, &lo_v, &hi_v) {
+                (Value::Int(v), Value::Int(l), Value::Int(h)) => v >= l && v <= h,
+                (Value::Float(v), Value::Float(l), Value::Float(h)) => v >= l && v <= h,
+                (Value::Int(v), Value::Float(l), Value::Float(h)) => {
+                    (*v as f64) >= *l && (*v as f64) <= *h
+                }
+                (Value::Float(v), Value::Int(l), Value::Int(h)) => {
+                    *v >= (*l as f64) && *v <= (*h as f64)
+                }
+                _ => false,
+            }
+        }
+        FieldConstraint::OneOf(members) => members
+            .iter()
+            .any(|m| coerce_config_literal(type_name, m).as_ref() == Some(value)),
+    }
+}
+
+/// Pure, pre-run shape check (NL-20 / DC-3 / DC-4): validate a proposed value
+/// set against `decl` in one pass, reporting every violation and applying
+/// none. On success, returns an [`AcceptedConfig`] where every field resolves
+/// to a value — the proposed one, or the field's `default`, or `Value::Null`
+/// for an optional field with neither. Never mutates any prior accepted set;
+/// the caller decides what "prior" means (see
+/// [`crate::workflows::run_with_config`]).
+pub fn check_config_values(
+    decl: &ConfigDecl,
+    proposed: &[(String, Value)],
+) -> std::result::Result<AcceptedConfig, Vec<ConfigViolation>> {
+    let mut violations = Vec::new();
+
+    for (name, _) in proposed {
+        if !decl.fields.iter().any(|f| &f.name == name) {
+            violations.push(ConfigViolation {
+                field: name.clone(),
+                reason: ConfigReason::UnknownField,
+            });
+        }
+    }
+
+    let mut accepted: Vec<(String, Value, bool)> = Vec::new();
+
+    for field in &decl.fields {
+        let default_value = field
+            .default
+            .as_deref()
+            .map(|raw| coerce_config_literal(&field.type_name, raw));
+        if let Some(None) = default_value {
+            violations.push(ConfigViolation {
+                field: field.name.clone(),
+                reason: ConfigReason::BadDefault,
+            });
+        }
+        if let (Some(Some(dv)), Some(c)) = (&default_value, &field.constraint)
+            && !config_satisfies_constraint(dv, c, &field.type_name)
+        {
+            violations.push(ConfigViolation {
+                field: field.name.clone(),
+                reason: ConfigReason::BadDefault,
+            });
+        }
+
+        match proposed.iter().find(|(n, _)| n == &field.name) {
+            Some((_, value)) => {
+                if !config_type_matches(value, &field.type_name) {
+                    violations.push(ConfigViolation {
+                        field: field.name.clone(),
+                        reason: ConfigReason::TypeMismatch,
+                    });
+                    continue;
+                }
+                if let Some(constraint) = &field.constraint
+                    && !config_satisfies_constraint(value, constraint, &field.type_name)
+                {
+                    let reason = match constraint {
+                        FieldConstraint::Range { .. } => ConfigReason::OutOfRange,
+                        FieldConstraint::OneOf(_) => ConfigReason::NotInEnum,
+                    };
+                    violations.push(ConfigViolation {
+                        field: field.name.clone(),
+                        reason,
+                    });
+                    continue;
+                }
+                accepted.push((field.name.clone(), value.clone(), field.secret));
+            }
+            None => match default_value.flatten() {
+                Some(dv) => accepted.push((field.name.clone(), dv, field.secret)),
+                None if field.required => violations.push(ConfigViolation {
+                    field: field.name.clone(),
+                    reason: ConfigReason::MissingRequired,
+                }),
+                None => accepted.push((field.name.clone(), Value::Null, field.secret)),
+            },
+        }
+    }
+
+    if violations.is_empty() {
+        Ok(AcceptedConfig { values: accepted })
+    } else {
+        Err(violations)
+    }
+}
+
 // ─── Tests ────────────────────────────────────────────────────────────────────
 
 #[cfg(test)]
@@ -1811,6 +2036,188 @@ mod tests {
                 .any(|d| ["W011", "W012", "W013"].contains(&d.code.as_str())),
             "known vocabulary must not warn; got: {:?}",
             diags.iter().map(|d| &d.code).collect::<Vec<_>>()
+        );
+    }
+
+    // ── §config: shape check (NL-20) ────────────────────────────────────────
+
+    fn sample_config_decl() -> ConfigDecl {
+        use crate::ast::ConfigField;
+        ConfigDecl {
+            header: None,
+            fields: vec![
+                ConfigField {
+                    name: "max_retries".to_string(),
+                    type_name: "int".to_string(),
+                    default: Some("3".to_string()),
+                    constraint: Some(FieldConstraint::Range {
+                        lo: "1".to_string(),
+                        hi: "10".to_string(),
+                    }),
+                    ..Default::default()
+                },
+                ConfigField {
+                    name: "api_key".to_string(),
+                    type_name: "str".to_string(),
+                    required: true,
+                    secret: true,
+                    ..Default::default()
+                },
+                ConfigField {
+                    name: "level".to_string(),
+                    type_name: "str".to_string(),
+                    default: Some("medium".to_string()),
+                    constraint: Some(FieldConstraint::OneOf(vec![
+                        "low".to_string(),
+                        "medium".to_string(),
+                        "high".to_string(),
+                    ])),
+                    ..Default::default()
+                },
+            ],
+        }
+    }
+
+    #[test]
+    fn check_config_values_happy_path_uses_defaults_and_proposed() {
+        let decl = sample_config_decl();
+        let proposed = vec![("api_key".to_string(), Value::Text("sk-live".to_string()))];
+        let accepted = check_config_values(&decl, &proposed).expect("shape check should pass");
+        assert_eq!(accepted.get("max_retries"), Some(&Value::Int(3)));
+        assert_eq!(
+            accepted.get("level"),
+            Some(&Value::Text("medium".to_string()))
+        );
+        assert_eq!(
+            accepted.get("api_key"),
+            Some(&Value::Text("sk-live".to_string()))
+        );
+        assert!(accepted.is_secret("api_key"));
+        assert!(!accepted.is_secret("max_retries"));
+    }
+
+    #[test]
+    fn check_config_values_unknown_field() {
+        let decl = sample_config_decl();
+        let proposed = vec![
+            ("api_key".to_string(), Value::Text("k".to_string())),
+            ("bogus".to_string(), Value::Int(1)),
+        ];
+        let violations = check_config_values(&decl, &proposed).expect_err("must reject");
+        assert!(violations.contains(&ConfigViolation {
+            field: "bogus".to_string(),
+            reason: ConfigReason::UnknownField,
+        }));
+    }
+
+    #[test]
+    fn check_config_values_missing_required() {
+        let decl = sample_config_decl();
+        let violations = check_config_values(&decl, &[]).expect_err("must reject");
+        assert!(violations.contains(&ConfigViolation {
+            field: "api_key".to_string(),
+            reason: ConfigReason::MissingRequired,
+        }));
+    }
+
+    #[test]
+    fn check_config_values_type_mismatch() {
+        let decl = sample_config_decl();
+        let proposed = vec![
+            ("api_key".to_string(), Value::Text("k".to_string())),
+            (
+                "max_retries".to_string(),
+                Value::Text("not_a_number".to_string()),
+            ),
+        ];
+        let violations = check_config_values(&decl, &proposed).expect_err("must reject");
+        assert!(violations.contains(&ConfigViolation {
+            field: "max_retries".to_string(),
+            reason: ConfigReason::TypeMismatch,
+        }));
+    }
+
+    #[test]
+    fn check_config_values_out_of_range() {
+        let decl = sample_config_decl();
+        let proposed = vec![
+            ("api_key".to_string(), Value::Text("k".to_string())),
+            ("max_retries".to_string(), Value::Int(99)),
+        ];
+        let violations = check_config_values(&decl, &proposed).expect_err("must reject");
+        assert!(violations.contains(&ConfigViolation {
+            field: "max_retries".to_string(),
+            reason: ConfigReason::OutOfRange,
+        }));
+    }
+
+    #[test]
+    fn check_config_values_not_in_enum() {
+        let decl = sample_config_decl();
+        let proposed = vec![
+            ("api_key".to_string(), Value::Text("k".to_string())),
+            ("level".to_string(), Value::Text("extreme".to_string())),
+        ];
+        let violations = check_config_values(&decl, &proposed).expect_err("must reject");
+        assert!(violations.contains(&ConfigViolation {
+            field: "level".to_string(),
+            reason: ConfigReason::NotInEnum,
+        }));
+    }
+
+    #[test]
+    fn check_config_values_bad_default_is_reported() {
+        use crate::ast::ConfigField;
+        let decl = ConfigDecl {
+            header: None,
+            fields: vec![ConfigField {
+                name: "n".to_string(),
+                type_name: "int".to_string(),
+                default: Some("not_an_int".to_string()),
+                ..Default::default()
+            }],
+        };
+        let violations = check_config_values(&decl, &[]).expect_err("bad default must reject");
+        assert!(violations.contains(&ConfigViolation {
+            field: "n".to_string(),
+            reason: ConfigReason::BadDefault,
+        }));
+    }
+
+    #[test]
+    fn check_config_values_reports_all_violations_applies_none() {
+        let decl = sample_config_decl();
+        // Two independent violations: missing required api_key + bad type on max_retries.
+        let proposed = vec![("max_retries".to_string(), Value::Text("nope".to_string()))];
+        let violations = check_config_values(&decl, &proposed).expect_err("must reject");
+        assert_eq!(
+            violations.len(),
+            2,
+            "both violations must be reported: {violations:?}"
+        );
+    }
+
+    #[test]
+    fn check_config_values_is_pure() {
+        let decl = sample_config_decl();
+        let proposed = vec![("api_key".to_string(), Value::Text("k".to_string()))];
+        let a = check_config_values(&decl, &proposed).expect("pass");
+        let b = check_config_values(&decl, &proposed).expect("pass");
+        assert_eq!(a.get("max_retries"), b.get("max_retries"));
+        assert_eq!(a.get("level"), b.get("level"));
+    }
+
+    #[test]
+    fn accepted_config_non_secret_fields_excludes_secret() {
+        let decl = sample_config_decl();
+        let proposed = vec![("api_key".to_string(), Value::Text("k".to_string()))];
+        let accepted = check_config_values(&decl, &proposed).expect("pass");
+        let names: Vec<&str> = accepted.non_secret_fields().map(|(n, _)| n).collect();
+        assert!(names.contains(&"max_retries"));
+        assert!(names.contains(&"level"));
+        assert!(
+            !names.contains(&"api_key"),
+            "secret field must not appear in non_secret_fields: {names:?}"
         );
     }
 }

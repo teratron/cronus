@@ -7,15 +7,18 @@
 //! and parallel blocks). Conditions and rule bodies are kept as raw strings, as
 //! the reference does.
 //!
-//! Schema (`§schema:`) and config (`§config:`) *file* parsing are deferred — the
-//! parity corpus is workflows; those entry points return a parse error for now
-//! rather than being silently mishandled.
+//! Schema (`§schema:`) file parsing is deferred — the parity corpus is
+//! workflows; that entry point returns a parse error for now rather than being
+//! silently mishandled. Config (`§config:`) files parse through the dedicated
+//! [`Parser::parse_config`] entry point (NL-20); `parse`/`parse_with_schema`
+//! stay typed to [`WorkflowFile`] and reject a `§config` header with a redirect
+//! naming `parse_config`, since a config file is not a workflow.
 
 use crate::ast::{
-    AbsoluteRule, CommandCall, Comment, Conditional, ContextDecl, ErrorDecl, FileHeader, FileType,
-    ForLoop, InputDecl, InputField, MacroBlock, MapBlock, OutputDecl, ParallelBlock, Preference,
-    RuleKind, RuntimeBlock, Step, Stmt, SwitchBlock, TestBlock, Trigger, UntilLoop, Variable,
-    WorkflowFile,
+    AbsoluteRule, CommandCall, Comment, Conditional, ConfigDecl, ConfigField, ContextDecl,
+    ErrorDecl, FieldConstraint, FileHeader, FileType, ForLoop, InputDecl, InputField, MacroBlock,
+    MapBlock, OutputDecl, ParallelBlock, Preference, RuleKind, RuntimeBlock, Step, Stmt,
+    SwitchBlock, TestBlock, Trigger, UntilLoop, Variable, WorkflowFile,
 };
 use crate::error::{Error, Result, Span};
 use crate::lexer::{Lexer, Token, TokenType};
@@ -50,10 +53,16 @@ impl Parser {
         let val = p.cur_val();
         if val.starts_with("\u{00a7}wf:") {
             Ok(p.parse_workflow())
-        } else if val.starts_with("\u{00a7}schema:") || val.starts_with("\u{00a7}config:") {
+        } else if val.starts_with("\u{00a7}schema:") {
             Err(crate::error::Error::Parse {
                 span: p.span(),
-                message: "schema/config file parsing is not yet implemented".to_string(),
+                message: "schema file parsing is not yet implemented".to_string(),
+            })
+        } else if val.starts_with("\u{00a7}config:") {
+            Err(crate::error::Error::Parse {
+                span: p.span(),
+                message: "a §config file is not a workflow — use Parser::parse_config() instead"
+                    .to_string(),
             })
         } else {
             Err(crate::error::Error::Parse {
@@ -87,16 +96,196 @@ impl Parser {
         let val = p.cur_val();
         if val.starts_with("\u{00a7}wf:") {
             Ok(p.parse_workflow())
-        } else if val.starts_with("\u{00a7}schema:") || val.starts_with("\u{00a7}config:") {
+        } else if val.starts_with("\u{00a7}schema:") {
             Err(Error::Parse {
                 span: p.span(),
-                message: "schema/config file parsing is not yet implemented".to_string(),
+                message: "schema file parsing is not yet implemented".to_string(),
+            })
+        } else if val.starts_with("\u{00a7}config:") {
+            Err(Error::Parse {
+                span: p.span(),
+                message: "a §config file is not a workflow — use Parser::parse_config() instead"
+                    .to_string(),
             })
         } else {
             Err(Error::Parse {
                 span: p.span(),
                 message: format!("unknown file type: {val}"),
             })
+        }
+    }
+
+    // ── Config file (§config:) ──────────────────────────────────────────────
+
+    /// Parse `source` into a [`ConfigDecl`] (NL-20).
+    ///
+    /// Errors if the source is empty, does not open with a `§` declaration, or
+    /// declares a file type other than `§config:`.
+    pub fn parse_config(source: &str) -> Result<ConfigDecl> {
+        let tokens = Lexer::tokenize_str(source)?;
+        let mut p = Parser { tokens, pos: 0 };
+        p.skip_noise();
+        if p.at_end() {
+            return Err(Error::Parse {
+                span: Span::new(0, 0),
+                message: "empty source — expected a § declaration".to_string(),
+            });
+        }
+        if p.cur_ty() != TokenType::Section {
+            return Err(Error::Parse {
+                span: p.span(),
+                message: "expected a § declaration at the start of the file".to_string(),
+            });
+        }
+        if !p.cur_val().starts_with("\u{00a7}config:") {
+            return Err(Error::Parse {
+                span: p.span(),
+                message: "expected a §config: declaration".to_string(),
+            });
+        }
+        let header = p.parse_header(FileType::Config);
+        let fields = p.parse_config_fields();
+        Ok(ConfigDecl {
+            header: Some(header),
+            fields,
+        })
+    }
+
+    /// Reserved config-field clause keyword (introduced by a `:` clause) versus
+    /// the start of a new field (`name : type`). `-` is not a valid identifier
+    /// character in this lexer, so the enumeration clause lexes as `one_of`
+    /// (underscore) rather than the spec prose's `one-of`.
+    fn is_config_clause_keyword(word: &str) -> bool {
+        matches!(word, "default" | "range" | "one_of" | "describe")
+    }
+
+    /// Parse the field-declaration body of a `§config:` file. Field boundaries
+    /// are disambiguated structurally (a clause keyword continues the current
+    /// field; anything else starts a new one) rather than by indentation —
+    /// this lexer does not emit indent/dedent tokens.
+    fn parse_config_fields(&mut self) -> Vec<ConfigField> {
+        let mut fields: Vec<ConfigField> = Vec::new();
+        loop {
+            self.skip_noise();
+            if self.at_end() || self.check(TokenType::Section) {
+                break;
+            }
+            if self.check(TokenType::Comment) {
+                self.advance();
+                continue;
+            }
+            if !matches!(
+                self.cur_ty(),
+                TokenType::Identifier | TokenType::CommandName
+            ) {
+                self.advance();
+                continue;
+            }
+
+            let word = self.cur_val();
+            let mut continued_field = false;
+
+            if let Some(field) = fields.last_mut() {
+                if word == "required" {
+                    field.required = true;
+                    self.advance();
+                    continued_field = true;
+                } else if word == "secret" {
+                    field.secret = true;
+                    self.advance();
+                    continued_field = true;
+                } else if Self::is_config_clause_keyword(&word)
+                    && self.peek_ty(1) == Some(TokenType::Colon)
+                {
+                    self.advance(); // clause keyword
+                    self.advance(); // colon
+                    self.skip_noise();
+                    if word == "default" {
+                        field.default = self.take_config_value();
+                    } else if word == "describe" {
+                        if self.check(TokenType::StringLit) {
+                            field.describe = Some(self.cur_val());
+                            self.advance();
+                        }
+                    } else if word == "range" {
+                        let lo = self.take_config_value().unwrap_or_default();
+                        self.skip_noise();
+                        if self.check(TokenType::Comma) {
+                            self.advance();
+                            self.skip_noise();
+                        }
+                        let hi = self.take_config_value().unwrap_or_default();
+                        field.constraint = Some(FieldConstraint::Range { lo, hi });
+                    } else if word == "one_of" {
+                        let mut values = Vec::new();
+                        if let Some(v) = self.take_config_value() {
+                            values.push(v);
+                        }
+                        while self.check(TokenType::Pipe) {
+                            self.advance();
+                            self.skip_noise();
+                            if let Some(v) = self.take_config_value() {
+                                values.push(v);
+                            }
+                        }
+                        field.constraint = Some(FieldConstraint::OneOf(values));
+                    }
+                    continued_field = true;
+                }
+            }
+
+            if !continued_field {
+                fields.push(self.parse_config_field_start());
+            }
+        }
+        fields
+    }
+
+    /// Parse a new field's `name : type` head.
+    fn parse_config_field_start(&mut self) -> ConfigField {
+        let name = self.cur_val();
+        self.advance();
+        let mut field = ConfigField {
+            name,
+            ..Default::default()
+        };
+        self.skip_noise();
+        if self.check(TokenType::Colon) {
+            self.advance();
+            self.skip_noise();
+            if !self.at_end()
+                && matches!(
+                    self.cur_ty(),
+                    TokenType::Identifier | TokenType::CommandName
+                )
+            {
+                field.type_name = self.cur_val();
+                self.advance();
+            }
+        }
+        field
+    }
+
+    /// Consume a single literal token (`default:`/`range:`/`one_of:` value) as
+    /// its raw text — mirroring `parse_field_list`'s `@in:` default capture.
+    /// Type-directed coercion to a runtime `Value` happens at shape-check time.
+    fn take_config_value(&mut self) -> Option<String> {
+        if self.at_end() {
+            return None;
+        }
+        match self.cur_ty() {
+            TokenType::Number
+            | TokenType::StringLit
+            | TokenType::True
+            | TokenType::False
+            | TokenType::Null
+            | TokenType::Identifier
+            | TokenType::CommandName => {
+                let v = self.cur_val();
+                self.advance();
+                Some(v)
+            }
+            _ => None,
         }
     }
 
@@ -1380,6 +1569,11 @@ impl Parser {
         !self.at_end() && self.cur_ty() == ty
     }
 
+    /// Look ahead `offset` tokens from the current position without consuming.
+    fn peek_ty(&self, offset: usize) -> Option<TokenType> {
+        self.tokens.get(self.pos + offset).map(|t| t.ty)
+    }
+
     fn span(&self) -> Span {
         if self.at_end() {
             Span::new(0, 0)
@@ -1860,5 +2054,108 @@ mod tests {
         assert_eq!(tb.input, vec![("query".to_owned(), "world".to_owned())]);
         assert_eq!(tb.expected, vec![("$out".to_owned(), "world".to_owned())]);
         assert_eq!(tb.tags, vec!["unit".to_owned()]);
+    }
+
+    // ── §config: parsing (NL-20) ────────────────────────────────────────────
+
+    const CONFIG_SAMPLE: &str = "\
+§config:settings v1.0
+max_retries : int
+  default: 3
+  range: 1, 10
+  describe: \"Maximum retry attempts\"
+api_key : str
+  required
+  secret
+  describe: \"External API credential\"
+level : str
+  default: medium
+  one_of: low | medium | high
+";
+
+    #[test]
+    fn parse_config_reads_header() {
+        let decl = Parser::parse_config(CONFIG_SAMPLE).expect("parse_config");
+        let h = decl.header.unwrap();
+        assert_eq!(h.file_type, FileType::Config);
+        assert_eq!(h.name, "settings");
+        assert_eq!(h.version, "v1.0");
+    }
+
+    #[test]
+    fn parse_config_reads_all_fields_in_order() {
+        let decl = Parser::parse_config(CONFIG_SAMPLE).expect("parse_config");
+        assert_eq!(decl.fields.len(), 3);
+        assert_eq!(decl.fields[0].name, "max_retries");
+        assert_eq!(decl.fields[1].name, "api_key");
+        assert_eq!(decl.fields[2].name, "level");
+    }
+
+    #[test]
+    fn parse_config_reads_range_constraint_and_default() {
+        let decl = Parser::parse_config(CONFIG_SAMPLE).expect("parse_config");
+        let f = &decl.fields[0];
+        assert_eq!(f.type_name, "int");
+        assert_eq!(f.default.as_deref(), Some("3"));
+        match &f.constraint {
+            Some(FieldConstraint::Range { lo, hi }) => {
+                assert_eq!(lo, "1");
+                assert_eq!(hi, "10");
+            }
+            other => panic!("expected Range constraint, got {other:?}"),
+        }
+        assert_eq!(f.describe.as_deref(), Some("Maximum retry attempts"));
+    }
+
+    #[test]
+    fn parse_config_reads_required_and_secret() {
+        let decl = Parser::parse_config(CONFIG_SAMPLE).expect("parse_config");
+        let f = &decl.fields[1];
+        assert_eq!(f.type_name, "str");
+        assert!(f.required);
+        assert!(f.secret);
+        assert!(!decl.fields[0].secret, "unrelated field must stay unmarked");
+    }
+
+    #[test]
+    fn parse_config_reads_one_of_constraint() {
+        let decl = Parser::parse_config(CONFIG_SAMPLE).expect("parse_config");
+        let f = &decl.fields[2];
+        assert_eq!(f.default.as_deref(), Some("medium"));
+        match &f.constraint {
+            Some(FieldConstraint::OneOf(vals)) => {
+                assert_eq!(
+                    vals,
+                    &vec!["low".to_string(), "medium".to_string(), "high".to_string()]
+                );
+            }
+            other => panic!("expected OneOf constraint, got {other:?}"),
+        }
+    }
+
+    #[test]
+    fn parse_config_rejects_non_config_header() {
+        let err = Parser::parse_config("§wf:x v1.0\n@steps:\n  1. LOG(x)\n").unwrap_err();
+        assert!(matches!(err, Error::Parse { .. }));
+    }
+
+    #[test]
+    fn parse_rejects_config_header_with_redirect() {
+        let err = Parser::parse(CONFIG_SAMPLE).unwrap_err();
+        let msg = err.to_string();
+        assert!(
+            msg.contains("parse_config"),
+            "expected a redirect to parse_config, got: {msg}"
+        );
+    }
+
+    #[test]
+    fn parse_schema_header_still_deferred() {
+        let err = Parser::parse("§schema:x v1.0\n").unwrap_err();
+        let msg = err.to_string();
+        assert!(
+            msg.contains("not yet implemented"),
+            "schema deferral message must be preserved, got: {msg}"
+        );
     }
 }

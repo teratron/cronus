@@ -245,6 +245,9 @@ pub mod error_code {
     pub const DIALOG_TIMEOUT: &str = "NODUS:DIALOG_TIMEOUT";
     /// A `CONFIRM` was rejected under `+strict`.
     pub const DIALOG_REJECTED: &str = "NODUS:DIALOG_REJECTED";
+    /// A proposed `§config` value set failed the pre-run shape check or was
+    /// rejected by the host `ConfigProvider` (NL-20).
+    pub const CONFIG_INVALID: &str = "NODUS:CONFIG_INVALID";
 }
 
 /// Severity of a runtime error code.
@@ -318,6 +321,8 @@ pub fn error_meta(code: &str) -> Option<(ErrorSeverity, ErrorCategory)> {
         ec::GIT_UNAVAILABLE => (Error, Runtime),
         ec::DIALOG_TIMEOUT => (Error, Dialog),
         ec::DIALOG_REJECTED => (Error, Dialog),
+        // Config-layer code (NL-20).
+        ec::CONFIG_INVALID => (Error, Validation),
         // Non-canonical (incl. deprecated EXECUTION_FAILED) → no metadata.
         _ => return None,
     };
@@ -640,6 +645,10 @@ mod tests {
             error_meta(error_code::DIALOG_TIMEOUT),
             Some((ErrorSeverity::Error, ErrorCategory::Dialog))
         );
+        assert_eq!(
+            error_meta(error_code::CONFIG_INVALID),
+            Some((ErrorSeverity::Error, ErrorCategory::Validation))
+        );
     }
 
     #[test]
@@ -680,8 +689,13 @@ mod tests {
             GIT_UNAVAILABLE,
             DIALOG_TIMEOUT,
             DIALOG_REJECTED,
+            CONFIG_INVALID,
         ];
-        assert_eq!(canonical.len(), 25, "24 language codes + CAPABILITY_UNMET");
+        assert_eq!(
+            canonical.len(),
+            26,
+            "24 language codes + CAPABILITY_UNMET + CONFIG_INVALID"
+        );
         for code in canonical {
             assert!(
                 error_meta(code).is_some(),

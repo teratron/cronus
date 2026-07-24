@@ -100,6 +100,47 @@ impl PolicyProvider for NoopPolicyProvider {
     }
 }
 
+// ─── ConfigProvider (NL-20) ──────────────────────────────────────────────────
+
+/// The outcome of a host reviewing a shape-checked `§config` candidate set
+/// (NL-20 / DC-3 / DC-4).
+#[derive(Debug, Clone)]
+pub enum ConfigOutcome {
+    /// The host approved the candidate set.
+    Accepted(crate::validator::AcceptedConfig),
+    /// The host declined; the caller's previously accepted set (if any) stays
+    /// in force — a rejection never partially configures a run.
+    Rejected(Vec<crate::validator::ConfigViolation>),
+}
+
+/// Host acceptance authority over a shape-checked `§config` candidate
+/// (LP-2/LP-10): a workflow reads its configuration but can never author,
+/// widen, or self-grant it — acceptance is the host's decision alone.
+pub trait ConfigProvider {
+    /// Decide whether to accept a candidate that already passed the pure
+    /// shape check ([`crate::validator::check_config_values`]).
+    fn accept(
+        &self,
+        decl: &crate::ast::ConfigDecl,
+        candidate: crate::validator::AcceptedConfig,
+    ) -> ConfigOutcome;
+}
+
+/// Built-in host acceptance: accepts the shape-checked candidate as-is. No
+/// I/O, no store, no UI — matching the [`NoopStorageProvider`] /
+/// [`NoopPolicyProvider`] LP-2 built-in precedent.
+pub struct DefaultConfigProvider;
+
+impl ConfigProvider for DefaultConfigProvider {
+    fn accept(
+        &self,
+        _decl: &crate::ast::ConfigDecl,
+        candidate: crate::validator::AcceptedConfig,
+    ) -> ConfigOutcome {
+        ConfigOutcome::Accepted(candidate)
+    }
+}
+
 // ─── Capability Manifest (LP-8) ──────────────────────────────────────────────
 
 /// Model-backed commands — those the executor dispatches to its
@@ -132,6 +173,8 @@ pub enum ExtensionRole {
     Dialog,
     /// Graded-run task world ([`crate::environment::EnvironmentProvider`]).
     Environment,
+    /// `§config` host-acceptance authority ([`ConfigProvider`]).
+    Config,
 }
 
 /// What a workflow declares it needs from its host to execute (LP-8).
@@ -308,19 +351,23 @@ impl HostCapabilities {
 
     /// The built-in in-process host: it provides [`ExtensionRole::Model`] (the
     /// [`crate::executor::StubProvider`]), [`ExtensionRole::Audit`] (a sink is
-    /// always wired), [`ExtensionRole::Vocabulary`] (the builtin schema), and
+    /// always wired), [`ExtensionRole::Vocabulary`] (the builtin schema),
     /// [`ExtensionRole::Environment`] (the [`crate::environment::StubEnvironment`]
     /// — a complete, if trivial, graded world, so a manifest-declaring workflow
     /// stays runnable in-process; this is a deliberate contrast with
     /// [`ExtensionRole::Dialog`], which `builtin()` does **not** provide, since
-    /// the default dialog resolver only handles `+default`-marked dialogs). It
-    /// declares no host-extension commands and no named capabilities.
+    /// the default dialog resolver only handles `+default`-marked dialogs), and
+    /// [`ExtensionRole::Config`] (the [`DefaultConfigProvider`] — like
+    /// `Environment`, a complete trivial acceptor, not merely absent like
+    /// `Dialog`). It declares no host-extension commands and no named
+    /// capabilities.
     pub fn builtin() -> Self {
         let mut host = Self::new();
         host.roles.insert(ExtensionRole::Model);
         host.roles.insert(ExtensionRole::Audit);
         host.roles.insert(ExtensionRole::Vocabulary);
         host.roles.insert(ExtensionRole::Environment);
+        host.roles.insert(ExtensionRole::Config);
         host
     }
 
@@ -525,6 +572,45 @@ mod tests {
             manifest.is_empty(),
             "pure builtin workflow needs nothing: {manifest:?}"
         );
+    }
+
+    // ── ConfigProvider / ExtensionRole::Config (NL-20) ──────────────────────
+
+    #[test]
+    fn default_config_provider_accepts_candidate() {
+        use crate::ast::ConfigDecl;
+        use crate::validator::{AcceptedConfig, check_config_values};
+
+        let decl = ConfigDecl::default();
+        let candidate = check_config_values(&decl, &[]).expect("empty decl always passes");
+        let provider = DefaultConfigProvider;
+        match provider.accept(&decl, candidate) {
+            ConfigOutcome::Accepted(_) => {}
+            ConfigOutcome::Rejected(v) => panic!("expected Accepted, got Rejected({v:?})"),
+        }
+        // Type-level sanity: AcceptedConfig is constructible via the shape check.
+        let _: AcceptedConfig = check_config_values(&ConfigDecl::default(), &[]).unwrap();
+    }
+
+    #[test]
+    fn builtin_host_provides_config() {
+        let host = HostCapabilities::builtin();
+        assert!(host.provides(ExtensionRole::Config));
+    }
+
+    #[test]
+    fn manifest_requiring_config_is_satisfied_by_builtin() {
+        let manifest = CapabilityManifest::new().require_role(ExtensionRole::Config);
+        let host = HostCapabilities::builtin();
+        assert!(validate_manifest(&manifest, &host).is_empty());
+    }
+
+    #[test]
+    fn manifest_requiring_config_rejected_by_stripped_host() {
+        let manifest = CapabilityManifest::new().require_role(ExtensionRole::Config);
+        let host = HostCapabilities::new(); // no roles at all
+        let missing = validate_manifest(&manifest, &host);
+        assert_eq!(missing, vec![Missing::Role(ExtensionRole::Config)]);
     }
 
     #[test]
