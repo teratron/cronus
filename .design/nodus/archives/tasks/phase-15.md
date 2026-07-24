@@ -30,7 +30,6 @@ duration_minutes: ~
 **Strategic Goal:** Realize `l2-nodus-observability.md` §4.8 (HO-7 + HO-14) in `crates/nodus` — make the event stream statistically trustworthy: a run-monotonic dense `seq` plus a run-scoped `correlation_id` on every event (order it, detect drops), and a two-state `Measurement` replacing every numeric that can fail to be obtained (aggregate it without a fabricated zero). All-additive to the taxonomy — no new `ExecutionEvent` variant (HO-6 preserved), no behavioural change to `RunResult` (HO-5 preserved); zero new dependency (LP-1). Sequential tracks A→B→C→T.
 
 > **Scope note — nothing to implement for streaming merge.** §4.8 records HO-7's chunk-merge as *vacuous in core*: `ModelProvider::generate` returns a complete `String`, so no chunk ever exists at this layer and the fold is a host obligation (LP-2). Do not add merge machinery.
-
 > **Churn warning.** Both Track-A tasks rewrite all 10 `ExecutionEvent` variants and every construction site (~20 emission sites in `executor.rs`, plus every test literal in `observability.rs` and `tests/observability.rs`). Rust will not compile a partially-applied field change, so each Track-A task lands its type change *together with* the sites it breaks — that is why their `Verify` is a whole-lib test run, not a per-file check.
 
 ## Atomic Checklist
