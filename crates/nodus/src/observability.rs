@@ -99,6 +99,8 @@ pub enum ExecutionEvent {
         step_command: String,
         /// Snapshot of variable names bound at this point (no values).
         input_vars: Vec<String>,
+        /// Definition-derived, stable cross-run identity (HO-15).
+        step_identity: String,
     },
     /// After a step's command returns successfully.
     StepEnd {
@@ -107,6 +109,8 @@ pub enum ExecutionEvent {
         /// Pipeline target names written by this step (empty if no `→`).
         output_vars: Vec<String>,
         elapsed_ms: u64,
+        /// Definition-derived, stable cross-run identity (HO-15).
+        step_identity: String,
     },
     /// When a step produces a NODUS error code.
     StepError {
@@ -115,6 +119,10 @@ pub enum ExecutionEvent {
         /// NODUS:* error code from the vocabulary taxonomy.
         error_code: String,
         error_detail: String,
+        /// Definition-derived, stable cross-run identity (HO-15).
+        step_identity: String,
+        /// Stable, message-independent grouping input (HO-19).
+        fault_identity: FaultIdentity,
     },
     /// When a hard (`!!NEVER`/`!!ALWAYS`) constraint fires.
     ConstraintHit {
@@ -196,6 +204,108 @@ pub struct EnvInteraction {
     pub action: Option<FieldDescriptor>,
 }
 
+// ─── Run-manifest identity & reproducibility (HO-12/15/18/19/20) ─────────────
+
+/// Definition-derived, stable step identity (HO-15) — NOT per-run allocated.
+/// The same value across repeated runs, retries/resumes (NL-12), and recursive
+/// children (NL-18); it changes only when the step's own definition changes
+/// (its number or its command name). Deterministic (NL-6).
+///
+/// Distinct from HO-7's within-run `(correlation_id, seq)` ordering: this is
+/// the cross-run comparison key, not a within-run position.
+///
+/// Takes `(step_number, command_name)` rather than a `&Step` reference — the
+/// executor's emission sites carry these two pieces of the definition, not a
+/// `Step` value, so deriving identity from them avoids threading an AST
+/// reference through the dispatch path for no semantic gain.
+pub fn step_identity(step_number: u32, command_name: &str) -> String {
+    format!("{step_number}:{command_name}")
+}
+
+/// A stable, message-independent grouping input for a failing step (HO-19).
+///
+/// Composed only from stable inputs — [`step_identity`], the emitted
+/// `NODUS:*` code, and an optional workflow-declared discriminator that
+/// outranks the code when present. **Never** derived from `error_detail`
+/// rendered text, which routinely carries per-occurrence interpolated values
+/// (an id, a path, a count) that would shatter one recurring failure into
+/// thousands of singletons. nodus performs no grouping itself — it guarantees
+/// only that the inputs a host groups on are stable and content-independent.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct FaultIdentity {
+    pub step_identity: String,
+    /// The canonical `NODUS:*` code (see [`crate::vocab::error_code`]).
+    pub code: String,
+    /// A workflow-declared discriminator, if any. No `.nodus` grammar
+    /// declares one yet, so this is always `None` today — the carrier exists
+    /// ahead of the declaring syntax (an honest, not a silent, gap).
+    pub discriminator: Option<String>,
+}
+
+/// The execution mode a run declared (HO-12): real, or simulated at a stated
+/// fidelity. nodus substitutes no providers itself — a host that wires
+/// modeled providers for a simulation declares the mode; nodus only records
+/// what was declared. Absent/default is `Real` (today's behaviour), so a
+/// caller declaring nothing is unaffected (HO-5).
+#[derive(Debug, Clone, PartialEq, Eq, Default)]
+pub enum ExecutionMode {
+    #[default]
+    Real,
+    Simulated {
+        fidelity: SimFidelity,
+    },
+}
+
+/// Declared fidelity of a simulated run (HO-12).
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum SimFidelity {
+    Structural,
+    Modeled,
+    Shadow,
+}
+
+/// Whether re-running the recorded workflow reproduces the same outcome
+/// (HO-20). **Stated, never inferred** from the mere presence of a
+/// [`ReproRecipe`] — nodus's own evaluation is deterministic (NL-6), but a run
+/// that made any model call is not, and the recipe must say which of the two
+/// it is rather than let a reader assume exactness.
+#[derive(Debug, Clone, PartialEq, Eq, Default)]
+pub enum Determinism {
+    #[default]
+    Deterministic,
+    ContainsModelCalls,
+}
+
+/// What re-executing this run requires, recorded from the manifest alone
+/// (HO-20) — the host reconstructs nothing. nodus embeds nothing into
+/// produced artifacts, names no file format, and performs no replay; it only
+/// records what it itself resolved (LP-1/LP-2).
+///
+/// An uncapturable field is `None` — **never silently omitted** — since a
+/// short recipe must not read as a complete one (the HO-14 honesty rule
+/// applied at the manifest grain). `needs_vocabulary` is `None` today because
+/// `@needs` selective vocabulary loading is not yet implemented; this is a
+/// declared omission, not a defect.
+#[derive(Debug, Clone, PartialEq, Eq, Default)]
+pub struct ReproRecipe {
+    /// Content identity of the workflow definition (a `std`-only digest —
+    /// the [`crate::environment::CandidateResult`] precedent; zero-dep, LP-1).
+    pub workflow_digest: String,
+    /// The LP-8 capability-manifest roles/commands that satisfied this run.
+    pub capability_set: Vec<String>,
+    /// Mirrors [`RunManifest::exposure_switches`] (HO-18) into the recipe.
+    pub exposure_switches: Vec<(String, String)>,
+    /// Mirrors [`RunManifest::execution_mode`] (HO-12) into the recipe.
+    pub execution_mode: ExecutionMode,
+    /// The producing crate version (`env!("CARGO_PKG_VERSION")`).
+    pub nodus_version: String,
+    /// Resolved `@needs` vocabulary units. `None` until `@needs` selective
+    /// loading is implemented — an honest declared omission.
+    pub needs_vocabulary: Option<Vec<String>>,
+    /// Stated, never inferred (see the type's own documentation).
+    pub determinism: Determinism,
+}
+
 // ─── Run manifest ─────────────────────────────────────────────────────────────
 
 /// Overall status reported in the run manifest.
@@ -235,6 +345,13 @@ pub struct RunManifest {
     /// run that did not go through [`crate::environment`]'s combinators —
     /// additive field, HO-5 observer neutrality preserved for the common case.
     pub env_trajectory: Vec<EnvInteraction>,
+    /// Real vs. simulated, and at what fidelity (HO-12). Default `Real`.
+    pub execution_mode: ExecutionMode,
+    /// Resolved `(switch_name, value)` pairs the host froze once at run start
+    /// (HO-18, LP-19 non-straddling). Empty = prevailing defaults.
+    pub exposure_switches: Vec<(String, String)>,
+    /// What re-executing this run requires, from the manifest alone (HO-20).
+    pub repro: ReproRecipe,
 }
 
 // ─── Tests ────────────────────────────────────────────────────────────────────
@@ -278,18 +395,26 @@ mod tests {
             step_index: 1,
             step_command: "GEN".to_string(),
             input_vars: vec!["query".to_string()],
+            step_identity: step_identity(1, "GEN"),
         });
         noop.record_event(ExecutionEvent::StepEnd {
             step_index: 1,
             step_command: "GEN".to_string(),
             output_vars: vec!["$out".to_string()],
             elapsed_ms: 5,
+            step_identity: step_identity(1, "GEN"),
         });
         noop.record_event(ExecutionEvent::StepError {
             step_index: 1,
             step_command: "PUBLISH".to_string(),
             error_code: "NODUS:RULE_VIOLATION".to_string(),
             error_detail: "!!NEVER: publish".to_string(),
+            step_identity: step_identity(1, "PUBLISH"),
+            fault_identity: FaultIdentity {
+                step_identity: step_identity(1, "PUBLISH"),
+                code: "NODUS:RULE_VIOLATION".to_string(),
+                discriminator: None,
+            },
         });
         noop.record_event(ExecutionEvent::ConstraintHit {
             rule_name: "!!NEVER: publish".to_string(),
@@ -344,6 +469,9 @@ mod tests {
             total_steps: 5,
             event_count: 10,
             env_trajectory: Vec::new(),
+            execution_mode: ExecutionMode::default(),
+            exposure_switches: Vec::new(),
+            repro: ReproRecipe::default(),
         });
         // All 10 event variants + run_complete accepted without panic.
     }
@@ -357,12 +485,14 @@ mod tests {
             step_index: 1,
             step_command: "GEN".to_string(),
             input_vars: vec![],
+            step_identity: step_identity(1, "GEN"),
         });
         recording.record_event(ExecutionEvent::StepEnd {
             step_index: 1,
             step_command: "GEN".to_string(),
             output_vars: vec!["$out".to_string()],
             elapsed_ms: 3,
+            step_identity: step_identity(1, "GEN"),
         });
 
         let events = recording.events.lock().unwrap();
@@ -521,6 +651,9 @@ mod tests {
             total_steps: 3,
             event_count: 6,
             env_trajectory: Vec::new(),
+            execution_mode: ExecutionMode::default(),
+            exposure_switches: Vec::new(),
+            repro: ReproRecipe::default(),
         };
         let recording = RecordingProvider::new();
         recording.run_complete(manifest);
@@ -529,5 +662,6 @@ mod tests {
         assert_eq!(manifests[0].run_id, "r-001");
         assert_eq!(manifests[0].event_count, 6);
         assert_eq!(manifests[0].status, RunStatus::Ok);
+        assert_eq!(manifests[0].execution_mode, ExecutionMode::Real);
     }
 }

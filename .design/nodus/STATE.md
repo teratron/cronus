@@ -4,23 +4,31 @@
 <!-- Maximum 100 lines. Agent updates AFTER each completed action. -->
 
 **Workspace:** nodus
-**Updated:** 2026-07-24 11:31
-**Phase:** 13 — Declarative Configuration Surface
+**Updated:** 2026-07-24 12:45
+**Phase:** 14 — Run-Manifest Identity & Reproducibility
 **Status:** Done
 
 ## Current Position
 
-- **Task:** Phase 13 complete — Declarative Configuration Surface (l2-nodus-config)
-- **Spec:** PLAN v1.16.0 / TASKS v2.8.0 / INDEX v1.0.58; RULES v1.6.0. 16 nodus specs Stable, phases 1–13 Done. l2-nodus-config implemented — realizes NL-20 (§config). Remaining pending obligations: NL-19/21, LP-17/18/19, HO-14…HO-20 (see PLAN Backlog)
-- **Next Action:** Phase complete; run /magic.task nodus to plan the next phase (Backlog: NL-19/21 + LP-17/18/19 fold into l2-nodus-runtime/portability compliance passes; HO-14…HO-20 into l2-nodus-observability)
+- **Task:** Phase 14 complete — Run-Manifest Identity & Reproducibility (l2-nodus-observability §4.7)
+- **Spec:** PLAN v1.17.0 / TASKS v2.9.0 / INDEX v1.0.59; RULES v1.6.0. 16 nodus specs Stable, phases 1–14 Done. l2-nodus-observability §4.7 (HO-12/15/18/19/20) implemented. Remaining: HO event-stream batch (HO-7…HO-11/13/14/16/17) + NL-19/21 (l2-nodus-runtime) + LP-17/18/19 (l2-nodus-portability) — see PLAN Backlog
+- **Next Action:** Phase complete; run /magic.task nodus to plan the next phase (Backlog: HO event-stream batch needs a dedicated /magic.spec pass first; NL-19/21 + LP-17/18/19 are lighter compliance-table closures)
 
 ## Progress
 
 ```
-Build phases 1–13 Done (Seed → Testing → Capability Manifest → Dialog → Control-Flow → Environment & Evaluation → Declarative Configuration Surface) | Phase 13: 9/9 tasks, Sequential A→B→C→T, all archived | Gates green: cargo 335 tests (was 292; +43) + clippy + fmt + doc; LP-1 zero-dep preserved
+Build phases 1–14 Done (Seed → Testing → Capability Manifest → Dialog → Control-Flow → Environment & Evaluation → Declarative Configuration Surface → Run-Manifest Identity & Reproducibility) | Phase 14: 7/7 tasks, Sequential A→B→C→T, all archived | Gates green: cargo 343 tests (was 335; +8) + clippy + fmt + doc; LP-1 zero-dep preserved
 ```
 
 ## Recent Decisions
+
+- 2026-07-24 **Decision:** Phase 14 complete. `l2-nodus-observability` §4.7 implemented in `crates/nodus`: `ExecutionMode`/`SimFidelity`/`Determinism`/`ReproRecipe`/`FaultIdentity` types; `step_identity`/`fault_identity` on events; `RunManifest.{execution_mode,exposure_switches,repro}`; `Executor::execute_with_manifest_context` host-declaring entry point. Three design decisions caught during implementation, each a `[DR]`: (1) `step_identity(u32, &str)` not `step_identity(&Step)` — emission call sites carry the two definition pieces directly, not an AST reference; (2) `workflow_digest` hashes the parsed AST's `Debug` form, not raw source — `execute_inner` never sees source text (parsing happens in `workflows.rs`); (3) extended the private `execute_inner` (3 in-file callers) with the two host-declared params rather than touching `execute()`/`execute_with_params()`'s public signatures, adding one new public method for the declaring path instead. 343 tests pass (was 335; +8); clippy/fmt/doc clean (fixed 2 `derivable_impls` findings); zero new dependency (LP-1 preserved).
+
+- 2026-07-24 **Decision:** Phase 14 opened — Run-Manifest Identity & Reproducibility. A spec-ahead-of-code L2 update (not a new orphan): l2-nodus-observability was already planned in Phase 4 (HO-1…HO-6), and its §4.7 (HO-12/15/18/19/20, v1.2.0) adds unrealized manifest-cluster content — recognized cognitively as a planning trigger (orphan-detection cannot surface it; only the SYNC_GAP warning fired). Decomposed §4.7 into 7 atomic tasks / 4 tracks (A manifest+event types/fields, B step_identity+fault_identity derivation, C repro population + host-supplied mode/switches, T validation), Sequential; each carries a concrete Verify line (C10). One [DR] deferred to implementation: the host-supplied `execution_mode`/`exposure_switches` entry-point shape (RunParams struct vs new run_with_* variant). All-additive/optional (HO-5/HO-6 preserved), zero-dep (LP-1). INDEX v1.0.58 → v1.0.59, PLAN v1.16.0 → v1.17.0, TASKS v2.8.0 → v2.9.0.
+
+- 2026-07-24 **Decision:** Authored the observability manifest cluster. Discovered the observability backlog is bigger than flagged — the code realizes only HO-1…HO-6 + Phase-12 `env_trajectory`, so **HO-7…HO-20 are ALL pending** (14 invariants), too many for one phase. They split by data structure: HO-12/15/18/19/20 enrich `RunManifest`/`StepError` (one coherent "honest, cross-run-comparable, re-executable record" story); HO-7/8/9/11/13/16 + HO-14 + HO-10/17 enrich per-event descriptors (a separate story). Scoped this /magic.spec to the manifest cluster — updated l2-nodus-observability 1.1.0 → 1.2.0 with §4.7 (intended realization: `execution_mode`, `step_identity`, `exposure_switches`, `FaultIdentity`, `ReproRecipe`), Stable via C9 (spec-ahead-of-code, the l2-nodus-config precedent). Deferred the event-stream batch explicitly (nothing silently dropped). INDEX v1.0.58 → v1.0.59. Next: /magic.task opens the phase.
+
+- 2026-07-24 **Decision:** Post-Phase-13 replan — no new phase (plan saturated). Pre-flight clean (16/16 Stable, no orphan, no SYNC_GAP, RULES parity v1.6.0 held). Phase 13 consumed the only orphan (l2-nodus-config/NL-20). Every remaining Backlog item (NL-19/21, LP-17/18/19, HO-14…HO-20) is an Invariant-Compliance obligation with no L2 realization spec, so none is decomposable into verifiable atomic tasks (C10). Computed next step (DA-6): /magic.spec nodus to author the L2 realizations — observability cluster HO-14…HO-20 (net-new RunManifest weight) is the natural next spec→task→run cycle; the language/portability clusters are lighter compliance-table closures. No PLAN/TASKS rewrite (already in lockstep with INDEX v1.0.58).
 
 - 2026-07-24 **Decision:** Phase 13 complete. `l2-nodus-config` implemented in `crates/nodus`: `ConfigDecl`/`ConfigField`/`FieldConstraint` AST + `Parser::parse_config` (replaces the `§config` parser stub) + `Transpiler::config_to_nodus` round-trip; `NODUS:CONFIG_INVALID` code; pure `check_config_values` shape check + `AcceptedConfig` value model; `ConfigProvider`/`ConfigOutcome`/`DefaultConfigProvider` + `ExtensionRole::Config` (LP-8, `builtin()` provides it); `run_with_config`/`run_with_config_and_audit` public API. Two design decisions caught during implementation: (1) `Parser::parse`/`parse_with_schema` stay typed to `WorkflowFile` and give `§config` a precise redirect error naming `parse_config`, rather than the spec draft's literal "delegate" (which would require bolting an `Option<ConfigDecl>` onto the workflow AST) — `l2-nodus-config.md` patched 1.0.0→1.0.1 (no logic/status change) to match; (2) secret write-only is realized as an omission (never merged into `$in.config`) rather than a redaction filter, and full `Value`-level provenance tagging (NL-11) is explicitly scoped out as a pre-existing system-wide obligation, not something this feature could or should close alone. 335 tests pass (was 292; +43); clippy/fmt/doc clean; zero new dependency (LP-1 preserved).
 

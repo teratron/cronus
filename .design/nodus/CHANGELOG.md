@@ -2,6 +2,16 @@
 
 Internal phase journal. Each entry corresponds to a completed phase.
 
+## Phase 14 — Run-Manifest Identity & Reproducibility (l2-nodus-observability §4.7) (2026-07-24)
+
+- T-14A01: Added `ExecutionMode`/`SimFidelity`/`Determinism`/`ReproRecipe` to `observability.rs`; added `execution_mode`, `exposure_switches: Vec<(String, String)>`, `repro: ReproRecipe` to `RunManifest`
+- T-14A02: Added `FaultIdentity { step_identity, code, discriminator }`; added `step_identity: String` to `StepStart`/`StepEnd`/`StepError`, `fault_identity: FaultIdentity` to `StepError` — updated all 7 construction sites (2 in `observability.rs` tests, 5 in `executor.rs`)
+- T-14B01: Added `step_identity(step_number: u32, command_name: &str) -> String` — definition-derived, stable across runs/retries/resumes; wired onto every `StepStart`/`StepEnd`/`StepError` emission
+- T-14B02: Populated `StepError.fault_identity` at the single rule-violation emission site from `step_identity` + the constant `NODUS:RULE_VIOLATION` code — never from `error_detail` text; `discriminator: None` today (no `.nodus` grammar declares one yet)
+- T-14C01: Populated the nodus-computable `ReproRecipe` fields at `run_complete`: `workflow_digest` via `DefaultHasher` over the parsed AST's `Debug` representation (the raw source is unavailable at this layer — parsing happens in `workflows.rs`), `nodus_version` from `env!("CARGO_PKG_VERSION")`, `determinism` from whether `GEN`/`ANALYZE` ran, `needs_vocabulary: None` (declared omission — `@needs` unimplemented), `capability_set: Vec::new()` (no manifest checked on the plain execute path)
+- T-14C02: Added `Executor::execute_with_manifest_context` — the host-declaring entry point for `execution_mode`/`exposure_switches`; `execute()`/`execute_with_params()` keep their exact public signatures (forwarding the `Real`/`[]` defaults) via an extended private `execute_inner`
+- T-14T01: Extended `tests/observability.rs` with 8 integration tests (cross-run step-identity stability + differs-by-definition, message-independent fault-identity, execution-mode/exposure-switch round-trip + default, determinism-reflects-model-calls, needs_vocabulary-None + version-matches, digest-deterministic-and-distinguishing); `cargo test -p nodus` — 343 passed (was 335; +8), 0 failed; clippy `-D warnings` clean (fixed 2 `derivable_impls` findings); fmt clean; `Cargo.toml [dependencies]` still empty (LP-1 zero-dep preserved)
+
 ## Phase 13 — Declarative Configuration Surface (l2-nodus-config) (2026-07-24)
 
 - T-13A01: Added `ConfigDecl`/`ConfigField`/`FieldConstraint` to `ast.rs` — field default/constraint values kept as raw `String` (mirrors `InputField::default`'s precedent), coerced to a typed `Value` at shape-check time; keeps `ast.rs` free of a dependency on `executor.rs`

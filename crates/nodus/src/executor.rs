@@ -18,8 +18,8 @@
 
 use crate::ast::{AbsoluteRule, CommandCall, RuleKind, Step, Stmt, WorkflowFile};
 use crate::observability::{
-    AuditProvider, EnvInteraction, ExecutionEvent, FieldDescriptor, LoopType, NoopAuditProvider,
-    RunManifest, RunStatus,
+    AuditProvider, EnvInteraction, ExecutionEvent, ExecutionMode, FaultIdentity, FieldDescriptor,
+    LoopType, NoopAuditProvider, ReproRecipe, RunManifest, RunStatus, step_identity,
 };
 use crate::vocab;
 use std::collections::HashMap;
@@ -386,6 +386,22 @@ impl ExecutionContext {
     }
 }
 
+/// Deterministic `std`-only content digest of the parsed workflow definition
+/// (HO-20). `execute_inner` receives only the parsed [`WorkflowFile`], never
+/// the raw source text (parsing happens earlier, in `workflows.rs`) — so this
+/// hashes the AST's canonical `Debug` representation rather than source bytes,
+/// mirroring `environment.rs`'s `digest_source` (`DefaultHasher`, zero-dep,
+/// LP-1; deterministic within one build, not guaranteed stable across Rust
+/// versions/platforms). Two sources differing only in whitespace/comments
+/// parse to the same AST and therefore share a digest — the correct notion of
+/// "same workflow" for reproducibility, since neither affects execution.
+fn digest_ast(ast: &WorkflowFile) -> String {
+    use std::hash::{Hash, Hasher};
+    let mut hasher = std::collections::hash_map::DefaultHasher::new();
+    format!("{ast:?}").hash(&mut hasher);
+    format!("{:016x}", hasher.finish())
+}
+
 // ─── Executor ─────────────────────────────────────────────────────────────────
 
 /// Core runtime engine for NODUS workflows.
@@ -462,8 +478,18 @@ impl Executor {
     /// Run a parsed workflow through the boot sequence, execute its steps, and
     /// return the structured [`RunResult`].
     pub fn execute(&self, ast: &WorkflowFile, input: Option<Value>) -> RunResult {
-        self.execute_inner(ast, input, "", "", None, None, Vec::new())
-            .0
+        self.execute_inner(
+            ast,
+            input,
+            "",
+            "",
+            None,
+            None,
+            Vec::new(),
+            ExecutionMode::default(),
+            Vec::new(),
+        )
+        .0
     }
 
     /// Run a workflow with explicit run metadata forwarded to the audit provider.
@@ -474,8 +500,47 @@ impl Executor {
         run_id: &str,
         started_at: &str,
     ) -> RunResult {
-        self.execute_inner(ast, input, run_id, started_at, None, None, Vec::new())
-            .0
+        self.execute_inner(
+            ast,
+            input,
+            run_id,
+            started_at,
+            None,
+            None,
+            Vec::new(),
+            ExecutionMode::default(),
+            Vec::new(),
+        )
+        .0
+    }
+
+    /// Like [`execute_with_params`](Self::execute_with_params) but with a
+    /// host-declared execution mode (HO-12) and resolved exposure switches
+    /// (HO-18), both mirrored into the manifest's `repro` recipe (HO-20). A
+    /// caller declaring `ExecutionMode::Real` and no switches sees the
+    /// identical output as `execute_with_params` (HO-5 preserved) — this is
+    /// purely an additive entry point, not a modification of the defaults.
+    pub fn execute_with_manifest_context(
+        &self,
+        ast: &WorkflowFile,
+        input: Option<Value>,
+        run_id: &str,
+        started_at: &str,
+        execution_mode: ExecutionMode,
+        exposure_switches: Vec<(String, String)>,
+    ) -> RunResult {
+        self.execute_inner(
+            ast,
+            input,
+            run_id,
+            started_at,
+            None,
+            None,
+            Vec::new(),
+            execution_mode,
+            exposure_switches,
+        )
+        .0
     }
 
     /// Run a workflow under a step/wall-clock ceiling, embedding `env_trajectory`
@@ -505,6 +570,8 @@ impl Executor {
             max_steps,
             wall_clock_ms,
             env_trajectory,
+            ExecutionMode::default(),
+            Vec::new(),
         )
     }
 
@@ -522,6 +589,8 @@ impl Executor {
         max_steps: Option<u32>,
         wall_clock_ms: Option<u64>,
         env_trajectory: Vec<EnvInteraction>,
+        execution_mode: ExecutionMode,
+        exposure_switches: Vec<(String, String)>,
     ) -> (RunResult, bool) {
         let mut ctx = ExecutionContext::new();
 
@@ -651,6 +720,30 @@ impl Executor {
             Status::Ok | Status::Partial | Status::Paused => RunStatus::Ok,
             Status::Failed | Status::Aborted => RunStatus::ConstraintHalt,
         };
+        // HO-20: stated, never inferred from the recipe's mere presence — a
+        // model call (GEN/ANALYZE) makes the run non-deterministic.
+        let determinism = if ctx
+            .log
+            .iter()
+            .any(|e| e.command == "GEN" || e.command == "ANALYZE")
+        {
+            crate::observability::Determinism::ContainsModelCalls
+        } else {
+            crate::observability::Determinism::Deterministic
+        };
+        let repro = ReproRecipe {
+            workflow_digest: digest_ast(ast),
+            // No CapabilityManifest is checked on the plain execute()/
+            // execute_with_params() path — Executor itself holds no manifest
+            // context (that gate lives in workflows.rs::run_with_manifest);
+            // an empty set honestly reports "none was checked", not a guess.
+            capability_set: Vec::new(),
+            exposure_switches: exposure_switches.clone(),
+            execution_mode: execution_mode.clone(),
+            nodus_version: env!("CARGO_PKG_VERSION").to_string(),
+            needs_vocabulary: None, // @needs selective loading not yet implemented
+            determinism,
+        };
         self.audit.run_complete(RunManifest {
             workflow_name: workflow_id.clone(),
             schema_version: crate::vocab::BUILTIN_SCHEMA_VERSION.to_string(),
@@ -662,6 +755,9 @@ impl Executor {
             total_steps: ctx.log.len() as u32,
             event_count: ctx.event_count,
             env_trajectory,
+            execution_mode,
+            exposure_switches,
+            repro,
         });
 
         (
@@ -1135,6 +1231,12 @@ impl Executor {
                 step_command: cmd.name.clone(),
                 error_code: vocab::error_code::RULE_VIOLATION.to_string(),
                 error_detail: violation.clone(),
+                step_identity: step_identity(step_num, &cmd.name),
+                fault_identity: FaultIdentity {
+                    step_identity: step_identity(step_num, &cmd.name),
+                    code: vocab::error_code::RULE_VIOLATION.to_string(),
+                    discriminator: None,
+                },
             });
             ctx.event_count += 1;
             ctx.errors.push(RuntimeError {
@@ -1157,6 +1259,7 @@ impl Executor {
             step_index: step_num,
             step_command: cmd.name.clone(),
             input_vars,
+            step_identity: step_identity(step_num, &cmd.name),
         });
         ctx.event_count += 1;
 
@@ -1169,6 +1272,7 @@ impl Executor {
             step_command: cmd.name.clone(),
             output_vars,
             elapsed_ms,
+            step_identity: step_identity(step_num, &cmd.name),
         });
         ctx.event_count += 1;
 
@@ -1202,6 +1306,7 @@ impl Executor {
             step_index: step_num,
             step_command: cmd.name.clone(),
             input_vars,
+            step_identity: step_identity(step_num, &cmd.name),
         });
         ctx.event_count += 1;
 
@@ -1268,6 +1373,7 @@ impl Executor {
             step_command: cmd.name.clone(),
             output_vars,
             elapsed_ms: 0,
+            step_identity: step_identity(step_num, &cmd.name),
         });
         ctx.event_count += 1;
 

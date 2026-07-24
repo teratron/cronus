@@ -1,6 +1,6 @@
 # Nodus Observability Implementation (Rust)
 
-**Version:** 1.1.0
+**Version:** 1.2.0
 **Status:** Stable
 **Layer:** implementation
 **Implements:** l1-nodus-observability.md
@@ -14,6 +14,17 @@ struct, and the built-in `NoopAuditProvider` to `crates/nodus`. Hook points are 
 before control returns to the next step. The existing `run` and `run_with_provider` API functions
 retain their signatures; new `run_with_audit` and `run_with_provider_and_audit` variants accept
 an `AuditProvider` implementation from the host.
+
+<!-- [ADDED] v1.2.0 -->
+**v1.2.0 — Run-Manifest Identity & Reproducibility (HO-12, HO-15, HO-18, HO-19, HO-20).** The
+`RunManifest` and `StepError` are enriched into a cross-run-comparable, arm-partitionable,
+re-executable record: a stable per-run execution mode (HO-12), a definition-derived step identity
+that is the same step across runs (HO-15), the resolved exposure-switch values a run executed under
+(HO-18), a message-independent fault-identity contribution on errors (HO-19), and a re-execution
+recipe that states what re-running the workflow requires (HO-20). All additive and optional — a run
+that declares none behaves exactly as v1.1.0 (HO-5/HO-6 preserved). This is the intended realization
+(the spec-ahead-of-code pattern); it awaits its implementation phase. The per-event-descriptor batch
+(HO-7…HO-11, HO-13, HO-14, HO-16, HO-17) is deferred to a follow-up pass (§4.7).
 
 ## Related Specifications
 
@@ -55,6 +66,13 @@ taxonomy from `l1-nodus-observability.md` into the executor.
 | HO-4 Frozen boundary | `observability.rs` contains no validator or executor logic. `record_event` is called *after* the NL-invariant checks in `validator.rs` complete — the audit layer only witnesses outcomes; it never intercepts or modifies them. `ExecutionEvent::ConstraintHit` records that a rule fired; it does not re-evaluate the rule |
 | HO-5 Observer neutrality | `Executor::execute` calls `record_event` on a `&dyn AuditProvider` reference; the return type is `()`. No branch in `executor.rs` inspects provider state or return value. `RunResult` is assembled independently of the provider |
 | HO-6 Structured event taxonomy | `ExecutionEvent` is a closed Rust enum with exactly 10 variants matching the L1 taxonomy. Adding a new event type requires amending this spec (minor version bump) and the `ExecutionEvent` enum — there is no catch-all string variant |
+| HO-12 Execution-mode provenance <!-- [ADDED] v1.2.0 --> | `RunManifest.execution_mode: ExecutionMode` (`Real` default \| `Simulated { fidelity }`); nodus substitutes no providers and records only the host-declared mode, so a consumer excludes simulated runs from real-run analytics. Absent = `Real` (today's behaviour). §4.7 |
+| HO-15 Cross-run step identity <!-- [ADDED] v1.2.0 --> | `step_identity(&Step)` derived from the definition (number + command name), carried on `StepStart`/`StepEnd`/`StepError` and the manifest; the *same* step across runs is one comparable series. Stable across retries/resumes (NL-12)/recursive children (NL-18); changes only when the definition changes. Distinct from HO-7's within-run `(correlation_id, seq)`. §4.7 |
+| HO-18 Variant provenance <!-- [ADDED] v1.2.0 --> | `RunManifest.exposure_switches: Vec<(String, String)>` — the resolved `(name, value)` pairs the host froze once at run start (LP-19; non-straddling, one value per switch). Empty = prevailing defaults. Names/values only (§4.4). §4.7 |
+| HO-19 Fault-identity contribution <!-- [ADDED] v1.2.0 --> | `StepError.fault_identity: FaultIdentity { step_identity, code, discriminator? }` — a stable, message-independent grouping input, **never** derived from `error_detail` rendered text; the optional workflow-declared `discriminator` outranks the code. nodus computes no grouping. §4.7 |
+| HO-20 Re-execution recipe <!-- [ADDED] v1.2.0 --> | `RunManifest.repro: ReproRecipe` — workflow content digest, the LP-8 capability set that satisfied the manifest, exposure switches (HO-18), execution mode (HO-12), nodus version, and a stated `determinism`. Uncapturable fields (e.g. resolved `@needs` vocabulary while `@needs` is unimplemented) are `None`, never omitted. nodus embeds nothing and performs no replay. §4.7 |
+
+> **Realization status.** HO-1…HO-6 are realized in `crates/nodus` (§4.1–§4.6). HO-12/15/18/19/20 are **specified here as the intended realization (§4.7) and await their implementation phase** — the spec-ahead-of-code pattern this project uses (cf. `l2-nodus-config.md`). The remaining L1 invariants — HO-7…HO-11, HO-13, HO-14, HO-16, HO-17 — are a distinct per-event-descriptor batch reconciled in a follow-up spec pass, not covered here.
 
 ## 4. Detailed Design
 
@@ -257,6 +275,112 @@ Unit tests reside in `observability.rs` (`#[cfg(test)] mod tests`) and integrati
 The `RecordingProvider` test helper collects events in a `Vec<ExecutionEvent>` behind a
 `std::sync::Mutex` — zero external dependencies.
 
+### 4.7 Run-Manifest Identity & Reproducibility [ADDED v1.2.0]
+
+Realization of HO-12, HO-15, HO-18, HO-19, HO-20 — additive `RunManifest` / `StepError` fields that
+make a trace cross-run-comparable, arm-partitionable, and re-executable. Every field is
+optional/defaulted, so a run declaring none is byte-for-byte v1.1.0 (HO-5 observer neutrality, HO-6
+closed taxonomy preserved). All values are host-declared or definition-derived — nodus computes no
+statistic, holds no history, mocks nothing, and performs no replay (LP-1/LP-2). Within the §4.4
+data-safety boundary: identities, versions, names — never rendered content or a secret's value.
+
+#### Stable step identity (HO-15)
+
+```text
+[REFERENCE]
+/// Definition-derived, NOT per-run allocated. Same value across runs/retries/resumes (NL-12)/
+/// recursive children (NL-18); changes only when the step's definition changes. Deterministic (NL-6).
+pub fn step_identity(step: &Step) -> String;   // e.g. "{number}:{command_name}"
+```
+
+`StepStart` / `StepEnd` / `StepError` each gain `step_identity: String`. A host comparing "the last
+twenty runs" to "the twenty before" groups by this identity; within-run ordering stays on HO-7's
+`(correlation_id, seq)` (deferred batch). This is the foundation HO-18 and HO-19 build on.
+
+#### Execution mode (HO-12)
+
+```text
+[REFERENCE]
+pub enum ExecutionMode {
+    Real,                                  // default; an absent marker means Real (today's behaviour)
+    Simulated { fidelity: SimFidelity },   // the host substituted modeled providers for this run
+}
+pub enum SimFidelity { Structural, Modeled, Shadow }
+```
+
+`RunManifest` gains `execution_mode: ExecutionMode` (default `Real`). The executor records only the
+host-declared mode — nodus substitutes no providers; a `run_with_*` caller that wired modeled
+providers declares it. Same manifest-honesty family as HO-10 (completeness): a trace never lies about
+which mode produced it.
+
+#### Variant provenance (HO-18)
+
+`RunManifest` gains `exposure_switches: Vec<(String, String)>` — the resolved `(switch_name, value)`
+pairs the host froze **once at run start** (LP-19; non-straddling — one value per switch for the whole
+run, so a half-one-arm-half-another run is unrepresentable). Empty = the run executed under prevailing
+defaults. Composes HO-15: stable step identity makes a step comparable *across* arms, HO-18 makes the
+arms distinguishable. nodus computes no assignment and names no fraction/hash/subject (LP-2).
+
+#### Fault identity (HO-19)
+
+```text
+[REFERENCE]
+pub struct FaultIdentity {
+    pub step_identity: String,          // HO-15
+    pub code: String,                   // the typed NODUS:* code (l2-nodus-errors)
+    pub discriminator: Option<String>,  // optional workflow-declared; when present, outranks the code
+}
+```
+
+`StepError` gains `fault_identity: FaultIdentity`, composed from stable inputs only and **never**
+derived from `error_detail` rendered text (which routinely carries per-occurrence interpolated
+values — an id, a path, a count — that would shatter one recurring failure into thousands of
+singletons). nodus performs no grouping and holds no fault record; it guarantees only that the inputs
+a host groups on are stable and content-independent (FL-3/FL-4, source side).
+
+#### Re-execution recipe (HO-20)
+
+```text
+[REFERENCE]
+pub struct ReproRecipe {
+    pub workflow_digest: String,               // content identity of the definition (std digest, zero-dep — the NE-12 precedent)
+    pub capability_set: Vec<String>,           // the LP-8 roles/commands that satisfied the run's manifest
+    pub exposure_switches: Vec<(String, String)>, // HO-18 (mirrored into the recipe)
+    pub execution_mode: ExecutionMode,         // HO-12
+    pub nodus_version: String,                 // the producing crate version
+    pub needs_vocabulary: Option<Vec<String>>, // resolved @needs units — None (Unavailable) until @needs lands
+    pub determinism: Determinism,
+}
+pub enum Determinism { Deterministic, ContainsModelCalls }  // stated, never inferred from the recipe's presence
+```
+
+`RunManifest` gains `repro: ReproRecipe`, recording what re-executing the run requires **from the
+manifest alone** — the host reconstructs nothing. Two honesty rules from the L1 contract:
+
+- **Re-executable ≠ reproducible.** nodus's own evaluation is deterministic (NL-6), but a run
+  containing model calls is not — `determinism` *states* which the run supports rather than letting a
+  reader infer exactness from a recipe merely being present (`ContainsModelCalls` whenever a
+  `GEN`/`REFINE` ran).
+- **Uncapturable → unavailable, never omitted.** A field nodus could not resolve is `None`, never
+  silently dropped — a short manifest must not read as a complete one. `needs_vocabulary` is `None`
+  until `@needs` selective loading is implemented (an honest declared omission, the HO-14 principle
+  applied locally at the manifest grain — the general two-state `Measurement` type is the deferred
+  batch's concern).
+
+nodus embeds nothing into produced artifacts, names no file format, and performs no replay
+(embedding/transport/re-execution are host concerns, LP-1/LP-2). Realizes RR-2 (three recipe layers),
+RR-3 (content identity over names), RR-4 (producing version), RR-6 (declared omissions), RR-8
+(determinism stated).
+
+#### Deferred: event-stream enrichment batch
+
+HO-7 (`(correlation_id, seq)` fields), HO-8 (cost token classes on `ModelResponse`), HO-9 (execution
+receipt), HO-10 (trace-completeness classification — read-side), HO-11 (dual-legibility `message`),
+HO-13 (per-item derivation lineage), HO-14 (the general two-state `Measurement` type for event
+numerics), HO-16 (anomaly annotation), and HO-17 (transient/durable separation) form a distinct
+per-event-descriptor batch, reconciled in a follow-up spec pass. This section realizes the
+manifest/identity cluster only.
+
 ## 5. Implementation Notes
 
 1. Implement `observability.rs` first (pure types, no executor dependency). All 10 variants and
@@ -299,5 +423,6 @@ The `RecordingProvider` test helper collects events in a `Vec<ExecutionEvent>` b
 
 | Version | Date | Author | Notes |
 | --- | --- | --- | --- |
+| 1.2.0 | 2026-07-24 | Core Team | Added §4.7 Run-Manifest Identity & Reproducibility — the intended realization (spec-ahead-of-code) of HO-12 (`execution_mode`), HO-15 (definition-derived `step_identity` on events + manifest), HO-18 (`exposure_switches` resolved-and-frozen variant provenance), HO-19 (`StepError.fault_identity`, message-independent), and HO-20 (`RunManifest.repro: ReproRecipe` — workflow digest, capability set, exposure, mode, nodus version, stated determinism, `None`-not-omitted uncapturable fields). All additive/optional (HO-5/HO-6 preserved); awaits its implementation phase. The per-event-descriptor batch (HO-7…HO-11, HO-13, HO-14, HO-16, HO-17) is explicitly deferred to a follow-up pass. Reconciles the standing pending Invariant-Compliance obligation for HO-12/15/18/19/20. |
 | 1.1.0 | 2026-07-04 | Core Team | Added `BufferedAuditProvider` adapter (§4.3): opt-in bounded-channel + writer-thread sink honoring the `(correlation_id, seq)` ordering contract; blocking backpressure (never drops); flush-and-join on drop with `run_complete` as the final delivered event; synchronous in-path recording remains the default |
 | 1.0.0 | 2026-06-24 | Core Team | Initial spec — HO-1…HO-6 compliance table, `observability.rs` type system, executor hook-point mapping, `workflows.rs` API additions, full test plan |
