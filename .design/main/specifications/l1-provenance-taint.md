@@ -1,6 +1,6 @@
 # Provenance Taint
 
-**Version:** 1.0.0
+**Version:** 1.0.1
 **Status:** Stable
 **Layer:** concept
 
@@ -20,6 +20,7 @@ This is the **at-rest** complement to runtime trust-composition. The runtime pro
 - [l1-attestation.md](l1-attestation.md) — **distinct**: attestation answers *is this authentic* (integrity/authorship); taint answers *is its origin trusted*. An authentic external document is still external-tainted.
 - [l1-multi-device-sync.md](l1-multi-device-sync.md) — data synced from another device/source enters as external-origin and is tainted accordingly (PT-1/PT-2).
 - [../../nodus/specifications/l1-nodus-language.md](../../nodus/specifications/l1-nodus-language.md) — NL-17 origin-taint provenance is the nodus-workflow realization: a value's provenance MAY carry a host-supplied origin taint, never relaxing the untrusted-by-default boundary.
+- [l1-confidentiality-flow.md](l1-confidentiality-flow.md) — [ADDED v1.0.1] the confidentiality dual of this integrity-axis taint: CF mirrors PT-4/PT-5 sticky most-untrusted-wins propagation as sticky **most-confidential-wins**, bounding outbound sinks rather than inbound trust.
 
 ## 1. Motivation
 

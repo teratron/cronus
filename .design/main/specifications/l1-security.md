@@ -1,6 +1,6 @@
 # Client Security
 
-**Version:** 1.3.0
+**Version:** 1.3.1
 **Status:** Stable
 **Layer:** concept
 
@@ -18,6 +18,7 @@ The technology-agnostic model of protecting the client: keeping secrets isolated
 - [l2-agent-autonomy.md](l2-agent-autonomy.md) - Realizes SEC-9: the approval gate that learns a durable, scoped, revocable allow-rule; SEC-10's "autonomy level cannot be model-elevated" is enforced here.
 - [l1-messaging-gateway.md](l1-messaging-gateway.md) - The reachability half of the SEC-10 authority plane (who may reach the agent — channels, admitted parties, pairing); MG-3/MG-5/MG-7.
 - [l2-sandbox-policy.md](l2-sandbox-policy.md) - Concrete SEC-10 instance: the host is the sole writer of the policy file; the agent's policy context is read-only and it requests changes through an approval path.
+- [l1-confidentiality-flow.md](l1-confidentiality-flow.md) — [ADDED v1.3.1] CF-4 generalizes the SEC-3 device-edge egress gate to a per-sink capacity at *every* outbound sink, and SEC-1 secret isolation is the top of the confidentiality lattice.
 
 ## 1. Motivation
 

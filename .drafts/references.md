@@ -46,6 +46,7 @@
 - <https://github.com/langgenius/dify>
 - <https://github.com/langchain-ai/langchain>
 - <https://github.com/aaif-goose/goose>
+- <https://github.com/microsoft/agent-framework>
 
 ## Spec-Driven Development
 

@@ -1,6 +1,6 @@
 # Context Provenance & Trusted Composition
 
-**Version:** 1.1.0
+**Version:** 1.1.1
 **Status:** Stable
 **Layer:** concept
 
@@ -36,6 +36,7 @@ realizations of this one contract.
 - [l1-workflow-language.md](l1-workflow-language.md) — a workflow interpolates variables into prompts; those interpolations are composition boundaries governed here.
 - [l1-tokenization-boundary.md](l1-tokenization-boundary.md) — TB-4/TB-5 supply the **structural floor** beneath CP-2/CP-6: where the model has a control sub-alphabet, no content can encode into it, so a frame cannot be forged rather than merely being hard to forge. CP-9 is the composing invariant.
 - [l1-nodus-language.md](../../nodus/specifications/l1-nodus-language.md) — the nodus realization: NL-11 provenance-safe `$var` interpolation.
+- [l1-confidentiality-flow.md](l1-confidentiality-flow.md) — [ADDED v1.1.1] the orthogonal **outbound** axis: this spec defends inbound (untrusted-in neutralized), confidentiality-flow defends outbound (sensitive-out bounded per sink); a single trust label cannot hold both, and the two together cut the injection→exfiltration chain (CF-1/CF-5).
 
 ## 1. Motivation
 
