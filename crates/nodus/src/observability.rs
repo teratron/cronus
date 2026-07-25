@@ -59,6 +59,128 @@ pub enum Measurement {
     Unavailable,
 }
 
+// ─── Event annotations (HO-9, HO-11, HO-16, HO-17) ────────────────────────────
+
+/// Host-supplied verdict on an event's measurement, relative to that step's
+/// own history (HO-16). nodus computes no verdict, holds no history, and
+/// names no model, threshold, or window (LP-2) — it reserves only the
+/// carrier. `Unscored` is **never** `Normal`: an absent verdict is emitted as
+/// absence, matching [`Measurement::Unavailable`].
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum Anomaly {
+    Anomalous,
+    Normal,
+    Unscored,
+}
+
+/// Durable (part of the record) vs. transient (a live affordance, never
+/// persisted or positioned in the sequence) — HO-17. A transient event must
+/// **never** consume a `seq` (see [`crate::executor::Executor::emit`]'s doc
+/// comment for the load-bearing consequence). Default `Durable` — nodus
+/// emits no transients today.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
+pub enum Durability {
+    #[default]
+    Durable,
+    Transient,
+}
+
+/// Host-supplied annotations that may ride any [`ExecutionEvent`] (HO-9
+/// receipt, HO-11 message, HO-16 anomaly, HO-17 durability) — **one carrier
+/// field per variant** rather than four separate fields, so the all-variant
+/// churn happens once and a future annotation is a struct field, not a
+/// tenth-variant edit.
+///
+/// `Default` is all-`None` + `Durable`: a host declaring nothing produces a
+/// stream identical to one with no annotations at all (HO-5 preserved).
+#[derive(Debug, Clone, Default)]
+pub struct EventAnnotations {
+    /// HO-11: host-rendered one-line human projection of *this event's own*
+    /// structured fields. Adds no fact the fields lack; contradicts none —
+    /// a faithful projection, not a second record. Within §4.4 (descriptors
+    /// and counts, never raw content). No renderer/locale vocabulary in core.
+    pub message: Option<String>,
+    /// HO-16: host-supplied verdict. `None` = not annotated at all
+    /// (distinct from `Some(Anomaly::Unscored)` = annotated as "no verdict").
+    pub anomaly: Option<Anomaly>,
+    /// HO-9: opaque, secret-free, host-supplied authenticity token binding
+    /// step identity to observed result. No crypto in core (LP-2, the LP-9
+    /// attestation precedent); the signing secret never enters a trace,
+    /// prompt, or context.
+    pub receipt: Option<String>,
+    /// HO-17: durable vs. transient.
+    pub durability: Durability,
+}
+
+/// A reference to the source element a produced element derived from
+/// (HO-13) — an index within the mapping domain, **never** a copy of element
+/// content (LN-8, staying inside §4.4).
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct SourceRef {
+    pub producing_step: u32,
+    pub source_index: u32,
+}
+
+// ─── Trace completeness (HO-10) ────────────────────────────────────────────────
+
+/// Whether a persisted trace is trustworthy as a whole run, decidable from
+/// the trace alone (HO-10).
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum TraceCompleteness {
+    /// A terminal manifest is present and the durable sequence has no gap.
+    Complete,
+    /// A terminal manifest is present but `event_count` disagrees with the
+    /// highest durable `seq` + 1 — events were lost inside the recorded range.
+    GapDamaged,
+    /// Durable events exist but no terminal manifest was ever written — a
+    /// killed, panicked, or OOM-killed host never reached `run_complete`.
+    Truncated,
+    /// Neither events nor a manifest.
+    Empty,
+}
+
+/// Classify a trace from its durable events and (if present) terminal
+/// manifest — pure, read-side, no new emission (HO-5 untouched). Reuses
+/// §4.8's `event_count == highest seq + 1` identity as the gap test.
+///
+/// `durable_events` must already exclude any transient events (HO-17) — this
+/// function does not filter for you; passing a stream that still contains
+/// transients would misclassify a healthy trace as gap-damaged, since
+/// transients never consume a `seq` and would appear as holes.
+///
+/// nodus does not capture the fault that truncated a trace — that is the
+/// host's forensic diagnostic-log plane. This classifies only; it does not
+/// diagnose.
+pub fn classify_trace(
+    durable_events: &[ExecutionEvent],
+    manifest: Option<&RunManifest>,
+) -> TraceCompleteness {
+    let highest_seq = durable_events.iter().map(event_seq).max();
+    match (manifest, highest_seq) {
+        (Some(m), Some(hs)) if m.event_count as u64 == hs + 1 => TraceCompleteness::Complete,
+        (Some(m), None) if m.event_count == 0 => TraceCompleteness::Complete,
+        (Some(_), _) => TraceCompleteness::GapDamaged,
+        (None, Some(_)) => TraceCompleteness::Truncated,
+        (None, None) => TraceCompleteness::Empty,
+    }
+}
+
+/// Extract `seq` from any `ExecutionEvent` variant — every one carries it (HO-7).
+fn event_seq(event: &ExecutionEvent) -> u64 {
+    match event {
+        ExecutionEvent::StepStart { seq, .. }
+        | ExecutionEvent::StepEnd { seq, .. }
+        | ExecutionEvent::StepError { seq, .. }
+        | ExecutionEvent::ConstraintHit { seq, .. }
+        | ExecutionEvent::BranchTaken { seq, .. }
+        | ExecutionEvent::LoopIteration { seq, .. }
+        | ExecutionEvent::MacroEnter { seq, .. }
+        | ExecutionEvent::MacroExit { seq, .. }
+        | ExecutionEvent::ModelCall { seq, .. }
+        | ExecutionEvent::ModelResponse { seq, .. } => *seq,
+    }
+}
+
 // ─── Event taxonomy ───────────────────────────────────────────────────────────
 
 /// Discriminant for loop types (used in [`ExecutionEvent::LoopIteration`]).
@@ -68,6 +190,9 @@ pub enum LoopType {
     For,
     /// A `~UNTIL MAX:n` conditional loop.
     Until,
+    /// A `~MAP` collection transform (HO-13: each iteration is a true
+    /// element-to-element mapping, distinct from plain iteration).
+    Map,
 }
 
 /// Structural descriptor for model I/O fields.
@@ -108,11 +233,12 @@ impl FieldDescriptor {
 /// Closed set of observable execution events. Adding a new variant is a
 /// spec-level minor-version amendment (HO-6).
 ///
-/// Every variant carries `seq` (run-monotonic, dense, gap-free — HO-7) and
+/// Every variant carries `seq` (run-monotonic, dense, gap-free — HO-7),
 /// `correlation_id` (shared by every event of one run, equal to
-/// `RunManifest.run_id` — HO-7). Both are assigned by
+/// `RunManifest.run_id` — HO-7), and `annotations` (host-supplied receipt /
+/// message / anomaly / durability — HO-9/11/16/17). All three are assigned by
 /// [`crate::executor::Executor`]'s single emission choke point, never by a
-/// caller — there is no public constructor that lets a caller pick either.
+/// caller — there is no public constructor that lets a caller pick any of them.
 #[derive(Debug, Clone)]
 pub enum ExecutionEvent {
     /// Before a step's command is dispatched.
@@ -125,6 +251,7 @@ pub enum ExecutionEvent {
         step_identity: String,
         seq: u64,
         correlation_id: String,
+        annotations: EventAnnotations,
     },
     /// After a step's command returns successfully.
     StepEnd {
@@ -137,6 +264,7 @@ pub enum ExecutionEvent {
         step_identity: String,
         seq: u64,
         correlation_id: String,
+        annotations: EventAnnotations,
     },
     /// When a step produces a NODUS error code.
     StepError {
@@ -151,6 +279,7 @@ pub enum ExecutionEvent {
         fault_identity: FaultIdentity,
         seq: u64,
         correlation_id: String,
+        annotations: EventAnnotations,
     },
     /// When a hard (`!!NEVER`/`!!ALWAYS`) constraint fires.
     ConstraintHit {
@@ -160,6 +289,7 @@ pub enum ExecutionEvent {
         halt: bool,
         seq: u64,
         correlation_id: String,
+        annotations: EventAnnotations,
     },
     /// When a conditional (`?IF`/`?ELIF`/`?ELSE`) resolves.
     BranchTaken {
@@ -169,16 +299,23 @@ pub enum ExecutionEvent {
         condition_result: bool,
         seq: u64,
         correlation_id: String,
+        annotations: EventAnnotations,
     },
-    /// At the start of each `~FOR`/`~UNTIL` loop body.
+    /// At the start of each `~FOR`/`~UNTIL`/`~MAP` loop body.
     LoopIteration {
         step_index: u32,
         loop_type: LoopType,
         iteration_number: Measurement,
         /// Variables bound for this iteration (e.g. the `~FOR` loop variable).
         bound_vars: Vec<String>,
+        /// HO-13: for a collection-mapping construct (`~MAP`), the source
+        /// element(s) this iteration's produced element derived from —
+        /// indices only, never content (LN-8). `None` for plain iteration
+        /// (`~FOR`/`~UNTIL`), which produces no mapped output to derive.
+        derivation: Option<Vec<SourceRef>>,
         seq: u64,
         correlation_id: String,
+        annotations: EventAnnotations,
     },
     /// When `RUN(@macro_name)` begins execution.
     MacroEnter {
@@ -186,6 +323,7 @@ pub enum ExecutionEvent {
         call_step_index: u32,
         seq: u64,
         correlation_id: String,
+        annotations: EventAnnotations,
     },
     /// When a macro body completes.
     MacroExit {
@@ -194,6 +332,7 @@ pub enum ExecutionEvent {
         elapsed_ms: Measurement,
         seq: u64,
         correlation_id: String,
+        annotations: EventAnnotations,
     },
     /// Immediately before dispatching to the `ModelProvider` (GEN, ANALYZE, …).
     ModelCall {
@@ -204,6 +343,7 @@ pub enum ExecutionEvent {
         input_summary: FieldDescriptor,
         seq: u64,
         correlation_id: String,
+        annotations: EventAnnotations,
     },
     /// Immediately after the `ModelProvider` returns.
     ModelResponse {
@@ -212,8 +352,18 @@ pub enum ExecutionEvent {
         /// Structural descriptor of the response — no raw content.
         output_summary: FieldDescriptor,
         elapsed_ms: Measurement,
+        /// HO-8 cost-attribution token classes. All `Unavailable` in core
+        /// today — `ModelProvider` exposes no token-accounting seam, so
+        /// there is nothing to report; never fabricated as `0`. Extending
+        /// `ModelProvider` with a token-reporting method is a separate,
+        /// out-of-scope change to the extension-point contract.
+        input_tokens: Measurement,
+        output_tokens: Measurement,
+        cache_read_tokens: Measurement,
+        cache_creation_tokens: Measurement,
         seq: u64,
         correlation_id: String,
+        annotations: EventAnnotations,
     },
 }
 
@@ -451,6 +601,7 @@ mod tests {
             step_identity: step_identity(1, "GEN"),
             seq,
             correlation_id: cid,
+            annotations: EventAnnotations::default(),
         });
         let (seq, cid) = sc(1);
         noop.record_event(ExecutionEvent::StepEnd {
@@ -461,6 +612,7 @@ mod tests {
             step_identity: step_identity(1, "GEN"),
             seq,
             correlation_id: cid,
+            annotations: EventAnnotations::default(),
         });
         let (seq, cid) = sc(2);
         noop.record_event(ExecutionEvent::StepError {
@@ -476,6 +628,7 @@ mod tests {
             },
             seq,
             correlation_id: cid,
+            annotations: EventAnnotations::default(),
         });
         let (seq, cid) = sc(3);
         noop.record_event(ExecutionEvent::ConstraintHit {
@@ -484,6 +637,7 @@ mod tests {
             halt: true,
             seq,
             correlation_id: cid,
+            annotations: EventAnnotations::default(),
         });
         let (seq, cid) = sc(4);
         noop.record_event(ExecutionEvent::BranchTaken {
@@ -492,6 +646,7 @@ mod tests {
             condition_result: true,
             seq,
             correlation_id: cid,
+            annotations: EventAnnotations::default(),
         });
         let (seq, cid) = sc(5);
         noop.record_event(ExecutionEvent::LoopIteration {
@@ -499,8 +654,10 @@ mod tests {
             loop_type: LoopType::For,
             iteration_number: Measurement::Taken(0),
             bound_vars: vec!["$item".to_string()],
+            derivation: None,
             seq,
             correlation_id: cid,
+            annotations: EventAnnotations::default(),
         });
         let (seq, cid) = sc(6);
         noop.record_event(ExecutionEvent::LoopIteration {
@@ -508,8 +665,10 @@ mod tests {
             loop_type: LoopType::Until,
             iteration_number: Measurement::Taken(1),
             bound_vars: vec![],
+            derivation: None,
             seq,
             correlation_id: cid,
+            annotations: EventAnnotations::default(),
         });
         let (seq, cid) = sc(7);
         noop.record_event(ExecutionEvent::MacroEnter {
@@ -517,6 +676,7 @@ mod tests {
             call_step_index: 5,
             seq,
             correlation_id: cid,
+            annotations: EventAnnotations::default(),
         });
         let (seq, cid) = sc(8);
         noop.record_event(ExecutionEvent::MacroExit {
@@ -525,6 +685,7 @@ mod tests {
             elapsed_ms: Measurement::Taken(2),
             seq,
             correlation_id: cid,
+            annotations: EventAnnotations::default(),
         });
         let (seq, cid) = sc(9);
         noop.record_event(ExecutionEvent::ModelCall {
@@ -533,6 +694,7 @@ mod tests {
             input_summary: FieldDescriptor::text(42),
             seq,
             correlation_id: cid,
+            annotations: EventAnnotations::default(),
         });
         let (seq, cid) = sc(10);
         noop.record_event(ExecutionEvent::ModelResponse {
@@ -540,8 +702,13 @@ mod tests {
             command: "GEN".to_string(),
             output_summary: FieldDescriptor::text(100),
             elapsed_ms: Measurement::Taken(10),
+            input_tokens: Measurement::Unavailable,
+            output_tokens: Measurement::Unavailable,
+            cache_read_tokens: Measurement::Unavailable,
+            cache_creation_tokens: Measurement::Unavailable,
             seq,
             correlation_id: cid,
+            annotations: EventAnnotations::default(),
         });
         noop.run_complete(RunManifest {
             workflow_name: "test".to_string(),
@@ -574,6 +741,7 @@ mod tests {
             step_identity: step_identity(1, "GEN"),
             seq,
             correlation_id: cid,
+            annotations: EventAnnotations::default(),
         });
         let (seq, cid) = sc(1);
         recording.record_event(ExecutionEvent::StepEnd {
@@ -584,6 +752,7 @@ mod tests {
             step_identity: step_identity(1, "GEN"),
             seq,
             correlation_id: cid,
+            annotations: EventAnnotations::default(),
         });
 
         let events = recording.events.lock().unwrap();
@@ -608,6 +777,7 @@ mod tests {
             halt: true,
             seq,
             correlation_id: cid,
+            annotations: EventAnnotations::default(),
         });
         let events = recording.events.lock().unwrap();
         match &events[0] {
@@ -626,6 +796,7 @@ mod tests {
             condition_result: true,
             seq,
             correlation_id: cid,
+            annotations: EventAnnotations::default(),
         });
         let (seq, cid) = sc(1);
         recording.record_event(ExecutionEvent::BranchTaken {
@@ -634,6 +805,7 @@ mod tests {
             condition_result: false,
             seq,
             correlation_id: cid,
+            annotations: EventAnnotations::default(),
         });
         let events = recording.events.lock().unwrap();
         assert!(matches!(
@@ -662,8 +834,10 @@ mod tests {
                 loop_type: LoopType::For,
                 iteration_number: Measurement::Taken(i),
                 bound_vars: vec!["$item".to_string()],
+                derivation: None,
                 seq,
                 correlation_id: cid,
+                annotations: EventAnnotations::default(),
             });
         }
         let events = recording.events.lock().unwrap();
@@ -691,8 +865,10 @@ mod tests {
             loop_type: LoopType::Until,
             iteration_number: Measurement::Taken(0),
             bound_vars: vec![],
+            derivation: None,
             seq,
             correlation_id: cid,
+            annotations: EventAnnotations::default(),
         });
         let events = recording.events.lock().unwrap();
         assert!(matches!(
@@ -713,6 +889,7 @@ mod tests {
             call_step_index: 3,
             seq,
             correlation_id: cid,
+            annotations: EventAnnotations::default(),
         });
         let (seq, cid) = sc(1);
         recording.record_event(ExecutionEvent::MacroExit {
@@ -721,6 +898,7 @@ mod tests {
             elapsed_ms: Measurement::Taken(7),
             seq,
             correlation_id: cid,
+            annotations: EventAnnotations::default(),
         });
         let events = recording.events.lock().unwrap();
         assert!(
@@ -746,6 +924,7 @@ mod tests {
             input_summary: desc,
             seq,
             correlation_id: cid,
+            annotations: EventAnnotations::default(),
         };
         // Verify debug output contains no prose that could be mistaken for content.
         let debug = format!("{event:?}");
@@ -799,6 +978,7 @@ mod tests {
             step_identity: step_identity(1, "ASK"),
             seq,
             correlation_id: cid,
+            annotations: EventAnnotations::default(),
         });
         let events = recording.events.lock().unwrap();
         assert!(matches!(
@@ -808,5 +988,106 @@ mod tests {
                 ..
             }
         ));
+    }
+
+    // ── EventAnnotations carrier (HO-9/11/16/17) ────────────────────────────
+
+    #[test]
+    fn event_annotations_default_is_all_none_and_durable() {
+        let a = EventAnnotations::default();
+        assert!(a.message.is_none());
+        assert!(a.anomaly.is_none());
+        assert!(a.receipt.is_none());
+        assert_eq!(a.durability, Durability::Durable);
+    }
+
+    #[test]
+    fn anomaly_unscored_is_never_normal() {
+        assert_ne!(Anomaly::Unscored, Anomaly::Normal);
+    }
+
+    // ── HO-13 derivation lineage ─────────────────────────────────────────────
+
+    #[test]
+    fn source_ref_carries_indices_only() {
+        let r = SourceRef {
+            producing_step: 2,
+            source_index: 5,
+        };
+        assert_eq!(r.producing_step, 2);
+        assert_eq!(r.source_index, 5);
+    }
+
+    // ── HO-10 classify_trace ─────────────────────────────────────────────────
+
+    fn sample_manifest(event_count: u32) -> RunManifest {
+        RunManifest {
+            workflow_name: "t".to_string(),
+            schema_version: "0.4.6".to_string(),
+            run_id: "r".to_string(),
+            started_at: "2026-07-25T00:00:00Z".to_string(),
+            elapsed_ms: Measurement::Taken(1),
+            status: RunStatus::Ok,
+            error_code: None,
+            total_steps: 1,
+            event_count,
+            env_trajectory: Vec::new(),
+            execution_mode: ExecutionMode::default(),
+            exposure_switches: Vec::new(),
+            repro: ReproRecipe::default(),
+        }
+    }
+
+    fn sample_events(n: u64) -> Vec<ExecutionEvent> {
+        (0..n)
+            .map(|i| ExecutionEvent::ConstraintHit {
+                rule_name: "x".to_string(),
+                triggering_step_index: 0,
+                halt: false,
+                seq: i,
+                correlation_id: "r".to_string(),
+                annotations: EventAnnotations::default(),
+            })
+            .collect()
+    }
+
+    #[test]
+    fn classify_trace_complete_with_matching_manifest() {
+        let events = sample_events(3);
+        let manifest = sample_manifest(3);
+        assert_eq!(
+            classify_trace(&events, Some(&manifest)),
+            TraceCompleteness::Complete
+        );
+    }
+
+    #[test]
+    fn classify_trace_gap_damaged_when_event_count_disagrees() {
+        let events = sample_events(3); // seq 0,1,2 -> highest+1 == 3
+        let manifest = sample_manifest(5); // claims 5, only 3 durable events present
+        assert_eq!(
+            classify_trace(&events, Some(&manifest)),
+            TraceCompleteness::GapDamaged
+        );
+    }
+
+    #[test]
+    fn classify_trace_truncated_when_events_but_no_manifest() {
+        let events = sample_events(2);
+        assert_eq!(classify_trace(&events, None), TraceCompleteness::Truncated);
+    }
+
+    #[test]
+    fn classify_trace_empty_when_neither() {
+        assert_eq!(classify_trace(&[], None), TraceCompleteness::Empty);
+    }
+
+    #[test]
+    fn classify_trace_complete_for_zero_event_manifest() {
+        let manifest = sample_manifest(0);
+        assert_eq!(
+            classify_trace(&[], Some(&manifest)),
+            TraceCompleteness::Complete
+        );
     }
 }

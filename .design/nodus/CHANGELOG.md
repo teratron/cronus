@@ -2,6 +2,15 @@
 
 Internal phase journal. Each entry corresponds to a completed phase.
 
+## Phase 16 — Event Annotations, Cost, Lineage & Completeness (l2-nodus-observability §4.9) (2026-07-25)
+
+- T-16A01: Added `EventAnnotations { message, anomaly, receipt, durability }` carrier + `Anomaly { Anomalous, Normal, Unscored }` + `Durability { Durable, Transient }` (default `Durable`) to `observability.rs`; added `annotations: EventAnnotations` to all 10 `ExecutionEvent` variants — one field absorbing HO-9/HO-11/HO-16/HO-17 instead of four separate all-variant additions
+- T-16B01: Added `input_tokens`/`output_tokens`/`cache_read_tokens`/`cache_creation_tokens` (all `Measurement`) to `ModelResponse` only; populated `Measurement::Unavailable` at both emission sites (`handle_gen`, `handle_analyze`) since `ModelProvider` has no token-accounting seam (extending it stays explicitly out of scope)
+- T-16B02: Added `SourceRef { producing_step, source_index }` + `derivation: Option<Vec<SourceRef>>` to `LoopIteration`, and a new `LoopType::Map` variant; fixed a discovered gap where `execute_map` emitted zero events (only `execute_for`/`execute_until` had `LoopIteration` sites) — `~MAP` now emits one `LoopIteration` per element with `Some(...)` N→N derivation, while `~FOR`/`~UNTIL` keep `derivation: None`; found in the process that the validator's `E004` rule doesn't recognize `~MAP`'s implicit `$it` binding and false-positives on every `~MAP` workflow (pre-existing, no crate test had ever run `~MAP` end-to-end) — flagged for a future fix, worked around in the new test by driving `Executor::execute` directly instead of `run_with_audit`
+- T-16C01: Added `TraceCompleteness { Complete, GapDamaged, Truncated, Empty }` + pure `classify_trace(durable_events, manifest)` — read-side only, no new field or emission, reuses Phase 15's `event_count == highest_seq + 1` gap identity
+- T-16C02: Documented the HO-17 durable-only-`seq` rule on `Executor::emit`'s doc comment; added a test pinning that every event from a real run is `Durable`; fixed a pre-existing defect found while editing `emit` — `execute_inner`'s doc comment had been split into two fragments by Phase 15's `emit` insertion; deliberately did not build an unused `emit_transient` companion
+- T-16T01: Extended `tests/observability.rs` with 5 integration tests + 8 new `observability.rs` unit tests covering carrier defaults, HO-8 `Unavailable`-not-`Taken(0)`, HO-13 derivation shapes, all four `classify_trace` outcomes, and HO-17 durable-only emission; `cargo test -p nodus` — 365 passed (was 352; +13), 0 failed; clippy `-D warnings` clean; fmt clean; `Cargo.toml [dependencies]` still empty (LP-1 zero-dep preserved) — **all 20 HO invariants in l1-nodus-observability.md are now realized**
+
 ## Phase 15 — Aggregation-Safe Event Stream (l2-nodus-observability §4.8) (2026-07-24)
 
 - T-15A01: Added `Measurement { Taken(u64), Unavailable }` to `observability.rs`; retyped `StepEnd`/`MacroExit`/`ModelResponse`/`RunManifest.elapsed_ms` and `LoopIteration.iteration_number`; `FieldDescriptor` counts left as plain `u32` (obtainable by construction)

@@ -1,6 +1,6 @@
 # Nodus Observability Implementation (Rust)
 
-**Version:** 1.3.0
+**Version:** 1.4.0
 **Status:** Stable
 **Layer:** implementation
 **Implements:** l1-nodus-observability.md
@@ -37,7 +37,18 @@ aggregate it without a fabricated zero corrupting the result. Batching them does
 churn once, so the remaining riders (HO-8's token classes especially) are **born** as `Measurement`
 rather than added raw and retyped later. Intended realization, awaiting its phase. The remaining
 riders — HO-8, HO-9, HO-10, HO-11, HO-13, HO-16, HO-17 — are additive optional fields and read-side
-rules that build on this foundation; deferred to a Pass-2 spec update (§4.8).
+rules that build on this foundation; they are now specified in §4.9 below.
+
+<!-- [ADDED] v1.4.0 -->
+**v1.4.0 — Event Annotations, Cost, Lineage & Completeness (Pass 2: HO-8, HO-9, HO-10, HO-11,
+HO-13, HO-16, HO-17).** Closes the event batch, and with it **all twenty** HO invariants. Four of the
+seven (HO-9 receipt, HO-11 message, HO-16 anomaly, HO-17 durability) are *host-supplied annotations
+that may ride any event*; specifying them as four separate fields would churn all ten variants four
+times over, so they land as **one `EventAnnotations` carrier field per variant** — the all-variant
+churn happens once, and any future annotation becomes a struct field rather than a tenth-variant
+edit. The remaining three are targeted: HO-8's token classes attach to `ModelResponse` only (born as
+§4.8's `Measurement`), HO-13's derivation descriptor to collection-mapping events only, and HO-10 is
+a pure read-side classification with **no field at all**. Intended realization, awaiting its phase.
 
 ## Related Specifications
 
@@ -84,10 +95,17 @@ taxonomy from `l1-nodus-observability.md` into the executor.
 | HO-18 Variant provenance <!-- [ADDED] v1.2.0 --> | `RunManifest.exposure_switches: Vec<(String, String)>` — the resolved `(name, value)` pairs the host froze once at run start (LP-19; non-straddling, one value per switch). Empty = prevailing defaults. Names/values only (§4.4). §4.7 |
 | HO-19 Fault-identity contribution <!-- [ADDED] v1.2.0 --> | `StepError.fault_identity: FaultIdentity { step_identity, code, discriminator? }` — a stable, message-independent grouping input, **never** derived from `error_detail` rendered text; the optional workflow-declared `discriminator` outranks the code. nodus computes no grouping. §4.7 |
 | HO-7 Sequence & correlation <!-- [ADDED] v1.3.0 --> | Every `ExecutionEvent` variant carries `seq: u64` (run-monotonic, dense, gap-free) and `correlation_id: String` (bound once at run construction from the same value as `RunManifest.run_id`). `RunManifest.event_count` doubles as the gap check — it equals `highest seq + 1` for an undamaged trace. Streaming chunk-merge is vacuous in core (the `ModelProvider` returns a complete `String`; no chunks exist) and remains a host obligation. §4.8 |
+| HO-8 Cost-attribution token classes <!-- [ADDED] v1.4.0 --> | `ModelResponse` gains `input_tokens`, `output_tokens`, `cache_read_tokens`, `cache_creation_tokens` — all `Measurement` (§4.8). `ModelProvider` exposes no token-accounting seam, so all four are `Unavailable` in core today, **never `0`** — the L1's own canonical example of the HO-14 rule. A host wrapping a real backend supplies `Taken(_)`. §4.9 |
+| HO-9 Execution-authenticity receipt <!-- [ADDED] v1.4.0 --> | `EventAnnotations.receipt: Option<String>` — an opaque, secret-free, host-supplied token binding step identity to observed result. No crypto in core (LP-2, the LP-9 attestation precedent); the signing secret never enters a trace, prompt, or context. Populated for step events; `None` everywhere today (no host supplies one). §4.9 |
+| HO-10 Trace-completeness honesty <!-- [ADDED] v1.4.0 --> | **No field.** A read-side classifier `classify_trace(events, manifest) -> TraceCompleteness { Complete, GapDamaged, Truncated, Empty }`: a terminal manifest ⇒ `Complete`; events without one ⇒ `Truncated`; a manifest whose `event_count` ≠ highest durable `seq` + 1 ⇒ `GapDamaged` (reusing §4.8's gap check). Adds no hot-path emission — HO-5 untouched. nodus does **not** capture the terminating crash; that is the host's forensic plane. §4.9 |
+| HO-11 Single-stream dual legibility <!-- [ADDED] v1.4.0 --> | `EventAnnotations.message: Option<String>` — a host-rendered one-line projection of the event's own structured fields. Faithfulness is a contract, not a hope: it introduces no fact the fields lack and contradicts none, and stays within §4.4 (descriptors and counts, never raw content). No renderer or locale vocabulary in core (LP-2). §4.9 |
+| HO-13 Per-item derivation lineage <!-- [ADDED] v1.4.0 --> | `LoopIteration.derivation: Option<Vec<SourceRef>>` where `SourceRef { producing_step: u32, source_index: u32 }` — indices only, never element content (LN-8), recording the true shape (N→N, 1→M, K→1, filter-drop; LN-4). Side-band metadata on an existing event — never a new variant (HO-6) and never inside the workflow's `Value` payload, so NL-7's closed value space is untouched. §4.9 |
+| HO-16 Optional anomaly annotation <!-- [ADDED] v1.4.0 --> | `EventAnnotations.anomaly: Option<Anomaly>` with `Anomaly { Anomalous, Normal, Unscored }` — four states counting `None` (no annotation), exactly the L1's set. `Unscored` is **never** `Normal`: an absent verdict is emitted as absence, matching HO-14's `Unavailable`. nodus computes no verdict and names no model, threshold, or window (LP-2) — it reserves only the carrier. §4.9 |
+| HO-17 Transient/durable separation <!-- [ADDED] v1.4.0 --> | `EventAnnotations.durability: Durability { Durable, Transient }` (default `Durable`). The load-bearing consequence for this crate: **a transient event must not consume a `seq`** — §4.8's counter numbers the durable stream only, so a missed transient is never a detected gap and a cut-off transient tail never makes a completed run read as truncated (HO-10). nodus emits no transients today (`ModelProvider` returns a complete `String`); the field and the emission rule are reserved for a host-facing streaming path. §4.9 |
 | HO-14 Aggregation-safe measurement <!-- [ADDED] v1.3.0 --> | `Measurement { Taken(u64), Unavailable }` replaces every raw numeric whose value could fail to be obtained: `StepEnd`/`MacroExit`/`ModelResponse`/`RunManifest`'s `elapsed_ms` and `LoopIteration.iteration_number`. `Unavailable` is never `0`, never omitted, never carried forward. Concrete bite: `handle_dialog`'s hardcoded `elapsed_ms: 0` (the one fabricated zero in the crate) becomes `Unavailable`. `FieldDescriptor`'s counts stay plain `u32` — obtainable by construction, never a stand-in. §4.8 |
 | HO-20 Re-execution recipe <!-- [ADDED] v1.2.0 --> | `RunManifest.repro: ReproRecipe` — workflow content digest, the LP-8 capability set that satisfied the manifest, exposure switches (HO-18), execution mode (HO-12), nodus version, and a stated `determinism`. Uncapturable fields (e.g. resolved `@needs` vocabulary while `@needs` is unimplemented) are `None`, never omitted. nodus embeds nothing and performs no replay. §4.7 |
 
-> **Realization status.** HO-1…HO-6 are realized in `crates/nodus` (§4.1–§4.6); HO-12/15/18/19/20 are realized per §4.7 (Phase 14). HO-7 and HO-14 are **specified here as the intended realization (§4.8) and await their implementation phase** — the spec-ahead-of-code pattern this project uses (cf. `l2-nodus-config.md`, §4.7). The remaining L1 invariants — **HO-8, HO-9, HO-10, HO-11, HO-13, HO-16, HO-17** — are additive optional fields and read-side rules that build on §4.8's foundation; they are reconciled in a Pass-2 spec update, not covered here.
+> **Realization status.** **All twenty HO invariants are now specified.** HO-1…HO-6 are realized in `crates/nodus` (§4.1–§4.6); HO-12/15/18/19/20 per §4.7 (Phase 14); HO-7 and HO-14 per §4.8 (Phase 15). The final seven — **HO-8, HO-9, HO-10, HO-11, HO-13, HO-16, HO-17** — are **specified here as the intended realization (§4.9) and await their implementation phase**, the spec-ahead-of-code pattern this project uses (cf. `l2-nodus-config.md`, §4.7, §4.8). Nothing from `l1-nodus-observability` remains unspecified.
 
 ## 4. Detailed Design
 
@@ -485,6 +503,132 @@ HO-16 (anomaly annotation), and HO-17 (transient/durable separation) are additiv
 and read-side rules. Each rides on the `seq`/`Measurement` foundation this section lays; none
 requires re-touching the variants once §4.8 is realized.
 
+### 4.9 Event Annotations, Cost, Lineage & Completeness [ADDED v1.4.0]
+
+Realization of the final seven HO invariants — HO-8, HO-9, HO-10, HO-11, HO-13, HO-16, HO-17.
+Every field below is optional or defaulted, so a host declaring none emits a stream byte-identical to
+§4.8's (HO-5 observer neutrality, HO-6 closed taxonomy preserved). All values are host-supplied or
+nodus-structural; nodus computes no verdict, holds no history, performs no grouping, and adds no
+dependency (LP-1/LP-2).
+
+#### The annotation carrier (HO-9, HO-11, HO-16, HO-17)
+
+Four of the seven are *host-supplied annotations that may ride any event*. Specified as four separate
+optional fields they would rewrite all ten `ExecutionEvent` variants four times over — and every
+future annotation would rewrite them again. They land instead as **one carrier field per variant**:
+
+```text
+[REFERENCE]
+// One new field on each of the 10 ExecutionEvent variants:
+annotations : EventAnnotations
+
+pub struct EventAnnotations {
+    /// HO-11: host-rendered one-line human projection of THIS event's own
+    /// structured fields. Adds no fact the fields lack; contradicts none.
+    /// Within §4.4 — descriptors and counts, never raw content.
+    pub message: Option<String>,
+    /// HO-16: host-supplied verdict. `None` = not annotated at all.
+    pub anomaly: Option<Anomaly>,
+    /// HO-9: opaque, secret-free, host-supplied authenticity token binding
+    /// step identity to observed result. Meaningful on step events; `None`
+    /// elsewhere and `None` everywhere until a host supplies a provider.
+    pub receipt: Option<String>,
+    /// HO-17: durable (the record) vs transient (a live affordance).
+    pub durability: Durability,
+}
+
+pub enum Anomaly { Anomalous, Normal, Unscored }   // + None ⇒ the L1's four states
+pub enum Durability { Durable, Transient }          // Default::default() == Durable
+```
+
+`EventAnnotations::default()` is all-`None` + `Durable`, so every existing emission site adds one
+`Default::default()` and behaves exactly as before. **`Unscored` is never `Normal`** — a detector
+with no history yet emits *no verdict*, and the trace says so, matching HO-14's `Unavailable` and
+HO-10's truncation marker. nodus names no model, threshold, window, or locale (LP-2); it reserves the
+carrier only.
+
+> **Emission rule for transients (HO-17).** §4.8's `seq` numbers the **durable stream only**. A
+> transient event therefore **must not consume a `seq`** — it must not increment the counter that
+> `RunManifest.event_count` reports. Were a transient to take a position, a consumer that dropped it
+> would detect a phantom gap, and a disconnect truncating a transient tail would make a completed
+> run read as truncated (HO-10). Concretely: the §4.8 `emit` choke point stays the durable path, and
+> a transient path is a *separate* companion that dispatches without touching the counter. nodus
+> emits no transients today — `ModelProvider::generate` returns a complete `String`, so no chunk
+> exists — but the rule is fixed now so a future host-facing streaming path cannot get it wrong by
+> default.
+
+#### Cost-attribution token classes (HO-8)
+
+```text
+[REFERENCE]
+// ModelResponse gains four fields — and only ModelResponse:
+input_tokens           : Measurement
+output_tokens          : Measurement
+cache_read_tokens      : Measurement
+cache_creation_tokens  : Measurement
+```
+
+Typed `Measurement` from birth (§4.8) rather than raw numbers retyped later — this is exactly the
+coupling §4.8 was sequenced first to buy. `ModelProvider` exposes **no token-accounting seam** (the
+same documented gap `l2-nodus-environment`'s `Budget.max_tokens` already records), so all four are
+`Measurement::Unavailable` in core today — **never `0`**. This is the L1's own canonical illustration
+of HO-14: a host must be able to distinguish *"the provider reported no cache accounting"* from
+*"the cache returned nothing"*. Extending `ModelProvider` with a token-reporting method is a
+separate, larger change (it touches the extension-point contract) and is **not** in scope here; a
+host wrapping a real backend supplies `Taken(_)` once that seam exists.
+
+#### Per-item derivation lineage (HO-13)
+
+```text
+[REFERENCE]
+// On collection-mapping events (LoopIteration; ~MAP rides the same path):
+derivation : Option<Vec<SourceRef>>
+
+pub struct SourceRef {
+    pub producing_step: u32,
+    pub source_index: u32,
+}
+```
+
+Indices only — **never element content** (LN-8), staying inside §4.4. Records the true shape as it
+actually is (LN-4): `~MAP` N→N gives `[(step, i)]` per produced element; a 1→M split gives
+`[(step, 0)]` for each of the M; a K→1 `~JOIN` gives all K sources on the single product; a filter
+records the dropped source index while survivors keep their own. Side-band metadata on an existing
+event — never a new variant (HO-6), and never part of the workflow's `Value` payload, so NL-7's
+closed value-type system is untouched and lineage can neither leak into nor perturb business data.
+Walking these references transitively reconstructs end-to-end lineage (LN-3); the walk is host-side.
+
+#### Trace completeness (HO-10) — read-side, no field
+
+```text
+[REFERENCE]
+pub enum TraceCompleteness { Complete, GapDamaged, Truncated, Empty }
+
+/// Pure classification over what a consumer holds. Adds no emission.
+pub fn classify_trace(
+    durable_events: &[ExecutionEvent],
+    manifest: Option<&RunManifest>,
+) -> TraceCompleteness;
+```
+
+Rules: a terminal manifest ⇒ `Complete`; events but no manifest ⇒ `Truncated` (a killed, panicked, or
+OOM-killed host never reached `run_complete`); neither ⇒ `Empty`; a manifest whose `event_count` ≠
+highest durable `seq` + 1 ⇒ `GapDamaged`, reusing §4.8's gap check directly. Reads **durable events
+only** (HO-17) — a transient tail severed by a disconnect must never make a completed run classify as
+truncated. This is pure interpretation of manifest presence/absence plus the §4.8 identity: no new
+hot-path work, so HO-5 is untouched and the change is entirely additive for existing consumers.
+
+**Boundary.** nodus does not capture the fault that truncated a trace. Whether a native traceback
+exists is the host's forensic diagnostic-log plane, installed below and earlier than the executor and
+surviving faults the executor cannot. nodus's contract stops precisely at *"my trace never lies about
+being complete"*; HO-10 forbids it from pretending otherwise.
+
+#### Closing the set
+
+With §4.9 realized, all twenty `l1-nodus-observability` invariants have a specified Rust realization:
+HO-1…HO-6 (§4.1–§4.6, live), HO-12/15/18/19/20 (§4.7, live), HO-7/HO-14 (§4.8, live), and
+HO-8/9/10/11/13/16/17 (§4.9, pending its phase). No observability invariant remains unspecified.
+
 ## 5. Implementation Notes
 
 1. Implement `observability.rs` first (pure types, no executor dependency). All 10 variants and
@@ -527,6 +671,7 @@ requires re-touching the variants once §4.8 is realized.
 
 | Version | Date | Author | Notes |
 | --- | --- | --- | --- |
+| 1.4.0 | 2026-07-24 | Core Team | Added §4.9 Event Annotations, Cost, Lineage & Completeness — the intended realization (spec-ahead-of-code) of the final seven invariants, **closing all twenty**. Central design decision: HO-9 (receipt), HO-11 (`message`), HO-16 (anomaly), and HO-17 (durability) are all *host-supplied annotations that may ride any event*; as four separate fields they would rewrite all ten `ExecutionEvent` variants four times over, so they land as **one `EventAnnotations` carrier field per variant** (`message`/`anomaly`/`receipt`/`durability`, `Default` = all-`None` + `Durable`) — one churn now, and future annotations become struct fields rather than tenth-variant edits. Targeted realizations: **HO-8** four token classes on `ModelResponse` only, born as §4.8 `Measurement` and `Unavailable`-not-`0` since `ModelProvider` has no token-accounting seam (extending that seam is explicitly out of scope); **HO-13** `Option<Vec<SourceRef>>` (indices only, never content) on collection-mapping events, side-band and outside the NL-7 `Value` space; **HO-10** a pure read-side `classify_trace → { Complete, GapDamaged, Truncated, Empty }` with **no field**, reusing §4.8's `event_count == highest seq + 1` identity as the gap test. Records the load-bearing HO-17 consequence for this crate: **a transient event must not consume a `seq`** — §4.8's counter numbers the durable stream only, so a dropped transient can never register as a gap nor a severed transient tail as a truncated run; nodus emits no transients today (`generate` returns a complete `String`), but the rule is fixed now so a future streaming path cannot default into corrupting the sequence. |
 | 1.3.0 | 2026-07-24 | Core Team | Added §4.8 Aggregation-Safe Event Stream — the intended realization (spec-ahead-of-code) of **HO-7** (`seq: u64` run-monotonic dense counter + run-scoped `correlation_id` on every `ExecutionEvent`; `RunManifest.event_count` = highest `seq` + 1 as the gap check; streaming chunk-merge recorded as vacuous in core — `ModelProvider::generate` returns a complete `String`, so no chunk exists to merge, and the fold is a host obligation) and **HO-14** (two-state `Measurement { Taken(u64), Unavailable }` replacing every raw numeric that can fail to be obtained — `elapsed_ms` on `StepEnd`/`MacroExit`/`ModelResponse`/`RunManifest` and `LoopIteration.iteration_number`; `FieldDescriptor`'s counts deliberately stay plain `u32`, obtainable by construction). Batched because both rewrite every variant — one round of churn, and Pass-2's HO-8 token classes are born as `Measurement` rather than added raw and retyped. Records two findings from the current crate: emission must route through a single `seq`-assigning choke point (20 `record_event` calls each paired with a manual `event_count += 1` — correct today, fragile once `seq` depends on it), and `handle_dialog`'s hardcoded `elapsed_ms: 0` is the exact fabricated-zero HO-14 forbids and becomes `Unavailable`. Pass 2 (HO-8, HO-9, HO-10, HO-11, HO-13, HO-16, HO-17) explicitly deferred. |
 | 1.2.0 | 2026-07-24 | Core Team | Added §4.7 Run-Manifest Identity & Reproducibility — the intended realization (spec-ahead-of-code) of HO-12 (`execution_mode`), HO-15 (definition-derived `step_identity` on events + manifest), HO-18 (`exposure_switches` resolved-and-frozen variant provenance), HO-19 (`StepError.fault_identity`, message-independent), and HO-20 (`RunManifest.repro: ReproRecipe` — workflow digest, capability set, exposure, mode, nodus version, stated determinism, `None`-not-omitted uncapturable fields). All additive/optional (HO-5/HO-6 preserved); awaits its implementation phase. The per-event-descriptor batch (HO-7…HO-11, HO-13, HO-14, HO-16, HO-17) is explicitly deferred to a follow-up pass. Reconciles the standing pending Invariant-Compliance obligation for HO-12/15/18/19/20. |
 | 1.1.0 | 2026-07-04 | Core Team | Added `BufferedAuditProvider` adapter (§4.3): opt-in bounded-channel + writer-thread sink honoring the `(correlation_id, seq)` ordering contract; blocking backpressure (never drops); flush-and-join on drop with `run_complete` as the final delivered event; synchronous in-path recording remains the default |

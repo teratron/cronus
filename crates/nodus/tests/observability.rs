@@ -4,8 +4,8 @@
 //! T-4T02: Public API — run_with_audit / run_with_provider_and_audit contracts.
 
 use nodus::{
-    AuditProvider, Determinism, ExecutionEvent, ExecutionMode, Executor, Measurement, RunManifest,
-    RunResult, SimFidelity, Status,
+    AuditProvider, Determinism, Durability, ExecutionEvent, ExecutionMode, Executor, LoopType,
+    Measurement, RunManifest, RunResult, SimFidelity, Status, TraceCompleteness, classify_trace,
     workflows::{run_with_audit, run_with_provider_and_audit},
 };
 use std::sync::{Arc, Mutex};
@@ -858,5 +858,259 @@ fn emit_choke_point_is_the_only_record_event_call_site() {
     assert_eq!(
         direct_calls, 1,
         "expected exactly one self.audit.record_event( call site (inside emit() itself); found {direct_calls}"
+    );
+}
+
+// ─── T-16T01: Event Annotations, Cost, Lineage & Completeness ────────────────
+
+const MAP_WF: &str = "\
+§wf:map_test v1.0
+§runtime: { core: schema.nodus }
+@in: { items: list }
+@out: $out
+@err: ESCALATE(human)
+@steps:
+  1. ~MAP $in.items: GEN($it) → $out
+";
+
+// HO-17: every event a real run emits is Durable — core emits no transients.
+#[test]
+fn all_events_from_a_real_run_are_durable() {
+    let recorder = RecordingProvider::new();
+    run_with_audit(
+        DETERMINISTIC_WF,
+        "obs_test.nodus",
+        None,
+        recorder.clone(),
+        "",
+        "",
+    )
+    .expect("run");
+    let events = recorder.events.lock().unwrap();
+    assert!(!events.is_empty());
+    assert!(
+        events
+            .iter()
+            .all(|e| event_annotations(e).durability == Durability::Durable),
+        "core must emit only Durable events"
+    );
+}
+
+// HO-9/11/16: the carrier defaults to all-None on every event from a real run
+// (no host-supplied provider populates them today).
+#[test]
+fn all_events_from_a_real_run_have_unpopulated_annotations() {
+    let recorder = RecordingProvider::new();
+    run_with_audit(
+        DETERMINISTIC_WF,
+        "obs_test.nodus",
+        None,
+        recorder.clone(),
+        "",
+        "",
+    )
+    .expect("run");
+    let events = recorder.events.lock().unwrap();
+    assert!(events.iter().all(|e| {
+        let a = event_annotations(e);
+        a.message.is_none() && a.anomaly.is_none() && a.receipt.is_none()
+    }));
+}
+
+fn event_annotations(e: &ExecutionEvent) -> &nodus::EventAnnotations {
+    match e {
+        ExecutionEvent::StepStart { annotations, .. }
+        | ExecutionEvent::StepEnd { annotations, .. }
+        | ExecutionEvent::StepError { annotations, .. }
+        | ExecutionEvent::ConstraintHit { annotations, .. }
+        | ExecutionEvent::BranchTaken { annotations, .. }
+        | ExecutionEvent::LoopIteration { annotations, .. }
+        | ExecutionEvent::MacroEnter { annotations, .. }
+        | ExecutionEvent::MacroExit { annotations, .. }
+        | ExecutionEvent::ModelCall { annotations, .. }
+        | ExecutionEvent::ModelResponse { annotations, .. } => annotations,
+    }
+}
+
+// HO-8: a real ModelResponse's token classes are Unavailable, never Taken(0)
+// — ModelProvider exposes no token-accounting seam.
+#[test]
+fn model_response_token_classes_are_unavailable_not_zero() {
+    let recorder = RecordingProvider::new();
+    run_with_audit(
+        DETERMINISTIC_WF,
+        "obs_test.nodus",
+        None,
+        recorder.clone(),
+        "",
+        "",
+    )
+    .expect("run");
+    let events = recorder.events.lock().unwrap();
+    let found = events.iter().find_map(|e| match e {
+        ExecutionEvent::ModelResponse {
+            input_tokens,
+            output_tokens,
+            cache_read_tokens,
+            cache_creation_tokens,
+            ..
+        } => Some((
+            *input_tokens,
+            *output_tokens,
+            *cache_read_tokens,
+            *cache_creation_tokens,
+        )),
+        _ => None,
+    });
+    let (input_t, output_t, cache_r, cache_c) = found.expect("a ModelResponse event");
+    for (name, m) in [
+        ("input_tokens", input_t),
+        ("output_tokens", output_t),
+        ("cache_read_tokens", cache_r),
+        ("cache_creation_tokens", cache_c),
+    ] {
+        assert_eq!(m, Measurement::Unavailable, "{name} must be Unavailable");
+        assert_ne!(
+            m,
+            Measurement::Taken(0),
+            "{name} must not be a fabricated 0"
+        );
+    }
+}
+
+// HO-13: ~FOR's LoopIteration carries no derivation (plain iteration, not a
+// produce-transform); ~MAP's newly-emitted LoopIteration carries the correct
+// N->N derivation, indices matching each element's position.
+#[test]
+fn for_loop_has_no_derivation_map_has_correct_n_to_n_derivation() {
+    // ~FOR: no derivation.
+    let recorder_for = RecordingProvider::new();
+    let for_input = nodus::executor::Value::Map(vec![(
+        "items".to_string(),
+        nodus::executor::Value::List(vec![
+            nodus::executor::Value::Text("a".to_string()),
+            nodus::executor::Value::Text("b".to_string()),
+        ]),
+    )]);
+    run_with_audit(
+        MULTI_EVENT_WF,
+        "multi_event.nodus",
+        Some(for_input),
+        recorder_for.clone(),
+        "",
+        "",
+    )
+    .expect("for run");
+    let for_events = recorder_for.events.lock().unwrap();
+    assert!(
+        for_events.iter().any(|e| matches!(
+            e,
+            ExecutionEvent::LoopIteration {
+                loop_type: LoopType::For,
+                derivation: None,
+                ..
+            }
+        )),
+        "~FOR LoopIteration must carry no derivation"
+    );
+
+    // ~MAP: N->N derivation with matching indices.
+    //
+    // Bypasses run_with_audit's validate-before-run gate and drives the
+    // Executor directly: the validator's E004 rule ("$it used but never
+    // assigned") does not know ~MAP binds $it implicitly at runtime, so it
+    // false-positives on every ~MAP workflow — a pre-existing validator gap,
+    // unrelated to and out of scope for this observability phase. This test
+    // exercises exactly what Phase 16 changed (the executor's event
+    // emission), not the validator.
+    let recorder_map = RecordingProvider::new();
+    let map_ast = nodus::parser::Parser::parse(MAP_WF).expect("parse ~MAP fixture");
+    let map_input = nodus::executor::Value::Map(vec![(
+        "items".to_string(),
+        nodus::executor::Value::List(vec![
+            nodus::executor::Value::Text("x".to_string()),
+            nodus::executor::Value::Text("y".to_string()),
+            nodus::executor::Value::Text("z".to_string()),
+        ]),
+    )]);
+    let map_result = Executor::with_audit(nodus::executor::StubProvider, recorder_map.clone())
+        .execute(&map_ast, Some(map_input));
+    assert_eq!(
+        map_result.status,
+        Status::Ok,
+        "errors: {:?}",
+        map_result.errors
+    );
+
+    let map_events = recorder_map.events.lock().unwrap();
+    let map_iterations: Vec<_> = map_events
+        .iter()
+        .filter_map(|e| match e {
+            ExecutionEvent::LoopIteration {
+                loop_type: LoopType::Map,
+                derivation,
+                ..
+            } => Some(derivation.clone()),
+            _ => None,
+        })
+        .collect();
+    assert_eq!(
+        map_iterations.len(),
+        3,
+        "expected one LoopIteration per ~MAP element"
+    );
+    for (i, derivation) in map_iterations.iter().enumerate() {
+        let refs = derivation
+            .as_ref()
+            .expect("~MAP must carry Some(derivation)");
+        assert_eq!(
+            refs.len(),
+            1,
+            "N->N: exactly one source ref per produced element"
+        );
+        assert_eq!(
+            refs[0].source_index, i as u32,
+            "source_index must match element position"
+        );
+    }
+}
+
+// HO-10: all four classify_trace outcomes.
+#[test]
+fn classify_trace_all_outcomes() {
+    let recorder = RecordingProvider::new();
+    run_with_audit(
+        DETERMINISTIC_WF,
+        "obs_test.nodus",
+        None,
+        recorder.clone(),
+        "",
+        "",
+    )
+    .expect("run");
+    let events = recorder.events.lock().unwrap().clone();
+    let manifests = recorder.manifests.lock().unwrap();
+    let manifest = &manifests[0];
+    assert!(!events.is_empty());
+
+    // Complete: the real trace + its own manifest.
+    assert_eq!(
+        classify_trace(&events, Some(manifest)),
+        TraceCompleteness::Complete
+    );
+
+    // Truncated: events exist, no manifest (host process died before run_complete).
+    assert_eq!(classify_trace(&events, None), TraceCompleteness::Truncated);
+
+    // Empty: neither.
+    assert_eq!(classify_trace(&[], None), TraceCompleteness::Empty);
+
+    // GapDamaged: drop the highest-seq (last-emitted) event, keep the manifest
+    // that claims the full count — simulates a lost tail event.
+    let mut damaged = events.clone();
+    damaged.pop();
+    assert_eq!(
+        classify_trace(&damaged, Some(manifest)),
+        TraceCompleteness::GapDamaged
     );
 }

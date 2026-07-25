@@ -18,8 +18,9 @@
 
 use crate::ast::{AbsoluteRule, CommandCall, RuleKind, Step, Stmt, WorkflowFile};
 use crate::observability::{
-    AuditProvider, EnvInteraction, ExecutionEvent, ExecutionMode, FaultIdentity, FieldDescriptor,
-    LoopType, Measurement, NoopAuditProvider, ReproRecipe, RunManifest, RunStatus, step_identity,
+    AuditProvider, EnvInteraction, EventAnnotations, ExecutionEvent, ExecutionMode, FaultIdentity,
+    FieldDescriptor, LoopType, Measurement, NoopAuditProvider, ReproRecipe, RunManifest, RunStatus,
+    SourceRef, step_identity,
 };
 use crate::vocab;
 use std::collections::HashMap;
@@ -600,20 +601,30 @@ impl Executor {
         )
     }
 
-    /// Returns `(result, budget_halted)` — `budget_halted` is `true` only when
-    /// `max_steps`/`wall_clock_ms` cut the run short (NE-13); it is always
     /// The single emission choke point (HO-7, T-15B01). Assigns `seq` from
     /// `ctx.event_count` and the run's bound `correlation_id`, dispatches to
     /// the audit provider, then increments the counter — so a mismatch
     /// between the assigned `seq` and the counter is unrepresentable, not
     /// merely absent. Every `record_event` call in this module goes through
     /// here; none calls `self.audit.record_event` directly.
+    ///
+    /// **Durable path only (HO-17).** `seq` numbers the durable stream —
+    /// this function must never be used to emit a transient event, since a
+    /// transient consuming a `seq` would read as a phantom gap if dropped,
+    /// and a severed transient tail would make a completed run classify as
+    /// `Truncated` ([`crate::observability::classify_trace`]). nodus emits no
+    /// transients today (`ModelProvider::generate` returns a complete
+    /// `String`, so no chunk exists); a future host-facing streaming path
+    /// needs a separate companion that dispatches without touching the
+    /// counter, not a change to this function.
     fn emit(&self, ctx: &mut ExecutionContext, build: impl FnOnce(u64, String) -> ExecutionEvent) {
         let event = build(ctx.event_count as u64, ctx.correlation_id.clone());
         self.audit.record_event(event);
         ctx.event_count += 1;
     }
 
+    /// Returns `(result, budget_halted)` — `budget_halted` is `true` only when
+    /// `max_steps`/`wall_clock_ms` cut the run short (NE-13); it is always
     /// `false` for the plain `execute`/`execute_with_params` paths (`None`
     /// budget parameters).
     #[allow(clippy::too_many_arguments)]
@@ -914,6 +925,7 @@ impl Executor {
                 condition_result: true,
                 seq,
                 correlation_id,
+                annotations: EventAnnotations::default(),
             });
             if let Some(action) = &cond.action {
                 let sig = self.execute_command(ctx, action, step_num);
@@ -938,6 +950,7 @@ impl Executor {
                     condition_result: true,
                     seq,
                     correlation_id,
+                    annotations: EventAnnotations::default(),
                 });
                 if let Some(action) = &elif_br.action {
                     let sig = self.execute_command(ctx, action, step_num);
@@ -962,6 +975,7 @@ impl Executor {
                 condition_result: false,
                 seq,
                 correlation_id,
+                annotations: EventAnnotations::default(),
             });
             if let Some(action) = &else_br.action {
                 let sig = self.execute_command(ctx, action, step_num);
@@ -1000,8 +1014,12 @@ impl Executor {
                 loop_type: LoopType::For,
                 iteration_number: Measurement::Taken(iter_idx as u64),
                 bound_vars: vec![fl_variable],
+                // Plain iteration, not a produce-transform construct — no
+                // meaningful derivation to record (HO-13).
+                derivation: None,
                 seq,
                 correlation_id,
+                annotations: EventAnnotations::default(),
             });
             let mut skip_rest = false;
             for child in &fl.body {
@@ -1036,8 +1054,10 @@ impl Executor {
                 loop_type: LoopType::Until,
                 iteration_number: Measurement::Taken(iter_idx as u64),
                 bound_vars: vec![],
+                derivation: None,
                 seq,
                 correlation_id,
+                annotations: EventAnnotations::default(),
             });
             for child in &ul.body {
                 match self.execute_node(ctx, child, step_num) {
@@ -1091,6 +1111,7 @@ impl Executor {
                     condition_result: true,
                     seq,
                     correlation_id,
+                    annotations: EventAnnotations::default(),
                 });
                 return self.execute_command(ctx, action, step_num);
             }
@@ -1102,6 +1123,7 @@ impl Executor {
                 condition_result: false,
                 seq,
                 correlation_id,
+                annotations: EventAnnotations::default(),
             });
             return self.execute_command(ctx, default, step_num);
         }
@@ -1128,8 +1150,24 @@ impl Executor {
         // command pipeline (audit, rule checks) runs per element.
         let mut cmd = mb.command.clone();
         cmd.pipeline_target = Some("$__map_element".to_string());
-        for item in items {
+        for (iter_idx, item) in items.into_iter().enumerate() {
             ctx.set_var("it", item);
+            // HO-13: ~MAP is a true N->N produce-transform, unlike plain
+            // ~FOR/~UNTIL iteration — each produced element derives from
+            // exactly the source element at the same index, at this step.
+            self.emit(ctx, |seq, correlation_id| ExecutionEvent::LoopIteration {
+                step_index: step_num,
+                loop_type: LoopType::Map,
+                iteration_number: Measurement::Taken(iter_idx as u64),
+                bound_vars: vec!["$it".to_string()],
+                derivation: Some(vec![SourceRef {
+                    producing_step: step_num,
+                    source_index: iter_idx as u32,
+                }]),
+                seq,
+                correlation_id,
+                annotations: EventAnnotations::default(),
+            });
             if let Some(sig) = self.execute_command(ctx, &cmd, step_num) {
                 return Some(sig);
             }
@@ -1275,6 +1313,7 @@ impl Executor {
                 halt: true,
                 seq,
                 correlation_id,
+                annotations: EventAnnotations::default(),
             });
             let error_detail = violation.clone();
             self.emit(ctx, |seq, correlation_id| ExecutionEvent::StepError {
@@ -1290,6 +1329,7 @@ impl Executor {
                 },
                 seq,
                 correlation_id,
+                annotations: EventAnnotations::default(),
             });
             ctx.errors.push(RuntimeError {
                 code: vocab::error_code::RULE_VIOLATION.to_string(),
@@ -1314,6 +1354,7 @@ impl Executor {
             step_identity: step_identity(step_num, &cmd.name),
             seq,
             correlation_id,
+            annotations: EventAnnotations::default(),
         });
 
         let result = self.dispatch(ctx, cmd, step_num);
@@ -1328,6 +1369,7 @@ impl Executor {
             step_identity: step_identity(step_num, &cmd.name),
             seq,
             correlation_id,
+            annotations: EventAnnotations::default(),
         });
 
         ctx.log_step(step_num, &cmd.name, result.clone());
@@ -1363,6 +1405,7 @@ impl Executor {
             step_identity: step_identity(step_num, &cmd.name),
             seq,
             correlation_id,
+            annotations: EventAnnotations::default(),
         });
 
         let prompt = cmd
@@ -1385,6 +1428,7 @@ impl Executor {
             input_summary: FieldDescriptor::text(prompt_len),
             seq,
             correlation_id,
+            annotations: EventAnnotations::default(),
         });
 
         let outcome = if cmd.name == "ASK" {
@@ -1436,6 +1480,7 @@ impl Executor {
             step_identity: step_identity(step_num, &cmd.name),
             seq,
             correlation_id,
+            annotations: EventAnnotations::default(),
         });
 
         signal
@@ -1485,6 +1530,7 @@ impl Executor {
                     call_step_index: step_num,
                     seq,
                     correlation_id,
+                    annotations: EventAnnotations::default(),
                 });
                 ctx.flags.push(format!("RUN:{macro_name}"));
                 let elapsed_ms = Measurement::Taken(macro_start.elapsed().as_millis() as u64);
@@ -1494,6 +1540,7 @@ impl Executor {
                     elapsed_ms,
                     seq,
                     correlation_id,
+                    annotations: EventAnnotations::default(),
                 });
                 Value::Null
             }
@@ -1563,18 +1610,26 @@ impl Executor {
             input_summary: FieldDescriptor::text(input_len),
             seq,
             correlation_id,
+            annotations: EventAnnotations::default(),
         });
         let call_start = Instant::now();
         let result = self.provider.generate(&prompt_str, &cmd.modifiers);
         let elapsed_ms = Measurement::Taken(call_start.elapsed().as_millis() as u64);
         let output_len = result.len() as u32;
+        // HO-8: ModelProvider exposes no token-accounting seam, so all four
+        // classes are Unavailable — never a fabricated 0.
         self.emit(ctx, |seq, correlation_id| ExecutionEvent::ModelResponse {
             step_index: step_num,
             command: cmd.name.clone(),
             output_summary: FieldDescriptor::text(output_len),
             elapsed_ms,
+            input_tokens: Measurement::Unavailable,
+            output_tokens: Measurement::Unavailable,
+            cache_read_tokens: Measurement::Unavailable,
+            cache_creation_tokens: Measurement::Unavailable,
             seq,
             correlation_id,
+            annotations: EventAnnotations::default(),
         });
         Value::Text(result)
     }
@@ -1597,6 +1652,7 @@ impl Executor {
             input_summary: FieldDescriptor::text(text_len),
             seq,
             correlation_id,
+            annotations: EventAnnotations::default(),
         });
         let call_start = Instant::now();
         let result = self.provider.analyze(&text, &cmd.flags);
@@ -1612,8 +1668,13 @@ impl Executor {
             command: cmd.name.clone(),
             output_summary,
             elapsed_ms,
+            input_tokens: Measurement::Unavailable,
+            output_tokens: Measurement::Unavailable,
+            cache_read_tokens: Measurement::Unavailable,
+            cache_creation_tokens: Measurement::Unavailable,
             seq,
             correlation_id,
+            annotations: EventAnnotations::default(),
         });
         result
     }
