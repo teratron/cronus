@@ -4,23 +4,25 @@
 <!-- Maximum 100 lines. Agent updates AFTER each completed action. -->
 
 **Workspace:** nodus
-**Updated:** 2026-07-25 06:10
-**Phase:** 16 — Event Annotations, Cost, Lineage & Completeness
+**Updated:** 2026-07-25 06:30
+**Phase:** 17 — `~MAP` Conformance & End-to-End Reachability
 **Status:** Active
 
 ## Current Position
 
-- **Task:** Phase 16 complete — Event Annotations, Cost, Lineage & Completeness (l2-nodus-observability §4.9); 6/6 tasks, 4 tracks A→C+T, Sequential. **All 20 HO invariants in l1-nodus-observability.md are now closed.**
-- **Spec:** PLAN v1.19.0 / TASKS v2.11.0 / INDEX v1.0.61; RULES v1.6.0. 16 nodus specs Stable, phases 1–16 Done. Remaining Backlog: NL-19/21 (l2-nodus-runtime) + LP-17/18/19 (l2-nodus-portability) + upstream parity-gap clusters (operators/MATCHES design fork, @needs, @ON priority, macro execution) + the newly-flagged `~MAP`/E004 validator gap
-- **Next Action:** Phase complete — run /magic.task nodus to replan (checks whether the Backlog, all design-blocked pending L2 specs, has become plannable now that observability is fully closed).
+- **Task:** Phase 17 planned — `~MAP` Conformance & End-to-End Reachability (l2-nodus-control-flow §4.3/§4.4); 5 tasks / 4 tracks A→C+T, Sequential; not started. Restores `~MAP` reachability through the validated public API
+- **Spec:** PLAN v1.20.0 / TASKS v2.12.0 / INDEX v1.0.61; RULES v1.6.0. 16 nodus specs Stable, phases 1–16 Done, Phase 17 Todo. Remaining Backlog after this: NL-19/21 (l2-nodus-runtime) + LP-17/18/19 (l2-nodus-portability) + parity-gap clusters + lexical-scoping design pass + fixture-corpus tidying
+- **Next Action:** Execute T-17A01 Teach `E004` that `~MAP` binds `$it` — the conformance fix via /magic.run nodus
 
 ## Progress
 
 ```
-Build phases 1–16 Done (Seed → Testing → Capability Manifest → Dialog → Control-Flow → Environment & Evaluation → Declarative Configuration Surface → Run-Manifest Identity & Reproducibility → Aggregation-Safe Event Stream → Event Annotations/Cost/Lineage/Completeness); observability spec fully realized (all 20 HO invariants) | Baseline gates: cargo 365 tests + clippy + fmt; LP-1 zero-dep preserved
+Build phases 1–16 Done (Seed → Testing → Capability Manifest → Dialog → Control-Flow → Environment & Evaluation → Declarative Configuration Surface → Run-Manifest Identity & Reproducibility → Aggregation-Safe Event Stream → Event Annotations/Cost/Lineage/Completeness); observability spec fully realized (all 20 HO invariants); Phase 17 planned (~MAP conformance defect — 5 tasks A→C+T, Sequential, not started) | Baseline gates: cargo 365 tests + clippy + fmt; LP-1 zero-dep preserved
 ```
 
 ## Recent Decisions
+
+- 2026-07-25 **Decision:** Post-Phase-16 replan — **new phase opened**, breaking the three-cycle "plan saturated → go author a spec" pattern. Pre-flight clean (16/16 Stable, 0 Draft, all 16 file headers match INDEX exactly, no cross-workspace collisions, RULES parity v1.6.0 held). Observability is fully closed, so the usual next-spec candidate is gone — but the replan promoted the defect Phase 16 surfaced in passing rather than treating it as a footnote: `E004` doesn't know `~MAP` binds `$it`, so **every** `~MAP` workflow is rejected before it runs and the construct has been unreachable through all validated entry points since Phase 11. This is categorically different from every other Backlog item: `l2-nodus-control-flow` §4.3/§4.4 (Stable v1.0.0) already mandate the implicit binding, so the code diverges from a Stable contract — plannable with a concrete Verify line and **no new spec** (C12.1 fix-to-regain-conformance), where the rest stay design-blocked. Grounding before planning (the discipline that paid off in Phases 15/16): localized the defect to the `Stmt::Map` arm of `collect_vars_stmt` (marks `$it` used via `collect_vars_cmd`, never declares it, unlike `collect_vars_for` which declares `~FOR`'s explicit variable); confirmed `~MAP` is the *only* construct with an undeclared implicit binding (`~UNTIL`/`~PARALLEL` bind nothing); confirmed `$it` is absent from `RESERVED_VARIABLES`; and found the coverage hole that hid it — `tests/control_flow.rs` drives `!HALT`/`!PAUSE`/`?SWITCH`/`~RETRY` end-to-end through `workflows::run` but has zero `~MAP` coverage, so the one construct never tested end-to-end is the one that doesn't work end-to-end. Also noted the spec's own blind spot: §4.5 enumerates only the three validator rules Phase 11 *added* and never records which *existing* rule the new binding invalidated — patched as T-17C01. Scope held deliberately narrow: two adjacent temptations (making `collect_vars_stmt` properly scope-aware; backfilling fixtures for the other four v0.7 constructs) were pushed to Backlog, not folded in — the first is a non-additive design change, the second has no defect behind it. PLAN v1.19.0 → v1.20.0, TASKS v2.11.0 → v2.12.0, INDEX v1.0.61 held.
 
 - 2026-07-25 **Decision:** Phase 16 complete. `l2-nodus-observability` §4.9 implemented in `crates/nodus`: `EventAnnotations`/`Anomaly`/`Durability` carrier on all 10 `ExecutionEvent` variants (HO-9/11/16/17); 4 `Measurement` token classes on `ModelResponse` only (HO-8); `SourceRef`/`derivation` lineage on `LoopIteration` + new `LoopType::Map` (HO-13); read-side `classify_trace` with no new field (HO-10); HO-17 durable-only-`seq` rule documented on `emit`. Two findings surfaced during implementation: (1) `execute_map` emitted zero events before this phase — fixed as the planned scope expansion, now emits one `LoopIteration` per element with correct N→N derivation; (2) unplanned — driving `~MAP` through the public `run_with_audit` API hits a pre-existing validator gap (`E004` doesn't know `~MAP` binds `$it` implicitly), rejecting every `~MAP` workflow; no crate test had ever exercised `~MAP` end-to-end before. Worked around in the new test (direct `Executor::execute`, bypassing the validate-gate) rather than expanding this phase into a validator fix; flagged in PLAN.md Backlog instead. Also fixed a pre-existing doc-comment defect found while extending `emit`'s: Phase 15 had split `execute_inner`'s doc comment into two disconnected fragments. 365 tests pass (was 352; +13); clippy/fmt clean; zero new dependency (LP-1 preserved). **All 20 HO invariants closed — l1-nodus-observability.md fully realized.**
 
