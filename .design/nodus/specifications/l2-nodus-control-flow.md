@@ -1,6 +1,6 @@
 # Nodus Control-Flow Constructs Implementation (Rust)
 
-**Version:** 1.0.0
+**Version:** 1.0.1
 **Status:** Stable
 **Layer:** implementation
 **Implements:** l1-nodus-language.md
@@ -124,6 +124,14 @@ Stmt::Map    → for each element of the Value::List collection, bind $it, run t
 - `~RETRY` without `:n`, or `n > 10`, → error (NL-5 bounded-loop extension).
 - `!HALT` without an `ESCALATE()` in the same step → error.
 - `?SWITCH` with no arms → warning.
+- `~MAP`'s implicit `$it` binding (§4.3) counts as declared for the
+  pre-existing "variable used but never assigned" check, on the same terms as
+  `~FOR`'s explicit loop variable: the check tracks declarations in one
+  file-wide set with no per-construct scope, so a variable a loop introduces
+  reads as declared for the rest of the file, not only inside that loop's own
+  body — `~MAP` follows this existing precedent rather than introducing new
+  scoping behavior. A file containing **no** `~MAP` construct at all still
+  flags a bare `$it` reference as undeclared, exactly as before.
 
 ### 4.6 Transpiler
 
@@ -159,3 +167,4 @@ already exist; this cluster wires them to syntax.
 | Version | Date | Author | Notes |
 | --- | --- | --- | --- |
 | 1.0.0 | 2026-06-27 | Core Team | Initial spec — Rust realization of the v0.7 control constructs (`?SWITCH`/`~MAP`/`~RETRY`/`!HALT`/`!PAUSE`): lexer tokens, `SwitchBlock`/`MapBlock` AST + action flags + retry, parser/executor/validator/transpiler wiring; reuses `Status::Paused`/`Signal::Pause` and `SWITCH_NO_MATCH`/`PAUSED`. Phased implementation recommended. |
+| 1.0.1 | 2026-07-25 | Core Team | §4.5 patch: records that `~MAP`'s implicit `$it` binding (§4.3) must count as declared for the pre-existing variable-declaration check, on the same file-wide-set terms as `~FOR`'s explicit loop variable — closes a conformance gap where the realized check omitted this and rejected every `~MAP` workflow. No design change; status stays `Stable`. |

@@ -1015,16 +1015,7 @@ fn for_loop_has_no_derivation_map_has_correct_n_to_n_derivation() {
     );
 
     // ~MAP: N->N derivation with matching indices.
-    //
-    // Bypasses run_with_audit's validate-before-run gate and drives the
-    // Executor directly: the validator's E004 rule ("$it used but never
-    // assigned") does not know ~MAP binds $it implicitly at runtime, so it
-    // false-positives on every ~MAP workflow — a pre-existing validator gap,
-    // unrelated to and out of scope for this observability phase. This test
-    // exercises exactly what Phase 16 changed (the executor's event
-    // emission), not the validator.
     let recorder_map = RecordingProvider::new();
-    let map_ast = nodus::parser::Parser::parse(MAP_WF).expect("parse ~MAP fixture");
     let map_input = nodus::executor::Value::Map(vec![(
         "items".to_string(),
         nodus::executor::Value::List(vec![
@@ -1033,8 +1024,15 @@ fn for_loop_has_no_derivation_map_has_correct_n_to_n_derivation() {
             nodus::executor::Value::Text("z".to_string()),
         ]),
     )]);
-    let map_result = Executor::with_audit(nodus::executor::StubProvider, recorder_map.clone())
-        .execute(&map_ast, Some(map_input));
+    let map_result = run_with_audit(
+        MAP_WF,
+        "map_test.nodus",
+        Some(map_input),
+        recorder_map.clone(),
+        "",
+        "",
+    )
+    .expect("map run");
     assert_eq!(
         map_result.status,
         Status::Ok,

@@ -2,6 +2,14 @@
 
 Internal phase journal. Each entry corresponds to a completed phase.
 
+## Phase 17 — `~MAP` Conformance & End-to-End Reachability (l2-nodus-control-flow §4.3/§4.4) (2026-07-25)
+
+- T-17A01: Declared `$it` in the `Stmt::Map` arm of `collect_vars_stmt` (`validator.rs`) so `E004` stops flagging `~MAP`'s implicit per-element binding as undeclared — the construct has been unreachable through every validated public entry point (`run`, `run_with_audit`, …) since Phase 11; did not add `$it` to `RESERVED_VARIABLES` (would blanket-declare it globally, disabling the diagnostic even for workflows with no `~MAP`)
+- T-17B01: Added `tests/fixtures/map_transform.nodus` — the fixture corpus's first v0.7 control construct — plus validate/round-trip/execute-ok coverage in `parity.rs`; added N-element/empty/non-list behavioral tests in `control_flow.rs` driving `workflows::run`
+- T-17B02: Retired the Phase-16 `Executor::execute` validate-gate bypass in `tests/observability.rs` now that its justification (the E004 defect) is fixed; the derivation-lineage test now drives `run_with_audit` like every other test in the file
+- T-17C01: Patched `l2-nodus-control-flow.md` §4.5 (1.0.0 → 1.0.1) to record that `~MAP`'s implicit `$it` counts as declared for the variable-declaration check, on `~FOR`'s existing file-wide-set terms — closes the documentation gap that let the defect ship unnoticed
+- T-17T01: `cargo test -p nodus` — 373 passed (was 365; +8), 0 failed; clippy `-D warnings` clean; fmt clean; `Cargo.toml [dependencies]` still empty (LP-1 zero-dep preserved) — `~MAP` is now reachable through the full validated public API
+
 ## Phase 16 — Event Annotations, Cost, Lineage & Completeness (l2-nodus-observability §4.9) (2026-07-25)
 
 - T-16A01: Added `EventAnnotations { message, anomaly, receipt, durability }` carrier + `Anomaly { Anomalous, Normal, Unscored }` + `Durability { Durable, Transient }` (default `Durable`) to `observability.rs`; added `annotations: EventAnnotations` to all 10 `ExecutionEvent` variants — one field absorbing HO-9/HO-11/HO-16/HO-17 instead of four separate all-variant additions

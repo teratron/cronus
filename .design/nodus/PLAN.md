@@ -2,7 +2,7 @@
 
 **Version:** 1.20.0
 **Generated:** 2026-07-25
-**Based on:** .design/nodus/INDEX.md v1.0.61
+**Based on:** .design/nodus/INDEX.md v1.0.62
 **Status:** Active
 
 ## Overview
@@ -218,11 +218,13 @@ stub-level runner to an assertion-evaluating test facility (NT-1…NT-10).*
 
 - [x] **L2 Nodus Observability §4.9** ([l2-nodus-observability.md](specifications/l2-nodus-observability.md)) [L2] — Track A: `EventAnnotations`/`Anomaly`/`Durability` types + one `annotations` field on all 10 variants (HO-9/11/16/17). Track B: HO-8 four `Measurement` token classes on `ModelResponse`; HO-13 `SourceRef` derivation on `LoopIteration` + the missing `~MAP` emission. Track C: HO-10 `classify_trace` read-side classifier; HO-17 durable-only `seq` discipline (rule + guard). Track T: annotations + cost + lineage + completeness + neutrality + zero-dep validation suite
 
-## Phase 17 — `~MAP` Conformance & End-to-End Reachability (l2-nodus-control-flow §4.3/§4.4)
+## Phase 17 — `~MAP` Conformance & End-to-End Reachability (l2-nodus-control-flow §4.3/§4.4) ✓
 
 *Restore conformance to `l2-nodus-control-flow.md` §4.3/§4.4 (Stable v1.0.0), which mandate `$it` as `~MAP`'s implicit per-element binding. The realized validator contradicts the mandate: `E004` ("$it used but never assigned") does not know about the implicit binding, so every `~MAP` workflow is rejected before it runs — `~MAP` has been unreachable through every validated public entry point (`run`, `run_with_audit`, …) since Phase 11 shipped it. Surfaced incidentally during Phase 16, whose HO-13 lineage test had to bypass the validate-gate to exercise `~MAP` at all. Unlike every other Backlog item this needs no new spec — the contract is already Stable and the code diverges from it (C12.1 fix-to-regain-conformance). Scope is deliberately narrow: the defect (one `collect_vars_stmt` arm), the coverage hole that hid it (`tests/control_flow.rs` covers `!HALT`/`!PAUSE`/`?SWITCH`/`~RETRY` end-to-end but not `~MAP`), the Phase-16 workaround it forced, and a patch-level spec sync recording the `E004` interaction §4.5 omitted. Sequential — Track B's tests cannot pass until Track A lands. Atomic tasks in [tasks/phase-17.md](tasks/phase-17.md).*
 
-- [ ] **L2 Nodus Control-Flow §4.3/§4.4** ([l2-nodus-control-flow.md](specifications/l2-nodus-control-flow.md)) [L2] — Track A: declare `$it` in the `Stmt::Map` arm of `collect_vars_stmt` (not in `RESERVED_VARIABLES` — that would blanket-declare it globally). Track B: `~MAP` end-to-end tests through `workflows::run` + the corpus's first v0.7 fixture (`map_transform.nodus`); retire the Phase-16 `Executor::execute` validate-gate bypass. Track C: patch-level sync of §4.5 recording the `E004`↔`$it` interaction (1.0.0 → 1.0.1). Track T: reachability + non-regression of `E004` for non-`~MAP` workflows + gates + zero-dep
+> **Status:** Complete — all tracks A/B/C/T delivered. 373 tests pass (was 365; +8); clippy/fmt clean; LP-1 zero-dep preserved. `~MAP` is now reachable through `workflows::run`/`run_with_audit` for the first time since Phase 11. Atomic tasks in [tasks/phase-17.md](tasks/phase-17.md).
+
+- [x] **L2 Nodus Control-Flow §4.3/§4.4** ([l2-nodus-control-flow.md](specifications/l2-nodus-control-flow.md)) [L2] — Track A: declare `$it` in the `Stmt::Map` arm of `collect_vars_stmt` (not in `RESERVED_VARIABLES` — that would blanket-declare it globally). Track B: `~MAP` end-to-end tests through `workflows::run` + the corpus's first v0.7 fixture (`map_transform.nodus`); retire the Phase-16 `Executor::execute` validate-gate bypass. Track C: patch-level sync of §4.5 recording the `E004`↔`$it` interaction (1.0.0 → 1.0.1). Track T: reachability + non-regression of `E004` for non-`~MAP` workflows + gates + zero-dep
 
 ## Backlog
 
@@ -233,7 +235,7 @@ stub-level runner to an assertion-evaluating test facility (NT-1…NT-10).*
   - HO-12/15/18/19/20 (execution mode, cross-run step identity, exposure-switch recording, fault identity, reproduction recipe): RESOLVED — l2-nodus-observability §4.7 (v1.2.0) implemented in Phase 14.
   - HO-7 (sequence+correlation) + HO-14 (two-state Measurement): RESOLVED — l2-nodus-observability §4.8 (v1.3.0) implemented in Phase 15.
   - HO-8/9/10/11/13/16/17 (cost token classes, execution receipt, trace-completeness read-side, dual-legibility message, per-item lineage, anomaly annotation, transient/durable separation): RESOLVED — l2-nodus-observability §4.9 (v1.4.0) implemented in Phase 16. Closes all 20 HO invariants; nothing from l1-nodus-observability remains unspecified.
-  - Validator gap (not an HO invariant, discovered during Phase 16): `E004` does not recognize `~MAP`'s implicit `$it` binding, making `~MAP` unreachable through every validated entry point: PHASED — Phase 17. Needs no new spec (the §4.3/§4.4 mandate is already Stable; the code diverges from it).
+  - Validator gap (not an HO invariant, discovered during Phase 16): `E004` does not recognize `~MAP`'s implicit `$it` binding, making `~MAP` unreachable through every validated entry point: RESOLVED — l2-nodus-control-flow §4.5 (v1.0.1) implemented in Phase 17.
   - Lexical scoping in variable-declaration analysis: `collect_vars_stmt` uses one flat `declared` set with no scope stack, so a binding leaks past its construct (`~FOR`'s loop variable is visible after the loop today; Phase 17 adds `$it` on the same terms). Correct scoping for all binding constructs is a coherent separate concern — needs a design pass deciding whether E004 should become scope-aware, and would change diagnostics for existing workflows (not purely additive).
   - Normative fixture corpus coverage: `tests/fixtures/` predates the v0.7 constructs and contains none of them (`?SWITCH`/`~RETRY`/`!HALT`/`!PAUSE`; Phase 17 adds the first, for `~MAP`). Pure corpus tidying — the other four already have passing end-to-end tests in `tests/control_flow.rs`, so no defect sits behind this. -->
 <!-- Upstream parity gap v0.4.6 → v0.7 (l1-nodus-language §4.6 / l2-nodus-runtime §4.7) — remaining clusters needing focused spec authoring before they can be planned: operators/expressions (MATCHES/?./??/WHERE/FIRST/LAST/string-interpolation — note MATCHES/PCRE vs the zero-dependency LP-1 constraint is an open design fork), @needs selective schema loading (blocked: no external-schema loading yet), @ON(priority=N) (triggers not dispatched yet), macro execution (RUN(@x) body expansion — needs structured macro-body parsing). Addressed: error taxonomy → Phase 8; closed registries → Phase 9; HITL dialog → Phase 10 (l2-nodus-dialog, Stable); control constructs → Phase 11 (l2-nodus-control-flow, Stable). -->

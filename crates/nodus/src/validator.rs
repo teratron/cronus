@@ -752,6 +752,9 @@ fn collect_vars_stmt(
                         .to_string(),
                 );
             }
+            // `~MAP` binds `$it` implicitly per element (l2-nodus-control-flow.md §4.3);
+            // declare it before walking the body so E004 does not flag it as undeclared.
+            declared.insert("$it".to_string());
             collect_vars_cmd(&mb.command, declared, used);
             if let Some(target) = &mb.target {
                 declared.insert(target.split('.').next().unwrap_or(target).to_string());
@@ -2218,6 +2221,44 @@ mod tests {
         assert!(
             !names.contains(&"api_key"),
             "secret field must not appear in non_secret_fields: {names:?}"
+        );
+    }
+
+    #[test]
+    fn e004_does_not_fire_on_map_implicit_it() {
+        let src = "\
+§wf:mapper v1.0
+§runtime: { core: schema.nodus }
+@out: $out
+@err: ESCALATE(human)
+@steps:
+  1. ~MAP $in.items: GEN($it) → $out
+";
+        let ast = Parser::parse(src).expect("parse");
+        let diags = Validator::validate(&ast, "mapper.nodus");
+        assert!(
+            diags.iter().all(|d| d.severity != Severity::Error),
+            "~MAP's implicit $it binding must not raise any error diagnostic (E004 in particular); got: {diags:?}"
+        );
+    }
+
+    #[test]
+    fn e004_still_fires_on_it_used_outside_map() {
+        let src = "\
+§wf:stray_it v1.0
+§runtime: { core: schema.nodus }
+@out: $out
+@err: ESCALATE(human)
+@steps:
+  1. LOG($it) → $out
+";
+        let ast = Parser::parse(src).expect("parse");
+        let diags = Validator::validate(&ast, "stray_it.nodus");
+        assert!(
+            diags
+                .iter()
+                .any(|d| d.code == "E004" && d.severity == Severity::Error),
+            "$it used outside a ~MAP must still be flagged as undeclared (the fix must not blanket-declare it); got: {diags:?}"
         );
     }
 }

@@ -28,6 +28,7 @@ const CONDITIONAL: &str = include_str!("fixtures/conditional.nodus");
 const FOR_LOOP: &str = include_str!("fixtures/for_loop.nodus");
 const PARALLEL_JOIN: &str = include_str!("fixtures/parallel_join.nodus");
 const MACRO_EXPAND: &str = include_str!("fixtures/macro_expand.nodus");
+const MAP_TRANSFORM: &str = include_str!("fixtures/map_transform.nodus");
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
 
@@ -206,6 +207,19 @@ mod validation {
     }
 
     #[test]
+    fn map_transform_no_block_errors() {
+        let diags = parse_and_validate(MAP_TRANSFORM, "map_transform.nodus");
+        let errors: Vec<_> = diags
+            .iter()
+            .filter(|d| d.severity == Severity::Error)
+            .collect();
+        assert!(
+            errors.is_empty(),
+            "expected no block-class errors for map_transform (E004 must not flag ~MAP's implicit $it); got: {errors:?}"
+        );
+    }
+
+    #[test]
     fn macro_expand_no_block_errors() {
         let diags = parse_and_validate(MACRO_EXPAND, "macro_expand.nodus");
         let errors: Vec<_> = diags
@@ -303,6 +317,17 @@ mod transpilation {
             ast2.header.as_ref().unwrap().name,
             "ticket_triage",
             "ticket_triage name must survive compact round-trip"
+        );
+    }
+
+    #[test]
+    fn compact_map_transform_round_trip() {
+        let compact = to_compact(MAP_TRANSFORM);
+        let ast2 = Parser::parse(&compact).expect("compact form must re-parse");
+        assert_eq!(
+            ast2.header.as_ref().unwrap().name,
+            "map_transform",
+            "map_transform name must survive compact round-trip"
         );
     }
 
@@ -408,6 +433,21 @@ mod execution {
             result.status,
             Status::Ok,
             "macro_expand must return Status::Ok"
+        );
+    }
+
+    #[test]
+    fn map_transform_executes_ok() {
+        // No input: $in.items is unset, so ~MAP iterates zero elements — this
+        // proves the workflow clears the validator gate and runs to
+        // completion, matching for_loop/parallel_join's no-input convention.
+        let result = workflows::run(MAP_TRANSFORM, "map_transform.nodus", None)
+            .expect("map_transform must execute without block-class errors");
+        assert_eq!(
+            result.status,
+            Status::Ok,
+            "map_transform must return Status::Ok; errors: {:?}",
+            result.errors
         );
     }
 

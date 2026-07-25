@@ -6,7 +6,7 @@
 //! step. The not-taken case proves neither flag fires spuriously.
 
 use nodus::{
-    executor::{DialogOutcome, DialogProvider, Status},
+    executor::{DialogOutcome, DialogProvider, Status, Value},
     workflows,
 };
 
@@ -210,6 +210,64 @@ fn retry_reruns_failing_step_up_to_bound() {
         result.log.iter().any(|e| e.command == "LOG"),
         "the step after an exhausted retry still runs; log: {:?}",
         result.log
+    );
+}
+
+// ~MAP — transforms a collection element-by-element via the implicit `$it`
+// binding. Validated end-to-end through workflows::run: until l2-nodus-control-flow's
+// E004 conformance fix, every ~MAP workflow was rejected before it ran.
+const MAP_WF: &str = r#"§wf:map_transform v1.0
+§runtime: { core: schema.nodus }
+@in: { items: list }
+@out: $out
+@err: ESCALATE(human)
+@steps:
+  1. ~MAP $in.items: GEN($it) → $out
+"#;
+
+#[test]
+fn map_transforms_each_element_producing_an_n_element_list() {
+    let input = Value::Map(vec![(
+        "items".to_string(),
+        Value::List(vec![
+            Value::Text("a".to_string()),
+            Value::Text("b".to_string()),
+            Value::Text("c".to_string()),
+        ]),
+    )]);
+    let result = workflows::run(MAP_WF, "map_transform.nodus", Some(input)).expect("run");
+    assert_eq!(result.status, Status::Ok, "errors: {:?}", result.errors);
+    match result.out {
+        Value::List(items) => assert_eq!(
+            items.len(),
+            3,
+            "a 3-element collection must transform to a 3-element list; got: {items:?}"
+        ),
+        other => panic!("expected $out to be a Value::List; got: {other:?}"),
+    }
+}
+
+#[test]
+fn map_over_empty_collection_yields_empty_list_no_error() {
+    let input = Value::Map(vec![("items".to_string(), Value::List(vec![]))]);
+    let result = workflows::run(MAP_WF, "map_transform.nodus", Some(input)).expect("run");
+    assert_eq!(result.status, Status::Ok, "errors: {:?}", result.errors);
+    assert_eq!(
+        result.out,
+        Value::List(vec![]),
+        "an empty collection must yield an empty list, never an error"
+    );
+}
+
+#[test]
+fn map_over_non_list_collection_yields_empty_list_no_error() {
+    let input = Value::Map(vec![("items".to_string(), Value::Int(5))]);
+    let result = workflows::run(MAP_WF, "map_transform.nodus", Some(input)).expect("run");
+    assert_eq!(result.status, Status::Ok, "errors: {:?}", result.errors);
+    assert_eq!(
+        result.out,
+        Value::List(vec![]),
+        "a non-list collection must yield an empty list, never an error"
     );
 }
 

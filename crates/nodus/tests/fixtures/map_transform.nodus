@@ -1,0 +1,13 @@
+§wf:map_transform v1.0
+;; Normative fixture: ~MAP collection transform over an input list, using
+;; the implicit $it per-element binding.
+
+§runtime: { core: schema.nodus }
+
+@in: { items: list }
+@out: $out
+@err: ESCALATE(human)
+
+@steps:
+  1. ~MAP $in.items: GEN($it) → $out
+  2. LOG($out)
