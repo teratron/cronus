@@ -190,3 +190,4 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Updated specification `office-visualization` (main)
 - Added specification `conversation-rewind` (main)
 - Completed task (nodus)
+- Updated specification `deliberation` (main)
