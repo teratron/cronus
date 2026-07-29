@@ -1,6 +1,6 @@
 # Loop Governance
 
-**Version:** 1.0.0
+**Version:** 1.1.0
 **Status:** Stable
 **Layer:** concept
 
@@ -47,6 +47,8 @@ defers to the concrete specs for everything they already own.
 - [l2-loop-runner.md](l2-loop-runner.md) — the Layer-2 realization of this concept in the engine crates.
 - [l1-context-compression.md](l1-context-compression.md) — CC-9 protected regions and CC-10 memory-safe lossy reduction are the context-side mechanisms LG-10 composes so a continuous-session loop's objective survives compaction.
 - [l1-development-workflow.md](l1-development-workflow.md) — DW-5 (after a compaction event the durable ledger, not agent memory, is authoritative) is the progress-authority LG-10 generalizes from the dev workflow to any standing-goal loop.
+- [l1-nodus-language.md](../../nodus/specifications/l1-nodus-language.md) - [ADDED v1.1.0] the workflow-runtime realization of the scope-restart loop (LG-11): a bounded, counted whole-run self-restart directive requestable only from the run-boundary stages, never a per-item step (NL-23).
+- [l2-config-hotreload.md](l2-config-hotreload.md) - [ADDED v1.1.0] a scope-restart re-reads inputs/config, the safe alternative to mutating a running loop's own configuration mid-iteration (LG-11).
 
 ## 1. Motivation
 
@@ -175,6 +177,29 @@ Layer 2 realizations and any conforming loop MUST honour these.
   lossy reduction runs (`l1-context-compression` CC-10). This is the persistent-session
   counterpart to LG-5's fresh-context-per-iteration: it makes an indefinitely-running
   standing-goal loop safe under continuous compaction.
+
+- **LG-11 Scope-restart authority is the scope's own boundary.** [ADDED v1.1.0] A loop
+  whose *body is a whole scope re-run from the top* — the entire workflow/run restarted
+  from its first stage, re-reading its own inputs and configuration, rather than a step
+  re-attempted with carried state — is a legitimate loop class (self-correction: re-run
+  everything after the final stage learned something; self-reconfiguration: reload changed
+  config/definition and start over). It is governed like any loop — a declared class (LG-1),
+  a hard restart ceiling **counted and visible** (LG-6, the restart count is the bound, not
+  an unbounded self-restart), externalized state so each restart **reconstructs** from durable
+  artifacts rather than inheriting the prior run's context (LG-5), and an append-only restart
+  ledger (LG-8). The addition LG governs here is **who may request it**: the authority to
+  restart a scope belongs **only to that scope's own boundary** (its run-level open/close),
+  **never to a nested context inside it** — a per-item, per-branch, or child stage MUST NOT
+  restart the enclosing whole-scope run. The reason is not policy but coherence: a restart
+  requested from inside one item's context is undefined about *which* context resumes and
+  *what* of the in-flight siblings survives, so the request is refused at the nested site and
+  legal only at the boundary that owns the whole scope. A restart re-reads inputs/config
+  (composing `l2-config-hotreload`) so it is the safe alternative to mutating a running loop's
+  own configuration mid-iteration, which LG-3 forbids. A restart restores neither state nor the prior run's
+  **already-committed effects**: re-running effectful steps from the top would re-commit them (send the email twice,
+  charge again), so a scope-restart loop is safe only where its effectful steps are **idempotent or compensated** —
+  the prior run's committed effects are harmless to repeat or reconciled through effect-compensation before the
+  restart, never silently double-committed. A restart is a re-run, not an undo; undo is a separate concern.
 
 ## 4. Detailed Design
 
@@ -429,5 +454,6 @@ already largely exists; the gaps are small):
 | Version | Date | Author | Notes |
 | --- | --- | --- | --- |
 | 1.0.0 | 2026-07-17 | Core Team | Promoted RFC→Stable via `/magic.spec` adversarial review (spec-critic + prompt-engineer PASS) — the governance-claim verification the 0.1.0/0.2.0 history named as the gate to Stable. No content change: LG-1…LG-10, the two loop classes with composition, the five-tier mutation-rights ladder with the criteria-immutability spine (LG-3), the separated-oracle contract, the independent ceiling, the escalation gate, and the objective-persistence guarantee were reviewed as-is and found technology-neutral, complete, and internally coherent. The keystone is now buildable via its L2 realization `l2-loop-runner` (promoted Draft→Stable in the same pass, LG-10 compliance row added, crate placement reconciled to the post-decomposition topology). |
+| 1.1.0 | 2026-07-26 | Core Team | Added LG-11 (scope-restart authority is the scope's own boundary) — a loop whose *body is a whole scope re-run from the top* (the entire workflow restarted from its first stage, re-reading its own inputs and configuration, rather than a step re-attempted with carried state) is a legitimate class for self-correction and self-reconfiguration, governed like any loop: declared class (LG-1), a hard **counted, visible** restart ceiling so it is bounded not unbounded self-restart (LG-6), externalized state so each restart reconstructs from durable artifacts rather than inheriting the prior run context (LG-5), and an append-only restart ledger (LG-8). The addition LG governs is **who may request it**: the authority to restart a scope belongs only to that scope's own boundary (its run-level open/close), never to a nested context inside it — a per-item/per-branch/child stage MUST NOT restart the enclosing whole-scope run, because a restart requested from inside one item's context is undefined about which context resumes and what of the in-flight siblings survives, so it is refused at the nested site and legal only at the boundary that owns the scope. A restart re-reads inputs/config (composing l2-config-hotreload), the safe alternative to the mid-iteration self-config-mutation LG-3 forbids. Nodus realization = NL-23. |
 | 0.2.0 | 2026-07-02 | Core Team | Added LG-10 (objective persistence across in-session reduction) + §4.4 two-realizations table + nodus-relevance row: LG-5 opens a fresh context per iteration; LG-10 is the persistent-session counterpart — a continuous-session loop that compacts in place MUST re-project the standing objective + progress into every turn from the durable slot so mid-session compaction/eviction can never drop the north-star (compaction-immune presence via CC-9 protected + re-projected-if-evicted), and the objective must be idempotent/resumable so a post-reduction turn resumes rather than restarts/redoes (durable progress captured before the lossy reduction, CC-10; the ledger outranks the compacted transcript after, DW-5). Satisfied by construction in nodus (no in-place compaction; `@ctx`/EG-11 immutable invocation context always present) — no nodus-side invariant. Stays RFC (additive; Stable gate unchanged). |
 | 0.1.0 | 2026-06-25 | Core Team | Initial RFC — LG-1…LG-9; two loop classes (execution/evolution) with composition rule; five-tier mutation-rights ladder with criteria-immutability spine; oracle-ownership contract (deterministic/independent/human, lineage-separation reduced-confidence) generalizing DH-11 to termination authority; state externalization; mutation manifest over a closed artifact taxonomy + append-only ledger; tier-escalation promotion gate; six-question loop design checklist; ideas-to-adopt + nodus-relevance mappings. Adversarial verification of the governance claims is the gate to Stable (mirrors the dynamic-harness sibling). |
