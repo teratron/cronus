@@ -1,6 +1,6 @@
 # Configuration Hot-Reload
 
-**Version:** 1.0.0
+**Version:** 1.0.2
 **Status:** Stable
 **Layer:** implementation
 **Implements:** l1-doctor.md, l1-architecture.md
@@ -37,6 +37,16 @@ A long-running agent daemon accumulates state across sessions. Restarting it eve
 | DOC-2 Auto-repair | Hot-reload is the low-blast-radius repair path for config drift; full restart is the escalation. |
 | DOC-4 Logged | Every reload plan (hot or restart) is logged with changed paths and chosen actions. |
 | SEC-5 No secret egress | Changed config paths are never logged in full; only the key-path suffix is emitted, never the value. |
+| INV-1 Embeddable core | Inherited, not realized here: this is a module inside the embeddable core, not the library boundary itself; it adds no frontend or platform dependency that would compromise embeddability. |
+| INV-2 Logic in core only | This subsystem IS core logic and lives in the core; reconfiguration behavior is exposed only through the core, never pushed into a frontend. |
+| INV-3 Frontend interchangeability / command parity | N/A: reload is an internal doctor operation, not a user-facing capability with a per-frontend surface. Were it ever surfaced manually, parity would be the frontend's concern, not this module's. |
+| INV-4 Hub-and-spoke autonomy | N/A directly: reload runs wherever the engine runs, reconfiguring the always-on process on a hub and the foreground one on a spoke with identical logic. |
+| INV-5 Durable, restartable state | N/A: reload re-reads configuration into a running process; configuration persistence and restart-recovery are owned by the storage/state layer, not by the reload planner. |
+| INV-6 Graceful capability scaling | N/A: reload changes configuration, not the exposed capability set; a host's capability subset is decided by the core contract. |
+| INV-7 Security of client data | Addressed by the SEC-5 row above: changed config paths are logged by key-path suffix only, never values, so reload never leaks a secret — the `l1-security` realization of INV-7's no-secret-egress rule for this subsystem. |
+| INV-8 Single-deployable modular monolith | Reload and its restart escalation act on the single deployable: the "restart" path bounces the one core daemon process, not an orchestrated set of services — there is no service to roll independently. Config reload is an in-process reconfiguration of the modular monolith. |
+| INV-9 Shipped-surface honesty | N/A: this module publishes no frontend verb; surface honesty is a frontend-spec concern. |
+| INV-10 Representation isolation at the inward seam | Mostly N/A: the `ConfigReloadPlan` is a domain-side value; reading the config source is the adapter's job and its file/format representation stays on that side. This module names no storage or wire representation. |
 
 ## 4. Detailed Design
 

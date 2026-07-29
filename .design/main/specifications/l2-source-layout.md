@@ -1,6 +1,6 @@
 # Source Layout (Monorepo)
 
-**Version:** 1.2.0
+**Version:** 1.2.2
 **Status:** Stable
 **Layer:** implementation
 **Implements:** l1-architecture.md
@@ -37,6 +37,12 @@ The architecture separates a reusable core from thin frontends; the source tree 
 | INV-2 Logic in core only | UI (`packages/ui`) and shells (`apps/`, `crates/cli`, `crates/tui`) hold no domain logic. |
 | INV-3 Frontend interchangeability | CLI, TUI, and the app are separate members over the same `core`. |
 | INV-4 Hub-and-spoke | `apps/desktop` can host the always-on engine; the same shell builds the mobile thin client. |
+| INV-5 Durable, restartable state | Not a source-tree property: durable runtime state lives in the user/install layout (`l2-filesystem-layout`), written by the persistence adapter, not in the developer tree. This layout's only bearing is giving that adapter crate its own home; it neither enables nor constrains restart behavior. |
+| INV-6 Graceful capability scaling | A runtime-contract property, not a layout one, with a mild structural aid: placing each frontend as its own workspace member lets a host build only the subset it needs (e.g. the TUI without the desktop shell). Which capabilities a running frontend then exposes is decided by the core contract, not by directory structure. |
+| INV-7 Security of client data | Enforced at runtime in the core/adapters, not by layout; the tree's related discipline is repo hygiene — secret-bearing files (`.env`, key material) stay out of the tracked tree via `.gitignore`. The invariant itself is realized in `l2-security` and the adapter crates. |
+| INV-8 Single-deployable modular monolith | The workspace layout structurally realizes the modular monolith: `crates/` is one Cargo workspace whose members link into a single deployable, not independently-deployed services; the tree carries no per-service manifest, deployment descriptor, or orchestration file. The crate boundaries this layout draws are compile-time seams (detailed in `l2-crate-topology`), never process boundaries. |
+| INV-9 Shipped-surface honesty | N/A to a directory layout: which verbs a frontend advertises is a runtime surface property realized in the frontend specs (`l2-cli`/`l2-tui`/`l2-app-ui`). The tree neither lists nor hides a verb. |
+| INV-10 Representation isolation at the inward seam | The invariant is a code property of the crates, not the tree — but the layout is its precondition: keeping adapter crates (`crates/store-local`, …) separate from the domain crate is what lets representation isolation be compiler-enforced (`l2-crate-topology` INV-10). The mapping discipline itself lives in those crates. |
 
 ## 4. Detailed Design
 
@@ -110,3 +116,5 @@ Measurement showed domain-to-domain coupling is already near zero, so splitting 
 | --- | --- | --- |
 | 1.2.0 | 2026-07-10 | Resolved the §4.4 crate-granularity TBD by delegating to the new `l2-crate-topology.md`: decomposition follows the dependency/seam axis, not the domain axis. Added §4.5 recording the decision and marking §4.1/§4.2 as pre-migration state. Status → RFC pending review of the topology spec (amendment rule). History table added with this entry. |
 | 1.2.0 | 2026-07-10 | `RFC → Stable`. The amendment rule's pending-review condition is satisfied: `l2-crate-topology` passed Post-Update Review and reached Stable in the same pass, so the delegated §4.5 decision is now backed by a Stable target. No content change; status advance only. |
+| 1.2.1 | 2026-07-29 | Completeness fix: added an INV-8 row to the §3 table — the `crates/` workspace layout structurally realizes the modular monolith (one deployable, no per-service manifest/orchestration file; crate boundaries are compile-time seams per `l2-crate-topology`). INV-8 entered `l1-architecture` after this table (INV-1…INV-4) was written. INV-9 (surface honesty) and INV-10 (inward-seam representation isolation) are behavioral/data invariants realized by the frontends and the core, not properties of a directory layout, and are noted as such in the INV-8 row rather than added as thin rows — consistent with the table's existing scope to the structural invariants the layout embodies. No new requirement; stays Stable. |
+| 1.2.2 | 2026-07-29 | Completeness fix (strict gate): filled the §3 Invariant-Compliance table to a full INV-1…INV-10 against `l1-architecture`. Added honest, layout-specific rows for INV-5/INV-6/INV-7 (behavioral/runtime invariants realized in the user/install layout, the core contract, and the adapters — the tree's only bearings being crate-housing, build-subset workspace members, and `.gitignore` secret hygiene) and INV-9/INV-10 (surface honesty is a frontend property; representation isolation is a code property of the crates, though this layout is its precondition by keeping adapter crates separate from the domain crate). Trimmed the redundant 9/10 note from the INV-8 row now that both have explicit rows. No new requirement or design; stays Stable. |

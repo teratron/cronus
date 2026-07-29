@@ -1,6 +1,6 @@
 # Core Library (Foundation)
 
-**Version:** 1.2.0
+**Version:** 1.2.1
 **Status:** Stable
 **Layer:** implementation
 **Implements:** l1-architecture.md
@@ -39,6 +39,9 @@ A reusable foundation lets every surface share one behavior and lets the engine 
 | INV-5 Durable, restartable state | Persistence module writes durable state (SQLite file); engine reconstructs sessions/memory/tasks on restart. |
 | INV-6 Graceful capability scaling | The contract is capability-flagged; a host enables the subset it can support. |
 | INV-7 Security of client data | Secret handling and telemetry separation are enforced in the core, not delegated to frontends. |
+| INV-8 Single-deployable modular monolith | The core library IS the modular monolith: all domain modules link into one deployable unit and communicate by in-process function calls, never network calls; no orchestration platform is required. Its only sanctioned outward boundary is the frontend↔core contract, and its only sanctioned in-process security boundary is the sandbox for untrusted code. `l2-crate-topology` partitions this library into compiler-enforced crates without introducing any process boundary. |
+| INV-9 Shipped-surface honesty | INV-9 is enforced on the frontends; the core's bearing is to be the honest referent they bind against. Each capability is exposed through the core's stable contract (INV-2), and a capability the core has not shipped is simply absent from that contract — so a frontend has nothing to bind an unshipped verb to and is never forced into a "not implemented" stub. The core never publishes a half-capability. |
+| INV-10 Representation isolation at the inward seam | The core owns the seam INV-10 governs: its domain tier depends only on contract types, while adapter representations (a persistence row, a wire DTO, a keychain record) stay private to the adapter and are mapped at the trait seam. Realized concretely in `l2-crate-topology` (`cronus-domain` → `cronus-contract`; `cronus-store-local` maps its `rusqlite` row to/from `MemoryEntry`). The core compiles and unit-tests against in-memory providers precisely because no adapter shape reaches the domain. |
 
 ## 4. Detailed Design
 
@@ -315,3 +318,4 @@ transformation.
 | Version | Date | Notes |
 | --- | --- | --- |
 | 1.2.0 | 2026-07-04 | Manager initialization as dependency waves (§4.5): independent managers initialize concurrently, cold start bounded by the longest dependency path; idle watchers consolidated into one multiplexed timer task. History table added with this entry. |
+| 1.2.1 | 2026-07-29 | Completeness fix: extended the §3 Invariant-Compliance table to INV-8/INV-9/INV-10, which entered `l1-architecture` after this table (INV-1…INV-7) was written, restoring the L1 "all invariants addressed" gate. INV-8 — the core library IS the modular monolith (in-process modules, one deployable), partitioned by `l2-crate-topology` without a process boundary. INV-9 — the core is the honest referent frontends bind to (no half-capabilities). INV-10 — the core owns the inward domain↔adapter seam (domain depends on contract types; adapter representations mapped at the seam). No new design or requirement; stays Stable. |

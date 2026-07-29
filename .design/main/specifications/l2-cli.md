@@ -1,6 +1,6 @@
 # CLI Frontend
 
-**Version:** 1.0.0
+**Version:** 1.0.1
 **Status:** Stable
 **Layer:** implementation
 **Implements:** l1-architecture.md
@@ -38,6 +38,9 @@ CLI is the contract for scripts, CI, and power users. It must be scriptable (non
 | INV-5 Durable, restartable state | CLI is stateless; all state lives in the core's durable store. |
 | INV-6 Graceful capability scaling | Commands unavailable in the current host/mode report a clear, non-divergent "unsupported here" result. |
 | INV-7 Security of client data | CLI never prints secrets; reads credentials from env/keychain via the core. |
+| INV-8 Single-deployable modular monolith | The CLI is one of INV-8's sanctioned boundaries (frontend↔core): it links the core in-process, or attaches to a hub over the sanctioned client connection — never a network service in an orchestrated set. `cronus <group> <verb>` invocations are in-process contract calls; the CLI adds no service tier and needs no orchestration platform to run. |
+| INV-9 Shipped-surface honesty | The `cronus` command set, its help, and its completion list a verb only when it is bound to a shipped core capability; a capability the core has not yet exposed is absent from the surface, never a verb that parses and then answers "not implemented". The §4.1 parity table is the truthful projection of the core contract at each release, not an aspirational menu. |
+| INV-10 Representation isolation at the inward seam | INV-10 governs the inward domain↔adapter seam, inside the core; the CLI sits on the outward side (INV-2) and stays clean by consuming only the core's contract types — it opens no store, keychain, or socket and names no `rusqlite` row or wire DTO. The `l2-crate-topology` §6.4 finding (a CLI reaching a leaked `rusqlite::Connection`) is precisely the inward leak this frontend must not carry; once `codegraph` hides its storage engine the CLI binds contract types alone. |
 
 ## 4. Detailed Design
 

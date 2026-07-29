@@ -1,6 +1,6 @@
 # Application UI/UX Frontend (Desktop / Web / Mobile)
 
-**Version:** 1.3.0
+**Version:** 1.3.1
 **Status:** Stable
 **Layer:** implementation
 **Implements:** l1-architecture.md
@@ -41,6 +41,9 @@ Non-technical clients ("the client who brings ideas") need a graphical, low-fric
 | INV-5 Durable, restartable state | UI is stateless beyond view; core persists state; app rehydrates on launch/reconnect. |
 | INV-6 Graceful capability scaling | Mobile exposes a capability subset (foreground + sync); behavior stays consistent with the core. |
 | INV-7 Security of client data | Secrets handled by the core via OS keychain; UI never persists credentials; only anonymized telemetry leaves the device. |
+| INV-8 Single-deployable modular monolith | The graphical app is the frontend over the frontend↔core boundary: the desktop build embeds one in-process core (the Tauri backend); the mobile build is a client of a hub. Neither decomposes the engine into services — IPC to the embedded core is the sanctioned boundary (INV-3), not an inter-service network call, and no orchestration platform is required. |
+| INV-9 Shipped-surface honesty | A button, menu item, or action is rendered only when bound to a shipped core capability; a not-yet-shipped capability yields no dead control — it is hidden or explicitly marked unavailable, never a control that fails with "not implemented". This is INV-9 for a graphical surface, and it aligns with the no-faked-agency rule (`l1-directability` DIR-9). |
+| INV-10 Representation isolation at the inward seam | INV-10's inward seam is inside the core; React sits outward and renders core contract types received over IPC (INV-2), never an adapter's representation (a store row, a keychain record). The IPC payload is the contract type, mapped at the core boundary — the UI cannot leak an adapter shape inward because it never holds one. |
 
 ## 4. Detailed Design
 
