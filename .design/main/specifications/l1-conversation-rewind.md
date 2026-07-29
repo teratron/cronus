@@ -1,6 +1,6 @@
 # Conversation Rewind
 
-**Version:** 1.0.0
+**Version:** 1.1.0
 **Status:** Stable
 **Layer:** concept
 
@@ -23,6 +23,7 @@ Rewind is the user's direct control over conversation history — a steering act
 - [l1-work-liveness.md](l1-work-liveness.md) / [l1-work-convergence.md](l1-work-convergence.md) - Rewound-away board cards are reconciled through the liveness sweep (WL-5) onto the one board (CONV-1), never silently deleted (RW-4).
 - [l1-version-control.md](l1-version-control.md) / [l1-change-merge.md](l1-change-merge.md) - The branch/fork discipline rewind mirrors for history, and the delta-reversal path for file-level side effects.
 - [l1-office-model.md](l1-office-model.md) - Office-per-project isolation (OFF-1) bounds what a rewind may restore or reach (RW-8).
+- [l1-compensation.md](l1-compensation.md) - [ADDED v1.1.0] the remediation path RW-5 lacked: a surfaced irreversible effect with a declared compensating action MAY be undone by its business inverse (CO-2), run reverse-order over a failed scope; where compensation is unavailable or fails, RW-5 honest surfacing still holds (CO-10).
 
 ## 1. Motivation
 
@@ -55,7 +56,7 @@ Rules every Layer 2 implementation MUST NOT violate:
 
 - **RW-4 (Reversible state restored to the target, atomically-or-reported):** on rewind, the office's derived, reversible state attributable to the rewound-away turns — conversation context, board cards, plans, memory writes — is restored to its condition as of the target checkpoint (composing CR-6 reconciliation, OC-2 exact-state resume). Rewound board work is reconciled through the liveness sweep (WL-5) onto the one board (CONV-1), never silently deleted. Restoration either reaches the checkpoint state or **names precisely what it could not restore** — a partial restore is reported, never disguised as complete.
 
-- **RW-5 (Irreversible effects surfaced, never pretended-away):** side effects the rewound-away turns performed that are **externally observable or irreversible** — a sent message/email, an external record created through a connector, a pushed commit, any effect already past the office's undo boundary — CANNOT be un-happened by a rewind and MUST be **surfaced to the user as part of the rewind** (named, so the user knows what already escaped), never silently orphaned and never falsely rolled back. A rewind reconciles what it can and reports what it cannot; presenting an irreversible rewind as clean is forbidden (composing CR-7 honesty, DIR-9 honest-control, the effect-sink boundary).
+- **RW-5 (Irreversible effects surfaced, never pretended-away):** side effects the rewound-away turns performed that are **externally observable or irreversible** — a sent message/email, an external record created through a connector, a pushed commit, any effect already past the office's undo boundary — CANNOT be un-happened by a rewind and MUST be **surfaced to the user as part of the rewind** (named, so the user knows what already escaped), never silently orphaned and never falsely rolled back. A rewind reconciles what it can and reports what it cannot; presenting an irreversible rewind as clean is forbidden (composing CR-7 honesty, DIR-9 honest-control, the effect-sink boundary). [AMENDED v1.1.0] Surfacing is the honest **floor**, not the ceiling: where a surfaced irreversible effect has a **declared compensating action** (`l1-compensation` CO-2), the rewind MAY **offer to compensate** it — executing the business inverse to cancel the escaped effect's meaning — rather than only naming it and orphaning it. Compensation is the remediation path this invariant otherwise lacks; where it is unavailable (no declared inverse) or fails, RW-5's honest surfacing still holds, and a scope with an un-compensated live effect is never reported as cleanly rewound (CO-10).
 
 - **RW-6 (Safe quiesce before restore):** if the office is actively working when a rewind is requested, it completes or safely checkpoints the current atomic step before restoring — a rewind MUST NOT tear an in-progress step (composing OC-1). In-flight work belonging to the rewound-away turns is drained and reconciled (CR-6/WL-5), not killed mid-step.
 
@@ -154,4 +155,5 @@ Primarily a main-workspace host mechanic. The runtime participates where a rewou
 
 | Version | Date | Author | Notes |
 | --- | --- | --- | --- |
+| 1.1.0 | 2026-07-26 | Core Team | Amended RW-5 — surfacing the irreversible is the honest **floor**, not the ceiling: where a surfaced effect has a **declared compensating action** (l1-compensation CO-2), the rewind MAY **offer to compensate** it (execute the business inverse) rather than only naming and orphaning it; where compensation is unavailable or fails, RW-5 honest surfacing still holds and a scope with an un-compensated live effect is never reported cleanly rewound (CO-10). Compensation is the remediation path this invariant otherwise lacked. Related Specifications extended with l1-compensation. |
 | 1.0.0 | 2026-07-24 | Core Team | Initial spec — conversation rewind: message-anchored rewind points (RW-1); reuse a message verbatim or edited, restoring state not replaying an outcome (RW-2); fork-not-destroy so rewind is itself reversible (RW-3); reversible derived state restored atomically-or-reported and board work reconciled via the liveness sweep (RW-4); irreversible/external side effects surfaced honestly, never pretended-away (RW-5); safe-quiesce before restore (RW-6); legible/attributed/auditable (RW-7); office-isolation and access-scope bounded (RW-8); user-initiated, optional, never an autonomous behavior (RW-9). Reuses the crash-recovery restore/reconcile/honesty machinery under a user-selected, message-anchored trigger; composes directability (steer + honest control), office-control (safe quiesce), work-liveness/convergence (board reconciliation), and version-control (fork discipline). Main-only host mechanic. |

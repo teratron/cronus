@@ -1,6 +1,6 @@
 # Implementation Plan
 
-**Version:** 2.45.0
+**Version:** 2.46.0
 **Generated:** 2026-07-22
 **Based on:** .design/main/INDEX.md v1.0.124
 **Status:** Active
@@ -240,6 +240,10 @@ Execution mode: **Parallel** (C3); tracks grouped by file independence. Critical
 - [x] **Confidentiality Flow Control** ([l1-confidentiality-flow.md](specifications/l1-confidentiality-flow.md)) [L1] — `concept-only` — the outbound half of information-flow control (how sensitive, where may it flow?), the orthogonal dual of the provenance/taint integrity axis (how trustworthy?); injection defense is inbound, this is exfiltration defense outbound. Two axes never collapsed since a trusted-and-secret credential and an untrusted-and-public injection cannot share one label (CF-1); an ordered lattice defaulting to most-restrictive (CF-2); **sticky most-confidential-wins propagation** so a paraphrase of a secret does not launder it (CF-3); **every outbound sink declares a capacity, over-capacity flow blocked**, generalizing the one SEC-3 egress gate to every sink (CF-4); **both axes required** since the dominant attack chains untrusted-in to secret-out (CF-5); confidential content carried as an opaque reference (CF-6); declassification explicit/authorized/recorded (CF-7); enforced by mechanism at the sink not by instructing the model (CF-8); inspectable/auditable (CF-9); local-first, label never leaks the value (CF-10). Nodus realization = NL-21
 
 *Concept absorbed in v2.45.0 (registry sync INDEX v1.0.143 → v1.0.144). Stable, `concept-only` (C28) — no authored `Implements:` L2 yet. Sits in the deferred-to band by strength of dependency: it completes a two-axis security model whose integrity half (context-provenance, provenance-taint, nodus NL-11/NL-17) is already Stable and partly implemented, and its own nodus half (NL-21) is authored — so its L2 lands alongside the provenance/injection-defense implementation rather than as independent work. The deferred-to implementation wave (reproduction-recipe, fault-lifecycle, staged-rollout, environment-lifecycle) is unchanged.*
+
+- [x] **Effect Compensation** ([l1-compensation.md](specifications/l1-compensation.md)) [L1] — `concept-only` — the third answer to a committed-then-failed effect, the middle rung between state rollback (crash-recovery, reversible internal state) and honest surfacing (rewind RW-5, irreversible and orphaned): **semantic undo by a declared forward inverse, never a state rollback** (CO-1); a per-step compensating action that is a first-class fallible effect, a step without one honestly un-compensable (CO-2); only completed effects compensated (CO-3); **reverse completion order (LIFO) as a correctness requirement** (CO-4); scoped to a declared compensation boundary (CO-5); triggered by failure/cancel/request, never automatic on success (CO-6); bounded with its own failure surfaced, never swallowed (CO-7); idempotent and resumable (CO-8); recorded and auditable, ledger showing effect + compensation (CO-9); honest net-effect statement so a partially-compensated scope is never presented as cleanly undone (CO-10). Nodus realization = NL-22
+
+*Concept absorbed in v2.46.0 (registry sync INDEX v1.0.144 → v1.0.146). Stable, `concept-only` (C28) — no authored `Implements:` L2 yet. Sits in the deferred-to band by dependency strength: it completes the recovery/rewind stack (crash-recovery + conversation-rewind, both already Stable, rewind amended →1.1.0 to defer to it), and its nodus half (NL-22) is authored — so its L2 lands with the recovery/workflow-runtime implementation, not as independent work. The deferred-to implementation wave (reproduction-recipe, fault-lifecycle, staged-rollout, environment-lifecycle) is unchanged.*
 
 ## Phase 1 — Seed I: Foundation
 

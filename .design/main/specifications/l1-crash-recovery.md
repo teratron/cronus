@@ -1,6 +1,6 @@
 # Crash Recovery & State Snapshots
 
-**Version:** 1.0.0
+**Version:** 1.0.1
 **Status:** Stable
 **Layer:** concept
 
@@ -17,6 +17,7 @@ Neighboring contracts already promise the *outcome*: durable restartable state (
 - [l1-work-liveness.md](l1-work-liveness.md) - After state restore, in-flight work is reconciled through the reap/resume/reconcile sweep (WL-5) and the liveness contract (WL-3) — recovery delivers a working office, not just data.
 - [l1-orchestration.md](l1-orchestration.md) - ORC-10 resumable goal/plan state is among the artifacts a snapshot captures and recovery reloads.
 - [l1-security.md](l1-security.md) - Secret isolation (SEC-1, STO-6): snapshots exclude the secret store; recovery never rolls secrets back.
+- [l1-compensation.md](l1-compensation.md) - [ADDED v1.0.1] state rollback (this spec) is for reversible internal state; compensation is its complement for committed external effects, and a crash mid-compensation resumes it (CO-8 idempotence composes CR-9).
 - [l2-backup.md](l2-backup.md) - The archival sibling: user-initiated/scheduled, restore-anywhere disaster recovery; snapshots are automatic, local, rapid restore points — demarcated in §4.5.
 - [l2-session-checkpoint.md](l2-session-checkpoint.md) - The session-granularity sibling: resuming an LLM turn across context-window boundaries; a snapshot captures checkpoint files like any other durable state.
 
