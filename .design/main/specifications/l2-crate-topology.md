@@ -1,6 +1,6 @@
 # Crate Topology (Core Decomposition)
 
-**Version:** 1.0.1
+**Version:** 1.1.0
 **Status:** Stable
 **Layer:** implementation
 **Implements:** l1-architecture.md
@@ -64,6 +64,7 @@ This spec closes that gap. It is not a new architectural decision; it is the mis
 | INV-6 Graceful capability scaling | A host now scales capability by **which provider crates it links**, not only by which contract calls it makes. Reduced capability (in-memory providers, no keychain) is expressible; divergent behavior is not, because every provider implements the same seam trait. |
 | INV-7 Security of client data | Strengthened. Credential hashing, at-rest encryption, and keychain access are confined to two adapter crates with a named public surface, so the blast radius of a secret-handling defect is a crate, not the engine. The domain tier cannot log a secret it has no means to read. `redact` stays in the domain tier so every tier can sanitize output. |
 | INV-8 Single-deployable modular monolith | This spec is INV-8's enforcement mechanism, not an exception to it. "Strongly-bounded internal modules with strictly inward dependencies" is unverifiable while every module can `use crate::anything`; a crate graph is acyclic by construction and checked on every build. All crates link into one binary; cross-crate communication is a function call. No sanctioned process boundary is added, and none is implied (§4.7). |
+| INV-10 Representation isolation at the inward seam | Enforced by the crate graph. An adapter crate's storage/wire representation (a `rusqlite` row struct, an encryption record, a token blob) is **private to that adapter** — it is not re-exported from `cronus-contract` and `cronus-domain` cannot name it. Crossing the seam is a **mapping**: the adapter converts its shape to/from a contract type (`MemoryEntry`, the seam types of §4.5) at the trait boundary, so the SQLite schema, the on-disk record format, and any future remote-backend DTO evolve inside their crate without touching the domain. The domain compiles and unit-tests against the contract types alone, with an in-memory provider, exactly because no adapter representation reaches it — the data twin of the behavioral inversion §4.6 already performs on traits. |
 
 ## 4. Detailed Design
 
@@ -166,6 +167,8 @@ pub trait UserDataStore: MemorySearch + Send + Sync {
     fn export(&self) -> Result<Vec<MemoryEntry>>;   // DN-7: always able to come home
 }
 ```
+
+The seam trades in **contract types**, never an adapter's own representation (INV-10). `cronus-store-local` maps its `rusqlite` row struct to and from `MemoryEntry` inside the adapter; the row struct is private to the crate and never appears in `cronus-domain`. A remote provider maps its own DTO the same way. Both representations evolve independently of the domain, which is what lets the pure-`std` domain compile and unit-test with an in-memory provider and no backend at all.
 
 ### 4.6 The single inverted edge
 
@@ -280,4 +283,5 @@ Recorded here because each bears on the topology, and each is independently acti
 | --- | --- | --- |
 | 1.0.0 | 2026-07-10 | Initial spec. Resolves the `l2-source-layout.md` §4.4 crate-granularity TBD: decompose on the dependency/seam axis (contract · domain · store-local · auth-local · facade), not the domain axis. Establishes the crate-minting rule (§4.4), realizes the DN-2 provider seams as crate boundaries (§4.5), identifies the single inverted `context_router → MemoryStore` edge as the migration pivot (§4.6), and distinguishes a crate boundary from a process boundary under INV-8 (§4.7). Records five analysis findings (§6), incl. an INV-2 violation in the CLI and the absent DN-2 seams. |
 | 1.0.0 | 2026-07-10 | `RFC → Stable`. Post-Update Review passed (`@role:spec-critic` + `@role:prompt-engineer`). The sole open question — the §2 reading of the stack spec's "one crate → desktop + mobile" — was resolved against `l2-technology-stack` INV-1 (the constraint is on the embeddable unit, preserved by the facade; the workspace already ships five crates) with no conflict; the TBD marker was cleared and the confirming rationale recorded inline. No design change; status advance only. |
+| 1.1.0 | 2026-07-26 | Core Team | Addressed new L1 invariant INV-10 (representation isolation at the inward seam) — added its Invariant-Compliance row (§3) and a §4.5 note: an adapter crate's storage/wire representation is **private to it** (not re-exported from `cronus-contract`, unnameable by `cronus-domain`) and mapped to/from contract types at the trait seam, so the SQLite schema / on-disk record / future remote DTO evolve inside their crate without touching the domain — the data twin of the §4.6 behavioral trait inversion, and what lets the pure-`std` domain compile and unit-test with an in-memory provider. No structural change to the crate set; the graph already enforces it once the representation types stay adapter-private. |
 | 1.0.1 | 2026-07-17 | Registered `cronus-model-local` (`crates/model-local`) as a fourth **adapter** crate in the §4.2 crate set — the model-transport adapter shipped in the Model Transport build phase, implementing `contract::InferenceBackend` over a loopback HTTP endpoint plus egress-gated remote profiles. It was already minted by the existing §4.4(a) rule (needs network I/O) and already covered by the CI `domain → adapter` boundary guard; this patch records the existing crate in the table and notes it is **not** one of the three DN-2 provider planes. Also extended the `cronus-contract` row to list the later-added `InferenceBackend` and `WikiCache`/`WikiReadSurface` seam traits. Documentation reconciliation of shipped structure — no new requirement, no design change; stays Stable. |
