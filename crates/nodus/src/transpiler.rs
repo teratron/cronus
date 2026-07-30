@@ -258,9 +258,19 @@ impl Transpiler {
         for test in &ast.tests {
             lines.push(String::new());
             lines.push(format!("@test:{} {{", test.name));
-            let has_structured =
-                !test.input.is_empty() || !test.expected.is_empty() || !test.tags.is_empty();
-            if has_structured {
+            // §10.4(a): raw_lines is the lexed token stream (l2-nodus-testing.md
+            // §2) and is the emission source whenever present — it is the only
+            // representation that reproduces the body in the form it was
+            // written; the structured fields are a derived view and, being
+            // non-empty whenever raw_lines is, previously left this branch
+            // unreachable. Fall back to structured emission only for a
+            // TestBlock built programmatically with no raw_lines at all.
+            if !test.raw_lines.is_empty() {
+                lines.push(format!(
+                    "  {}",
+                    Self::nodus_braced_raw_body(&test.raw_lines)
+                ));
+            } else if !test.input.is_empty() || !test.expected.is_empty() || !test.tags.is_empty() {
                 if !test.input.is_empty() {
                     lines.push("  input:".to_string());
                     for (k, v) in &test.input {
@@ -276,11 +286,44 @@ impl Transpiler {
                 if !test.tags.is_empty() {
                     lines.push(format!("  tags: [{}]", test.tags.join(", ")));
                 }
-            } else if !test.raw_lines.is_empty() {
-                // Backward compat: emit raw token values joined as a single body line
-                lines.push(format!("  {}", test.raw_lines.join(" ")));
             }
             lines.push("}".to_string());
+        }
+
+        // @macro: blocks (NL-6 — previously never emitted at all). Shares
+        // MacroBlock's raw_lines shape and the same collect_braced_raw_lines
+        // parser helper as @test:, so it reuses the same renderer rather than
+        // forking a second one. The normative corpus's own macro_expand.nodus
+        // uses the non-braced `@macro: name` form (no body captured today —
+        // macro body expansion is a deferred feature, see PLAN.md Backlog),
+        // which collect_braced_raw_lines represents identically to an empty
+        // braced body, so raw_lines is empty and no body line is emitted.
+        for macro_block in &ast.macros {
+            lines.push(String::new());
+            if macro_block.raw_lines.is_empty() {
+                lines.push(format!("@macro:{}", macro_block.name));
+            } else {
+                lines.push(format!("@macro:{} {{", macro_block.name));
+                lines.push(format!(
+                    "  {}",
+                    Self::nodus_braced_raw_body(&macro_block.raw_lines)
+                ));
+                lines.push("}".to_string());
+            }
+        }
+
+        // `;; HUMAN MODE` block (NL-6 — previously never emitted at all).
+        // Emitted LAST and deliberately: the parser routes a comment
+        // containing "HUMAN MODE" into collect_comment_block(), which
+        // greedily consumes every following Comment token — any
+        // free-standing comment emitted after this point would be silently
+        // absorbed into human_mode on re-parse, corrupting both it and
+        // `comments` (§ above). collect_comment_block joins raw token values
+        // with "\n" and the lines already carry their own ";;" prefix, so
+        // this is emitted verbatim.
+        if let Some(human_mode) = &ast.human_mode {
+            lines.push(String::new());
+            lines.push(human_mode.clone());
         }
 
         lines.join("\n")
@@ -645,6 +688,37 @@ impl Transpiler {
     /// Detect the exact shape `parse_assignment_or_expr` produces and emit
     /// the shorthand back instead; anything else falls through to the
     /// ordinary command-call rendering.
+    /// Render a `raw_lines` token stream (shared by `@test:` and `@macro:`
+    /// bodies — `collect_braced_raw_lines` backs both) back to source text.
+    /// §10.4(a)/(b): `raw_lines` is a `Vec<String>` of already-lexed token
+    /// *values*, with no type information, so this cannot distinguish a
+    /// separator from a value that happens to look like one — it can only
+    /// name the two token values (`{`, `}`) that must stay unquoted.
+    ///
+    /// `{`/`}` must remain literal `LBrace`/`RBrace` tokens: the depth
+    /// counter in `collect_braced_raw_lines` matches on token *type*, not
+    /// value, so quoting one would desynchronize where the reparse thinks
+    /// the block ends. Every other element — including `:`, `,`, `[`, `]`,
+    /// and the `input`/`expected`/`tags` section keywords — is matched by
+    /// `parse_test_body` purely on string *value* (`tok.as_str() == ":"`,
+    /// never a token-type check), so quoting them changes nothing there;
+    /// quoting is what makes a value containing whitespace or a
+    /// token-splitting character (`"When is my invoice due?"`, `"T-001"`)
+    /// re-lex to the single token it came from instead of splitting.
+    fn nodus_braced_raw_body(raw_lines: &[String]) -> String {
+        raw_lines
+            .iter()
+            .map(|tok| {
+                if tok == "{" || tok == "}" {
+                    tok.clone()
+                } else {
+                    format!("\"{tok}\"")
+                }
+            })
+            .collect::<Vec<_>>()
+            .join(" ")
+    }
+
     fn nodus_command_or_assignment(cmd: &CommandCall) -> String {
         let is_assignment_shorthand = cmd.name == "ASSIGN"
             && cmd.args.len() == 2
@@ -1214,5 +1288,94 @@ level : str
         steps_round_trip(
             "§wf:t v1\n@in: { items: list, category?=urgent }\n@steps:\n  1. ~FOR $item IN $in.items\n       ?SWITCH $in.category:\n         urgent → GEN($item) → $r\n       ~END\n     ~END\n",
         );
+    }
+
+    // ─── T-22A01: @test: block round-trip (l2-nodus-testing.md §10.4) ────────
+    //
+    // Asserts `parse(src).tests == parse(to_nodus(parse(src))).tests` — the
+    // AST-equality NL-6 mandates, not source-text equality. `TestBlock`
+    // includes `raw_lines`, so this exercises §10.4(a) (raw_lines is the
+    // emission source) and §10.4(b) (re-quoting) together.
+
+    fn tests_round_trip(src: &str) {
+        let ast = Parser::parse(src).expect("fixture must parse");
+        let compact = Transpiler::to_nodus(&ast);
+        let ast2 = Parser::parse(&compact)
+            .unwrap_or_else(|e| panic!("compact re-parse failed: {e:?}\ncompact:\n{compact}"));
+        assert_eq!(
+            ast.tests, ast2.tests,
+            "tests must be AST-equal after a compact round-trip\ncompact:\n{compact}"
+        );
+    }
+
+    #[test]
+    fn test_block_canonical_line_per_pair_round_trips() {
+        tests_round_trip(
+            "§wf:t v1\n@in: { query }\n@out: $out\n@steps:\n  1. GEN($in.query) → $out\n@test: smoke {\n  input:\n    query: hello\n  expected:\n    $out: hello\n  tags: [smoke]\n}\n",
+        );
+    }
+
+    #[test]
+    fn test_block_inline_brace_round_trips() {
+        tests_round_trip(
+            "§wf:t v1\n@in: { query }\n@out: $out\n@steps:\n  1. GEN($in.query) → $out\n@test: smoke {\n  input: { query: hello }\n  tags: [smoke]\n}\n",
+        );
+    }
+
+    #[test]
+    fn test_block_whitespace_and_hyphen_values_round_trip() {
+        // The two corpus shapes that corrupted before §10.4: a value
+        // containing whitespace and one containing a token-splitting
+        // character, both of which the pre-fix emitter split on reparse.
+        tests_round_trip(
+            "§wf:t v1\n@in: { ticket_id, body }\n@out: $out\n@steps:\n  1. GEN($in.body) → $out\n@test: t1 {\n  input:    { ticket_id: \"T-001\", body: \"When is my invoice due?\" }\n  tags: [smoke]\n}\n",
+        );
+    }
+
+    // ─── T-22B01/B02: @macro: and human_mode round-trip (NL-6) ───────────────
+
+    #[test]
+    fn macro_block_round_trips() {
+        let src = "§wf:t v1\n@in: { name: text }\n@out: $out\n@steps:\n  1. RUN(@greet) → $out\n@macro: greet\n  GEN($in.name) → $draft\n";
+        let ast = Parser::parse(src).expect("fixture must parse");
+        let compact = Transpiler::to_nodus(&ast);
+        let ast2 = Parser::parse(&compact)
+            .unwrap_or_else(|e| panic!("compact re-parse failed: {e:?}\ncompact:\n{compact}"));
+        assert_eq!(
+            ast.macros, ast2.macros,
+            "macros must be AST-equal after a compact round-trip\ncompact:\n{compact}"
+        );
+    }
+
+    #[test]
+    fn human_mode_block_round_trips() {
+        let src = "§wf:t v1\n@out: $out\n@steps:\n  1. GEN(x) → $out\n\n;; HUMAN MODE\n;; WORKFLOW: t\n;; a plain-language description\n";
+        let ast = Parser::parse(src).expect("fixture must parse");
+        let compact = Transpiler::to_nodus(&ast);
+        let ast2 = Parser::parse(&compact)
+            .unwrap_or_else(|e| panic!("compact re-parse failed: {e:?}\ncompact:\n{compact}"));
+        assert_eq!(
+            ast.human_mode, ast2.human_mode,
+            "human_mode must be AST-equal after a compact round-trip\ncompact:\n{compact}"
+        );
+    }
+
+    #[test]
+    fn free_standing_comment_after_human_mode_stays_out_of_it() {
+        // The load-bearing ordering guardrail: collect_comment_block greedily
+        // consumes every following Comment token, so a free-standing comment
+        // emitted after human_mode would be silently absorbed into it on
+        // re-parse. Emitting human_mode last (§ above) is what prevents this;
+        // this test would catch a regression that reordered the emission.
+        let src = "§wf:t v1\n;; a free-standing comment\n@out: $out\n@steps:\n  1. GEN(x) → $out\n\n;; HUMAN MODE\n;; WORKFLOW: t\n";
+        let ast = Parser::parse(src).expect("fixture must parse");
+        let compact = Transpiler::to_nodus(&ast);
+        let ast2 = Parser::parse(&compact)
+            .unwrap_or_else(|e| panic!("compact re-parse failed: {e:?}\ncompact:\n{compact}"));
+        assert_eq!(
+            ast.comments, ast2.comments,
+            "the free-standing comment must not be absorbed into human_mode\ncompact:\n{compact}"
+        );
+        assert_eq!(ast.human_mode, ast2.human_mode);
     }
 }

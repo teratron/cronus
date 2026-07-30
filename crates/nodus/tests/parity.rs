@@ -391,29 +391,29 @@ mod transpilation {
         );
     }
 
-    /// T-21B01 — the NL-6 mandate ("compact → human → compact must produce
-    /// an AST-equal result") verified over the whole normative corpus for the
-    /// fields this phase (control-flow round-trip) owns, not just a
-    /// header-name check. `l2-nodus-runtime.md` §3 claims this test lives in
-    /// `workflows.rs`; it lives here instead, alongside the fixture corpus it
-    /// sweeps — the spec is patched (§3, this phase) to name the real
-    /// location, the Phase-17 precedent for a claim that didn't match where
-    /// the code/tests actually ended up.
+    /// T-21B01, widened by T-22T01 — the NL-6 mandate ("compact → human →
+    /// compact must produce an AST-equal result") verified over the **whole**
+    /// `WorkflowFile`, for the entire normative corpus. `l2-nodus-runtime.md`
+    /// §3 claims this test lives in `workflows.rs`; it lives here instead,
+    /// alongside the fixture corpus it sweeps — the spec is patched (§3,
+    /// Phase 21) to name the real location, the Phase-17 precedent for a
+    /// claim that didn't match where the code/tests actually ended up.
     ///
-    /// Compares parsed `.steps`, never source text: three source-level
+    /// Compares parsed ASTs, never source text: three source-level
     /// differences are expected and AST-stable (`core: x.nodus` truncates to
     /// `x` on the FIRST parse, `mode` defaults to `production` during parsing
     /// if absent, `@err:` raw text is already space-joined by
     /// `consume_rest_of_line` before this test ever sees it) — a string-equal
     /// assertion would fail on all three for reasons unrelated to NL-6.
     ///
-    /// Scoped to `.steps` rather than the whole `WorkflowFile`: a full-struct
-    /// sweep surfaced a genuine, pre-existing (Phase 6) NL-6 violation in
-    /// `@test:` block re-emission (`ticket_triage.nodus`'s structured
-    /// `input`/`expected` values lose their braces and word-splitting
-    /// quoting) — real, but owned by `l2-nodus-testing.md`, not
-    /// `l2-nodus-control-flow.md`; recorded in the PLAN Backlog for a
-    /// dedicated pass rather than folded into this phase's scope.
+    /// Phase 21 scoped this assertion to `.steps` because three fields did
+    /// not yet round-trip: `tests` (fixed per `l2-nodus-testing.md` §10 —
+    /// `raw_lines` is now the emission source, with values re-quoted so they
+    /// re-lex to the single token they came from) and `macros`/`human_mode`
+    /// (previously never emitted at all — Phase 22 T-22B01/T-22B02). Widening
+    /// this assertion to the whole file is Phase 22's decisive acceptance
+    /// signal (`l2-nodus-testing.md` §10.5): it is unreachable unless all
+    /// three are actually fixed, so a regression in any one fails it here.
     #[test]
     fn full_corpus_ast_equal_after_compact_round_trip() {
         for (name, source) in NORMATIVE_CORPUS {
@@ -424,8 +424,8 @@ mod transpilation {
                 panic!("{name}: compact re-parse failed: {e:?}\ncompact:\n{compact}")
             });
             assert_eq!(
-                ast1.steps, ast2.steps,
-                "{name}: steps must be unchanged by a compact round-trip (NL-6)\ncompact:\n{compact}"
+                ast1, ast2,
+                "{name}: the whole WorkflowFile must be unchanged by a compact round-trip (NL-6)\ncompact:\n{compact}"
             );
         }
     }

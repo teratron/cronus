@@ -100,6 +100,7 @@ impl Validator {
         d.extend(Self::w008_log_last(ast, filename));
         d.extend(Self::w009_test_no_expected(ast, filename));
         // W010: extends resolve filesystem check — deferred
+        d.extend(Self::w015_test_pair_separator(ast, filename));
         d.extend(Self::w011_known_vocabulary(ast, filename));
         d.extend(Self::w014_switch_has_arms(ast, filename));
 
@@ -585,6 +586,79 @@ impl Validator {
                 )
             })
             .collect()
+    }
+
+    /// W015 (l2-nodus-testing.md §10.3, realizing NT-9's "not a silent
+    /// assertion-miss" clause) — a token inside a `@test:` block's `input:`
+    /// or `expected:` section that looks like a key-value pair but uses a
+    /// separator other than `:` (the corpus case: `expected: { status =
+    /// SUCCESS }`). `parse_test_body` only recognizes `key : value` triples,
+    /// so a non-conforming pair's tokens are silently skipped and the
+    /// assertion never reaches the evaluator — this makes that drop visible.
+    /// Mirrors `parse_test_body`'s own section-tracking control flow so a
+    /// legitimately-consumed `key : value` triple is never re-examined.
+    fn w015_test_pair_separator(wf: &WorkflowFile, filename: &str) -> Vec<Diagnostic> {
+        #[derive(PartialEq, Clone, Copy)]
+        enum Section {
+            None,
+            Input,
+            Expected,
+            Tags,
+        }
+
+        let mut diags = Vec::new();
+        for test in &wf.tests {
+            let raw = &test.raw_lines;
+            let mut section = Section::None;
+            let mut i = 0usize;
+            while i < raw.len() {
+                let tok = &raw[i];
+
+                if matches!(tok.as_str(), "input" | "expected" | "tags")
+                    && raw.get(i + 1).map(|s| s == ":").unwrap_or(false)
+                {
+                    section = match tok.as_str() {
+                        "input" => Section::Input,
+                        "expected" => Section::Expected,
+                        _ => Section::Tags,
+                    };
+                    i += 2;
+                    continue;
+                }
+
+                if matches!(section, Section::Input | Section::Expected) {
+                    if matches!(tok.as_str(), "{" | "}" | ",") {
+                        i += 1;
+                        continue;
+                    }
+                    if raw.get(i + 1).map(|s| s == ":").unwrap_or(false) {
+                        // A conforming key : value triple — consumed exactly
+                        // as parse_test_body consumes it, so its value token
+                        // is never re-examined as a would-be key below.
+                        i += 3;
+                        continue;
+                    }
+                    if let Some(sep) = raw.get(i + 1)
+                        && !matches!(sep.as_str(), "{" | "}" | ",")
+                        && raw.get(i + 2).is_some()
+                    {
+                        diags.push(Diagnostic::new(
+                            Severity::Warning,
+                            "W015",
+                            format!(
+                                "@test: '{}': '{tok}' looks like an assertion but uses '{sep}' instead of ':' — this pair is silently dropped, not evaluated.",
+                                test.name
+                            ),
+                            filename,
+                        ));
+                        i += 3;
+                        continue;
+                    }
+                }
+                i += 1;
+            }
+        }
+        diags
     }
 
     /// W011/W012/W013 — advisory checks against the closed vocabulary registries.
@@ -2102,6 +2176,82 @@ mod tests {
         assert!(
             !diags.iter().any(|d| d.code == "W009"),
             "unexpected W009 when expected: section is present"
+        );
+    }
+
+    #[test]
+    fn w015_fires_on_non_colon_pair_separator() {
+        let src = "\
+§wf:w015_wf v1.0
+§runtime: { core: schema.nodus }
+@in: { query }
+@out: $out
+@err: ESCALATE(human)
+@steps:
+  1. GEN($in.query) → $out
+@test: smoke {
+  expected: { status = SUCCESS }
+}
+";
+        let ast = Parser::parse(src).expect("parse");
+        let diags = Validator::validate(&ast, "w015_wf.nodus");
+        assert!(
+            diags.iter().any(|d| d.code == "W015"),
+            "expected W015 for a non-':' pair separator; got: {:?}",
+            diags.iter().map(|d| &d.code).collect::<Vec<_>>()
+        );
+    }
+
+    #[test]
+    fn w015_absent_on_conforming_colon_pairs() {
+        let src = "\
+§wf:w015_ok v1.0
+§runtime: { core: schema.nodus }
+@in: { query }
+@out: $out
+@err: ESCALATE(human)
+@steps:
+  1. GEN($in.query) → $out
+@test: smoke {
+  input: { query: hello }
+  expected: { $out: hello }
+}
+";
+        let ast = Parser::parse(src).expect("parse");
+        let diags = Validator::validate(&ast, "w015_ok.nodus");
+        assert!(
+            !diags.iter().any(|d| d.code == "W015"),
+            "unexpected W015 when all pairs use ':'; got: {:?}",
+            diags.iter().map(|d| &d.code).collect::<Vec<_>>()
+        );
+    }
+
+    #[test]
+    fn w015_and_w009_co_fire_when_all_expected_pairs_are_dropped() {
+        // §7: a block whose only `expected:` pairs are all non-conforming has
+        // an `expected:` section in source but an empty one in the AST, so it
+        // must emit BOTH W015 (the pairs were dropped) and W009 (nothing is
+        // asserted) — the intended pairing, not a duplicate report.
+        let src = "\
+§wf:w015_w009_wf v1.0
+§runtime: { core: schema.nodus }
+@in: { query }
+@out: $out
+@err: ESCALATE(human)
+@steps:
+  1. GEN($in.query) → $out
+@test: smoke {
+  input: { query: hello }
+  expected: { status = SUCCESS }
+}
+";
+        let ast = Parser::parse(src).expect("parse");
+        let diags = Validator::validate(&ast, "w015_w009_wf.nodus");
+        let codes: Vec<_> = diags.iter().map(|d| d.code.as_str()).collect();
+        assert!(codes.contains(&"W015"), "expected W015; got: {codes:?}");
+        assert!(
+            codes.contains(&"W009"),
+            "expected W009 to co-fire since expected: is empty in the AST; got: {codes:?}"
         );
     }
 
