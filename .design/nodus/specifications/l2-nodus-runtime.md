@@ -1,6 +1,6 @@
 # Nodus Runtime (Rust)
 
-**Version:** 1.2.0
+**Version:** 1.3.0
 **Status:** Stable
 **Layer:** implementation
 **Implements:** l1-nodus-language.md
@@ -39,6 +39,32 @@ A Rust implementation links in-process with any host (desktop, mobile, server) w
 | NL-8 Reserved namespace | `vocab::RUNTIME_OWNED_VARIABLES` (9-element subset of `RESERVED_VARIABLES`); validator emits `Severity::Error` code `E013` if a pipeline target (`→ $name`) names a runtime-owned variable |
 | NL-9 Typed I/O contract | Required `@in` fields (no `?` suffix, no default) verified by executor before step 1; missing input returns `Status::Error` |
 | NL-10 Sequential pipeline | AST `steps` field is `Vec<Step>` in declaration order; validator emits `Severity::Error` code `E014` when a variable is referenced before any prior step declares it via `→ $name` |
+
+### 3.1 Invariants added after v1.0.0 — realization status [ADDED v1.3.0]
+
+`l1-nodus-language.md` has grown NL-11 … NL-23 through additive refinement since
+this spec's table was written. Each of those invariants' Document History names
+*this* spec as the carrier of its pending obligation, so they are listed here
+explicitly: an obligation tracked only in a plan document is not tracked in the
+place its own contract points to. `Realized by` names the spec that defines the
+Rust shape; `pending` means no such spec exists yet, so no verifiable task can be
+authored against it.
+
+| L1 Invariant | Realization status |
+| --- | --- |
+| NL-11 Provenance-safe interpolation | **Pending** — no L2 realization spec. A phase-scoped subset landed with `§config` secret-omission (`l2-nodus-config`), but crate-wide `Value` provenance tagging remains an open system-wide obligation. |
+| NL-12 Deferred / external step execution | **Pending** — no L2 realization spec. The `Status::Paused` + `ResumeDescriptor` lifecycle exists (`l2-nodus-dialog`) but is human-answer-shaped; generalizing the resume trigger to any host-supplied completion is unrealized. Named as a dependency by NL-22's resumability rule. |
+| NL-13 Competitive parallel selection (`~PARALLEL +select` / `~PICK`) | **Pending** — no L2 realization spec. |
+| NL-14 Grader-gated iterative refinement (`~UNTIL +grade`) | **Pending** — no L2 realization spec. |
+| NL-15 Cache-stable prompt composition | **Pending** — no L2 realization spec. |
+| NL-16 Selective vocabulary disclosure (`@needs`) | **Pending** — no L2 realization spec; additionally blocked on external-schema loading, which does not exist. |
+| NL-17 Origin-taint provenance | **Pending** — no L2 realization spec; layers on the unrealized NL-11. |
+| NL-18 Bounded recursive decomposition (`RUN` + `MAX_DEPTH:n`) | **Pending** — no L2 realization spec; additionally blocked on `RUN(@macro)` body expansion, which is unimplemented. |
+| NL-19 Unforgeable frame markers & seam-anchored segmentation | **Pending** — no L2 realization spec. |
+| NL-20 `§config` declarative configuration surface | **Realized by** [l2-nodus-config.md](l2-nodus-config.md) — implemented. |
+| NL-21 Confidentiality-flow labeling | **Pending** — no L2 realization spec. |
+| NL-22 Compensation seam | **Realized by** [l2-nodus-compensation.md](l2-nodus-compensation.md) — specified; awaiting its implementation phase. |
+| NL-23 Bounded whole-run self-restart | **Realized by** [l2-nodus-restart.md](l2-nodus-restart.md) — specified; awaiting its implementation phase. |
 
 ## 4. Detailed Design
 
@@ -217,6 +243,7 @@ Single-character `;` inline comments (only `;;` is recognized) and the `\$` inte
 
 | Version | Date | Change |
 | --- | --- | --- |
+| 1.3.0 | 2026-07-30 | Added §3.1 — realization status for NL-11 … NL-23, the thirteen invariants added to `l1-nodus-language.md` after this spec's original compliance table was written. Each of their Document History entries names this spec as carrier of their pending obligation, but no row existed here; the obligations were tracked only in `PLAN.md`'s Backlog. §3.1 makes the stated carrier real: NL-20 realized by `l2-nodus-config`, NL-22 by the new `l2-nodus-compensation`, NL-23 by the new `l2-nodus-restart`, the remaining ten explicitly pending with their additional blockers named (NL-16 external-schema loading, NL-18 `RUN` body expansion, NL-17 layering on the unrealized NL-11). |
 | 1.2.0 | 2026-07-04 | §4.4: real `~PARALLEL` branch execution via `std::thread::scope` when providers are `Send + Sync` (sequential fallback otherwise); bounded width (`max_parallel_branches`, default cap 4); isolated branch environments with deterministic declared-order `~JOIN`; fail-fast without mid-step cancellation; audit interleaving resolved by `(correlation_id, seq)` |
 | 1.1.0 | 2026-06-25 | Added §4.7 upstream parity gaps (v0.4.6 → v0.7): missing `ASK`/`CONFIRM` commands, control constructs (`?SWITCH`/`~MAP`/`~RETRY`/`!HALT`/`!PAUSE`), operators/expressions, `@needs:`, `error_code` 11 → 24, closed flag/validator/type registries, macro execution, `Status::Paused`, lexer parity items |
 | 1.0.4 | 2026-06-24 | §4.1: add `portability.rs` module; §4.5: add `run_with_schema` and `run_with_schema_and_audit` rows; update extension-point note to reference `SchemaProvider` |
