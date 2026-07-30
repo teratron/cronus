@@ -1,8 +1,8 @@
 # Master Task Index (Registry)
 
-**Version:** 2.12.0
-**Generated:** 2026-07-25
-**Based on:** .design/nodus/PLAN.md v1.20.0
+**Version:** 2.13.0
+**Generated:** 2026-07-30
+**Based on:** .design/nodus/PLAN.md v1.21.0
 **Based on RULES:** .design/RULES.md v1.6.0
 **Execution Mode:** Sequential
 **Status:** Active
@@ -71,7 +71,7 @@ Tactical registry of all phases. Atomic checklists live in `tasks/phase-{N}.md`.
 
 ## Meta Information
 
-- **Last Updated**: 2026-07-25 (Phase 17 Complete — see below)
+- **Last Updated**: 2026-07-30 (v2.13.0: **sync-only replan — no new phase.** Registry advanced INDEX v1.0.62 → v1.0.64 via two additive `l1-nodus-language` refinements authored between sessions (→ 1.14.0): **NL-22** compensation seam and **NL-23** bounded whole-run self-restart. Both carried as pending L2 Invariant-Compliance obligations — neither has a `Stable` L2 spec defining its Rust shape, so no atomic task with a concrete `Verify` line is authorable (C10), exactly as each invariant's own Document History anticipated. Grounded, not assumed: the crate has zero traces of compensation/LP-11/LP-17/restart, and NL-22 composes three seams absent from the crate (LP-11 gate, LP-17 settlement, NL-12 resume-for-effects) — a real spec-time design fork, recorded in the Backlog alongside the assessment that NL-23 is the lighter and more tractable of the two. Also flagged: `l2-nodus-runtime.md` §3 covers only NL-1…NL-10, so NL-11…NL-23 have no row in the file each L1 entry names as their carrier. All 17 phases remain Done; PLAN v1.20.0 → v1.21.0; RULES parity v1.6.0 held.)
 - **Phase 17 Complete**: 2026-07-25 (tracks A/B/C/T; 5/5 tasks; l2-nodus-control-flow §4.5 — `$it` declared in the `Stmt::Map` arm of `collect_vars_stmt`; `~MAP` end-to-end tests through `workflows::run` + the fixture corpus's first v0.7 construct (`map_transform.nodus`); Phase-16 `Executor::execute` validate-gate bypass retired; §4.5 patched 1.0.0 → 1.0.1 recording the `E004`↔`$it` interaction. `~MAP` is now reachable through every validated public entry point for the first time since Phase 11. 373 tests pass (was 365; +8); clippy/fmt clean; LP-1 zero-dep preserved. INDEX v1.0.61 → v1.0.62.)
 - **Phase 17 Planned (v2.12.0)**: 2026-07-25 (opened **Phase 17 — `~MAP` Conformance & End-to-End Reachability** (l2-nodus-control-flow §4.3/§4.4), 5 tasks / 4 tracks (A–C, T), Sequential. First phase opened against *existing* Stable spec content rather than newly-authored content: §4.3/§4.4 mandate `$it` as `~MAP`'s implicit binding, but the realized `E004` rule rejects every `~MAP` workflow, making the construct unreachable through all validated entry points since Phase 11. Plan-time grounding localized it to one `collect_vars_stmt` arm and confirmed `~MAP` is the only construct with an undeclared implicit binding. Needs no new spec (C12.1 fix-to-regain-conformance). INDEX v1.0.61 held (spec version bumps during run), PLAN v1.19.0 → v1.20.0, RULES parity v1.6.0 held.)
 - **Phase 16 Complete**: 2026-07-25 (tracks A/B/C/T; 6/6 tasks; l2-nodus-observability §4.9 — `EventAnnotations`/`Anomaly`/`Durability` carrier on all 10 `ExecutionEvent` variants, 4 `Measurement` token classes on `ModelResponse`, `SourceRef` derivation lineage on `LoopIteration` + the previously-missing `~MAP` emission, read-side `classify_trace`, durable-only `seq` discipline documented on `emit`; realizes HO-8/9/10/11/13/16/17 — **all 20 HO invariants now closed**; 365 tests pass (was 352; +13); clippy/fmt clean; LP-1 zero-dep preserved. Found and worked around a pre-existing validator gap: `E004` doesn't recognize `~MAP`'s implicit `$it` binding, rejecting every `~MAP` workflow through `run_with_audit` — flagged in PLAN.md Backlog for a future fix, not expanded into this phase.)
