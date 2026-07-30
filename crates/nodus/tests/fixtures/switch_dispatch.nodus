@@ -1,0 +1,16 @@
+§wf:switch_dispatch v1.0
+;; Normative fixture: ?SWITCH multi-branch dispatch with a `*` default arm.
+
+§runtime: { core: schema.nodus }
+
+@in: { category: text }
+@out: $out
+@err: ESCALATE(human)
+
+@steps:
+  1. ?SWITCH $in.category:
+    urgent → ANALYZE(crisis) → $out
+    spam → GEN(reply) → $out
+    * → NOTIFY(unclassified) → $out
+  ~END
+  2. LOG($out)

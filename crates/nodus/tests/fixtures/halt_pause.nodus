@@ -1,0 +1,14 @@
+§wf:halt_pause v1.0
+;; Normative fixture: !HALT (fatal stop) and !PAUSE (suspension) action flags.
+
+§runtime: { core: schema.nodus }
+
+@in: { risk_score: text }
+@out: $out
+@err: ESCALATE(human)
+
+@steps:
+  1. ?IF $in.risk_score > 0.9 → ESCALATE(human) !HALT
+  2. ?IF $in.risk_score > 0.5 → ASK(confirm) !PAUSE
+  3. GEN($in.risk_score) → $out
+  4. LOG($out)

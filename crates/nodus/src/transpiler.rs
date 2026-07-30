@@ -10,8 +10,8 @@
 //! the transpiler stays in sync with the schema without duplicating data.
 
 use crate::ast::{
-    CommandCall, Conditional, ConfigDecl, FieldConstraint, ForLoop, MapBlock, RuleKind, Step, Stmt,
-    SwitchBlock, UntilLoop, WorkflowFile,
+    CommandCall, Conditional, ConfigDecl, FieldConstraint, ForLoop, MapBlock, ParallelBlock,
+    RuleKind, Step, Stmt, SwitchBlock, UntilLoop, WorkflowFile,
 };
 use crate::vocab::TRANSPILER_VERB_MAP;
 
@@ -152,6 +152,17 @@ impl Transpiler {
             } else {
                 lines.push(format!("§wf:{} {}", h.name, h.version));
             }
+        }
+
+        // Free-standing `;;` comments (WorkflowFile.comments) carry no source
+        // position — the parser accepts one at any point between recognized
+        // sections — so re-emitting them right after the header (the common
+        // fixture convention) is a faithful, order-preserving reconstruction.
+        // `comment.text` already includes the leading `;;` (the lexer's
+        // Comment token captures the whole line, unlike Stmt::Comment's text,
+        // which is trimmed of it during a different construction path).
+        for comment in &ast.comments {
+            lines.push(comment.text.clone());
         }
 
         if let Some(rt) = &ast.runtime {
@@ -445,15 +456,32 @@ impl Transpiler {
 
     fn nodus_step(step: &Step) -> String {
         match &step.body {
-            Some(Stmt::Command(cmd)) => {
-                let mut line = Self::nodus_command(cmd);
-                if let Some(comp) = &step.compensation {
-                    line.push_str(&format!(" ~COMPENSATE: {}", Self::nodus_command(comp)));
+            Some(body) => {
+                let mut first = String::new();
+                if let Some(n) = step.retry {
+                    first.push_str(&format!("~RETRY:{n} "));
                 }
-                line
+                first.push_str(&Self::nodus_stmt(body));
+                // ~COMPENSATE only ever attaches when the step's own top-level
+                // action is a direct command: ?IF/?SWITCH actions are parsed
+                // via try_parse_command_from_string (a string re-parse), which
+                // never sets pending_compensation — only parse_command_call
+                // (used for a step's direct Stmt::Command body) does.
+                if matches!(body, Stmt::Command(_))
+                    && let Some(comp) = &step.compensation
+                {
+                    first.push_str(&format!(" ~COMPENSATE: {}", Self::nodus_command(comp)));
+                }
+                let mut lines = vec![first];
+                // Indented sub-steps (e.g. a block-form `?IF cond:` header's
+                // action lines) are collected by parse_step into Step.sub_steps
+                // rather than into Conditional.body — they terminate on the
+                // next StepNumber/section token, not an explicit ~END, so no
+                // terminator is emitted here.
+                Self::push_indented_body(&mut lines, &step.sub_steps);
+                lines.join("\n")
             }
-            Some(Stmt::Comment(c)) => format!(";; {}", c.text),
-            _ => {
+            None => {
                 if !step.comment.is_empty() {
                     format!(";; {}", step.comment)
                 } else {
@@ -463,11 +491,190 @@ impl Transpiler {
         }
     }
 
+    /// Render any `Stmt` to its compact source form. Exhaustive by construction
+    /// (no wildcard arm) so a future `Stmt` variant is a compile error here,
+    /// not a silent drop — the shape of the defect this function used to have.
+    fn nodus_stmt(stmt: &Stmt) -> String {
+        match stmt {
+            Stmt::Command(cmd) => Self::nodus_command_or_assignment(cmd),
+            Stmt::Comment(c) => format!(";; {}", c.text),
+            Stmt::VarRef(v) => v.name.clone(),
+            Stmt::Conditional(cond) => Self::nodus_conditional_chain(cond),
+            Stmt::Switch(sw) => Self::nodus_switch(sw),
+            Stmt::ForLoop(fl) => Self::nodus_for(fl),
+            Stmt::UntilLoop(ul) => Self::nodus_until(ul),
+            Stmt::Parallel(pb) => Self::nodus_parallel(pb),
+            Stmt::Map(mb) => Self::nodus_map(mb),
+        }
+    }
+
+    /// Render an `?IF`/`?ELIF`/`?ELSE` chain. `Conditional.body` (the
+    /// block-form `?IF cond:` shape) is never populated by the parser today —
+    /// `parse_if_chain` never calls a body-collecting routine — so it is
+    /// deliberately not rendered here rather than inventing untested syntax
+    /// for an AST shape nothing currently produces.
+    fn nodus_conditional_chain(cond: &Conditional) -> String {
+        let mut lines = vec![Self::nodus_conditional_branch("?IF", cond)];
+        for br in &cond.elif_branches {
+            lines.push(Self::nodus_conditional_branch("?ELIF", br));
+        }
+        if let Some(else_br) = &cond.else_branch {
+            lines.push(Self::nodus_conditional_branch("?ELSE", else_br));
+        }
+        lines.join("\n")
+    }
+
+    fn nodus_conditional_branch(keyword: &str, cond: &Conditional) -> String {
+        let mut parts = vec![keyword.to_string()];
+        if !cond.condition.is_empty() {
+            parts.push(cond.condition.clone());
+        }
+        let mut flags: Vec<&str> = Vec::new();
+        if cond.break_flag {
+            flags.push("!BREAK");
+        }
+        if cond.skip_flag {
+            flags.push("!SKIP");
+        }
+        if cond.override_flag {
+            flags.push("!OVERRIDE");
+        }
+        if cond.halt_flag {
+            flags.push("!HALT");
+        }
+        if cond.pause_flag {
+            flags.push("!PAUSE");
+        }
+
+        match &cond.action {
+            Some(action) => {
+                parts.push("\u{2192}".to_string());
+                parts.push(Self::nodus_command(action));
+                parts.extend(flags.iter().map(|f| f.to_string()));
+            }
+            None if flags.is_empty() => {
+                // No action, no flags — the block-form `?IF cond:` shape
+                // (or a bare `?ELSE:`), matching parse_branch_tail's Colon arm.
+                if let Some(last) = parts.last_mut() {
+                    last.push(':');
+                } else {
+                    parts.push(":".to_string());
+                }
+            }
+            None => {
+                parts.extend(flags.iter().map(|f| f.to_string()));
+            }
+        }
+        parts.join(" ")
+    }
+
+    fn nodus_switch(sw: &SwitchBlock) -> String {
+        let mut lines = vec![format!("?SWITCH {}:", sw.scrutinee)];
+        for (value, action) in &sw.arms {
+            lines.push(format!(
+                "  {value} \u{2192} {}",
+                Self::nodus_command(action)
+            ));
+        }
+        if let Some(default) = &sw.default {
+            lines.push(format!("  * \u{2192} {}", Self::nodus_command(default)));
+        }
+        lines.push("~END".to_string());
+        lines.join("\n")
+    }
+
+    fn nodus_for(fl: &ForLoop) -> String {
+        let mut lines = vec![format!("~FOR {} IN {}", fl.variable, fl.collection)];
+        Self::push_indented_body(&mut lines, &fl.body);
+        lines.push("~END".to_string());
+        lines.join("\n")
+    }
+
+    fn nodus_until(ul: &UntilLoop) -> String {
+        let mut header = format!("~UNTIL {}", ul.condition);
+        if let Some(max) = ul.max_iterations {
+            header.push_str(&format!(" | MAX:{max}"));
+        }
+        header.push(':');
+        let mut lines = vec![header];
+        Self::push_indented_body(&mut lines, &ul.body);
+        lines.push("~END".to_string());
+        lines.join("\n")
+    }
+
+    fn nodus_parallel(pb: &ParallelBlock) -> String {
+        let mut lines = vec!["~PARALLEL:".to_string()];
+        Self::push_indented_body(&mut lines, &pb.branches);
+        match &pb.join_target {
+            Some(target) => lines.push(format!("~JOIN \u{2192} {target}")),
+            None => lines.push("~END".to_string()),
+        }
+        lines.join("\n")
+    }
+
+    fn nodus_map(mb: &MapBlock) -> String {
+        // The block's `→ target` lives on MapBlock.target, not the inner
+        // command (parse_map moves it there via pipeline_target.take()) —
+        // attach it back onto a clone so nodus_command renders it, mirroring
+        // the parser's move in reverse.
+        let mut cmd = mb.command.clone();
+        cmd.pipeline_target = mb.target.clone();
+        format!("~MAP {}: {}", mb.collection, Self::nodus_command(&cmd))
+    }
+
+    /// Append each body statement's rendered lines to `lines`, indented two
+    /// spaces per nesting level. Indentation is cosmetic — the lexer is
+    /// whitespace-insensitive between tokens, nesting is bounded by `~END`
+    /// (and `~JOIN`) tokens, not indentation — but keeps emitted source
+    /// readable and mirrors the human-authored fixture style.
+    fn push_indented_body(lines: &mut Vec<String>, body: &[Stmt]) {
+        for stmt in body {
+            for line in Self::nodus_stmt(stmt).lines() {
+                lines.push(format!("  {line}"));
+            }
+        }
+    }
+
+    /// `$var = expr` is surface sugar `parse_assignment_or_expr` represents
+    /// internally as a synthetic `Stmt::Command { name: "ASSIGN", args:
+    /// [var, expr], pipeline_target: Some(var), .. }` — reusing the Command
+    /// shape rather than adding a new Stmt variant. "ASSIGN" is not in
+    /// `KNOWN_COMMANDS`, so it lexes as a plain Identifier, not a
+    /// CommandName: emitting it via the generic call syntax cannot round-trip
+    /// (confirmed by the corpus harness on ticket_triage.nodus's step 9).
+    /// Detect the exact shape `parse_assignment_or_expr` produces and emit
+    /// the shorthand back instead; anything else falls through to the
+    /// ordinary command-call rendering.
+    fn nodus_command_or_assignment(cmd: &CommandCall) -> String {
+        let is_assignment_shorthand = cmd.name == "ASSIGN"
+            && cmd.args.len() == 2
+            && cmd.modifiers.is_empty()
+            && cmd.validators.is_empty()
+            && cmd.flags.is_empty()
+            && cmd.pipeline_target.as_deref() == Some(cmd.args[0].as_str());
+        if is_assignment_shorthand {
+            return format!("{} = {}", cmd.args[0], cmd.args[1]);
+        }
+        Self::nodus_command(cmd)
+    }
+
     fn nodus_command(cmd: &CommandCall) -> String {
         let mut parts = vec![format!("{}({})", cmd.name, cmd.args.join(", "))];
         for (mod_name, mod_val) in &cmd.modifiers {
             if !mod_val.is_empty() {
-                parts.push(format!("{mod_name}={mod_val}"));
+                // A modifier value containing whitespace was necessarily
+                // quoted in the source (a bare multi-token value would have
+                // been lexed as separate tokens and parse_modifier_value only
+                // consumes one) — re-quote it, or the reparse silently drops
+                // everything after the first token (an AST-equality loss
+                // the corpus round-trip harness caught on ticket_triage.nodus's
+                // `+msg="Critical ticket"`).
+                let val = if mod_val.chars().any(char::is_whitespace) {
+                    format!("\"{mod_val}\"")
+                } else {
+                    mod_val.clone()
+                };
+                parts.push(format!("{mod_name}={val}"));
             } else {
                 parts.push(mod_name.clone());
             }
@@ -920,5 +1127,92 @@ level : str
             .expect("compensation must survive the round-trip");
         assert_eq!(comp.name, "NOTIFY");
         assert_eq!(comp.args, vec!["$url"]);
+    }
+
+    // ─── T-21A01/A02/A03: compact-form control-flow round-trip (NL-6) ────────
+    //
+    // Each asserts `parse(src).steps == parse(to_nodus(parse(src))).steps` —
+    // the AST-equality NL-6 actually mandates, never source-text equality.
+
+    fn steps_round_trip(src: &str) {
+        let ast = Parser::parse(src).expect("fixture must parse");
+        let compact = Transpiler::to_nodus(&ast);
+        let ast2 = Parser::parse(&compact)
+            .unwrap_or_else(|e| panic!("compact re-parse failed: {e:?}\ncompact:\n{compact}"));
+        assert_eq!(
+            ast.steps, ast2.steps,
+            "steps must be AST-equal after a compact round-trip\ncompact:\n{compact}"
+        );
+    }
+
+    #[test]
+    fn conditional_inline_action_round_trips() {
+        steps_round_trip("§wf:t v1\n@steps:\n  1. ?IF $r > 0.9 → ESCALATE(human) !HALT\n");
+    }
+
+    #[test]
+    fn conditional_chain_with_target_round_trips() {
+        steps_round_trip(
+            "§wf:t v1\n@steps:\n  1. ?IF $r > 0.9 → GEN(x) → $picked\n     ?ELIF $r > 0.5 → GEN(y) → $picked\n     ?ELSE → GEN(z) → $picked\n",
+        );
+    }
+
+    #[test]
+    fn switch_with_arms_and_default_round_trips() {
+        steps_round_trip(
+            "§wf:t v1\n@in: { category?=urgent }\n@steps:\n  1. ?SWITCH $in.category:\n    urgent → GEN(crisis) → $urgent_pick\n    spam → GEN(reply) → $spam_pick\n    * → GEN(default) → $def\n  ~END\n",
+        );
+    }
+
+    #[test]
+    fn for_loop_body_round_trips() {
+        steps_round_trip(
+            "§wf:t v1\n@in: { items: list }\n@steps:\n  1. ~FOR $item IN $in.items\n       LOG($item) → $out\n     ~END\n",
+        );
+    }
+
+    #[test]
+    fn until_loop_with_max_round_trips() {
+        steps_round_trip(
+            "§wf:t v1\n@steps:\n  1. ~UNTIL $q > 0.85 | MAX:3:\n       REFINE($draft) → $draft\n     ~END\n",
+        );
+    }
+
+    #[test]
+    fn until_loop_without_max_round_trips() {
+        steps_round_trip(
+            "§wf:t v1\n@steps:\n  1. ~UNTIL $q > 0.85:\n       REFINE($draft) → $draft\n     ~END\n",
+        );
+    }
+
+    #[test]
+    fn parallel_with_join_round_trips() {
+        steps_round_trip(
+            "§wf:t v1\n@steps:\n  1. ~PARALLEL:\n       GEN(a) → $x\n       ANALYZE(b) → $y\n     ~JOIN → $t\n",
+        );
+    }
+
+    #[test]
+    fn parallel_without_join_round_trips() {
+        steps_round_trip("§wf:t v1\n@steps:\n  1. ~PARALLEL:\n       GEN(a) → $x\n     ~END\n");
+    }
+
+    #[test]
+    fn map_block_target_round_trips() {
+        steps_round_trip(
+            "§wf:t v1\n@in: { items: list }\n@steps:\n  1. ~MAP $in.items: GEN($it) → $out\n",
+        );
+    }
+
+    #[test]
+    fn retry_bound_round_trips() {
+        steps_round_trip("§wf:t v1\n@steps:\n  1. ~RETRY:3 FETCH($url) → $data\n");
+    }
+
+    #[test]
+    fn nested_switch_inside_for_loop_round_trips() {
+        steps_round_trip(
+            "§wf:t v1\n@in: { items: list, category?=urgent }\n@steps:\n  1. ~FOR $item IN $in.items\n       ?SWITCH $in.category:\n         urgent → GEN($item) → $r\n       ~END\n     ~END\n",
+        );
     }
 }

@@ -2,7 +2,7 @@
 
 **Last Full Run:** —
 **Full Sessions:** 0
-**Snapshots:** 9
+**Snapshots:** 10
 
 ## Snapshots
 
@@ -19,3 +19,4 @@ Auto-collected after each phase completion. Lightweight metrics only — no anal
 | 2026-07-30 | Phase 18 | 0/0/18 | 6/0/0 | 26 | 🟢 |
 | 2026-07-30 | Phase 19 | 0/0/18 | 5/0/0 | 26 | 🟢 |
 | 2026-07-30 | Phase 20 | 0/0/18 | 6/0/0 | 26 | 🟢 |
+| 2026-07-30 | Phase 21 | 0/0/18 | 7/0/0 | 26 | 🟢 |

@@ -1,0 +1,13 @@
+§wf:retry_bounded v1.0
+;; Normative fixture: ~RETRY:n bounded step retry.
+
+§runtime: { core: schema.nodus }
+
+@in: { question: text }
+@out: $out
+@err: ESCALATE(human)
+
+@steps:
+  1. ~RETRY:3 ASK($in.question) → $answer
+  2. GEN($answer) → $out
+  3. LOG($out)

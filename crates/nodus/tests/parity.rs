@@ -29,6 +29,27 @@ const FOR_LOOP: &str = include_str!("fixtures/for_loop.nodus");
 const PARALLEL_JOIN: &str = include_str!("fixtures/parallel_join.nodus");
 const MACRO_EXPAND: &str = include_str!("fixtures/macro_expand.nodus");
 const MAP_TRANSFORM: &str = include_str!("fixtures/map_transform.nodus");
+const SWITCH_DISPATCH: &str = include_str!("fixtures/switch_dispatch.nodus");
+const RETRY_BOUNDED: &str = include_str!("fixtures/retry_bounded.nodus");
+const HALT_PAUSE: &str = include_str!("fixtures/halt_pause.nodus");
+
+/// The normative fixture corpus swept by the NL-6 AST-equality harness
+/// (T-21B01) — every well-formed fixture above, excluding the three
+/// deliberately-invalid `lint_*` fixtures (they exist to trigger a specific
+/// validator diagnostic, not to represent round-trippable content).
+const NORMATIVE_CORPUS: &[(&str, &str)] = &[
+    ("simple_log.nodus", SIMPLE_LOG),
+    ("ticket_triage.nodus", TICKET_TRIAGE),
+    ("until_quality_loop.nodus", UNTIL_QUALITY_LOOP),
+    ("conditional.nodus", CONDITIONAL),
+    ("for_loop.nodus", FOR_LOOP),
+    ("parallel_join.nodus", PARALLEL_JOIN),
+    ("macro_expand.nodus", MACRO_EXPAND),
+    ("map_transform.nodus", MAP_TRANSFORM),
+    ("switch_dispatch.nodus", SWITCH_DISPATCH),
+    ("retry_bounded.nodus", RETRY_BOUNDED),
+    ("halt_pause.nodus", HALT_PAUSE),
+];
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
 
@@ -220,6 +241,45 @@ mod validation {
     }
 
     #[test]
+    fn switch_dispatch_no_block_errors() {
+        let diags = parse_and_validate(SWITCH_DISPATCH, "switch_dispatch.nodus");
+        let errors: Vec<_> = diags
+            .iter()
+            .filter(|d| d.severity == Severity::Error)
+            .collect();
+        assert!(
+            errors.is_empty(),
+            "expected no block-class errors for switch_dispatch; got: {errors:?}"
+        );
+    }
+
+    #[test]
+    fn retry_bounded_no_block_errors() {
+        let diags = parse_and_validate(RETRY_BOUNDED, "retry_bounded.nodus");
+        let errors: Vec<_> = diags
+            .iter()
+            .filter(|d| d.severity == Severity::Error)
+            .collect();
+        assert!(
+            errors.is_empty(),
+            "expected no block-class errors for retry_bounded; got: {errors:?}"
+        );
+    }
+
+    #[test]
+    fn halt_pause_no_block_errors() {
+        let diags = parse_and_validate(HALT_PAUSE, "halt_pause.nodus");
+        let errors: Vec<_> = diags
+            .iter()
+            .filter(|d| d.severity == Severity::Error)
+            .collect();
+        assert!(
+            errors.is_empty(),
+            "expected no block-class errors for halt_pause; got: {errors:?}"
+        );
+    }
+
+    #[test]
     fn macro_expand_no_block_errors() {
         let diags = parse_and_validate(MACRO_EXPAND, "macro_expand.nodus");
         let errors: Vec<_> = diags
@@ -329,6 +389,45 @@ mod transpilation {
             "map_transform",
             "map_transform name must survive compact round-trip"
         );
+    }
+
+    /// T-21B01 — the NL-6 mandate ("compact → human → compact must produce
+    /// an AST-equal result") verified over the whole normative corpus for the
+    /// fields this phase (control-flow round-trip) owns, not just a
+    /// header-name check. `l2-nodus-runtime.md` §3 claims this test lives in
+    /// `workflows.rs`; it lives here instead, alongside the fixture corpus it
+    /// sweeps — the spec is patched (§3, this phase) to name the real
+    /// location, the Phase-17 precedent for a claim that didn't match where
+    /// the code/tests actually ended up.
+    ///
+    /// Compares parsed `.steps`, never source text: three source-level
+    /// differences are expected and AST-stable (`core: x.nodus` truncates to
+    /// `x` on the FIRST parse, `mode` defaults to `production` during parsing
+    /// if absent, `@err:` raw text is already space-joined by
+    /// `consume_rest_of_line` before this test ever sees it) — a string-equal
+    /// assertion would fail on all three for reasons unrelated to NL-6.
+    ///
+    /// Scoped to `.steps` rather than the whole `WorkflowFile`: a full-struct
+    /// sweep surfaced a genuine, pre-existing (Phase 6) NL-6 violation in
+    /// `@test:` block re-emission (`ticket_triage.nodus`'s structured
+    /// `input`/`expected` values lose their braces and word-splitting
+    /// quoting) — real, but owned by `l2-nodus-testing.md`, not
+    /// `l2-nodus-control-flow.md`; recorded in the PLAN Backlog for a
+    /// dedicated pass rather than folded into this phase's scope.
+    #[test]
+    fn full_corpus_ast_equal_after_compact_round_trip() {
+        for (name, source) in NORMATIVE_CORPUS {
+            let ast1 =
+                Parser::parse(source).unwrap_or_else(|e| panic!("{name}: parse failed: {e:?}"));
+            let compact = Transpiler::to_nodus(&ast1);
+            let ast2 = Parser::parse(&compact).unwrap_or_else(|e| {
+                panic!("{name}: compact re-parse failed: {e:?}\ncompact:\n{compact}")
+            });
+            assert_eq!(
+                ast1.steps, ast2.steps,
+                "{name}: steps must be unchanged by a compact round-trip (NL-6)\ncompact:\n{compact}"
+            );
+        }
     }
 
     #[test]
