@@ -1,6 +1,6 @@
 # Nodus DSL Testing — Rust Implementation
 
-**Version:** 1.2.0
+**Version:** 1.2.1
 **Status:** Stable
 **Layer:** implementation
 **Implements:** [l1-nodus-testing.md](l1-nodus-testing.md)
@@ -280,9 +280,13 @@ AST-equality even if every value were quoted correctly.
 The rule therefore has two parts:
 
 > **(a) Source selection.** When `raw_lines` is non-empty it is the emission source, because
-> it is the only representation that reproduces the body in the form the author wrote it.
-> The structured fields are the fallback, used for `TestBlock` values constructed
-> programmatically rather than parsed.
+> it is the only representation that preserves the author's **token sequence** — including
+> the `{`/`,`/`}` of the §10.2 inline form, which the structured fields discard. It does not
+> preserve line breaks: `collect_braced_raw_lines` drops `Newline` tokens, so a multi-line
+> body re-emits as a single flat line. That is sufficient for NL-6, which requires
+> AST-equality and not source identity, and re-emitting the line breaks would in fact
+> **break** it by changing `raw_lines` on re-parse. The structured fields are the fallback,
+> used for `TestBlock` values constructed programmatically rather than parsed.
 >
 > **(b) Value re-quoting.** A value MUST be emitted so that re-lexing it yields exactly one
 > token whose value equals the value emitted. Where the bare form would not, the value is
@@ -323,6 +327,7 @@ section.
 
 | Version | Date | Change |
 | --- | --- | --- |
+| 1.2.1 | 2026-07-30 | Discharges the correction queued when Phase 22 was planned: §10.4(a) claimed `raw_lines` "reproduces the body in the form the author wrote it", which overstates. It preserves the author's **token sequence** (including the §10.2 inline form's `{`/`,`/`}`, which the structured fields discard) but not line breaks — `collect_braced_raw_lines` drops `Newline` tokens, so a multi-line body re-emits flat. Clarified that this is sufficient because NL-6 requires AST-equality rather than source identity, and that re-emitting the line breaks would *break* NL-6 by changing `raw_lines` on re-parse. Text-only precision fix; the two-part rule, `W015`, and every §10 conclusion are unchanged, so the implementation shipped in Phase 22 already matches the corrected wording. |
 | 1.2.0 | 2026-07-30 | Added §10 (body grammar conformance & NL-6 round-trip) and `W015`. Corrects §2, which described a `raw_lines`/structured-fields split that no parse produces — `raw_lines` is the lexed token stream and the structured fields are a derived view, both always populated; the transpiler's emission branch was written against the non-existent state and so never reached its own `raw_lines` path. §10.1/§10.2 fix the canonical body grammar to L1 §4.1's line-per-pair colon form and record the inline-brace form as tolerated-but-not-canonical. §10.3 resolves the `=`-separator question — not legal (L1 admits only `:`), the defect being that non-conforming pairs were dropped *silently*, letting a declared assertion pass without ever being checked; now `W015`, warning-severity so existing corpus files still parse. §10.4 states the two-part round-trip rule (emit from `raw_lines` when present; re-quote values that would not re-lex to a single equal token), which achieves NL-6 AST-equality without storing quoting in the AST. §1 module map gains `transpiler.rs`. |
 | 1.1.0 | 2026-07-04 | Parallel-safe stub (§5): `StubProvider` documented as `Send + Sync`, so `@test:` blocks containing `~PARALLEL` exercise real concurrent branch scheduling with deterministic assertions (input-keyed stub + declared-order `~JOIN`); realizes the NT-5 host extension the language contract permits |
 | 1.0.0 | 2026-06-24 | Initial spec — Rust implementation of NT-1…NT-10; types, API, evaluator, validator diagnostics |

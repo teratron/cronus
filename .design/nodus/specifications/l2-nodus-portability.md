@@ -1,6 +1,6 @@
 # Nodus Portability Implementation (Rust)
 
-**Version:** 1.1.0
+**Version:** 1.2.0
 **Status:** Stable
 **Layer:** implementation
 **Implements:** l1-nodus-portability.md
@@ -9,22 +9,32 @@
 
 Concrete Rust implementation of the nodus portability and extension contract.
 Maps each LP-invariant from `l1-nodus-portability.md` to its enforcing mechanism in
-`crates/nodus`. Specifies the `SchemaProvider` vocabulary-extension seam, defines
-the pending `StorageProvider` and `PolicyProvider` trait interfaces (pending LP-3
-graduation), and documents the extraction artifacts that deliver LP-6 compliance.
+`crates/nodus`. Specifies the `SchemaProvider` vocabulary-extension seam, records the
+`StorageProvider` and `PolicyProvider` trait interfaces (shipped, but with no call
+site — §3.1), and documents the extraction artifacts that deliver LP-6 compliance.
+
+§3 maps LP-1…LP-8, the invariants that existed when this spec was written. §3.1
+records the realization status of LP-9…LP-20, added to the L1 by later additive
+refinement, against a four-way axis that distinguishes a seam with nothing to
+attach to from one that ships but is never consulted.
 
 ## Related Specifications
 
 - [l1-nodus-portability.md](l1-nodus-portability.md) — portability contract this spec implements
 - [l2-nodus-runtime.md](l2-nodus-runtime.md) — runtime module structure this spec extends
-- [l2-nodus-observability.md](l2-nodus-observability.md) — AuditProvider extension point (LP-2 example)
+- [l2-nodus-observability.md](l2-nodus-observability.md) — AuditProvider extension point (LP-2 example); HO-10 completeness anchors LP-20's reporting half
 - [l1-nodus-language.md](l1-nodus-language.md) — NL-invariants that LP-invariants complement
+- [l2-nodus-config.md](l2-nodus-config.md) — [ADDED v1.2.0] `ConfigProvider` role; already carries LP-2/LP-15 and LP-10 rows, and is the seam LP-19 should extend rather than parallel
+- [l2-nodus-environment.md](l2-nodus-environment.md) — [ADDED v1.2.0] `EnvironmentProvider` role; NE-3/NE-7/NE-10 discharge the realized part of LP-18
+- [l2-nodus-dialog.md](l2-nodus-dialog.md) — [ADDED v1.2.0] `DialogProvider` role; its `Status::Paused` + `ResumeDescriptor` lifecycle is the NL-12 substrate LP-14 waits on
+- [l2-nodus-compensation.md](l2-nodus-compensation.md) — [ADDED v1.2.0] establishes the "vacuous in core" recording vocabulary §3.1 uses, and records the LP-11 gate as vacuous by composition
 
 ## 1. Motivation
 
-`l1-nodus-portability.md` defines seven invariants (LP-1…LP-7) that govern how nodus
-stays decoupled from any specific host, but the current `l2-nodus-runtime.md` only
-documents the runtime from an execution perspective. No spec records:
+`l1-nodus-portability.md` defines the invariants that govern how nodus stays decoupled
+from any specific host — seven when this spec was written, twenty today (LP-1…LP-20) —
+but the current `l2-nodus-runtime.md` only documents the runtime from an execution
+perspective. No spec records:
 
 - exactly which Rust constructs enforce each LP-invariant,
 - the planned vocabulary-extension seam (`SchemaProvider`) documented in `vocab.rs` as
@@ -53,7 +63,8 @@ in `l2-nodus-runtime.md`.
 
 ## 3. Invariant Compliance
 
-Explicit mapping of every LP-invariant to its Rust enforcement mechanism:
+Explicit mapping of LP-1…LP-8 to its Rust enforcement mechanism. LP-9…LP-20 were added
+to the L1 after this table was written; their realization status is §3.1.
 
 | LP Invariant | Rust Enforcement |
 | --- | --- |
@@ -65,6 +76,55 @@ Explicit mapping of every LP-invariant to its Rust enforcement mechanism:
 | LP-6 Semantic versioning contract | Published via `crates/nodus/Cargo.toml` with `version = "{semver}"`. Breaking changes follow the notice protocol in `l1-nodus-portability.md §4.5`. CI enforces `cargo semver-checks` (planned; currently manual). `EXTRACTION.md` documents the release checklist. |
 | LP-7 Feedback loop lifecycle | Operationalised by the `/magic.spec nodus` → `/magic.task nodus` → `/magic.run nodus` pipeline. Discovery and distillation steps happen in `l1-nodus-portability.md §4.2`; spec amendment is the Proposal step; the run pipeline is Implementation; `CHANGELOG.md` + version bump is Release. |
 | LP-8 Capability manifest | **Implemented (§4.7).** `portability.rs` defines `CapabilityManifest` (roles / host commands / named capabilities), `HostCapabilities`, and the pure `validate_manifest` resolver. `workflows.rs` runs the gate in `run_with_manifest` / `run_with_manifest_and_audit` after lint validation and before the executor boots, rejecting fail-fast with a `NODUS:CAPABILITY_UNMET` error that names the missing-capability set and emitting no audit events (the executor is never invoked). `CapabilityManifest::from_workflow` derives the manifest from invoked commands. The same resolver is the machine-checkable LP-3 host-substitution test. |
+
+### 3.1 Invariants added after v1.0.0 — realization status [ADDED v1.2.0]
+
+`l1-nodus-portability.md` has grown LP-9 … LP-20 through additive refinement since the
+§3 table was written. Every one of those invariants' Document History entries closes with
+the same sentence — *"l2-nodus-portability carries LP-{N} as a pending Invariant-Compliance
+obligation reconciled at magic.task"* — so they are listed here explicitly: an obligation
+tracked only in a plan document is not tracked in the place its own contract points to.
+
+These twelve are host-supplied seams, so the binary *Realized / Pending* axis used by
+`l2-nodus-runtime.md` §3.1 would misreport them. A four-way axis is used instead:
+
+- **Satisfied structurally** — enforced by what the crate contains and, more often, by what
+  it deliberately lacks. Verifiable today; the standing check is a negative one.
+- **Vacuous in core** — the construct the invariant gates does not exist in the crate, so the
+  seam has no call site. Nothing is owed until that construct lands, and the obligation
+  attaches to whoever builds it. (Vocabulary established by `l2-nodus-compensation.md` §2.)
+- **Seam declared, wiring pending** — the trait ships and is re-exported from `lib.rs`, but no
+  code path consults it: a host implementing it today observes **no behaviour change**. This
+  is published API that silently does nothing, not deferred work. (The crate's own phrasing
+  for this state is "interface-declared, wiring pending".)
+- **Partially realized** — some of the invariant's rules are discharged, named individually.
+
+| L1 Invariant | Realization status |
+| --- | --- |
+| LP-9 Extraction attestation | **Vacuous in core.** No bundle-load path exists (zero occurrences of `bundle` / `witness` / `attest`-as-verification), so the verify-before-load hook has no call site. The `EXTRACTION.md` + `ci.yml` artifacts are LP-6 deliverables (§4.6), not an LP-9 witness. Nodus never signs — verification is the host's (LP-2) — so the core's obligation begins only when an import path does. |
+| LP-10 Host-granted authority, never self-authored | **Satisfied structurally.** Discharged by absence of vocabulary: `KNOWN_COMMANDS` holds no policy-writing command; `CapabilityManifest` exposes only `require_*` builders (declare) and getters (read) with no grant/relax/widen operation; acceptance authority sits behind `ConfigProvider` (`l2-nodus-config.md` LP-10 row); `Budget` is enforced by the run loop and unreadable by the workflow (`l2-nodus-environment.md` NE-13). Load-bearing in four sibling specs (cited by NL-14 / NL-17 / NL-20 DC-10 / NL-21) while having had no row here — the reason it needs one. |
+| LP-11 Per-effect authorization seam | **Seam declared, wiring pending.** `PolicyProvider` + `NoopPolicyProvider` ship and are re-exported, but `evaluate` has **zero call sites**: a host implementing it today gets no gate, and `decide → effect → observe` is unenforced because there is no *decide*. Already recorded as vacuous-by-composition by `l2-nodus-compensation.md` §2. The remedy is one hook in `execute_command` — see the leverage note below. |
+| LP-12 Imported-bundle admission vetting | **Vacuous in core.** Same absent load path as LP-9, and explicitly sequenced after it (attest → vet → run, §4.8 of the L1). No classifier call site can exist before a bundle can be loaded. |
+| LP-13 Addressable versioned import resolution | **Vacuous in core.** No resolver, catalog, pin record, or reference form. `@runtime: { core: <schema-file> }` names a schema file but performs no resolution or pinning. Precedes LP-9/LP-12 in the load order (resolve → attest → vet → run), so the three are one deliverable, not three. |
+| LP-14 Verified-peer delegation seam | **Vacuous in core**, with a named upstream blocker: it specializes NL-12 generalized deferred execution, which `l2-nodus-runtime.md` §3.1 records as **Pending** — the `Status::Paused` + `ResumeDescriptor` lifecycle exists but is human-answer-shaped. A peer seam cannot precede the generalized deferred step it is a special case of. |
+| LP-15 Host-supplied durable-state seam | **Seam declared, wiring pending** — plus a **divergence from the L1**. `StorageProvider` ships and is re-exported, but `store`/`load` have zero call sites. Separately, L1 §4.1 now specifies the built-in as an *in-memory* store ("non-durable; state discarded between invocations"), whereas the crate ships `NoopStorageProvider`: `store` discards and `load` always returns `None`. A no-op is not an in-memory store — an in-memory store round-trips within one invocation and the no-op never does, so a workflow that writes then reads inside a single run reads `None`. The L1 also names `put`/`get`/`delete`; the crate has `store`/`load` and no `delete`. |
+| LP-16 Effect risk-class declaration | **Vacuous in core.** No effect-class type exists (zero occurrences of `EffectClass`), and the consequence descriptors are carried *to* the LP-11 gate — which has no call site. Blocked strictly behind LP-11. |
+| LP-17 Settlement effect seam | **Vacuous in core.** Zero settlement vocabulary. Two levels of unrealized dependency: it specializes the LP-11 gate (unwired) and reuses LP-14's verified peer (vacuous) for the peer-payee case. |
+| LP-18 Environment-liveness seam | **Partially realized.** Rule (c) is discharged — `EnvInteraction` carries environment attribution on existing events (`l2-nodus-environment.md` NE-3), `release` is mandatory + idempotent behind an `InstanceGuard` drop guard (NE-7), and the capability half is complete (NE-10: `ExtensionRole::Environment` + `validate_manifest` fail-fast, provided by `HostCapabilities::builtin()`). Rules (a) and (b) are **not**: `EnvironmentProvider::open` returns `Instance`, not a `Result`, so a vanished or un-openable environment has no typed failure path; no `NODUS:*` code is environment-liveness-shaped; and `ResumeDescriptor` is dialog-shaped, carrying no environment identity, so a resume cannot detect that its environment is gone. Closing (a)/(b) changes a published trait signature — LP-6 **major**, not additive. |
+| LP-19 Host-supplied exposure switch seam | **Vacuous in core.** Zero `rollout` / `holdout` vocabulary; the `switch` occurrences are the `?SWITCH` control-flow construct, unrelated. Its nearest neighbour is `§config` (NL-20, `l2-nodus-config.md`), which already shares the resolve-once / host-accepts / workflow-read-only shape but lacks the two rules that make LP-19 what it is: a **declared safe value** and the unresolvable-switch fallback path. When LP-19 lands it should extend the `ConfigProvider` acceptance shape rather than introduce a parallel seam. |
+| LP-20 Obligation-gated effect seam | **Vacuous in core.** Zero `obligation` / `discharge` vocabulary. Its gating half reuses the LP-11 ordering and is blocked with it. Its *reporting* half is nearer: "an obligation open at run end is surfaced in the terminal `RunManifest`" has a real anchor, since `RunManifest` exists and `l2-nodus-observability.md` HO-10 already carries completeness honesty (`TraceCompleteness` / `classify_trace`). |
+
+**Leverage.** Of the twelve, none is a plain "needs a phase": eight are vacuous, two are
+seam-declared-wiring-pending, one is satisfied structurally, one is partially realized. The
+single highest-value observation is that **LP-11's absent call site blocks LP-16, LP-17, and
+LP-20** — four invariants reduce to one authorization hook in `execute_command`. The two
+nearest-to-plannable items are independent of it: the LP-15 built-in divergence (small and
+self-contained) and LP-18 (a)/(b) (which needs an L2 design decision first, because a
+`Result`-returning environment lifecycle is a breaking change).
+
+**Import triad.** LP-13 → LP-9 → LP-12 are the ordered stages of one absent mechanism.
+Recording them as three independent gaps overstates the backlog; they land together or
+not at all.
 
 ## 4. Detailed Design
 
@@ -112,17 +172,27 @@ boundary of schema construction.
 
 ### 4.2 Extension Point Registry (Rust)
 
-Full registry of LP-2 extension points and their implementation status in `crates/nodus`:
+Full registry of LP-2 extension points and their implementation status in `crates/nodus`.
+The rows correspond one-to-one with the `ExtensionRole` variants (§4.7); *Wired* records
+whether any code path actually consults the trait, which is the distinction §3.1 turns on:
 
-| Role | Trait | Built-in | Status |
-| --- | --- | --- | --- |
-| Model | `ModelProvider` | `StubProvider` | Implemented (`executor.rs`) |
-| Audit | `AuditProvider` | `NoopAuditProvider` | Implemented (`observability.rs`) |
-| Vocabulary | `SchemaProvider` | `BuiltinSchemaProvider` | Specified here; pending implementation |
-| Storage | `StorageProvider` | `NoopStorageProvider` | Pending LP-3 (interface below) |
-| Policy | `PolicyProvider` | `NoopPolicyProvider` | Pending LP-3 (interface below) |
+| Role | Trait | Built-in | Status | Wired |
+| --- | --- | --- | --- | --- |
+| Model | `ModelProvider` | `StubProvider` | Implemented (`executor.rs`) | Yes |
+| Audit | `AuditProvider` | `NoopAuditProvider` | Implemented (`observability.rs`) | Yes |
+| Vocabulary | `SchemaProvider` | `BuiltinSchemaProvider` | Implemented (`portability.rs`; `Schema::with_provider`, `run_with_schema`) | Yes |
+| Dialog | `DialogProvider` | `DefaultDialogProvider` | Implemented (`executor.rs`; `l2-nodus-dialog.md`) | Yes |
+| Environment | `EnvironmentProvider` | `StubEnvironment` | Implemented (`environment.rs`; `l2-nodus-environment.md`) | Yes |
+| Config | `ConfigProvider` | `DefaultConfigProvider` | Implemented (`portability.rs`; `l2-nodus-config.md`) | Yes |
+| Storage | `StorageProvider` | `NoopStorageProvider` | Interface only (§4.3) | **No** — zero call sites (LP-15, §3.1) |
+| Policy | `PolicyProvider` | `NoopPolicyProvider` | Interface only (§4.4) | **No** — zero call sites (LP-11, §3.1) |
 
-### 4.3 StorageProvider — Pending LP-3
+> `Dialog`, `Environment`, and `Config` are roles the implementation added after the L1
+> §4.1 taxonomy table was last amended; that table still lists four. L1 §4.1 declares itself
+> "the authoritative extension point registry", so the divergence is recorded here and
+> reconciled L1-side rather than resolved unilaterally by this L2.
+
+### 4.3 StorageProvider — Interface Only (wiring pending LP-3)
 
 Interface contract recorded for when LP-3 is satisfied (two independent hosts require
 durable cross-invocation state):
@@ -150,7 +220,7 @@ deferred; those commands currently operate against the in-memory variable enviro
 LP-3 graduation also triggers the addition of `run_with_storage` and
 `run_with_storage_and_audit` API variants to `workflows.rs`.
 
-### 4.4 PolicyProvider — Pending LP-3
+### 4.4 PolicyProvider — Interface Only (wiring pending LP-3)
 
 Interface contract recorded for when LP-3 is satisfied (two independent hosts require
 runtime policy evaluation beyond `!!`-rules):
@@ -180,16 +250,18 @@ only passes context to the host's decision function.
 
 ### 4.5 Module Additions
 
-When `SchemaProvider` is implemented (§4.1):
+Delivered (`SchemaProvider` per §4.1, the manifest per §4.7):
 
 ```text
 [REFERENCE]
 crates/nodus/src/
 ├── ...
-├── vocab.rs          — Schema::with_provider constructor added
-└── portability.rs    — SchemaProvider + BuiltinSchemaProvider
-                        StorageProvider + NoopStorageProvider  (pending LP-3)
-                        PolicyProvider + NoopPolicyProvider    (pending LP-3)
+├── vocab.rs          — Schema::with_provider constructor
+└── portability.rs    — SchemaProvider  + BuiltinSchemaProvider   (wired)
+                        ConfigProvider  + DefaultConfigProvider   (wired, l2-nodus-config)
+                        StorageProvider + NoopStorageProvider     (interface only — §3.1 LP-15)
+                        PolicyProvider  + NoopPolicyProvider      (interface only — §3.1 LP-11)
+                        ExtensionRole / CapabilityManifest / HostCapabilities / validate_manifest
 ```
 
 `lib.rs` re-exports from `portability` follow the same pattern as `observability`.
@@ -216,7 +288,10 @@ satisfied by any host:
 
 ```text
 [REFERENCE]
-pub enum ExtensionRole { Model, Audit, Storage, Policy, Vocabulary }
+pub enum ExtensionRole {
+    Model, Audit, Storage, Policy, Vocabulary,   // original five
+    Dialog, Environment, Config,                 // added by later L2 work (§4.2)
+}
 
 pub struct CapabilityManifest {
     roles:        BTreeSet<ExtensionRole>,
@@ -237,8 +312,12 @@ impl CapabilityManifest {
 
 `from_workflow` walks every command (descending into conditionals, loops, and
 parallel branches): a model-backed command (`GEN`/`ANALYZE`) requires `Model`; a
+dialog command (`ASK`/`CONFIRM`) without a `+default` requires `Dialog`; a
 command outside the builtin vocabulary requires `Vocabulary` and is recorded as a
-required command name; a builtin non-model command requires nothing. Explicit DSL
+required command name; a builtin non-model command requires nothing. `Storage`,
+`Policy`, and `Environment` have no corresponding command syntax and are never
+derived — a caller requires them explicitly via `require_role` (`run_with_environment`
+does so on every call, since calling it is itself the declaration). Explicit DSL
 declaration (an `@needs` section) is deferred to the upstream-parity backlog.
 
 `HostCapabilities` is what the active host provides. It is constructed
@@ -257,10 +336,16 @@ impl HostCapabilities {
 }
 ```
 
-The built-in host provides `Model` (the `StubProvider`), `Audit` (a sink is
-always wired), and `Vocabulary` (the builtin schema); it provides neither
-`Storage` nor `Policy`, which remain pending LP-3 (§4.3, §4.4). A model-only or
-manifest-free workflow therefore runs against the built-in host with no wiring.
+`HostCapabilities::builtin()` provides five roles: `Model` (the `StubProvider`),
+`Audit` (a sink is always wired), `Vocabulary` (the builtin schema),
+`Environment` (`StubEnvironment`), and `Config` (`DefaultConfigProvider`) — the
+last two because each built-in is a *complete trivial* implementation, so a
+workflow declaring the need stays runnable in-process. It provides neither
+`Storage` nor `Policy` (interface-only, §4.3/§4.4), and deliberately not
+`Dialog`, whose default resolver is incomplete: a workflow that asks a question
+no host can answer must fail its manifest rather than silently proceed. A
+model-only or manifest-free workflow therefore runs against the built-in host
+with no wiring.
 
 The resolver is pure — no I/O, no events — and returns every unmet item by name:
 
@@ -301,12 +386,18 @@ portable to a host exactly when that host satisfies its manifest.
 
 ## 5. Implementation Notes
 
-Order of implementation across future phases:
+Order of implementation across future phases, revised against the §3.1 findings:
 
 1. **SchemaProvider + capability manifest (LP-8)** — delivered. `Schema::with_provider`, the `run_with_schema` variant, and the `CapabilityManifest` / `validate_manifest` gate (§4.7) are purely additive — zero risk to the existing API.
-2. **StorageProvider** (after LP-3) — requires executor hook points for `STORE`/`LOAD` commands. Plan as a separate phase once the second host usage context is documented.
-3. **PolicyProvider** (after LP-3) — requires a new pre-step evaluation hook in `execute_command`. Plan alongside or after StorageProvider.
-4. **`cargo semver-checks` gate** — add to `ci.yml` once the crate reaches `1.0.0`; this is the LP-6 mechanical enforcement.
+2. **PolicyProvider call site (LP-11)** — promoted to the highest-leverage item by §3.1: a single pre-effect evaluation hook in `execute_command` converts `PolicyProvider` from a no-op export into a real seam **and** unblocks LP-16, LP-17, and LP-20, all three of which are gated behind the same `decide → effect → observe` ordering. Additive: with no host provider the built-in allow-all preserves today's behaviour byte-for-byte.
+3. **StorageProvider built-in + call site (LP-15)** — two separable pieces. The smaller and independent one is the built-in divergence: L1 §4.1 specifies an in-memory store, the crate ships a no-op that never round-trips (§3.1). Correcting the built-in is self-contained and does not wait on LP-3. Executor hook points for `STORE`/`LOAD` remain the larger, LP-3-gated piece.
+4. **Environment liveness (LP-18 a/b)** — requires an L2 design decision before it can be planned: giving `EnvironmentProvider::open` a `Result` return and teaching `ResumeDescriptor` an environment identity are breaking changes to published items, so LP-6 classes them **major**. Amend this spec (or `l2-nodus-environment.md`) before authoring a task.
+5. **Import triad (LP-13 → LP-9 → LP-12)** — one deliverable, not three; nothing is owed until a bundle-load path exists. Not plannable today.
+6. **`cargo semver-checks` gate** — add to `ci.yml` once the crate reaches `1.0.0`; this is the LP-6 mechanical enforcement.
+
+Items 2 and 3 are the only entries here that a task can be authored against without a
+further spec pass. Everything in §3.1 marked *Vacuous in core* is deliberately absent from
+this list: an item with no call site yields no verifiable task.
 
 ## 6. Drawbacks & Alternatives
 
@@ -323,6 +414,9 @@ Order of implementation across future phases:
 | `[VOCAB]` | `crates/nodus/src/vocab.rs` | `KNOWN_COMMANDS`, `RESERVED_VARIABLES`, `Schema` — LP-4 seam |
 | `[EXT-POINTS]` | `crates/nodus/src/executor.rs` | `ModelProvider`, `StubProvider` — LP-2 canonical example |
 | `[AUDIT-EXT]` | `crates/nodus/src/observability.rs` | `AuditProvider`, `NoopAuditProvider` — LP-2 second example |
+| `[PORTABILITY]` | `crates/nodus/src/portability.rs` | `ExtensionRole`, `CapabilityManifest`, `HostCapabilities`, `validate_manifest`; the Schema/Storage/Policy/Config traits — the §3.1 evidence base |
+| `[ENV-EXT]` | `crates/nodus/src/environment.rs` | `EnvironmentProvider`, `StubEnvironment`, `Instance` — the LP-18 realized surface |
+| `[RUN-VARIANTS]` | `crates/nodus/src/workflows.rs` | The orthogonal `run_with_*` family — LP-5 composability evidence |
 | `[API-SURFACE]` | `crates/nodus/src/lib.rs` | Public re-export surface — LP-6 versioning scope |
 | `[CI]` | `crates/nodus/.github/workflows/ci.yml` | LP-6 regression gate |
 | `[EXTRACTION]` | `crates/nodus/EXTRACTION.md` | LP-6 extraction checklist |
@@ -331,5 +425,6 @@ Order of implementation across future phases:
 
 | Version | Date | Author | Notes |
 | --- | --- | --- | --- |
+| 1.2.0 | 2026-07-30 | Core Team | Reconciled the twelve deferred Invariant-Compliance obligations LP-9…LP-20, each of whose L1 Document History entries names *this* spec as their carrier — new §3.1. Replaces the binary Realized/Pending axis of `l2-nodus-runtime` §3.1 with a **four-way** one, because these are host-supplied seams and the binary form misreports them: **Satisfied structurally** (LP-10 — discharged by absence of vocabulary, and load-bearing in four sibling specs while having had no row here), **Vacuous in core** (LP-9/12/13/14/16/17/19/20 — the gated construct is absent, so the seam has no call site and nothing is owed until it lands; vocabulary from `l2-nodus-compensation` §2), **Seam declared, wiring pending** (LP-11 and LP-15 — traits ship and are re-exported but `evaluate` / `store` / `load` have **zero call sites**, so a host implementing them observes no behaviour change: published API that silently does nothing, not deferred work), and **Partially realized** (LP-18 — rule (c) discharged via NE-3/NE-7/NE-10, rules (a)/(b) not, and closing them is an LP-6 *major* change since `EnvironmentProvider::open` returns `Instance` not `Result`). Records two structural findings: **LP-11's absent call site alone blocks LP-16, LP-17, and LP-20**, so four invariants reduce to one hook in `execute_command`; and LP-13 → LP-9 → LP-12 are ordered stages of one absent import mechanism, not three independent gaps. Names an L1 divergence: L1 §4.1 specifies an *in-memory* built-in store while the crate ships `NoopStorageProvider`, which never round-trips within an invocation (also `put`/`get`/`delete` vs `store`/`load`, no `delete`). Corrected three stale surfaces against `portability.rs`: §4.2 registry (5 roles → 8, adding `Dialog`/`Environment`/`Config`, plus a *Wired* column, and un-marking `SchemaProvider` as pending when §5 already recorded it delivered), §4.7 `ExtensionRole` reference enum (5 → 8 variants) and its built-in-host prose (3 → 5 roles provided, with `Dialog`'s deliberate exclusion explained), and `from_workflow`'s derivation rules (adds the `ASK`/`CONFIRM` → `Dialog` rule and the never-derived roles). §1 seven-invariants → twenty; §4.5 module map marked delivered; §5 re-ordered so the only two task-authorable items (LP-11 call site, LP-15 built-in) lead. Flags for L1 reconciliation that §4.1 — self-declared "the authoritative extension point registry" — still lists four roles against the implementation's eight. |
 | 1.1.0 | 2026-06-27 | Core Team | LP-8 implemented: §4.7 capability manifest + pre-run satisfiability gate (`CapabilityManifest`, `ExtensionRole`, `HostCapabilities`, `validate_manifest`, `run_with_manifest` / `run_with_manifest_and_audit`, `NODUS:CAPABILITY_UNMET`); §3 LP-8 row → Implemented; status RFC → Stable |
 | 1.0.0 | 2026-06-24 | Core Team | Initial spec — LP-1…LP-7 compliance table; SchemaProvider seam; StorageProvider + PolicyProvider pending LP-3 interfaces; extraction artifacts |
