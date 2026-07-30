@@ -79,6 +79,8 @@ pub enum TokenType {
     TildeMap,
     /// `~RETRY` (followed by `:n`).
     TildeRetry,
+    /// `~COMPENSATE` (followed by `: CMD(args)`, NL-22).
+    TildeCompensate,
     /// `~JOIN`
     TildeJoin,
     /// `~END`
@@ -220,6 +222,7 @@ fn tilde_keyword(word: &str) -> Option<TokenType> {
         "PARALLEL" => Some(TokenType::TildeParallel),
         "MAP" => Some(TokenType::TildeMap),
         "RETRY" => Some(TokenType::TildeRetry),
+        "COMPENSATE" => Some(TokenType::TildeCompensate),
         "JOIN" => Some(TokenType::TildeJoin),
         "END" => Some(TokenType::TildeEnd),
         _ => None,

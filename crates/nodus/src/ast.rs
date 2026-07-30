@@ -43,6 +43,10 @@ pub struct RuntimeBlock {
     pub agents: Vec<(String, String)>,
     /// Execution mode (defaults to `production`).
     pub mode: String,
+    /// Bounded whole-run self-restart ceiling (NL-23). `None` disables the
+    /// feature entirely — a workflow with no `restart_max` behaves exactly as
+    /// before this construct existed.
+    pub restart_max: Option<u32>,
 }
 
 /// Reactive trigger declaration (`@ON: condition → action`).
@@ -378,6 +382,10 @@ pub struct Step {
     /// `None` means no retry; `Some(0)` marks a present-but-invalid bound that
     /// the validator rejects.
     pub retry: Option<u32>,
+    /// `~COMPENSATE: CMD(args)` — the host-supplied undo for this step's
+    /// business effect (NL-22). `None` means the step is honestly
+    /// un-compensable, not that it has no effect.
+    pub compensation: Option<CommandCall>,
 }
 
 /// The top-level node for a parsed workflow file.

@@ -86,6 +86,8 @@ impl Validator {
         d.extend(Self::e015_no_duplicate_test_names(ast, filename));
         d.extend(Self::e016_halt_requires_escalate(ast, filename));
         d.extend(Self::e017_retry_bounded(ast, filename));
+        d.extend(Self::e018_restart_max_bounded(ast, filename));
+        d.extend(Self::e019_restart_scope(ast, filename));
 
         // Warnings
         d.extend(Self::w001_err_handler(ast, filename));
@@ -368,6 +370,42 @@ impl Validator {
                 _ => None,
             })
             .collect()
+    }
+
+    /// `restart_max` (NL-23, the run-grain analog of `~UNTIL MAX:n`) must be a
+    /// declared bound with 1 ≤ n ≤ 10, mirroring `e017_retry_bounded`'s shape.
+    fn e018_restart_max_bounded(wf: &WorkflowFile, filename: &str) -> Vec<Diagnostic> {
+        match wf.runtime.as_ref().and_then(|rt| rt.restart_max) {
+            Some(n) if n == 0 || n > 10 => vec![Diagnostic::new(
+                Severity::Error,
+                "E018",
+                "restart_max requires a bound n with 1 ≤ n ≤ 10.",
+                filename,
+            )],
+            _ => vec![],
+        }
+    }
+
+    /// NL-23(b): a `$restart` request is legal only from a run-boundary step,
+    /// never from inside a `~FOR`/`~PARALLEL` body or a `?SWITCH` arm — which
+    /// context resumes and what of the in-flight siblings survives is
+    /// undefined otherwise. Statically detectable: nesting is a fixed AST
+    /// shape, not a runtime value. `~UNTIL` and `~MAP` are deliberately not
+    /// walked here — `~UNTIL` is outside this rule's scope (an open question
+    /// flagged for a future spec pass), and `~MAP` is structurally immune:
+    /// `execute_map` always rewrites its inner command's pipeline target to a
+    /// scratch variable before running it, so `$restart` cannot be its target.
+    fn e019_restart_scope(wf: &WorkflowFile, filename: &str) -> Vec<Diagnostic> {
+        let mut diags = Vec::new();
+        for step in &wf.steps {
+            if let Some(body) = &step.body {
+                restart_scope_stmt(body, &mut diags, filename);
+            }
+            for sub in &step.sub_steps {
+                restart_scope_stmt(sub, &mut diags, filename);
+            }
+        }
+        diags
     }
 
     // ─── Warnings ─────────────────────────────────────────────────────────────
@@ -697,6 +735,11 @@ fn collect_vars_step(
     }
     for sub in &step.sub_steps {
         collect_vars_stmt(sub, declared, used);
+    }
+    // NL-22: a ~COMPENSATE clause's args/target are ordinary variable
+    // references too — E004 should see them the same as the step's own body.
+    if let Some(comp) = &step.compensation {
+        collect_vars_cmd(comp, declared, used);
     }
 }
 
@@ -1032,6 +1075,136 @@ fn find_empty_switches_stmt(node: &Stmt, diags: &mut Vec<Diagnostic>, filename: 
         }
         Stmt::Map(_) | Stmt::Command(_) | Stmt::VarRef(_) | Stmt::Comment(_) => {}
     }
+}
+
+/// NL-23(b) entry: walk a statement transparently (nothing here is itself
+/// forbidden), but once a `~FOR` body, `~PARALLEL` branch, or `?SWITCH` arm is
+/// entered, switch to [`flag_restart_stmt`], which flags every `$restart`
+/// target found beneath — including through further nesting.
+fn restart_scope_stmt(node: &Stmt, diags: &mut Vec<Diagnostic>, filename: &str) {
+    match node {
+        Stmt::Command(_) => {}
+        Stmt::Conditional(cond) => {
+            for child in &cond.body {
+                restart_scope_stmt(child, diags, filename);
+            }
+            for br in &cond.elif_branches {
+                for child in &br.body {
+                    restart_scope_stmt(child, diags, filename);
+                }
+            }
+            if let Some(else_br) = &cond.else_branch {
+                for child in &else_br.body {
+                    restart_scope_stmt(child, diags, filename);
+                }
+            }
+        }
+        Stmt::ForLoop(fl) => {
+            for child in &fl.body {
+                flag_restart_stmt(child, diags, filename);
+            }
+        }
+        // ~UNTIL is deliberately not forbidden by this rule (see the doc
+        // comment on e019_restart_scope) — recurse transparently so a further
+        // nested ~FOR/~PARALLEL/?SWITCH inside it is still caught.
+        Stmt::UntilLoop(ul) => {
+            for child in &ul.body {
+                restart_scope_stmt(child, diags, filename);
+            }
+        }
+        Stmt::Parallel(pb) => {
+            for child in &pb.branches {
+                flag_restart_stmt(child, diags, filename);
+            }
+        }
+        Stmt::Switch(sw) => {
+            for (_, action) in &sw.arms {
+                flag_restart_command(action, diags, filename);
+            }
+            if let Some(default) = &sw.default {
+                flag_restart_command(default, diags, filename);
+            }
+        }
+        Stmt::Map(_) | Stmt::VarRef(_) | Stmt::Comment(_) => {}
+    }
+}
+
+/// Unconditionally flags every `$restart`-targeting command reachable from
+/// `node` — used once [`restart_scope_stmt`] has already entered a forbidden
+/// container, so everything beneath it is in scope regardless of further
+/// nesting shape.
+fn flag_restart_stmt(node: &Stmt, diags: &mut Vec<Diagnostic>, filename: &str) {
+    match node {
+        Stmt::Command(cmd) => flag_restart_command(cmd, diags, filename),
+        Stmt::Conditional(cond) => {
+            if let Some(action) = &cond.action {
+                flag_restart_command(action, diags, filename);
+            }
+            for child in &cond.body {
+                flag_restart_stmt(child, diags, filename);
+            }
+            for br in &cond.elif_branches {
+                if let Some(action) = &br.action {
+                    flag_restart_command(action, diags, filename);
+                }
+                for child in &br.body {
+                    flag_restart_stmt(child, diags, filename);
+                }
+            }
+            if let Some(else_br) = &cond.else_branch {
+                if let Some(action) = &else_br.action {
+                    flag_restart_command(action, diags, filename);
+                }
+                for child in &else_br.body {
+                    flag_restart_stmt(child, diags, filename);
+                }
+            }
+        }
+        Stmt::ForLoop(fl) => {
+            for child in &fl.body {
+                flag_restart_stmt(child, diags, filename);
+            }
+        }
+        Stmt::UntilLoop(ul) => {
+            for child in &ul.body {
+                flag_restart_stmt(child, diags, filename);
+            }
+        }
+        Stmt::Parallel(pb) => {
+            for child in &pb.branches {
+                flag_restart_stmt(child, diags, filename);
+            }
+        }
+        Stmt::Switch(sw) => {
+            for (_, action) in &sw.arms {
+                flag_restart_command(action, diags, filename);
+            }
+            if let Some(default) = &sw.default {
+                flag_restart_command(default, diags, filename);
+            }
+        }
+        Stmt::Map(mb) => {
+            if mb.target.as_deref() == Some("$restart") {
+                diags.push(restart_scope_diagnostic(filename));
+            }
+        }
+        Stmt::VarRef(_) | Stmt::Comment(_) => {}
+    }
+}
+
+fn flag_restart_command(cmd: &CommandCall, diags: &mut Vec<Diagnostic>, filename: &str) {
+    if cmd.pipeline_target.as_deref() == Some("$restart") {
+        diags.push(restart_scope_diagnostic(filename));
+    }
+}
+
+fn restart_scope_diagnostic(filename: &str) -> Diagnostic {
+    Diagnostic::new(
+        Severity::Error,
+        "E019",
+        "$restart is requestable only from a top-level run-boundary step, never from inside a ~FOR/~PARALLEL body or a ?SWITCH arm.",
+        filename,
+    )
 }
 
 fn find_until_loops_step<F: FnMut(&UntilLoop)>(step: &Step, f: &mut F) {
@@ -2259,6 +2432,211 @@ mod tests {
                 .iter()
                 .any(|d| d.code == "E004" && d.severity == Severity::Error),
             "$it used outside a ~MAP must still be flagged as undeclared (the fix must not blanket-declare it); got: {diags:?}"
+        );
+    }
+
+    #[test]
+    fn e018_fires_on_unbounded_or_oversized_restart_max() {
+        use crate::ast::RuntimeBlock;
+
+        for n in [0u32, 11] {
+            let wf = WorkflowFile {
+                runtime: Some(RuntimeBlock {
+                    core: "schema.nodus".to_string(),
+                    restart_max: Some(n),
+                    ..Default::default()
+                }),
+                ..Default::default()
+            };
+            let diags = Validator::validate(&wf, "");
+            assert!(
+                diags
+                    .iter()
+                    .any(|d| d.code == "E018" && d.severity == Severity::Error),
+                "restart_max: {n} must raise E018; got: {diags:?}"
+            );
+        }
+    }
+
+    #[test]
+    fn no_e018_for_valid_restart_max() {
+        use crate::ast::RuntimeBlock;
+
+        for n in [1u32, 10] {
+            let wf = WorkflowFile {
+                runtime: Some(RuntimeBlock {
+                    core: "schema.nodus".to_string(),
+                    restart_max: Some(n),
+                    ..Default::default()
+                }),
+                ..Default::default()
+            };
+            let diags = Validator::validate(&wf, "");
+            assert!(
+                !diags.iter().any(|d| d.code == "E018"),
+                "restart_max: {n} must not raise E018; got: {diags:?}"
+            );
+        }
+    }
+
+    #[test]
+    fn e013_fires_when_pipeline_target_is_restart_count() {
+        use crate::ast::{CommandCall, RuntimeBlock, Step, Stmt};
+
+        let wf = WorkflowFile {
+            runtime: Some(RuntimeBlock {
+                core: "schema.nodus".to_string(),
+                ..Default::default()
+            }),
+            steps: vec![Step {
+                number: 1,
+                body: Some(Stmt::Command(CommandCall {
+                    name: "GEN".to_string(),
+                    args: vec!["prompt".to_string()],
+                    pipeline_target: Some("$restart_count".to_string()),
+                    ..Default::default()
+                })),
+                ..Default::default()
+            }],
+            ..Default::default()
+        };
+        let diags = Validator::validate(&wf, "");
+        assert!(
+            diags
+                .iter()
+                .any(|d| d.code == "E013" && d.severity == Severity::Error),
+            "→ $restart_count must be rejected — it is runtime-owned and unforgeable (NL-8/NL-23); got: {diags:?}"
+        );
+    }
+
+    #[test]
+    fn no_e013_for_restart_request_target() {
+        use crate::ast::{CommandCall, RuntimeBlock, Step, Stmt};
+
+        let wf = WorkflowFile {
+            runtime: Some(RuntimeBlock {
+                core: "schema.nodus".to_string(),
+                restart_max: Some(3),
+                ..Default::default()
+            }),
+            steps: vec![Step {
+                number: 1,
+                body: Some(Stmt::Command(CommandCall {
+                    name: "GEN".to_string(),
+                    args: vec!["prompt".to_string()],
+                    pipeline_target: Some("$restart".to_string()),
+                    ..Default::default()
+                })),
+                ..Default::default()
+            }],
+            ..Default::default()
+        };
+        let diags = Validator::validate(&wf, "");
+        assert!(
+            !diags.iter().any(|d| d.code == "E013"),
+            "→ $restart must stay writable — a workflow must be able to request a restart; got: {diags:?}"
+        );
+    }
+
+    #[test]
+    fn e019_fires_on_restart_request_nested_in_for_loop() {
+        use crate::ast::{CommandCall, ForLoop, RuntimeBlock, Step, Stmt};
+
+        let wf = WorkflowFile {
+            runtime: Some(RuntimeBlock {
+                core: "schema.nodus".to_string(),
+                restart_max: Some(3),
+                ..Default::default()
+            }),
+            steps: vec![Step {
+                number: 1,
+                body: Some(Stmt::ForLoop(ForLoop {
+                    variable: "$item".to_string(),
+                    collection: "$in.items".to_string(),
+                    body: vec![Stmt::Command(CommandCall {
+                        name: "GEN".to_string(),
+                        args: vec![],
+                        pipeline_target: Some("$restart".to_string()),
+                        ..Default::default()
+                    })],
+                })),
+                ..Default::default()
+            }],
+            ..Default::default()
+        };
+        let diags = Validator::validate(&wf, "");
+        assert!(
+            diags
+                .iter()
+                .any(|d| d.code == "E019" && d.severity == Severity::Error),
+            "a $restart request inside a ~FOR body must be rejected (NL-23(b)); got: {diags:?}"
+        );
+    }
+
+    #[test]
+    fn e019_fires_on_restart_request_nested_in_switch_arm() {
+        use crate::ast::{CommandCall, RuntimeBlock, Step, Stmt, SwitchBlock};
+
+        let wf = WorkflowFile {
+            runtime: Some(RuntimeBlock {
+                core: "schema.nodus".to_string(),
+                restart_max: Some(3),
+                ..Default::default()
+            }),
+            steps: vec![Step {
+                number: 1,
+                body: Some(Stmt::Switch(SwitchBlock {
+                    scrutinee: "$in.x".to_string(),
+                    arms: vec![(
+                        "urgent".to_string(),
+                        CommandCall {
+                            name: "GEN".to_string(),
+                            args: vec![],
+                            pipeline_target: Some("$restart".to_string()),
+                            ..Default::default()
+                        },
+                    )],
+                    default: None,
+                })),
+                ..Default::default()
+            }],
+            ..Default::default()
+        };
+        let diags = Validator::validate(&wf, "");
+        assert!(
+            diags
+                .iter()
+                .any(|d| d.code == "E019" && d.severity == Severity::Error),
+            "a $restart request inside a ?SWITCH arm must be rejected (NL-23(b)); got: {diags:?}"
+        );
+    }
+
+    #[test]
+    fn no_e019_for_top_level_restart_request() {
+        use crate::ast::{CommandCall, RuntimeBlock, Step, Stmt};
+
+        let wf = WorkflowFile {
+            runtime: Some(RuntimeBlock {
+                core: "schema.nodus".to_string(),
+                restart_max: Some(3),
+                ..Default::default()
+            }),
+            steps: vec![Step {
+                number: 1,
+                body: Some(Stmt::Command(CommandCall {
+                    name: "GEN".to_string(),
+                    args: vec![],
+                    pipeline_target: Some("$restart".to_string()),
+                    ..Default::default()
+                })),
+                ..Default::default()
+            }],
+            ..Default::default()
+        };
+        let diags = Validator::validate(&wf, "");
+        assert!(
+            !diags.iter().any(|d| d.code == "E019"),
+            "a top-level $restart request must not be rejected; got: {diags:?}"
         );
     }
 }

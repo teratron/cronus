@@ -276,6 +276,20 @@ enum Signal {
 
 // ─── Execution context ────────────────────────────────────────────────────────
 
+/// A step's declared undo, recorded only once that step's own action has
+/// completed without adding a new runtime error (NL-22(a) — only completed
+/// effects compensate; a still-running or already-failed step never enters
+/// this ledger, keeping cancellation a distinct path from the unwind). A step
+/// whose action carries a control signal (`!HALT`/`!PAUSE`/`!BREAK`/`!SKIP`)
+/// is not recorded either — `run_step_with_retry` returns early on any
+/// signal, before the ledger-append point, since a signal-carrying step's
+/// completion is ambiguous in exactly the way a per-item context is (NL-23(b)
+/// reasons about the same ambiguity for restart requests).
+struct CompletedEffect {
+    step_number: u32,
+    compensation: CommandCall,
+}
+
 struct ExecutionContext {
     variables: HashMap<String, Value>,
     rules: Vec<AbsoluteRule>,
@@ -289,6 +303,9 @@ struct ExecutionContext {
     /// Bound once at run construction (HO-7); shared by every event this run
     /// emits and equal to `RunManifest.run_id`. Never re-derived per event.
     correlation_id: String,
+    /// The completed-effect ledger (NL-22), appended in completion order and
+    /// drained back-to-front (LIFO) when the run fails.
+    compensations: Vec<CompletedEffect>,
 }
 
 impl ExecutionContext {
@@ -304,6 +321,7 @@ impl ExecutionContext {
             start_instant: Instant::now(),
             paused_at: None,
             correlation_id,
+            compensations: Vec::new(),
         }
     }
 
@@ -504,7 +522,7 @@ impl Executor {
     /// Run a parsed workflow through the boot sequence, execute its steps, and
     /// return the structured [`RunResult`].
     pub fn execute(&self, ast: &WorkflowFile, input: Option<Value>) -> RunResult {
-        self.execute_inner(
+        self.execute_with_restart(
             ast,
             input,
             "",
@@ -526,7 +544,7 @@ impl Executor {
         run_id: &str,
         started_at: &str,
     ) -> RunResult {
-        self.execute_inner(
+        self.execute_with_restart(
             ast,
             input,
             run_id,
@@ -555,7 +573,7 @@ impl Executor {
         execution_mode: ExecutionMode,
         exposure_switches: Vec<(String, String)>,
     ) -> RunResult {
-        self.execute_inner(
+        self.execute_with_restart(
             ast,
             input,
             run_id,
@@ -588,7 +606,7 @@ impl Executor {
         wall_clock_ms: Option<u64>,
         env_trajectory: Vec<EnvInteraction>,
     ) -> (RunResult, bool) {
-        self.execute_inner(
+        self.execute_with_restart(
             ast,
             input,
             run_id,
@@ -621,6 +639,104 @@ impl Executor {
         let event = build(ctx.event_count as u64, ctx.correlation_id.clone());
         self.audit.record_event(event);
         ctx.event_count += 1;
+    }
+
+    /// NL-23: wraps [`Self::execute_inner`] in a bounded attempt loop when the
+    /// workflow declares `restart_max`. Wrapping **around** rather than
+    /// reaching inside is the load-bearing choice — `execute_inner` builds a
+    /// fresh [`ExecutionContext`] on every call, so re-entering it *is* the
+    /// LG-5 fresh reconstruction; no state-clearing routine exists to drift
+    /// out of sync as the context gains fields later.
+    ///
+    /// A workflow with no `restart_max` takes exactly the pre-NL-23 path: one
+    /// `execute_inner` call, no `$restart_count` seeded, byte-identical result
+    /// unless the workflow itself sets `$restart` (in which case the request
+    /// is refused with `NODUS:RESTART_LIMIT` — self-restart is opt-in via
+    /// declaration, never silently active).
+    #[allow(clippy::too_many_arguments)]
+    fn execute_with_restart(
+        &self,
+        ast: &WorkflowFile,
+        input: Option<Value>,
+        run_id: &str,
+        started_at: &str,
+        max_steps: Option<u32>,
+        wall_clock_ms: Option<u64>,
+        env_trajectory: Vec<EnvInteraction>,
+        execution_mode: ExecutionMode,
+        exposure_switches: Vec<(String, String)>,
+    ) -> (RunResult, bool) {
+        let restart_max = ast.runtime.as_ref().and_then(|rt| rt.restart_max);
+
+        let Some(max) = restart_max else {
+            let (mut result, budget_halted) = self.execute_inner(
+                ast,
+                input,
+                run_id,
+                started_at,
+                max_steps,
+                wall_clock_ms,
+                env_trajectory,
+                execution_mode,
+                exposure_switches,
+            );
+            if result.vars.get("restart").is_some_and(Self::is_truthy) {
+                result
+                    .flags
+                    .push(vocab::error_code::RESTART_LIMIT.to_string());
+            }
+            return (result, budget_halted);
+        };
+
+        let mut attempt: u32 = 0;
+        loop {
+            let attempt_input = Self::seed_restart_count(&input, attempt);
+            // Each attempt is its own event stream (HO-7): a shared correlation_id
+            // across attempts would break the per-manifest event_count == highest
+            // seq + 1 identity, so a non-empty caller-supplied run_id is
+            // disambiguated per attempt rather than reused verbatim.
+            let attempt_run_id = if run_id.is_empty() {
+                String::new()
+            } else {
+                format!("{run_id}-restart{attempt}")
+            };
+            let (mut result, budget_halted) = self.execute_inner(
+                ast,
+                attempt_input,
+                &attempt_run_id,
+                started_at,
+                max_steps,
+                wall_clock_ms,
+                env_trajectory.clone(),
+                execution_mode.clone(),
+                exposure_switches.clone(),
+            );
+
+            let requested = result.vars.get("restart").is_some_and(Self::is_truthy);
+            if !requested {
+                return (result, budget_halted);
+            }
+            if attempt + 1 > max {
+                result
+                    .flags
+                    .push(vocab::error_code::RESTART_LIMIT.to_string());
+                return (result, budget_halted);
+            }
+            attempt += 1;
+        }
+    }
+
+    /// Merge a `restart_count` entry into the `@in`-overlay input map for one
+    /// attempt, preserving whatever the caller originally passed. Fresh per
+    /// attempt (LG-5) — nothing from a prior attempt's variable environment
+    /// carries over except this explicit, intentional counter.
+    fn seed_restart_count(input: &Option<Value>, attempt: u32) -> Option<Value> {
+        let mut entries = match input {
+            Some(Value::Map(m)) => m.clone(),
+            _ => Vec::new(),
+        };
+        entries.push(("restart_count".to_string(), Value::Int(attempt as i64)));
+        Some(Value::Map(entries))
     }
 
     /// Returns `(result, budget_halted)` — `budget_halted` is `true` only when
@@ -754,6 +870,32 @@ impl Executor {
             Status::Ok
         };
 
+        // NL-22(d): armed only on failure/abort, never automatic on success —
+        // a Status::Ok/Partial/Paused run keeps its effects untouched. Drains
+        // the ledger back-to-front (LIFO, CO-4): later effects were built on
+        // earlier ones, so popping is the correctness contract, not a hint.
+        // A compensation that fails is not retried and does not abort the
+        // unwind (NL-22(b)) — it stays surfaced as COMPENSATION_FAILED
+        // alongside whatever error the original effect already carries, and
+        // draining continues so every remaining completed effect still gets
+        // its chance to undo.
+        if matches!(status, Status::Failed | Status::Aborted) {
+            while let Some(effect) = ctx.compensations.pop() {
+                let errors_before_compensation = ctx.errors.len();
+                self.execute_command(&mut ctx, &effect.compensation, effect.step_number);
+                if ctx.errors.len() != errors_before_compensation {
+                    ctx.errors.push(RuntimeError {
+                        code: vocab::error_code::COMPENSATION_FAILED.to_string(),
+                        step: effect.step_number,
+                        reason: format!(
+                            "compensation for step {} failed; original effect remains live",
+                            effect.step_number
+                        ),
+                    });
+                }
+            }
+        }
+
         let resume = if paused {
             Some(ResumeDescriptor {
                 workflow: workflow_id.clone(),
@@ -863,6 +1005,15 @@ impl Executor {
             if ctx.errors.len() == errors_at_attempt {
                 // Success: discard any errors left by earlier failed attempts.
                 ctx.errors.truncate(errors_before);
+                // NL-22(a): only a step that completes cleanly (here, not a
+                // signal-carrying branch — see the doc comment on the
+                // compensations field) enters the completed-effect ledger.
+                if let Some(comp) = &step.compensation {
+                    ctx.compensations.push(CompletedEffect {
+                        step_number: step.number,
+                        compensation: comp.clone(),
+                    });
+                }
                 return None;
             }
         }

@@ -2,6 +2,24 @@
 
 Internal phase journal. Each entry corresponds to a completed phase.
 
+## Phase 19 — Compensation Seam (l2-nodus-compensation) (2026-07-30)
+
+- T-19A01: Added `TildeCompensate` lexer token + `Step.compensation: Option<CommandCall>` (mirroring `Step.retry`) + `~COMPENSATE: CMD(args)` trailing same-line clause + transpiler round-trip
+- T-19A02: Added `NODUS:COMPENSATION_FAILED` (Error, Runtime) following the Phase-13 `CONFIG_INVALID` precedent
+- T-19B01/B02: Added the completed-effect ledger (`ExecutionContext.compensations: Vec<CompletedEffect>`), populated at `run_step_with_retry`'s existing success-detection point; armed only on `Status::Failed`/`Status::Aborted`, drained via `Vec::pop()` (LIFO falls out for free); a failed compensation is surfaced as `NODUS:COMPENSATION_FAILED` without aborting the rest of the unwind
+- T-19T01: New `tests/compensation.rs` (6 integration tests) + 4 new unit tests in `parser.rs`/`transpiler.rs`; `cargo test -p nodus` — 397 passed (was 387; +10), 0 failed; clippy `-D warnings` clean; fmt clean; `Cargo.toml [dependencies]` still empty (LP-1 zero-dep preserved) — realizes NL-22, **closing both NL-22 and NL-23 this cycle**
+- Dropped the spec's planned parallel `uncompensable` record and per-entry outcome enum — nothing reads either, so NL-22(a)'s honesty property is preserved by construction instead (the ledger only ever contains explicitly-declared compensations)
+- Found and fixed two parser defects self-contained to the new `~COMPENSATE` path (not pre-existing): a recursive `parse_command_call` call for the compensation's inner command left the outer call's own `skip_to_newline()` swallowing the entire next step; and the spec's own canonical example command (`UNPUBLISH`) isn't a real nodus command. Also proactively extended `E004` to see a `~COMPENSATE` clause's own variable references
+
+## Phase 18 — Bounded Whole-Run Self-Restart (l2-nodus-restart) (2026-07-30)
+
+- T-18A01: Added `restart_max: Option<u32>` to `RuntimeBlock`, slotted into `parse_runtime_braces`'s existing key scan; `1..=10` bound check (`E018`) mirroring `e017_retry_bounded`; transpiler round-trip
+- T-18A02: Added `NODUS:RESTART_LIMIT` (Warn, Control) following the Phase-13 `CONFIG_INVALID` precedent (constant + `error_meta` row + lockstep-array entry)
+- T-18A03: Added `$restart` (writable, `RESERVED_VARIABLES`) and `$restart_count` (unforgeable, `RESERVED_VARIABLES` + `RUNTIME_OWNED_VARIABLES`) — the request/exposure split
+- T-18B01/B02: Added `E019` — a static validator rule rejecting a `$restart` request nested inside a `~FOR` body, `~PARALLEL` branch, or `?SWITCH` arm (mirroring `find_empty_switches_stmt`'s recursive-descent shape); added `Executor::execute_with_restart` — a bounded attempt loop wrapped around `execute_inner` (all 4 public callers now route through it, no signature change), seeding `restart_count` fresh per attempt so LG-5 freshness is structural
+- T-18T01: New `tests/restart.rs` (5 integration tests) + 9 new unit tests in `parser.rs`/`validator.rs`; `cargo test -p nodus` — 387 passed (was 373; +14), 0 failed; clippy `-D warnings` clean (fixed one `redundant_closure`); fmt clean; `Cargo.toml [dependencies]` still empty (LP-1 zero-dep preserved) — realizes NL-23
+- Deviated from the spec's literal §4.2/§4.6 in two ways, both flagged for a future spec patch: dropped `Signal::Restart` in favor of validator-only enforcement (matching the E010/E013/E014/E016/E017 precedent — every comparable structural rule in this crate is validator-only), and `RESTART_SCOPE` landed as bare code `E019` rather than a `vocab.rs` constant. Found and worked around (not fixed) a pre-existing, unrelated parser defect: inline `?IF cond → CMD() → $target` never attaches its trailing pipeline target
+
 ## Phase 17 — `~MAP` Conformance & End-to-End Reachability (l2-nodus-control-flow §4.3/§4.4) (2026-07-25)
 
 - T-17A01: Declared `$it` in the `Stmt::Map` arm of `collect_vars_stmt` (`validator.rs`) so `E004` stops flagging `~MAP`'s implicit per-element binding as undeclared — the construct has been unreachable through every validated public entry point (`run`, `run_with_audit`, …) since Phase 11; did not add `$it` to `RESERVED_VARIABLES` (would blanket-declare it globally, disabling the diagnostic even for workflows with no `~MAP`)

@@ -166,6 +166,9 @@ impl Transpiler {
                 lines.push(format!("  agents:  {{ {} }}", parts.join(", ")));
             }
             lines.push(format!("  mode:    {}", rt.mode));
+            if let Some(n) = rt.restart_max {
+                lines.push(format!("  restart_max: {n}"));
+            }
             lines.push("}".to_string());
         }
 
@@ -442,7 +445,13 @@ impl Transpiler {
 
     fn nodus_step(step: &Step) -> String {
         match &step.body {
-            Some(Stmt::Command(cmd)) => Self::nodus_command(cmd),
+            Some(Stmt::Command(cmd)) => {
+                let mut line = Self::nodus_command(cmd);
+                if let Some(comp) = &step.compensation {
+                    line.push_str(&format!(" ~COMPENSATE: {}", Self::nodus_command(comp)));
+                }
+                line
+            }
             Some(Stmt::Comment(c)) => format!(";; {}", c.text),
             _ => {
                 if !step.comment.is_empty() {
@@ -891,5 +900,25 @@ level : str
         };
         let out = Transpiler::config_to_nodus(&decl);
         assert!(out.contains("§config:settings v1.0"), "header: {out}");
+    }
+
+    #[test]
+    fn compensation_clause_survives_compact_round_trip() {
+        use crate::parser::Parser;
+
+        let src = "§wf:publisher v1.0\n§runtime: { core: schema.nodus }\n@steps:\n  1. PUBLISH($doc) → $url ~COMPENSATE: NOTIFY($url)\n";
+        let ast = Parser::parse(src).expect("parse");
+        let compact = Transpiler::to_nodus(&ast);
+        assert!(
+            compact.contains("~COMPENSATE:"),
+            "compact form must emit the clause: {compact}"
+        );
+        let ast2 = Parser::parse(&compact).expect("compact form must re-parse");
+        let comp = ast2.steps[0]
+            .compensation
+            .as_ref()
+            .expect("compensation must survive the round-trip");
+        assert_eq!(comp.name, "NOTIFY");
+        assert_eq!(comp.args, vec!["$url"]);
     }
 }

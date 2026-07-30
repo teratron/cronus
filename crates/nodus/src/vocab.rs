@@ -144,12 +144,21 @@ pub const RESERVED_VARIABLES: &[&str] = &[
     "$confidence",
     "$memory",
     "$kb_results",
+    // NL-23: $restart is the self-restart request — an ordinary writable
+    // pipeline target, like $out/$draft. $restart_count is its runtime-owned
+    // counterpart below (unforgeable — see that list's doc comment).
+    "$restart",
+    "$restart_count",
 ];
 
 /// Runtime-owned variable names that user pipeline targets must not shadow (NL-8).
 /// These are set exclusively by the executor and are not writable by workflow steps.
 /// Writable reserved variables (`$out`, `$raw`, `$draft`, `$log`, `$quality`,
-/// `$sentiment`, `$confidence`) are intentionally excluded — commands assign to them.
+/// `$sentiment`, `$confidence`, `$restart`) are intentionally excluded — commands
+/// assign to them. `$restart_count` is the one exception among the NL-23 pair:
+/// it must stay runtime-owned so flow logic cannot forge the chain position it
+/// reads (a workflow may *request* a restart via `$restart` but may not fabricate
+/// how many have already happened).
 pub const RUNTIME_OWNED_VARIABLES: &[&str] = &[
     "$in",
     "$error",
@@ -160,6 +169,7 @@ pub const RUNTIME_OWNED_VARIABLES: &[&str] = &[
     "$flags",
     "$memory",
     "$kb_results",
+    "$restart_count",
 ];
 
 /// Compact command → human-form verb (consumed by the transpiler). A command
@@ -248,6 +258,15 @@ pub mod error_code {
     /// A proposed `§config` value set failed the pre-run shape check or was
     /// rejected by the host `ConfigProvider` (NL-20).
     pub const CONFIG_INVALID: &str = "NODUS:CONFIG_INVALID";
+    /// A `$restart` request was refused: either `restart_max` is undeclared
+    /// (self-restart disabled) or the declared ceiling was reached (NL-23).
+    /// A bounded construct reaching its bound, mirroring `MAX_REACHED` — a
+    /// normal reported outcome, not a fault.
+    pub const RESTART_LIMIT: &str = "NODUS:RESTART_LIMIT";
+    /// A `~COMPENSATE` action itself failed while unwinding a completed
+    /// effect (NL-22). The original effect stays recorded live — this marks
+    /// the compensation attempt as failed, never as if the effect were undone.
+    pub const COMPENSATION_FAILED: &str = "NODUS:COMPENSATION_FAILED";
 }
 
 /// Severity of a runtime error code.
@@ -323,6 +342,10 @@ pub fn error_meta(code: &str) -> Option<(ErrorSeverity, ErrorCategory)> {
         ec::DIALOG_REJECTED => (Error, Dialog),
         // Config-layer code (NL-20).
         ec::CONFIG_INVALID => (Error, Validation),
+        // Self-restart code (NL-23).
+        ec::RESTART_LIMIT => (Warn, Control),
+        // Compensation-seam code (NL-22).
+        ec::COMPENSATION_FAILED => (Error, Runtime),
         // Non-canonical (incl. deprecated EXECUTION_FAILED) → no metadata.
         _ => return None,
     };
@@ -690,11 +713,13 @@ mod tests {
             DIALOG_TIMEOUT,
             DIALOG_REJECTED,
             CONFIG_INVALID,
+            RESTART_LIMIT,
+            COMPENSATION_FAILED,
         ];
         assert_eq!(
             canonical.len(),
-            26,
-            "24 language codes + CAPABILITY_UNMET + CONFIG_INVALID"
+            28,
+            "24 language codes + CAPABILITY_UNMET + CONFIG_INVALID + RESTART_LIMIT + COMPENSATION_FAILED"
         );
         for code in canonical {
             assert!(

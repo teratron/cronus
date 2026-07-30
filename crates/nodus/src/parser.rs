@@ -27,6 +27,20 @@ use crate::lexer::{Lexer, Token, TokenType};
 pub struct Parser {
     tokens: Vec<Token>,
     pos: usize,
+    /// A `~COMPENSATE: CMD(args)` clause trailing a command's pipeline target,
+    /// stashed here by `parse_command_call` and drained by `parse_step` right
+    /// after parsing the step's own body (NL-22). `Step.compensation` has no
+    /// natural slot inside `parse_command_call`'s `CommandCall`-only return
+    /// type, so this is the escape hatch — mirrors how `~RETRY:n` is read as
+    /// a preceding modifier in `parse_step` itself rather than threaded
+    /// through every command-parsing call.
+    pending_compensation: Option<CommandCall>,
+    /// Depth inside a `~FOR`/`~UNTIL`/`~PARALLEL` body. `~COMPENSATE` only
+    /// attaches to a step's own top-level action (NL-23(b)'s reasoning
+    /// applies here too — attaching it to a per-item/per-branch command would
+    /// be ambiguous about which iteration's compensation actually ran), so
+    /// `parse_command_call` only stashes one when this is `0`.
+    nested_body_depth: u32,
 }
 
 impl Parser {
@@ -36,7 +50,12 @@ impl Parser {
     /// declares a non-workflow file type (schema/config parsing is deferred).
     pub fn parse(source: &str) -> Result<WorkflowFile> {
         let tokens = Lexer::tokenize_str(source)?;
-        let mut p = Parser { tokens, pos: 0 };
+        let mut p = Parser {
+            tokens,
+            pos: 0,
+            pending_compensation: None,
+            nested_body_depth: 0,
+        };
         p.skip_noise();
         if p.at_end() {
             return Err(crate::error::Error::Parse {
@@ -79,7 +98,12 @@ impl Parser {
     /// use host-declared commands to parse successfully.
     pub fn parse_with_schema(source: &str, schema: &crate::vocab::Schema) -> Result<WorkflowFile> {
         let tokens = Lexer::tokenize_str_with_schema(source, schema)?;
-        let mut p = Parser { tokens, pos: 0 };
+        let mut p = Parser {
+            tokens,
+            pos: 0,
+            pending_compensation: None,
+            nested_body_depth: 0,
+        };
         p.skip_noise();
         if p.at_end() {
             return Err(Error::Parse {
@@ -123,7 +147,12 @@ impl Parser {
     /// declares a file type other than `§config:`.
     pub fn parse_config(source: &str) -> Result<ConfigDecl> {
         let tokens = Lexer::tokenize_str(source)?;
-        let mut p = Parser { tokens, pos: 0 };
+        let mut p = Parser {
+            tokens,
+            pos: 0,
+            pending_compensation: None,
+            nested_body_depth: 0,
+        };
         p.skip_noise();
         if p.at_end() {
             return Err(Error::Parse {
@@ -445,6 +474,7 @@ impl Parser {
                         "core" => rt.core = value,
                         "mode" => rt.mode = value,
                         "extends" => rt.extends = vec![value],
+                        "restart_max" => rt.restart_max = value.parse::<u32>().ok(),
                         _ => {}
                     }
                 }
@@ -796,8 +826,15 @@ impl Parser {
         }
 
         step.body = self.parse_step_body();
+        step.compensation = self.pending_compensation.take();
 
         // Collect indented sub-steps that are not new step numbers.
+        // `~COMPENSATE` only attaches to the step's own top-level action
+        // (parsed just above); a trailing clause on a sub-step line is
+        // treated as nested (silently not captured, same as a ~FOR/~PARALLEL
+        // body) rather than risking a leak into the *next* top-level step's
+        // `pending_compensation.take()`.
+        self.nested_body_depth += 1;
         while !self.at_end() {
             self.skip_noise();
             if self.at_end() {
@@ -844,6 +881,8 @@ impl Parser {
                 _ => self.advance(),
             }
         }
+        self.nested_body_depth -= 1;
+        self.pending_compensation = None;
 
         step
     }
@@ -898,6 +937,12 @@ impl Parser {
         let mut validators = Vec::new();
         let mut flags = Vec::new();
         let mut target = None;
+        // Set when a trailing ~COMPENSATE clause is parsed: that recursive
+        // parse_command_call call already consumed through its own newline,
+        // so the unconditional skip_to_newline() below must not run again —
+        // it would otherwise find itself sitting at the START of the next
+        // line (not at a newline) and swallow that entire next line/step.
+        let mut compensation_consumed_line = false;
 
         while !self.at_end() {
             match self.cur_ty() {
@@ -925,6 +970,22 @@ impl Parser {
                     if self.check(TokenType::Variable) {
                         target = Some(self.cur_val());
                         self.advance();
+                        // ~COMPENSATE trails the pipeline target on the same
+                        // line (NL-22); only a step's own top-level action may
+                        // carry one, never a nested loop/parallel body command.
+                        // No skip_noise() here — that would cross a newline
+                        // into the next line/step looking for a clause that,
+                        // by definition, must be on this same line.
+                        if self.nested_body_depth == 0 && self.check(TokenType::TildeCompensate) {
+                            self.advance();
+                            if self.check(TokenType::Colon) {
+                                self.advance();
+                            }
+                            if matches!(self.cur_ty(), TokenType::CommandName | TokenType::Run) {
+                                self.pending_compensation = Some(self.parse_command_call());
+                                compensation_consumed_line = true;
+                            }
+                        }
                     } else {
                         target = Some(self.consume_rest_of_line().trim().to_string());
                     }
@@ -934,7 +995,9 @@ impl Parser {
             }
         }
 
-        self.skip_to_newline();
+        if !compensation_consumed_line {
+            self.skip_to_newline();
+        }
         CommandCall {
             name,
             args,
@@ -1275,6 +1338,7 @@ impl Parser {
         let mut branches = Vec::new();
         let mut join_target = None;
 
+        self.nested_body_depth += 1;
         while !self.at_end() {
             self.skip_noise();
             if self.at_end() {
@@ -1306,6 +1370,7 @@ impl Parser {
                 _ => self.advance(),
             }
         }
+        self.nested_body_depth -= 1;
 
         ParallelBlock {
             branches,
@@ -1376,6 +1441,7 @@ impl Parser {
     }
 
     fn collect_body_until_end(&mut self) -> Vec<Stmt> {
+        self.nested_body_depth += 1;
         let mut body = Vec::new();
         while !self.at_end() {
             self.skip_noise();
@@ -1395,6 +1461,7 @@ impl Parser {
                 body.push(node);
             }
         }
+        self.nested_body_depth -= 1;
         body
     }
 
@@ -1797,6 +1864,21 @@ mod tests {
     }
 
     #[test]
+    fn parses_restart_max_when_declared() {
+        let src = "§wf:retryable v1.0\n§runtime: { core: schema.nodus, restart_max: 3 }\n@steps:\n  1. LOG(x)\n";
+        let wf = Parser::parse(src).unwrap();
+        let rt = wf.runtime.unwrap();
+        assert_eq!(rt.restart_max, Some(3));
+    }
+
+    #[test]
+    fn restart_max_absent_when_not_declared() {
+        let wf = Parser::parse(SAMPLE).unwrap();
+        let rt = wf.runtime.unwrap();
+        assert_eq!(rt.restart_max, None);
+    }
+
+    #[test]
     fn parses_trigger_rule_and_preference() {
         let wf = Parser::parse(SAMPLE).unwrap();
         assert_eq!(wf.triggers.len(), 1);
@@ -1912,6 +1994,43 @@ mod tests {
             Some(0),
             "a missing bound is recorded as Some(0)"
         );
+    }
+
+    #[test]
+    fn parses_compensate_clause_trailing_pipeline_target() {
+        let src = "§wf:publisher v1.0\n§runtime: { core: schema.nodus }\n@steps:\n  1. PUBLISH($doc) → $url ~COMPENSATE: NOTIFY($url)\n";
+        let wf = Parser::parse(src).unwrap();
+        let comp = wf.steps[0]
+            .compensation
+            .as_ref()
+            .expect("compensation must be captured");
+        assert_eq!(comp.name, "NOTIFY");
+        assert_eq!(comp.args, vec!["$url"]);
+        match wf.steps[0].body.as_ref().unwrap() {
+            Stmt::Command(c) => {
+                assert_eq!(c.name, "PUBLISH");
+                assert_eq!(c.pipeline_target.as_deref(), Some("$url"));
+            }
+            other => panic!("expected command, got {other:?}"),
+        }
+    }
+
+    #[test]
+    fn no_compensation_when_clause_absent() {
+        let src = "§wf:publisher v1.0\n§runtime: { core: schema.nodus }\n@steps:\n  1. PUBLISH($doc) → $url\n";
+        let wf = Parser::parse(src).unwrap();
+        assert_eq!(wf.steps[0].compensation, None);
+    }
+
+    #[test]
+    fn compensation_inside_for_loop_body_does_not_leak_to_outer_step() {
+        let src = "§wf:looper v1.0\n§runtime: { core: schema.nodus }\n@in: { items: list }\n@steps:\n  1. ~FOR $item IN $in.items\n       PUBLISH($item) → $url ~COMPENSATE: NOTIFY($url)\n     ~END\n  2. LOG(done)\n";
+        let wf = Parser::parse(src).unwrap();
+        assert_eq!(
+            wf.steps[0].compensation, None,
+            "a ~COMPENSATE clause nested inside a ~FOR body must not attach to the enclosing step"
+        );
+        assert_eq!(wf.steps[1].compensation, None);
     }
 
     #[test]
