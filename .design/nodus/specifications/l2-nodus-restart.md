@@ -1,6 +1,6 @@
 # Nodus Bounded Self-Restart Implementation (Rust)
 
-**Version:** 1.0.0
+**Version:** 1.0.1
 **Status:** Stable
 **Layer:** implementation
 **Implements:** l1-nodus-language.md
@@ -24,7 +24,7 @@ restarts), and NL-22 compensation (which *undoes*; a restart does not — see §
 - [l1-nodus-language.md](l1-nodus-language.md) — the language contract: NL-23 (the invariant realized here), NL-5 bounded loops (the `MAX:n` kinship), NL-7 closed value system, NL-8 reserved namespace, NL-20 `§config` (re-read on restart)
 - [../../main/specifications/l1-loop-governance.md](../../main/specifications/l1-loop-governance.md) — the host-side contract NL-23 realizes: LG-11 scope-restart authority is the scope's own boundary, LG-6 counted ceiling, LG-5 fresh reconstruction from durable state
 - [l2-nodus-config.md](l2-nodus-config.md) — `§config` acceptance; a restart re-reads the accepted set rather than mutating it mid-run
-- [l2-nodus-errors.md](l2-nodus-errors.md) — owns the error taxonomy this spec extends with `NODUS:RESTART_LIMIT` and `NODUS:RESTART_SCOPE`
+- [l2-nodus-errors.md](l2-nodus-errors.md) — owns the error taxonomy this spec extends with `NODUS:RESTART_LIMIT`; the nested-restart rejection is a bare validator code (`E019`), not a taxonomy entry (§4.6)
 - [l2-nodus-observability.md](l2-nodus-observability.md) — HO-7 dense per-run `seq` + `correlation_id`, which forces the one-event-stream-per-attempt decision in §4.5
 - [l2-nodus-runtime.md](l2-nodus-runtime.md) — the runtime crate extended here (`vocab`, `parser`, `executor`, `validator`); its §3 records NL-23 as realized by this spec
 - [l2-nodus-compensation.md](l2-nodus-compensation.md) — NL-22; the seam that makes a restart over effectful steps safe. Soft reference: neither spec requires the other to be implemented
@@ -57,7 +57,7 @@ alternative.
 | L1 Invariant | Rust Enforcement |
 | --- | --- |
 | NL-23(a) Bounded by a visible carried count | The ceiling is declared in `§runtime:` as `restart_max: n` (a run-level property, so a run-level home). The attempt loop refuses to iterate past it and pushes `NODUS:RESTART_LIMIT`. The count is readable by flow logic as the reserved variable `$restart_count`, seeded fresh each attempt. |
-| NL-23(b) Run-boundary authority only | The validator statically rejects a restart request nested inside a `~FOR`/`~MAP`/`~PARALLEL` body or `?SWITCH` arm (`NODUS:RESTART_SCOPE`). Because the same AST walk cannot see host-provided values, the executor also refuses at run time when the signal originates below top level — static where provable, refused where not. |
+| NL-23(b) Run-boundary authority only | The validator statically rejects a restart request nested inside a `~FOR`/`~MAP`/`~PARALLEL` body or `?SWITCH` arm (bare code `E019`, §4.4/§4.6). This is a validator-only gate — the executor never re-checks nesting at run time, because it never sees a workflow the validator has not already passed (§4.2). |
 | NL-23(c) Fresh reconstruction, not inherited transcript | The restart loop wraps `execute_inner`, which constructs a new `ExecutionContext` on entry. Re-running it *is* the fresh reconstruction — there is no state-clearing routine that could be forgotten or drift out of sync with new context fields. `@in` and the accepted `§config` are re-read per attempt. |
 | NL-23(d) Deterministic and additive | Same input + same restart decisions ⇒ same attempt chain (NL-6 unaffected: the restart constrains control flow, not rendering). A workflow declaring no `restart_max` and never requesting a restart takes exactly today's path — one attempt, byte-identical result. |
 | NL-23(e) Re-runs, does not undo | No unwind, no state restore. The un-compensated double-commit consequence is documented (§2) and left to NL-22 / host idempotency, not papered over. |
@@ -86,17 +86,15 @@ existing workflow changes behavior.
 
 The request is an ordinary typed directive value, not a new `Value` kind: a step
 sets the reserved variable `$restart` (an existing kind — `Bool` true, or a `Map`
-carrying host-meaningful detail nodus does not interpret). The executor reads it
-at the top-level step boundary and converts it into an internal control signal:
-
-```text
-[REFERENCE]
-// executor.rs — Signal gains one variant. Signal is not a Value, so NL-7 holds.
-enum Signal { Break, Skip, Pause, Halt, Restart }
-```
-
-`Signal::Restart` is raised only when `$restart` is set by a **top-level** step;
-raised from below, it is the `NODUS:RESTART_SCOPE` refusal instead (§4.4).
+carrying host-meaningful detail nodus does not interpret). No new `Signal`
+variant realizes this — the executor reads `$restart` from the attempt's final
+variable state once `execute_inner` returns, the same as any other post-attempt
+`RunResult.vars` inspection. Whether the request originated from a nested
+per-item context never needs a runtime check: the validator's static rule
+(§4.4) rejects any workflow containing such a request before it can run at all,
+so every program the executor ever executes already satisfies the boundary-
+authority constraint (LG-11) by construction — refused where checkable, and
+nothing is left needing a runtime fallback.
 
 ### 4.3 The attempt loop
 
@@ -119,7 +117,7 @@ can be accidentally carried across an attempt.
 
 ### 4.4 Validator
 
-- A restart request written inside a `~FOR`/`~MAP`/`~PARALLEL` body or a `?SWITCH` arm → `NODUS:RESTART_SCOPE` (error). Statically detectable by the existing AST walk.
+- A restart request written inside a `~FOR`/`~MAP`/`~PARALLEL` body or a `?SWITCH` arm → a validator error, bare code `E019` (not a `vocab.rs` `NODUS:*` constant — see §4.6). Statically detectable by the existing AST walk; because this rule runs before any execution, the executor never needs a runtime re-check (§4.2).
 - `restart_max` outside `1..=10` → error, mirroring `~RETRY:n`'s bound check (E017's shape) so the run grain inherits the same sanity ceiling as the step grain.
 
 ### 4.5 Observability: one event stream per attempt
@@ -141,25 +139,33 @@ through `$restart_count` per attempt.
 
 ```text
 [REFERENCE]
-// vocab.rs — two new codes (Phase-13 CONFIG_INVALID precedent)
-pub const RESTART_LIMIT: &str = "NODUS:RESTART_LIMIT";   // (Warn,  Control)
-pub const RESTART_SCOPE: &str = "NODUS:RESTART_SCOPE";   // (Error, Control)
+// vocab.rs — one new code (Phase-13 CONFIG_INVALID precedent)
+pub const RESTART_LIMIT: &str = "NODUS:RESTART_LIMIT";   // (Warn, Control)
 ```
 
 `RESTART_LIMIT` is a **warning**, mirroring `MAX_REACHED`: hitting the ceiling is
 a bounded construct reaching its bound — a normal outcome the run reports, not a
-fault. `RESTART_SCOPE` is an **error**: requesting a restart from a per-item
-context is a structural mistake, not a graded outcome. Both join `error_meta` and
-the lockstep test.
+fault. It joins `error_meta` and the lockstep test.
+
+The nested-restart-request rejection (§4.4) is realized as a **bare validator
+code** — `"E019"`, not a `vocab.rs` `NODUS:*` constant, and not part of
+`error_meta` or the lockstep count. This matches the crate's existing
+convention for purely structural, statically-decidable validator rules
+(E010/E013/E014/E016/E017 are the same shape): a `vocab.rs` `NODUS:*` code is for
+a condition with runtime-facing meaning — something a host or trace consumer
+might branch on — while `E019` never reaches a run at all (the validator gate
+refuses it first), so it has no place in the runtime-facing registry. §6
+records why this was chosen over the originally-specified `Signal::Restart` +
+`NODUS:RESTART_SCOPE` design.
 
 ## 5. Implementation Notes
 
 Vertical-slice order (each slice compiles and is independently verifiable):
 
 1. `restart_max` parsing in `§runtime:` + the validator bound check — declaration surface only, no behavior.
-2. Two error codes + `error_meta` rows + lockstep-test extension.
-3. `$restart_count` / `$restart` into `RESERVED_VARIABLES` + `RUNTIME_OWNED_VARIABLES` (NL-8 shadowing rejected).
-4. `Signal::Restart` + the top-level-only raise + the `RESTART_SCOPE` static rule.
+2. One error code (`RESTART_LIMIT`) + its `error_meta` row + lockstep-test extension. The nested-restart rejection's `E019` is not a `vocab.rs` code and lands in slice 4 (§4.6).
+3. `$restart` into `RESERVED_VARIABLES` only (reserved-but-writable, like `$out`/`$draft`); `$restart_count` into **both** `RESERVED_VARIABLES` and `RUNTIME_OWNED_VARIABLES` (NL-8 — the count is unforgeable, the request is not).
+4. The static `E019` validator rule rejecting a restart request nested inside a `~FOR`/`~MAP`/`~PARALLEL` body or `?SWITCH` arm. No `Signal::Restart` variant is added — see §6.
 5. The attempt loop around `execute_inner`, plus `RESTART_LIMIT` on exhaustion.
 
 Slice 5 last: it is the only slice that changes an existing run's control flow,
@@ -172,12 +178,13 @@ and by then every guard it depends on is already provable.
 - **A new `Value::Directive` variant for the request**: rejected — violates NL-7's closed value system for no gain; an existing kind in a reserved variable carries the same signal.
 - **Restarting by re-invoking from the host**: rejected as the *only* mechanism — it loses the bound (nothing counts the chain), loses the authority rule (the host cannot see which context asked), and pushes a correctness contract into every host. Available as a complement, not a substitute.
 - **Clearing state in place instead of re-entering `execute_inner`**: rejected — a clearing routine must be updated every time the context gains a field, and the failure mode is silent state leakage across attempts.
+- **A `Signal::Restart` executor variant plus a `vocab.rs` `NODUS:RESTART_SCOPE` constant** (the original design in earlier drafts of this section): dropped during implementation. Every comparable structural rule already in this crate (E010/E013/E014/E016/E017) is validator-only, with zero runtime re-check, because the executor is never invoked on a workflow the validator gate has not already passed — adding a `Signal`-based interception here would have been this crate's first redundant enforcement layer for a condition the validator already refuses before any run starts. The bare validator code `E019` is the actual realization (§4.4/§4.6); this section and the `INDEX.md` registry entry are corrected to describe it accordingly.
 
 ## Canonical References
 
 | Alias | Path | Purpose |
 | --- | --- | --- |
-| `[EXEC]` | `crates/nodus/src/executor.rs` | `execute_inner` — the function the attempt loop wraps; `Signal`; `ExecutionContext` construction (where freshness originates) |
+| `[EXEC]` | `crates/nodus/src/executor.rs` | `execute_with_restart` — the attempt loop; `execute_inner` — the function it wraps; `ExecutionContext` construction (where freshness originates) |
 | `[VOCAB]` | `crates/nodus/src/vocab.rs` | `RESERVED_VARIABLES` / `RUNTIME_OWNED_VARIABLES` (NL-8), `error_code` + `error_meta` + lockstep test |
 | `[PARSER]` | `crates/nodus/src/parser.rs` | `§runtime:` block parsing — where `restart_max` is read |
 | `[VALIDATOR]` | `crates/nodus/src/validator.rs` | the AST walk that detects a nested restart request; `~RETRY:n`'s bound check as the shape for `restart_max` |
@@ -188,3 +195,4 @@ and by then every guard it depends on is already provable.
 | Version | Date | Author | Notes |
 | --- | --- | --- | --- |
 | 1.0.0 | 2026-07-30 | Core Team | Initial spec — Rust realization of NL-23 (bounded whole-run self-restart): `restart_max` in `§runtime:` (opt-in; absent ⇒ disabled), `$restart` request + `$restart_count` exposure as reserved + runtime-owned variables (NL-8 shadow-rejected), `Signal::Restart` raised only from a top-level step, a bounded attempt loop **around** `execute_inner` so fresh reconstruction is structural rather than enforced by a clearing routine, `NODUS:RESTART_LIMIT` (Warn) on ceiling exhaustion and `NODUS:RESTART_SCOPE` (Error) for a request from a nested per-item context. Records the HO-7-forced decision that each attempt is its own event stream / manifest, and deliberately leaves attempt-chain linking to `l2-nodus-observability` rather than changing a manifest field from a restart spec. NL-23(e) double-commit consequence documented, not papered over. |
+| 1.0.1 | 2026-07-30 | Core Team | Reconciled to Phase 18's as-built implementation (no design/status change) — §4.2/§4.3/§4.4/§4.6 rewritten: no `Signal::Restart` variant exists; the executor detects a restart request by reading `$restart` from the attempt's final `RunResult.vars` once `execute_inner` returns, relying on the validator's static rule to make nested requests unreachable at run time rather than re-checking at runtime. The nested-restart rejection is a bare validator code `"E019"`, not a `vocab.rs` `NODUS:RESTART_SCOPE` constant — it carries no `error_meta` row and is outside the lockstep count. §5 slice 3 corrected: only `$restart_count` is `RUNTIME_OWNED_VARIABLES`; `$restart` is reserved-but-writable, matching §3 (the authoritative row, which was already correct). §6 records why the `Signal`/`RESTART_SCOPE` design was dropped in favor of this crate's validator-only-enforcement precedent (E010/E013/E014/E016/E017). |

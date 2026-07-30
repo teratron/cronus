@@ -80,7 +80,11 @@ fn halt_not_taken_runs_to_completion() {
     );
 }
 
-// ?SWITCH fixtures — scrutinee seeded via an `@in` default.
+// ?SWITCH fixtures — scrutinee seeded via an `@in` default. SWITCH_MATCH_WF,
+// SWITCH_DEFAULT_WF and SWITCH_NO_MATCH_WF below declare no arm target at
+// all — their three tests passing unmodified after the Phase 20 parser fix
+// (try_parse_command_from_string) is this suite's non-regression evidence
+// for the no-target case.
 const SWITCH_MATCH_WF: &str = r#"§wf:switch_match v1.0
 §runtime: { core: schema.nodus }
 @in: { category?=urgent }
@@ -117,6 +121,25 @@ const SWITCH_NO_MATCH_WF: &str = r#"§wf:switch_nomatch v1.0
   2. LOG(after) → $out
 "#;
 
+// Each arm binds a trailing → $target (l2-nodus-control-flow's NL-10 row:
+// "?SWITCH arm actions bind their targets in declaration order"). Two
+// distinct target names prove per-arm binding — not a single shared target
+// aliased across the whole switch — and the later step reading whichever
+// target the taken arm bound proves the target is reachable through
+// workflows::run, not just parsed into the AST.
+const SWITCH_ARM_TARGETS_WF: &str = r#"§wf:switch_targets v1.0
+§runtime: { core: schema.nodus }
+@in: { category?=urgent }
+@out: $out
+@err: ESCALATE(human)
+@steps:
+  1. ?SWITCH $in.category:
+    urgent → GEN(crisis) → $urgent_pick
+    spam → GEN(reply) → $spam_pick
+  ~END
+  2. LOG(done) → $out
+"#;
+
 #[test]
 fn switch_runs_first_matching_arm() {
     let result = workflows::run(SWITCH_MATCH_WF, "switch_match.nodus", None).expect("run");
@@ -146,6 +169,55 @@ fn switch_falls_through_to_default() {
         !result.log.iter().any(|e| e.command == "ANALYZE"),
         "no value arm matched, so none should run; log: {:?}",
         result.log
+    );
+}
+
+#[test]
+fn switch_arm_bound_target_reachable_through_run() {
+    // Default @in.category = urgent (first arm). Runs through workflows::run
+    // (parse → validate → execute), not Executor::execute — proving the
+    // arm's → $urgent_pick target is reachable through every validated public
+    // entry point, the same bar Phase 17 set for ~MAP's $it.
+    let result = workflows::run(SWITCH_ARM_TARGETS_WF, "switch_targets.nodus", None).expect("run");
+    assert_eq!(result.status, Status::Ok, "errors: {:?}", result.errors);
+    assert_eq!(
+        result.vars.get("urgent_pick"),
+        Some(&Value::Text("[STUB gen(crisis) tone=brand]".to_string())),
+        "the taken arm's own target must be bound; vars: {:?}",
+        result.vars
+    );
+    assert_eq!(
+        result.vars.get("spam_pick"),
+        None,
+        "a non-taken arm's target must never be bound; vars: {:?}",
+        result.vars
+    );
+}
+
+#[test]
+fn switch_arm_targets_bind_independently_per_arm() {
+    // Overriding @in.category to the second arm must bind THAT arm's own
+    // target, not the first arm's — proving each arm's → target is bound to
+    // that specific arm (declaration order), not a single target shared
+    // across the whole switch regardless of which arm fired.
+    let input = Value::Map(vec![(
+        "category".to_string(),
+        Value::Text("spam".to_string()),
+    )]);
+    let result =
+        workflows::run(SWITCH_ARM_TARGETS_WF, "switch_targets.nodus", Some(input)).expect("run");
+    assert_eq!(result.status, Status::Ok, "errors: {:?}", result.errors);
+    assert_eq!(
+        result.vars.get("spam_pick"),
+        Some(&Value::Text("[STUB gen(reply) tone=brand]".to_string())),
+        "vars: {:?}",
+        result.vars
+    );
+    assert_eq!(
+        result.vars.get("urgent_pick"),
+        None,
+        "the first arm did not fire, so its target must not be bound; vars: {:?}",
+        result.vars
     );
 }
 

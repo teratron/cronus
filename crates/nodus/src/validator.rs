@@ -2435,6 +2435,59 @@ mod tests {
         );
     }
 
+    // The next two tests were planned as a *fix* (Phase 20 Track B) on the
+    // assumption that `collect_vars_stmt`'s `Stmt::Switch` arm only tracked
+    // the scrutinee, mirroring the ~MAP/$it gap Phase 17 closed. Plan-time
+    // grounding for that assumption used a `sed` line range that (unnoticed)
+    // cut off mid-match-arm, before the arm-walking loop that was already
+    // there. No fix was needed — these are regression tests confirming the
+    // existing `collect_vars_cmd` calls over `sw.arms`/`sw.default` hold,
+    // now that Phase 20 made `?SWITCH` arm targets reachable via the parser.
+
+    #[test]
+    fn e004_does_not_fire_on_switch_arm_bound_target_used_later() {
+        let src = "\
+§wf:dispatch v1.0
+§runtime: { core: schema.nodus }
+@in: { category?=urgent }
+@out: $out
+@err: ESCALATE(human)
+@steps:
+  1. ?SWITCH $in.category:
+    urgent → GEN(x) → $picked
+  ~END
+  2. LOG($picked) → $out
+";
+        let ast = Parser::parse(src).expect("parse");
+        let diags = Validator::validate(&ast, "dispatch.nodus");
+        assert!(
+            diags.iter().all(|d| d.code != "E004"),
+            "a ?SWITCH arm's → $picked target must be declared, so a later step reading it must not raise E004; got: {diags:?}"
+        );
+    }
+
+    #[test]
+    fn e004_fires_on_switch_arm_actions_own_undeclared_variable() {
+        let src = "\
+§wf:dispatch v1.0
+§runtime: { core: schema.nodus }
+@out: $out
+@err: ESCALATE(human)
+@steps:
+  1. ?SWITCH $category:
+    urgent → GEN($stray) → $out
+  ~END
+";
+        let ast = Parser::parse(src).expect("parse");
+        let diags = Validator::validate(&ast, "dispatch.nodus");
+        assert!(
+            diags
+                .iter()
+                .any(|d| d.code == "E004" && d.severity == Severity::Error),
+            "$stray is referenced only inside a ?SWITCH arm action and never assigned — must still be flagged (proves arm actions are walked for uses too); got: {diags:?}"
+        );
+    }
+
     #[test]
     fn e018_fires_on_unbounded_or_oversized_restart_max() {
         use crate::ast::RuntimeBlock;

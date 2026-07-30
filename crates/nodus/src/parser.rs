@@ -1759,13 +1759,29 @@ impl Parser {
         if raw.is_empty() {
             return None;
         }
+        // A branch action / `@err:` handler MAY carry a trailing `→ $target`
+        // pipeline destination (e.g. `CMD(args) → $target`). Split it off
+        // BEFORE the `(` split below — otherwise the no-paren path folds the
+        // arrow and target straight into the command name, and the
+        // paren path folds it into the last argument.
+        let (raw, pipeline_target) = match raw.rsplit_once('→') {
+            Some((cmd, target)) => {
+                let target = target.trim();
+                (cmd.trim(), (!target.is_empty()).then(|| target.to_string()))
+            }
+            None => (raw.trim(), None),
+        };
+        if raw.is_empty() {
+            return None;
+        }
         let (name, rest) = match raw.split_once('(') {
             Some((n, r)) => (n.trim(), Some(r)),
-            None => (raw.trim(), None),
+            None => (raw, None),
         };
         if name.is_empty() || !name.chars().next().is_some_and(char::is_uppercase) {
             return Some(CommandCall {
                 name: raw.to_string(),
+                pipeline_target,
                 ..Default::default()
             });
         }
@@ -1784,6 +1800,7 @@ impl Parser {
         Some(CommandCall {
             name: name.to_string(),
             args,
+            pipeline_target,
             ..Default::default()
         })
     }
@@ -2069,6 +2086,81 @@ mod tests {
             }
             other => panic!("expected switch, got {other:?}"),
         }
+    }
+
+    #[test]
+    fn switch_arm_action_captures_pipeline_target() {
+        let src = "§wf:dispatch v1.0\n§runtime: { core: schema.nodus }\n@steps:\n  1. ?SWITCH $category:\n    urgent → GEN(x) → $picked\n  ~END\n";
+        let wf = Parser::parse(src).unwrap();
+        match wf.steps[0].body.as_ref().unwrap() {
+            Stmt::Switch(sw) => {
+                assert_eq!(sw.arms[0].1.name, "GEN");
+                assert_eq!(sw.arms[0].1.args, vec!["x"]);
+                assert_eq!(
+                    sw.arms[0].1.pipeline_target.as_deref(),
+                    Some("$picked"),
+                    "an arm action's trailing → target must be captured, not folded into args"
+                );
+            }
+            other => panic!("expected switch, got {other:?}"),
+        }
+    }
+
+    #[test]
+    fn switch_default_action_captures_pipeline_target() {
+        let src = "§wf:dispatch v1.0\n§runtime: { core: schema.nodus }\n@steps:\n  1. ?SWITCH $category:\n    urgent → ROUTE(x)\n    * → GEN(reply) → $picked\n  ~END\n";
+        let wf = Parser::parse(src).unwrap();
+        match wf.steps[0].body.as_ref().unwrap() {
+            Stmt::Switch(sw) => {
+                let default = sw.default.as_ref().expect("default arm parsed");
+                assert_eq!(default.name, "GEN");
+                assert_eq!(
+                    default.pipeline_target.as_deref(),
+                    Some("$picked"),
+                    "the `*` default's trailing → target must be captured too"
+                );
+            }
+            other => panic!("expected switch, got {other:?}"),
+        }
+    }
+
+    #[test]
+    fn inline_if_action_captures_pipeline_target() {
+        let src = "§wf:guard v1\n@steps:\n  1. ?IF $r > 0.9 → GEN(x) → $picked\n";
+        let wf = Parser::parse(src).unwrap();
+        match wf.steps[0].body.as_ref().unwrap() {
+            Stmt::Conditional(c) => {
+                let action = c.action.as_ref().expect("action parsed");
+                assert_eq!(action.name, "GEN");
+                assert_eq!(action.args, vec!["x"]);
+                assert_eq!(
+                    action.pipeline_target.as_deref(),
+                    Some("$picked"),
+                    "an inline ?IF action's trailing → target must attach, not be discarded"
+                );
+            }
+            other => panic!("expected conditional, got {other:?}"),
+        }
+    }
+
+    #[test]
+    fn error_handler_captures_pipeline_target() {
+        let src = "§wf:notifier v1.0\n§runtime: { core: schema.nodus }\n@err: NOTIFY(admin) → $picked\n@steps:\n  1. GEN(x) → $out\n";
+        let wf = Parser::parse(src).unwrap();
+        let handler = wf
+            .error_decl
+            .as_ref()
+            .expect("error_decl parsed")
+            .handler
+            .as_ref()
+            .expect("handler parsed");
+        assert_eq!(handler.name, "NOTIFY");
+        assert_eq!(handler.args, vec!["admin"]);
+        assert_eq!(
+            handler.pipeline_target.as_deref(),
+            Some("$picked"),
+            "an @err: handler's trailing → target must be captured too"
+        );
     }
 
     #[test]

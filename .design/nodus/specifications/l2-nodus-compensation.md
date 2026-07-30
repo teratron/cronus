@@ -1,6 +1,6 @@
 # Nodus Compensation Seam Implementation (Rust)
 
-**Version:** 1.0.0
+**Version:** 1.0.1
 **Status:** Stable
 **Layer:** implementation
 **Implements:** l1-nodus-language.md
@@ -9,9 +9,9 @@
 
 Rust realization of the NL-22 compensation seam: an effectful step MAY declare a
 **compensating action** — a host-supplied *forward* action that undoes the step's
-business effect — and when the compensation scope fails, is cancelled, or is
-explicitly compensated, the compensations of the scope's **successfully-completed**
-steps run in **reverse order of completion** (LIFO). This spec records how the
+business effect — and when the compensation scope fails or is aborted, the
+compensations of the scope's **successfully-completed** steps run in **reverse
+order of completion** (LIFO). This spec records how the
 lexer, AST, parser, executor, validator, and transpiler realize that contract, and
 which parts of NL-22's stated composition are **vacuous in core today** and
 therefore host obligations rather than silent omissions.
@@ -45,7 +45,7 @@ the record* rather than an absence to be misread as success.
 
 - No new external dependency (LP-1). The ledger is a `Vec` on the existing execution context; no transaction manager, no persistence crate.
 - **Semantic undo, not state rollback** (CO-1): nodus does not restore variables, re-seed `$out`, or unwind the value environment. A compensation is an ordinary forward command the host implements.
-- **The run is the compensation scope in this pass.** NL-22 speaks of "a workflow region / subprocess"; nodus has no subprocess concept today (`RUN(@macro)` body expansion is unimplemented) and the lexer emits no indent/dedent tokens, so a declared sub-region form has no structural anchor yet. Scope = the run; a `~SCOPE`-style declared region is a documented deferral (§7), not an omission.
+- **The run is the compensation scope in this pass.** NL-22 speaks of "a workflow region / subprocess"; nodus has no subprocess concept today (`RUN(@macro)` body expansion is unimplemented) and the lexer emits no indent/dedent tokens, so a declared sub-region form has no structural anchor yet. Scope = the run; a `~SCOPE`-style declared region is a documented deferral (§6), not an omission.
 - **The LP-11 `decide → effect → observe` gate composition is vacuous in core.** NL-22 requires each compensation to pass that gate "like any effect"; no such gate exists in the crate (verified: zero occurrences of LP-11 / settlement machinery). A compensation therefore runs through the ordinary `execute_command` path, which *is* today's effect path. When the LP-11 seam lands, compensations inherit it for free because they already route through that one path — no second mechanism to retrofit.
 - **Crash-mid-compensation resume is a host obligation today.** NL-22's resumability (CO-8) names the NL-12 suspend/resume machinery, which is unimplemented. Nodus drives each compensation **at-least-once within a single process run** against the ledger; the ledger is the artifact a host persists and replays. A host-supplied compensation is expected idempotent, so re-driving does not double-undo.
 - Compensation is **armed, never automatic on success** (CO-6): a scope that completes normally keeps its effects. No implicit rollback on a clean run.
@@ -56,9 +56,9 @@ the record* rather than an absence to be misread as success.
 | L1 Invariant | Rust Enforcement |
 | --- | --- |
 | NL-22(a) Only completed effects compensate | A step enters the ledger **only** after its action returns without a runtime error. A never-started, still-running, or already-failed step is never in the ledger, so it cannot be compensated. Cancellation of a running step stays the ordinary interrupt path (`Signal`), structurally distinct from the unwind. |
-| NL-22(b) Each compensation is a fallible gated effect | A compensation runs through the same `execute_command` path as any command, so it is subject to the same rule checks and emits the same events. A compensation that errors pushes `NODUS:COMPENSATION_FAILED` and marks that ledger entry `Failed`, leaving the original effect recorded **live** — never swallowed, never reported as undone. |
-| NL-22(c) Idempotent and resumable | The ledger is the driving record: each entry is driven at-least-once and carries a terminal outcome (`Compensated` / `Failed`). Re-driving a persisted ledger is safe because the host-supplied compensation is expected idempotent. Nodus adds no dedupe of its own — it does not silently skip an entry it cannot prove ran. |
-| NL-22(d) Armed, never automatic | The unwind fires only on `Status::Failed` / `Status::Aborted` or an explicit compensate request. A `Status::Ok` / `Status::Partial` run performs no unwind. |
+| NL-22(b) Each compensation is a fallible gated effect | A compensation runs through the same `execute_command` path as any command, so it is subject to the same rule checks and emits the same events. A compensation that errors pushes `NODUS:COMPENSATION_FAILED` onto `ctx.errors`, leaving the original effect **live** — never swallowed, never reported as undone. |
+| NL-22(c) Idempotent and resumable | The ledger is the driving record: each entry is popped and driven at-least-once as the unwind proceeds. Re-driving a persisted ledger is safe because the host-supplied compensation is expected idempotent. Nodus adds no dedupe of its own — it does not silently skip an entry it cannot prove ran. |
+| NL-22(d) Armed, never automatic | The unwind fires only on `Status::Failed` / `Status::Aborted`. A `Status::Ok` / `Status::Partial` run performs no unwind — there is no separate explicit-compensate-request trigger. |
 | NL-22 reverse order (CO-4) | The ledger is append-on-completion and drained **back-to-front**, so later effects are undone before the earlier effects they were built on. Order is a correctness contract, enforced by popping the ledger rather than re-reading step order. |
 | NL-2 Hard constraints absolute | A `!!` rule violation still bypasses `@err:` and fails the run; the unwind then runs over whatever completed before the violation. Compensation never rescues a rule violation into success. |
 | NL-7 Closed value system | The compensation declaration is a `CommandCall` (existing AST type); its outcome is an ordinary `Value`. No new value kind. |
@@ -100,7 +100,7 @@ pub struct Step {
 
 ```text
 [REFERENCE]
-3. PUBLISH($doc) → $url ~COMPENSATE: UNPUBLISH($url)
+3. PUBLISH($doc) → $url ~COMPENSATE: NOTIFY($url)
 ```
 
 Same-line, not an indented sub-clause: the lexer emits no indent/dedent tokens,
@@ -113,46 +113,52 @@ end-of-line.
 ```text
 [REFERENCE]
 // executor.rs — on ExecutionContext
-pub enum CompensationOutcome { Pending, Compensated, Failed }
-
 struct CompletedEffect {
     step_number: u32,
-    step_identity: String,        // HO-15, already computed per step
     compensation: CommandCall,
-    outcome: CompensationOutcome,
 }
 
 // ctx.compensations: Vec<CompletedEffect>   // append in completion order
-// ctx.uncompensable: Vec<(u32, String)>     // completed effects with no undo
 ```
 
-A step's action completing without a runtime error appends to exactly one of the
-two: `compensations` when `Step.compensation` is `Some`, `uncompensable` when it
-is `None`. The second vector is what makes NL-22's honesty rule real — an
-un-compensable committed effect is *recorded*, not inferred from absence.
+A step's action completing without a runtime error appends to `compensations`
+**only when** `Step.compensation` is `Some` — a step with no declared
+compensation is simply never entered into the ledger at all. There is no
+parallel `uncompensable` record and no per-entry outcome field: nothing reads
+either (no accessor exists, and no external test can observe
+`ExecutionContext`'s internals), and NL-22(a)'s honesty property — an
+un-compensable committed effect is never silently treated as undone — already
+holds by construction, since the ledger only ever contains what a step
+explicitly declared. See §6 for why the originally-specified parallel record
+and outcome enum were dropped rather than built unread.
 
 ### 4.5 Executor — the unwind
 
 ```text
 [REFERENCE]
 Arming condition (after the step loop finishes):
-    status is Failed or Aborted, OR an explicit compensate request was made
-  → drain ctx.compensations back-to-front:
+    status is Failed or Aborted
+  → drain ctx.compensations back-to-front (Vec::pop, LIFO falls out for free):
         for each entry (last → first):
+            errors_before = ctx.errors.len()
             run entry.compensation through execute_command
-            ok    ⇒ entry.outcome = Compensated
-            error ⇒ entry.outcome = Failed
-                    push RuntimeError { code: COMPENSATION_FAILED, .. }
-                    CONTINUE to the next entry (see §7)
+            ctx.errors grew ⇒ push RuntimeError { code: COMPENSATION_FAILED,
+                                                   step: entry.step_number, .. }
+                              CONTINUE to the next entry (see §6)
     status Ok / Partial ⇒ no unwind (armed, not automatic)
 ```
+
+A compensation's success or failure is detected by comparing `ctx.errors.len()`
+before and after running it through `execute_command` — there is no per-entry
+outcome field to set (§4.4); the entry is simply popped either way, and a grown
+error count is what triggers the `COMPENSATION_FAILED` record.
 
 **A failed compensation does not abandon the remaining ones.** NL-22 fixes the
 order and requires each failure to be surfaced, but does not say whether a
 failure aborts the unwind. Nodus continues: it cannot know whether the failure
 invalidates the earlier undos (that is host domain), and abandoning would leave
 *more* effects live with no attempt recorded. Either way the record is complete.
-The alternative is weighed in §7.
+The alternative is weighed in §6.
 
 ### 4.6 Validator
 
@@ -190,6 +196,8 @@ Vertical-slice order (each slice compiles and is independently verifiable):
 - **Abort the unwind on the first failed compensation**: rejected as the default (§4.5). It is the safer choice *if* one assumes an earlier undo depends on a later one having succeeded — but nodus cannot verify that dependency, and the cost of being wrong is strictly worse (more live effects, fewer attempts recorded). A host that wants abort-on-first-failure can express it by making its compensation actions fail closed.
 - **An effectfulness classifier in core**: rejected — which commands have external effects is host knowledge (LP-2); a core classifier would be wrong for every host that extends the vocabulary.
 - **A declared `~SCOPE ... ~END` compensation region**: deferred, not rejected. It needs a structural anchor nodus lacks (no subprocess, no indent tokens). Run-as-scope is the honest subset; the region form composes additively when `RUN(@macro)` body expansion lands.
+- **A parallel `uncompensable` ledger plus a per-entry `CompensationOutcome` enum** (the original design in earlier drafts of §4.4): dropped during implementation. Nothing reads either — no accessor exists on `ExecutionContext`, and no external test can observe its internals — and NL-22(a)'s honesty property (an un-compensable committed effect is never silently treated as undone) already holds by construction, since the ledger only ever contains what a step explicitly declared. Building unread fields would have been the exact over-engineering this project's own discipline rules out. Compensation success/failure is instead read off the `ctx.errors` length delta around each `execute_command` call (§4.5).
+- **An explicit "compensate now" request as a second arming trigger alongside `Status::Failed`/`Status::Aborted`** (as earlier drafts of §3/§4.5 described): not built. No mechanism for a workflow or host to request compensation outside of a failed/aborted run exists in the crate; the unwind is armed by run status alone.
 
 ## Canonical References
 
@@ -206,3 +214,4 @@ Vertical-slice order (each slice compiles and is independently verifiable):
 | Version | Date | Author | Notes |
 | --- | --- | --- | --- |
 | 1.0.0 | 2026-07-30 | Core Team | Initial spec — Rust realization of NL-22 (compensation seam): `TildeCompensate` token, `Step.compensation: Option<CommandCall>` mirroring `Step.retry`, `~COMPENSATE: CMD(args)` trailing same-line clause, completed-effect ledger + parallel un-compensable record, LIFO drain armed on `Failed`/`Aborted`/explicit request, `NODUS:COMPENSATION_FAILED`. Three compositions NL-22 names are recorded as **vacuous in core today** rather than silently dropped: the LP-11 `decide → effect → observe` gate (no gate exists — compensations route through the one existing effect path, inheriting the seam for free when it lands), crash-mid-compensation resume (needs NL-12; nodus drives at-least-once per process run, the ledger being the host's replay artifact), and the declared sub-region scope (no structural anchor — run-as-scope is the honest subset). Resolves one point NL-22 leaves open: a failed compensation **continues** the unwind rather than aborting it (§4.5, alternative weighed in §6). |
+| 1.0.1 | 2026-07-30 | Core Team | Reconciled to Phase 19's as-built implementation (no design/status change) — §4.4/§4.5 rewritten: `CompletedEffect` is only `{ step_number, compensation }`, with no `step_identity` field, no `CompensationOutcome` enum, and no parallel `uncompensable` vector (nothing read any of them — NL-22(a)'s honesty property already holds by construction). §3/§4.5's "or an explicit compensate request" arming trigger removed — only `Status::Failed`/`Status::Aborted` arm the unwind; no such request mechanism was built. §4.3's canonical example (`UNPUBLISH`) replaced with `NOTIFY`, a real `KNOWN_COMMANDS` entry, matching the crate's own test fixtures. Fixed three dangling `§7` cross-references (the document has no §7) to `§6`. §6 gained two Drawbacks entries recording why the outcome enum/uncompensable record and the explicit-request trigger were dropped. |

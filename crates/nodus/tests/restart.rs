@@ -6,8 +6,7 @@
 //! reconstruction across attempts, and the no-`restart_max` additivity
 //! baseline.
 
-use nodus::ast::{CommandCall, Conditional, RuntimeBlock, Step, Stmt, WorkflowFile};
-use nodus::executor::{Executor, Status, StubProvider, Value};
+use nodus::executor::{Status, Value};
 use nodus::observability::{AuditProvider, ExecutionEvent, RunManifest};
 use nodus::parser::Parser;
 use nodus::transpiler::Transpiler;
@@ -53,18 +52,17 @@ impl AuditProvider for RecordingProvider {
     }
 }
 
-// ─── Fixtures (parsed source — bare top-level commands only) ─────────────────
+// ─── Fixtures (parsed source) ─────────────────────────────────────────────────
 //
-// NOTE: these fixtures deliberately avoid `?IF cond → CMD() → $target` for the
-// $restart write. That inline-conditional-action form has a pre-existing,
-// unrelated parser gap: `try_parse_command_from_string` never looks for a
-// trailing pipeline arrow within the re-parsed action string, so the target is
-// silently dropped (confirmed by inspecting the parsed AST directly — every
-// inline `?IF` action's `pipeline_target` comes back `None` regardless of
-// source text). Out of scope for NL-23 to fix. The attempt-count-dependent
-// scenario below works around it with a directly-constructed AST instead,
-// matching the Phase-16 precedent for parser gaps unrelated to what's under
-// test.
+// The attempt-count-dependent scenario below (`RESTART_ONCE_WF`) used to need
+// a directly-constructed AST: `?IF cond → CMD() → $target` dropped its
+// trailing pipeline target — `try_parse_command_from_string` never looked for
+// a second arrow within the re-parsed action string (confirmed by inspecting
+// the parsed AST directly — every inline `?IF` action's `pipeline_target`
+// came back `None` regardless of source text). Fixed in Phase 20
+// (l2-nodus-control-flow's NL-10 conformance pass, which also covers `?SWITCH`
+// arm targets); this fixture is now real nodus source run through the full
+// parse → validate → run_with_audit path.
 
 // Always requests a restart — never stops on its own; only the ceiling stops it.
 const RESTART_ALWAYS_WF: &str = r#"§wf:restart_always v1.0
@@ -98,59 +96,17 @@ const NESTED_RESTART_WF: &str = r#"§wf:nested_restart v1.0
   2. GEN(done) → $out
 "#;
 
-// Directly-constructed AST (bypasses the inline-conditional parser gap above):
-// requests a restart only while $restart_count < 1, so it restarts exactly
+// Requests a restart only while $restart_count < 1, so it restarts exactly
 // once. $attempt0_marker is likewise set only on that first attempt.
-fn restart_once_ast() -> WorkflowFile {
-    WorkflowFile {
-        runtime: Some(RuntimeBlock {
-            core: "schema.nodus".to_string(),
-            restart_max: Some(3),
-            ..Default::default()
-        }),
-        steps: vec![
-            Step {
-                number: 1,
-                body: Some(Stmt::Conditional(Conditional {
-                    condition: "$restart_count < 1".to_string(),
-                    action: Some(CommandCall {
-                        name: "GEN".to_string(),
-                        args: vec!["first_attempt_only".to_string()],
-                        pipeline_target: Some("$attempt0_marker".to_string()),
-                        ..Default::default()
-                    }),
-                    ..Default::default()
-                })),
-                ..Default::default()
-            },
-            Step {
-                number: 2,
-                body: Some(Stmt::Conditional(Conditional {
-                    condition: "$restart_count < 1".to_string(),
-                    action: Some(CommandCall {
-                        name: "GEN".to_string(),
-                        args: vec!["again".to_string()],
-                        pipeline_target: Some("$restart".to_string()),
-                        ..Default::default()
-                    }),
-                    ..Default::default()
-                })),
-                ..Default::default()
-            },
-            Step {
-                number: 3,
-                body: Some(Stmt::Command(CommandCall {
-                    name: "GEN".to_string(),
-                    args: vec!["done".to_string()],
-                    pipeline_target: Some("$out".to_string()),
-                    ..Default::default()
-                })),
-                ..Default::default()
-            },
-        ],
-        ..Default::default()
-    }
-}
+const RESTART_ONCE_WF: &str = r#"§wf:restart_once v1.0
+§runtime: { core: schema.nodus, restart_max: 3 }
+@out: $out
+@err: ESCALATE(human)
+@steps:
+  1. ?IF $restart_count < 1 → GEN(first_attempt_only) → $attempt0_marker
+  2. ?IF $restart_count < 1 → GEN(again) → $restart
+  3. GEN(done) → $out
+"#;
 
 // ─── Bound + authority ────────────────────────────────────────────────────────
 
@@ -209,8 +165,15 @@ fn ceiling_exhaustion_stops_after_max_plus_one_attempts_and_flags_restart_limit(
 #[test]
 fn restart_count_progresses_and_context_is_fresh_each_attempt() {
     let recorder = RecordingProvider::new();
-    let wf = restart_once_ast();
-    let result = Executor::with_audit(StubProvider, recorder.clone()).execute(&wf, None);
+    let result = run_with_audit(
+        RESTART_ONCE_WF,
+        "restart_once.nodus",
+        None,
+        recorder.clone(),
+        "",
+        "",
+    )
+    .expect("run");
 
     assert_eq!(result.status, Status::Ok, "errors: {:?}", result.errors);
     // The guard (`$restart_count < 1`) only holds on the first attempt, so a
