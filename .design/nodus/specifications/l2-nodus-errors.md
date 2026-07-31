@@ -1,6 +1,6 @@
 # Nodus Error Taxonomy Implementation (Rust)
 
-**Version:** 1.1.0
+**Version:** 1.1.1
 **Status:** Stable
 **Layer:** implementation
 **Implements:** l1-nodus-language.md
@@ -28,6 +28,7 @@ metadata and enforcement site.
 - [l2-nodus-runtime.md](l2-nodus-runtime.md) — the runtime crate this spec extends; `vocab::error_code`, `Error`, `RuntimeError`, the validator/executor emission sites (§4.7 itemizes the 11 → 24 gap)
 - [l1-nodus-dialog.md](l1-nodus-dialog.md) — owns the `DIALOG_TIMEOUT` / `DIALOG_REJECTED` / `PAUSED` subset
 - [l2-nodus-portability.md](l2-nodus-portability.md) — `NODUS:CAPABILITY_UNMET` (LP-8) and `NODUS:POLICY_DENIED` (LP-11, §4.9.4) are portability-layer runtime codes beyond the §4.6 language set; also documents that `@err:` handler dispatch (this spec's first bullet above) is unrealized in `executor.rs` today
+- [l2-nodus-error-dispatch.md](l2-nodus-error-dispatch.md) — [ADDED v1.1.1] realizes the `@err:` handler-dispatch mechanism this spec's NL-9 row names as a separate obligation; dispatches against the taxonomy this spec owns without adding any new code
 
 ## 1. Motivation
 
@@ -57,7 +58,7 @@ differently. Closing the §4.6 gap requires three things the current code lacks:
 | NL-1 Schema-first | Validation-category codes (`UNDEFINED_CMD`, `UNDEFINED_VAR`, `NO_SCHEMA`, `VALIDATION_FAILED`) are emitted by the validator before execution, never first surfaced at run time. |
 | NL-2 Hard constraints absolute | `RULE_VIOLATION` retains its dedicated path: emitted by the executor's rule check, bypasses `@err:`, forces `Status::Failed`. Severity `error`, category `runtime`; metadata never reclassifies it as catchable. |
 | NL-4 Validate-before-run | Any `error`-severity, `validation`-category code in the validation report blocks execution (the existing `has_errors` gate); execution-stage codes are unreachable on an invalid workflow. |
-| NL-9 Typed I/O / `@err:` contract | **Partially realized — corrected [v1.1.0].** Every runtime error carries a canonical `NODUS:*` code and surfaces in `RunResult.errors`; the taxonomy is a real, typed error surface. **What is not realized**: `@err:` handler *dispatch* itself. `WorkflowFile.error_decl` (the parsed `@err:` declaration) has zero call sites in `executor.rs` — it is parsed (`parser.rs`), validated (`validator.rs`), and transpiled (`transpiler.rs`), but the runtime never invokes the declared handler. `UNHANDLED_ERROR` is likewise never emitted (its constant exists and appears in a validator *warning message* only — `validator.rs`'s W-check that a workflow declares `@err:`). This row previously claimed both were built; found inaccurate while grounding `l2-nodus-portability.md`'s LP-11 design pass (§4.9.3). As-built today, "routed to `@err:`" means a typed code reaches `RunResult.errors`, and a host reads it and decides — matching this document's own §Overview language ("the `@err:` vs. continue decision a host applies"), which was already honest about this even where this row was not. Building executor-side `@err:` dispatch is a real, separate NL-9 obligation this correction records rather than resolves. |
+| NL-9 Typed I/O / `@err:` contract | **Taxonomy realized; dispatch specified, not yet implemented [v1.1.1].** Every runtime error carries a canonical `NODUS:*` code and surfaces in `RunResult.errors`; the taxonomy is a real, typed error surface — this document's own scope. **Dispatch itself** — invoking the declared `@err:` handler — is now specified in `l2-nodus-error-dispatch.md`: any non-fatal error a step returns with no `Signal` reaches a dispatch check in the main loop, `$error` is populated, and the handler runs via `execute_command` before the run ends; `RULE_VIOLATION` keeps its own dedicated fatal path unchanged (this document's NL-2 row) and is structurally excluded from dispatch, never an exception carved out by name. `UNHANDLED_ERROR` remains unemitted (its constant exists only inside a validator warning string) — dispatch does not introduce or require it, since every dispatched error already carries its own real code. As-built until that spec's implementation phase lands, "routed to `@err:`" still means only "a typed code reaches `RunResult.errors`, and a host reads it and decides" (this document's own §Overview language); once implemented, the declared handler also actually runs. |
 
 ## 4. Detailed Design
 
@@ -183,5 +184,6 @@ than raise it.
 
 | Version | Date | Author | Notes |
 | --- | --- | --- | --- |
+| 1.1.1 | 2026-07-31 | Core Team | NL-9 row updated: dispatch is now **specified** (`l2-nodus-error-dispatch.md`, new sibling spec), not merely flagged as missing. Eligibility for dispatch is structural (any `RuntimeError` returned with no `Signal`) rather than an enumerated code list, so this document needed no new code and no change to its own emission-point table — `RULE_VIOLATION` keeps the dedicated fatal path this document's NL-2 row already describes, unchanged. Related Specifications gains the new sibling spec. |
 | 1.1.0 | 2026-07-31 | Core Team | §4.2 gains a cross-reference for `POLICY_DENIED` (category `runtime`, severity `error`), the new LP-11 call-site denial code specified by `l2-nodus-portability.md` §4.9.4 — same classification as `RULE_VIOLATION`, sitting beside the frozen 24-code set exactly as `CAPABILITY_UNMET` does for LP-8. Not added to §4.5's Emission Points table, matching how `CAPABILITY_UNMET` is handled there (portability-layer codes are owned and enumerated by their own realization spec, not restated here). |
 | 1.0.0 | 2026-06-27 | Core Team | Initial spec — Rust realization of the 24-code taxonomy (`l1-nodus-language.md` §4.6): `ErrorSeverity`/`ErrorCategory` types, per-code severity×category registry, `error_meta` lookup, `EXECUTION_FAILED` supersede rule + site reassignment, validator/executor emission map; `CAPABILITY_UNMET` noted as the LP-8 portability-layer code. |
