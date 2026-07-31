@@ -1,6 +1,6 @@
 # Nodus Portability and Extension Contract
 
-**Version:** 1.14.0
+**Version:** 1.14.1
 **Status:** Stable
 **Layer:** concept
 
@@ -195,20 +195,30 @@ The `PolicyProvider` role is a *decide-class* seam over effectful steps. It is d
 [REFERENCE]
 run_effect(step, host):
     if host.has(PolicyProvider):
-        decision := host.policy.authorize(step.effect_class, step.args)   // decide, pre-effect
-        // fail-closed: any of {Deny, error, timeout} -> abort
-        if decision != Allow:
-            emit(NODUS:CAPABILITY_UNMET | NODUS:POLICY_DENIED)            // typed, never hang
-            route_to(@err) or bypass per NL-2                            // !! violations bypass @err
-            return
+        permitted := host.policy.evaluate(gate, context)   // decide, pre-effect — the real,
+                                                              // shipped signature (L2 §4.4):
+                                                              // evaluate(gate: &str, context: &Value) -> bool
+        // fail-closed: false (or a host implementation that errors/times out) -> abort
+        if not permitted:
+            record(NODUS:POLICY_DENIED)                    // typed, never hang; surfaces in
+                                                              // RunResult.errors (L2 §4.9)
+            return                                           // the effect never runs; execution
+                                                              // continues to the next step (non-halting —
+                                                              // distinct from the NL-2 !!-rule path, which
+                                                              // is the only path that halts the run)
     result := perform(step)                    // the effect happens exactly once, here
     host.audit.record(step, result)            // observe, post-effect (HO-*, after the real result)
     return result
 
-effect_class(step) := one of { model_call, tool_use, deferred }   // declared, host-matchable (LP-10: read-only)
+effect_class(step) := one of { model_call, tool_use, deferred }   // declared, host-matchable (LP-10: read-only).
+                                                                     // tool_use names the category; a given L2
+                                                                     // realization may leave it vacuous until a
+                                                                     // generic host-tool seam exists to gate.
 ```
 
 Two guarantees follow. First, the ordering is authoritative: a `PolicyProvider` never sees a post-effect state and an `AuditProvider` never observes a not-yet-happened effect — mirroring the main interception model's check-before-use rule. Second, the seam is purely additive: with no `PolicyProvider` the built-in *allow-all* applies and execution is byte-for-byte today's behaviour, so LP-11 imposes no cost on hosts that do not opt in.
+
+**On `@err:` routing** [CORRECTED v1.14.1]: this L1 names only the outcome a denial must produce — a typed `NODUS:*` record, non-halting, distinct from the `!!`-rule path that NL-2 alone owns. It does **not** mandate that the denial dispatch through a running `@err:` handler, because whether `@err:` is itself executor-dispatched is NL-9's concern, not LP-11's — LP-11 must produce a typed record regardless of what NL-9's realization does with it. An earlier revision of this reference block wrote `route_to(@err)` as if invoking the declared handler were the mechanism; that overstated what this invariant requires. `record(...)` above is the accurate primitive: the code is typed and reaches the run's error surface, and a host consults it exactly as it would any other `NODUS:*` code under NL-9.
 
 ### 4.8 Imported-Bundle Vetting Seam (LP-12)
 
@@ -265,8 +275,8 @@ delegate_to_peer(step, host):
     if peer is None or not verify_identity(peer):
         reject_fail_fast("unresolvable or unverified peer", step.peer_ref) // pre-delegation, never mid-run
     if host.has(PolicyProvider):
-        if host.policy.authorize(effect=peer_call, args={peer, step.capability}) != Allow:
-            emit(NODUS:POLICY_DENIED); route_to(@err); return             // LP-11 gate, fail-closed, default-deny
+        if not host.policy.evaluate("deferred", {peer, step.capability}):  // §4.7's real shape
+            record(NODUS:POLICY_DENIED); return                          // LP-11 gate, fail-closed, default-deny
     token  := suspend_with_correlation(step)                             // NL-12: yield Status::Paused
     result := host.await_peer(peer, step.capability, token)              // host owns channel/transport/settlement
     mark(result, provenance = Untrusted)                                 // NL-11: a peer is an external actor
@@ -314,7 +324,7 @@ run_effect(step, host):
     if host.has(PolicyProvider):
         tier     := host.tier_of(step.effect)          // host maps consequence → auto|confirm|approval
         decision := host.gate(tier, step.effect)       // host owns friction; unclassified → most cautious
-        if decision != Allow: emit(NODUS:POLICY_DENIED); route_to(@err); return   // LP-11 fail-closed
+        if decision != Allow: record(NODUS:POLICY_DENIED); return                 // LP-11 fail-closed
     perform(step); host.audit.record(step)             // decide → effect → observe
 ```
 
@@ -336,13 +346,13 @@ settlement := {
 run_settlement(step, host):
     if not host.has(SettlementRail):     reject_pre_run(NODUS:CAP_UNMET)     // LP-8 fail-fast
     env := host.spending_envelope()                                          // agent-read-only (LP-10)
-    if step.payee not in env.allowlist:  emit(NODUS:POLICY_DENIED); @err; return  // VS-4
+    if step.payee not in env.allowlist:  record(NODUS:POLICY_DENIED); return  // VS-4
     if step.amount > env.per_payment or step.amount > env.remaining:
-                                          emit(NODUS:POLICY_DENIED); @err; return  // VS-5 exhausted
+                                          record(NODUS:POLICY_DENIED); return  // VS-5 exhausted
     decision := host.gate(settlement, step)            // LP-11 decide, host owns friction (LP-16 tier)
-    if decision != Allow:                 emit(NODUS:POLICY_DENIED); @err; return  // VS-5 fail-closed
+    if decision != Allow:                 record(NODUS:POLICY_DENIED); return  // VS-5 fail-closed
     receipt := host.rail.settle(step)                  // bounded authority only; no rail in core (LP-2)
-    if receipt is None:                   emit(NODUS:SETTLEMENT_UNACCOUNTED); @err; return  // VS-7
+    if receipt is None:                   record(NODUS:SETTLEMENT_UNACCOUNTED); return  // VS-7
     host.audit.record(step, receipt)                   // decide → settle → observe; HO-9 witness
 ```
 
@@ -419,6 +429,7 @@ The LP-invariants are evaluated in the order that minimises rework:
 
 | Version | Date | Author | Notes |
 | --- | --- | --- | --- |
+| 1.14.1 | 2026-07-31 | Core Team | Corrected §4.7's `[REFERENCE]` pseudocode, found inaccurate while grounding the L2 LP-11 realization: `authorize(step.effect_class, step.args) -> Decision{Allow,...}` described a method shape that was never built — the trait actually shipped (LP-2, L2 §4.4) is `evaluate(gate: &str, context: &Value) -> bool`, a different signature. Replaced the sketch with the real one and named `record(NODUS:POLICY_DENIED)` as the primitive instead of `route_to(@err)`, since whether `@err:` is itself executor-dispatched is NL-9's concern — grounding the L2 pass found `error_decl` (the parsed `@err:` handler) has **zero call sites in `executor.rs`**: it is parsed, validated, and transpiled, but never invoked, so "route to @err" described a mechanism that does not exist in the runtime today. LP-11 does not need to build that mechanism; it needs only to produce a typed, non-halting record, which is what the corrected block specifies. **The same `route_to(@err)` / `authorize(...)` shorthand had propagated into three more `[REFERENCE]` blocks that reuse the LP-11 gate** — found by sweeping the file for `@err` rather than assuming §4.7 was the only site: §4.10's peer-delegation pseudocode (LP-14), §4.12's risk-tiered gate (LP-16), and §4.13's settlement gate (LP-17, four occurrences) all carried the identical inaccuracy; all four corrected to the same `record(NODUS:*)`-returns shape. Also annotated `effect_class`'s `tool_use` category: an L2 realization may leave it vacuous until a generic host-tool extension seam exists to gate — nodus's only host-swappable extension points today are `ModelProvider` and `DialogProvider`, and every `tool`-shaped builtin command (`FETCH`, `WRITE`, `GIT`, `NOTIFY`, …) is presently a fixed, zero-dependency stub with no host-supplied implementation, so gating them would authorize nothing real. Reference-accuracy fix only; no core invariant text (§3) changed — none of the four ever claimed `@err:` dispatch there, only a typed `NODUS:*` code. |
 | 1.14.0 | 2026-07-30 | Core Team | Added §4.14 (LP-3 Admission Evidence) and pointed LP-3 at it. LP-3 named a threshold ("two independent host contexts") without saying what satisfies it, making the gate **unfalsifiable** — a seam could sit behind it indefinitely with nothing stating what would ever open it, which is what happened: `PolicyProvider` and `StorageProvider` shipped as re-exported public API that no code path consults, and LP-11's absent call site silently blocked LP-16/LP-17/LP-20 for multiple planning cycles with no one able to say when the gate was met. §4.14 defines a **host context** by *what it decides and how it fails* rather than by ownership (two entry points of one project are two contexts when they exercise the seam differently; two separately-owned projects that consume it identically are one — the unit is the decision shape, because that is what the abstraction must span); defines **independence** as neither context deriving its behaviour from the other, with **documented divergence** — especially on fail direction — as the strongest positive signal, since a seam that must span an existing disagreement is demonstrably not a single-context optimisation, while two contexts agreeing on every axis are weak evidence even when separately owned; requires an **admission record** in the realizing L2 naming both contexts, the independence evidence, the host-specific types the seam must not name (LP-3's second half being verifiable by inspection and often already satisfied while the first half is open), and the disposition with the missing evidence spelled out when unsatisfied; and fixes that dispositions are **per seam, never blanket**, so a pass finding one seam satisfied and another not is the expected shape. Absent a record a seam stays interface-only — the state LP-2 already permits, now required to be a recorded decision rather than an unexamined default. Governance refinement only: no invariant added, none relaxed, no runtime behaviour implied. L1 stays Stable (C9); `l2-nodus-portability` 1.3.0 carries the first admission records under this rule. |
 | 1.13.0 | 2026-07-23 | Core Team | Added LP-20 (obligation-gated effect seam) — an effectful step MAY declare its effect **gated on a named obligation** (a host-tracked precondition some prior event must have discharged), the runtime guaranteeing the host's obligation check runs before the effect via the LP-11 `decide → effect → observe` ordering and aborting fail-closed with a typed NODUS:* when undischarged (never a silent proceed, never a hang). The workflow-side carrier of a *deferred* control: one step's action records that a later dependent effect is blocked until a required action has genuinely completed. Three rules — **discharge recognized only on genuine completion** never on an attempt or a look-alike step (the host owns what counts, LP-2); **per LP-10 a workflow declares the dependency but never marks its own obligation discharged**, so a workflow assembled under untrusted influence (NL-11) cannot self-satisfy its precondition; and **an obligation open at run end is surfaced in the terminal RunManifest, not dropped** (composing HO-10 completeness honesty), since a silently forgotten obligation is a policy that quietly did not apply, indistinguishable from one satisfied. Obligation namespace, tracking store, and discharge predicate entirely host-supplied (LP-2, no obligation/scanner/policy in core); nodus contributes only the declare-a-gate-and-let-the-host-resolve-it seam and the ordering guarantee. The dynamic *precondition* complement to the LP-11 per-effect gate (LP-11 asks is-this-effect-allowed-now, LP-20 asks has-the-required-prior-action-happened) and to the static LP-8 manifest; purely additive. The nodus realization of the new main l1-convergence-gate deferred-obligation contract (CG-5 gated-on-genuine-discharge / CG-6 outstanding-obligations-surfaced), the workflow-side half of a control the host places at a convergence boundary. L1 stays Stable (C9); l2-nodus-portability carries LP-20 as a pending Invariant-Compliance obligation reconciled at magic.task (LP-8…LP-19 precedent). |
 | 1.12.0 | 2026-07-23 | Core Team | Added LP-19 (host-supplied exposure switch seam) — a workflow MAY read a **named exposure switch** (a staged behaviour change, an experiment arm, a reserved holdout) whose value is supplied entirely by the host; nodus computes no assignment, holds no rollout state, and names no fraction/hash/subject/bucketing-key/targeting-rule (LP-2 — no rollout vocabulary in core), defining only how a value the host already decided **enters and behaves inside a run**: (a) **resolved once, frozen for the run** — mid-run re-resolution forbidden, so a run can never straddle two variants with half its steps on each side, which would make its trace attributable to neither arm and quietly poison any comparison built on it (the runtime-side guarantee behind the HO-18 manifest record), and a suspended run (NL-12/DG-4) resumes under the values it started with rather than under whatever the host would decide now; (b) **fail-closed to a declared safe value** — an unresolvable switch (unknown name, unavailable ruleset, stale beyond the host's bound) yields the declared safe value, normally the unchanged behaviour, never an error that halts the run and never an implicit *on*, with an undeclared safe value being a pre-run validation failure in the LP-8 family surfaced before the first step; (c) **read-only, ordinary, provenance-carrying** — the value enters as an ordinary value with configuration provenance (NL-11/NL-20 kinship — being a switch confers no trust) and, per LP-10, a workflow reads its switches but can never set, widen, flip, or self-assign one, requesting an arm not being a vocabulary the language has. Purely additive (a workflow reading no switch behaves exactly as today; a host resolving none supplies every safe value). The workflow-side realization of the new main l1-staged-rollout contract — host-computed deterministic assignment (SR-2), fail-closed local evaluation (SR-9), and the non-straddling requirement that makes per-run arm attribution meaningful (SR-11 via HO-18). L1 stays Stable (C9); l2-nodus-portability carries LP-19 as a pending Invariant-Compliance obligation reconciled at magic.task (LP-8…LP-18 precedent). |
