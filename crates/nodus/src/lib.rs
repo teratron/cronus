@@ -74,8 +74,8 @@ pub use observability::{
 pub use parser::Parser;
 pub use portability::{
     BuiltinSchemaProvider, CapabilityManifest, ConfigOutcome, ConfigProvider,
-    DefaultConfigProvider, ExtensionRole, HostCapabilities, Missing, NoopPolicyProvider,
-    NoopStorageProvider, PolicyProvider, SchemaProvider, StorageProvider, validate_manifest,
+    DefaultConfigProvider, ExtensionRole, HostCapabilities, InMemoryStorageProvider, Missing,
+    NoopPolicyProvider, PolicyProvider, SchemaProvider, StorageProvider, validate_manifest,
 };
 pub use transpiler::Transpiler;
 pub use validator::{

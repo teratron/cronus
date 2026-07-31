@@ -1,10 +1,11 @@
 //! Portability and extension-point traits for host integration.
 //!
-//! Provides the vocabulary-extension seam ([`SchemaProvider`]),
-//! and interface-only contracts for storage ([`StorageProvider`]) and
-//! policy evaluation ([`PolicyProvider`]) that are pending LP-3 graduation.
-//! Each trait ships with a built-in no-op implementation that satisfies the
-//! interface without I/O, matching the LP-2 pattern established by
+//! Provides the vocabulary-extension seam ([`SchemaProvider`]), a built-in
+//! in-memory implementation of the storage seam ([`StorageProvider`] /
+//! [`InMemoryStorageProvider`]), and an interface-only contract for policy
+//! evaluation ([`PolicyProvider`]) whose executor wiring is pending LP-3
+//! graduation. Each trait ships with a built-in implementation sufficient for
+//! in-process use without I/O, matching the LP-2 pattern established by
 //! [`crate::executor::StubProvider`] and [`crate::observability::NoopAuditProvider`].
 //!
 //! It also defines the LP-8 capability manifest ([`CapabilityManifest`]) and the
@@ -18,6 +19,7 @@ use crate::ast::{CommandCall, Conditional, Stmt, WorkflowFile};
 use crate::executor::Value;
 use crate::vocab;
 use std::collections::BTreeSet;
+use std::sync::Mutex;
 
 // ─── SchemaProvider ───────────────────────────────────────────────────────────
 
@@ -48,7 +50,7 @@ impl SchemaProvider for BuiltinSchemaProvider {
     }
 }
 
-// ─── StorageProvider (pending LP-3) ──────────────────────────────────────────
+// ─── StorageProvider (wiring pending LP-3) ───────────────────────────────────
 
 /// Durable key/value store for cross-invocation state.
 ///
@@ -63,14 +65,42 @@ pub trait StorageProvider {
     fn load(&self, key: &str) -> Option<Value>;
 }
 
-/// No-op storage: `store` discards all values; `load` always returns `None`.
-pub struct NoopStorageProvider;
+/// Built-in in-memory storage: round-trips within one process, holds nothing
+/// across separate instances. `std::sync::Mutex`-guarded; a poisoned lock
+/// degrades to an empty store rather than panicking.
+#[derive(Default)]
+pub struct InMemoryStorageProvider {
+    values: Mutex<Vec<(String, Value)>>,
+}
 
-impl StorageProvider for NoopStorageProvider {
-    fn store(&self, _key: &str, _value: &Value) {}
+impl InMemoryStorageProvider {
+    /// A fresh, empty in-memory store.
+    pub fn new() -> Self {
+        Self::default()
+    }
+}
 
-    fn load(&self, _key: &str) -> Option<Value> {
-        None
+impl StorageProvider for InMemoryStorageProvider {
+    fn store(&self, key: &str, value: &Value) {
+        let mut values = self
+            .values
+            .lock()
+            .unwrap_or_else(|poisoned| poisoned.into_inner());
+        match values.iter_mut().find(|(k, _)| k == key) {
+            Some((_, existing)) => *existing = value.clone(),
+            None => values.push((key.to_string(), value.clone())),
+        }
+    }
+
+    fn load(&self, key: &str) -> Option<Value> {
+        let values = self
+            .values
+            .lock()
+            .unwrap_or_else(|poisoned| poisoned.into_inner());
+        values
+            .iter()
+            .find(|(k, _)| k == key)
+            .map(|(_, v)| v.clone())
     }
 }
 
@@ -127,8 +157,8 @@ pub trait ConfigProvider {
 }
 
 /// Built-in host acceptance: accepts the shape-checked candidate as-is. No
-/// I/O, no store, no UI — matching the [`NoopStorageProvider`] /
-/// [`NoopPolicyProvider`] LP-2 built-in precedent.
+/// I/O, no store, no UI — matching the [`NoopPolicyProvider`] LP-2 built-in
+/// precedent.
 pub struct DefaultConfigProvider;
 
 impl ConfigProvider for DefaultConfigProvider {
@@ -459,15 +489,32 @@ mod tests {
     }
 
     #[test]
-    fn noop_storage_load_returns_none() {
-        let s = NoopStorageProvider;
+    fn in_memory_storage_load_absent_returns_none() {
+        let s = InMemoryStorageProvider::new();
         assert!(s.load("any_key").is_none());
     }
 
     #[test]
-    fn noop_storage_store_no_panic() {
-        let s = NoopStorageProvider;
-        s.store("k", &Value::Null);
+    fn in_memory_storage_round_trips() {
+        let s = InMemoryStorageProvider::new();
+        s.store("k", &Value::Text("v".to_string()));
+        assert_eq!(s.load("k"), Some(Value::Text("v".to_string())));
+    }
+
+    #[test]
+    fn in_memory_storage_overwrites_existing_key() {
+        let s = InMemoryStorageProvider::new();
+        s.store("k", &Value::Int(1));
+        s.store("k", &Value::Int(2));
+        assert_eq!(s.load("k"), Some(Value::Int(2)));
+    }
+
+    #[test]
+    fn in_memory_storage_instances_do_not_share_state() {
+        let a = InMemoryStorageProvider::new();
+        let b = InMemoryStorageProvider::new();
+        a.store("k", &Value::Bool(true));
+        assert!(b.load("k").is_none());
     }
 
     #[test]

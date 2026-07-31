@@ -5,15 +5,18 @@
 //! - `run_with_schema` recognizes host-declared commands (LP-4)
 //! - Without schema extension, host commands are silently parsed as text and
 //!   never appear in the execution log (LP-4 isolation gate)
-//! - `NoopStorageProvider` and `NoopPolicyProvider` compile and satisfy their
-//!   traits without executor wiring (LP-2 no-op contract)
+//! - `NoopPolicyProvider` compiles and satisfies its trait without executor
+//!   wiring (LP-2 no-op contract)
+//! - `InMemoryStorageProvider` round-trips within one invocation and shares
+//!   no state across instances (LP-2 built-in sufficiency, §4.1/§4.11)
 
 use nodus::{
     executor::{Status, Value},
     observability::{AuditProvider, ExecutionEvent, RunManifest},
     portability::{
         BuiltinSchemaProvider, CapabilityManifest, ExtensionRole, HostCapabilities,
-        NoopPolicyProvider, NoopStorageProvider, PolicyProvider, SchemaProvider, StorageProvider,
+        InMemoryStorageProvider, NoopPolicyProvider, PolicyProvider, SchemaProvider,
+        StorageProvider,
     },
     workflows,
 };
@@ -104,20 +107,11 @@ fn host_schema_unknown_command_not_dispatched() {
 // ─── Noop-provider compilation test ──────────────────────────────────
 
 #[test]
-fn noop_storage_and_policy_compile() {
-    // Verify NoopStorageProvider and NoopPolicyProvider satisfy their traits
+fn noop_policy_and_schema_compile() {
+    // Verify NoopPolicyProvider and BuiltinSchemaProvider satisfy their traits
     // without any executor wiring. Exercises LP-2: every extension point ships
-    // with a built-in no-op implementation that satisfies the interface.
-    let storage = NoopStorageProvider;
+    // with a built-in implementation sufficient for in-process use.
     let policy = NoopPolicyProvider;
-
-    // store is a no-op (does not panic, returns ())
-    storage.store("key", &Value::Null);
-    storage.store("key2", &Value::Text("hello".to_string()));
-
-    // load always returns None
-    assert!(storage.load("key").is_none());
-    assert!(storage.load("missing").is_none());
 
     // evaluate always returns true
     assert!(policy.evaluate("spend_cap", &Value::Null));
@@ -127,6 +121,44 @@ fn noop_storage_and_policy_compile() {
     let bs = BuiltinSchemaProvider;
     assert!(bs.host_commands().is_empty());
     assert!(bs.host_reserved_variables().is_empty());
+}
+
+// ─── InMemoryStorageProvider built-in conformance ─────────────────────────────
+
+#[test]
+fn in_memory_storage_round_trips_within_invocation() {
+    // (a) store -> load returns the equal value, satisfying L1 §4.1's
+    // in-memory built-in mandate (LP-15) that NoopStorageProvider could not.
+    let storage = InMemoryStorageProvider::new();
+    storage.store("key", &Value::Text("hello".to_string()));
+    assert_eq!(storage.load("key"), Some(Value::Text("hello".to_string())));
+}
+
+#[test]
+fn in_memory_storage_overwrites_on_repeated_store() {
+    // (b) storing twice on the same key overwrites rather than accumulating.
+    let storage = InMemoryStorageProvider::new();
+    storage.store("key", &Value::Int(1));
+    storage.store("key", &Value::Int(2));
+    assert_eq!(storage.load("key"), Some(Value::Int(2)));
+}
+
+#[test]
+fn in_memory_storage_absent_key_returns_none() {
+    // (c) load on a key that was never stored still returns None.
+    let storage = InMemoryStorageProvider::new();
+    storage.store("key", &Value::Bool(true));
+    assert!(storage.load("missing").is_none());
+}
+
+#[test]
+fn in_memory_storage_instances_share_no_state() {
+    // (d) two separate provider instances are isolated — the property that
+    // makes the built-in safe for in-process testing (LP-2's stated purpose).
+    let a = InMemoryStorageProvider::new();
+    let b = InMemoryStorageProvider::new();
+    a.store("key", &Value::Text("only in a".to_string()));
+    assert!(b.load("key").is_none());
 }
 
 // ─── LP-8 capability manifest fixtures ───────────────────────────────────────
