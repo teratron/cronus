@@ -1,6 +1,6 @@
 # Nodus Portability Implementation (Rust)
 
-**Version:** 1.2.0
+**Version:** 1.3.0
 **Status:** Stable
 **Layer:** implementation
 **Implements:** l1-nodus-portability.md
@@ -28,6 +28,7 @@ attach to from one that ships but is never consulted.
 - [l2-nodus-environment.md](l2-nodus-environment.md) — [ADDED v1.2.0] `EnvironmentProvider` role; NE-3/NE-7/NE-10 discharge the realized part of LP-18
 - [l2-nodus-dialog.md](l2-nodus-dialog.md) — [ADDED v1.2.0] `DialogProvider` role; its `Status::Paused` + `ResumeDescriptor` lifecycle is the NL-12 substrate LP-14 waits on
 - [l2-nodus-compensation.md](l2-nodus-compensation.md) — [ADDED v1.2.0] establishes the "vacuous in core" recording vocabulary §3.1 uses, and records the LP-11 gate as vacuous by composition
+- [../../main/specifications/l1-interception-model.md](../../main/specifications/l1-interception-model.md) — [ADDED v1.3.0] the host-side decide-class contract LP-11 realizes; its Document History records the plugin-hook ↔ tool-security fail-behaviour divergence that §4.8.1 cites as LP-3 independence evidence
 
 ## 1. Motivation
 
@@ -70,7 +71,7 @@ to the L1 after this table was written; their realization status is §3.1.
 | --- | --- |
 | LP-1 Host neutrality | `crates/nodus/Cargo.toml` lists zero `[dependencies]` beyond `std`. The workspace `Cargo.toml` uses `workspace = true` for metadata fields only; no workspace crate is imported. Verified by extraction audit (Phase 3) and by CI's `cargo check --no-default-features`. |
 | LP-2 Extension via abstract interfaces | Every integration point is a named Rust `trait`. Built-in implementations (`StubProvider`, `NoopAuditProvider`, `NoopStorageProvider`, `NoopPolicyProvider`) satisfy the interface with no I/O. Host implementations live outside the crate boundary. |
-| LP-3 Two-host generalisation rule | Enforced by the spec amendment process: a new trait or vocabulary command reaches the library only after a `/magic.spec nodus` amendment documents two independent host-usage contexts. `StorageProvider` and `PolicyProvider` are held here pending that gate. |
+| LP-3 Two-host generalisation rule | Enforced by the spec amendment process: a new trait or vocabulary command reaches the library only after a `/magic.spec nodus` amendment documents two independent host-usage contexts, recorded as an **admission record** per L1 §4.14 (§4.8 here). Dispositions are per seam: **`PolicyProvider` is satisfied** (§4.8.1 — the runtime tool guard and the plugin-hook interception, two divergent host decision shapes) and may be wired; **`StorageProvider` is not** (§4.8.2 — one context only), so its executor hook points stay held. |
 | LP-4 Vocabulary isolation | `KNOWN_COMMANDS` and `RESERVED_VARIABLES` are compile-time constants in `vocab.rs`. `SchemaProvider` builds an extended `Schema` value at runtime without mutating these constants. Host-specific commands are schema artifacts, never constants. |
 | LP-5 Composable extension | All extension points are independently composable: `run_with_provider`, `run_with_audit`, `run_with_provider_and_audit` accept each provider in orthogonal parameters. No global mutable state; no inheritance. Combinators are pure functions in `workflows.rs`. |
 | LP-6 Semantic versioning contract | Published via `crates/nodus/Cargo.toml` with `version = "{semver}"`. Breaking changes follow the notice protocol in `l1-nodus-portability.md §4.5`. CI enforces `cargo semver-checks` (planned; currently manual). `EXTRACTION.md` documents the release checklist. |
@@ -103,7 +104,7 @@ These twelve are host-supplied seams, so the binary *Realized / Pending* axis us
 | --- | --- |
 | LP-9 Extraction attestation | **Vacuous in core.** No bundle-load path exists (zero occurrences of `bundle` / `witness` / `attest`-as-verification), so the verify-before-load hook has no call site. The `EXTRACTION.md` + `ci.yml` artifacts are LP-6 deliverables (§4.6), not an LP-9 witness. Nodus never signs — verification is the host's (LP-2) — so the core's obligation begins only when an import path does. |
 | LP-10 Host-granted authority, never self-authored | **Satisfied structurally.** Discharged by absence of vocabulary: `KNOWN_COMMANDS` holds no policy-writing command; `CapabilityManifest` exposes only `require_*` builders (declare) and getters (read) with no grant/relax/widen operation; acceptance authority sits behind `ConfigProvider` (`l2-nodus-config.md` LP-10 row); `Budget` is enforced by the run loop and unreadable by the workflow (`l2-nodus-environment.md` NE-13). Load-bearing in four sibling specs (cited by NL-14 / NL-17 / NL-20 DC-10 / NL-21) while having had no row here — the reason it needs one. |
-| LP-11 Per-effect authorization seam | **Seam declared, wiring pending.** `PolicyProvider` + `NoopPolicyProvider` ship and are re-exported, but `evaluate` has **zero call sites**: a host implementing it today gets no gate, and `decide → effect → observe` is unenforced because there is no *decide*. Already recorded as vacuous-by-composition by `l2-nodus-compensation.md` §2. The remedy is one hook in `execute_command` — see the leverage note below. |
+| LP-11 Per-effect authorization seam | **Seam declared, wiring pending — and now UNBLOCKED [v1.3.0].** `PolicyProvider` + `NoopPolicyProvider` ship and are re-exported, but `evaluate` has **zero call sites**: a host implementing it today gets no gate, and `decide → effect → observe` is unenforced because there is no *decide*. Already recorded as vacuous-by-composition by `l2-nodus-compensation.md` §2. Wiring was held by LP-3, which §4.8.1 now records as **satisfied** — so the remedy, one pre-effect hook in `execute_command`, is plannable. Still to be designed before a task can carry a concrete `Verify` line: the effect-class notion (no `EffectClass` type exists), the `gate` identifier's derivation from a step, the denial signal (L2 §4.4 specifies `ConstraintHit { halt: false }`, while L1 §4.7 sketches a typed `NODUS:POLICY_DENIED`; these differ and must be reconciled), and the orthogonal `run_with_policy` combinators (LP-5). |
 | LP-12 Imported-bundle admission vetting | **Vacuous in core.** Same absent load path as LP-9, and explicitly sequenced after it (attest → vet → run, §4.8 of the L1). No classifier call site can exist before a bundle can be loaded. |
 | LP-13 Addressable versioned import resolution | **Vacuous in core.** No resolver, catalog, pin record, or reference form. `@runtime: { core: <schema-file> }` names a schema file but performs no resolution or pinning. Precedes LP-9/LP-12 in the load order (resolve → attest → vet → run), so the three are one deliverable, not three. |
 | LP-14 Verified-peer delegation seam | **Vacuous in core**, with a named upstream blocker: it specializes NL-12 generalized deferred execution, which `l2-nodus-runtime.md` §3.1 records as **Pending** — the `Status::Paused` + `ResumeDescriptor` lifecycle exists but is human-answer-shaped. A peer seam cannot precede the generalized deferred step it is a special case of. |
@@ -384,20 +385,57 @@ neutrality for runs that never start, HO-3/HO-5). A satisfiable manifest delegat
 to the stub executor. This is the machine-checkable LP-3 contract: a workflow is
 portable to a host exactly when that host satisfies its manifest.
 
+### 4.8 LP-3 Admission Records [ADDED v1.3.0]
+
+Admission records per `l1-nodus-portability.md` §4.14, which makes the LP-3 gate checkable.
+Dispositions are per seam; the two open seams reach **different** outcomes, which is the
+rule working rather than a half-finished pass.
+
+#### 4.8.1 `PolicyProvider` (LP-11) — **LP-3 SATISFIED**
+
+| Field | Record |
+| --- | --- |
+| **Context A** | **Runtime tool guard** — `crates/domain/src/tool_security.rs`. Decides: may this tool call execute? Evaluates *every* tool call before execution against named severity-ranked signature rules ("Layer 2 (guard) evaluates every tool call before execution"). Fails by severity classification. |
+| **Context B** | **Plugin-hook interception** — `crates/domain/src/hooks.rs`. Decides: does any registered hook block this tool event? Nine `HookEvent` kinds; hooks run **in parallel** and the aggregated decision is deny if *any* returns `Block`. Fails by aggregation. |
+| **Independence** | Documented divergence, and not by our reading: the host's own Stable `l1-interception-model.md` exists to unify "the **currently-divergent fail-behaviours of the plugin-hook and tool-security realizations**" (its Document History, INT-3). Two mechanisms that already disagree on fail direction — severity classification vs parallel deny-aggregation — are the §4.14 strongest signal. Neither derives its behaviour from the other. |
+| **Host types the seam must not name** | `HookEvent`, the hook rule/matcher types, `tool_security::Severity`, the scanner's signature-rule types, and `contract::*`. Verified against the interface as it stands: `evaluate(&self, gate: &str, context: &Value) -> bool` names only `&str` and nodus's own `Value`, so LP-3's second half is **already satisfied by construction** — the interface needs no change to pass. |
+| **Disposition** | **Satisfied.** The seam spans two independent, divergent host decision shapes without naming a host type. `PolicyProvider` may be wired. |
+
+The host-side need is specified rather than hypothetical: `l1-interception-model.md` §165–167
+records that nodus "already carries the *observe* seam … the mechanic it lacks — and adopts
+under this pass — is the **decide** seam", and assigns the realization to this workspace.
+
+#### 4.8.2 `StorageProvider` (LP-15) — **LP-3 NOT SATISFIED**
+
+| Field | Record |
+| --- | --- |
+| **Context A** | **Durable local store** — `crates/store-local`. Decides nothing; persists and retrieves. A genuine backend, but a *provider* rather than a second decision shape. |
+| **Context B** | **None identified.** No second integration consumes durable cross-invocation workflow state today. |
+| **Independence** | Not assessable — one context. |
+| **Host types the seam must not name** | Verified clean regardless: `store(&self, key: &str, value: &Value)` / `load(&self, key: &str) -> Option<Value>` name only `&str` and `Value`. LP-3's second half is satisfied; the first is not. |
+| **Disposition** | **Not satisfied.** Missing evidence that would settle it: a second integration that would persist workflow state *with a different durability or locality contract* than `store-local` — e.g. a remote-backed store whose egress decision differs (the `l1-deployment-neutrality` DN-3 local-vs-remote axis LP-15 already cites). Until then `StorageProvider` stays interface-only, and its executor hook points (`STORE`/`LOAD`) remain unplannable. |
+
+Note the asymmetry this produces, and that it is correct: the LP-15 **built-in conformance**
+fix (an in-memory built-in per L1 §4.1 and LP-2) is *not* gated by this record, because it
+touches neither hook points nor run-parameter variants — the scope §2 defers. Only the wiring
+is held.
+
 ## 5. Implementation Notes
 
 Order of implementation across future phases, revised against the §3.1 findings:
 
 1. **SchemaProvider + capability manifest (LP-8)** — delivered. `Schema::with_provider`, the `run_with_schema` variant, and the `CapabilityManifest` / `validate_manifest` gate (§4.7) are purely additive — zero risk to the existing API.
-2. **PolicyProvider call site (LP-11)** — promoted to the highest-leverage item by §3.1: a single pre-effect evaluation hook in `execute_command` converts `PolicyProvider` from a no-op export into a real seam **and** unblocks LP-16, LP-17, and LP-20, all three of which are gated behind the same `decide → effect → observe` ordering. Additive: with no host provider the built-in allow-all preserves today's behaviour byte-for-byte.
+2. **PolicyProvider call site (LP-11)** — the highest-leverage item: a single pre-effect evaluation hook in `execute_command` converts `PolicyProvider` from a no-op export into a real seam **and** unblocks LP-16, LP-17, and LP-20, all three gated behind the same `decide → effect → observe` ordering. Additive: with no host provider the built-in allow-all preserves today's behaviour byte-for-byte. **[MODIFIED v1.3.0]** The v1.2.0 text called this task-authorable while omitting the LP-3 gate this same document asserts in §3, §2 and §4.4 — an error corrected here from the other side: §4.8.1 now records LP-3 as **satisfied** for this seam, so the gate is genuinely open. It is not yet *task-authorable*, though, for an ordinary reason — no L2 defines its Rust shape (effect-class notion, `gate` derivation, denial signal, `run_with_policy` combinators; see the §3.1 LP-11 row). That is a spec pass, not a governance gate: the difference between "not permitted" and "not yet designed".
 3. **StorageProvider built-in + call site (LP-15)** — two separable pieces. The smaller and independent one is the built-in divergence: L1 §4.1 specifies an in-memory store, the crate ships a no-op that never round-trips (§3.1). Correcting the built-in is self-contained and does not wait on LP-3. Executor hook points for `STORE`/`LOAD` remain the larger, LP-3-gated piece.
 4. **Environment liveness (LP-18 a/b)** — requires an L2 design decision before it can be planned: giving `EnvironmentProvider::open` a `Result` return and teaching `ResumeDescriptor` an environment identity are breaking changes to published items, so LP-6 classes them **major**. Amend this spec (or `l2-nodus-environment.md`) before authoring a task.
 5. **Import triad (LP-13 → LP-9 → LP-12)** — one deliverable, not three; nothing is owed until a bundle-load path exists. Not plannable today.
 6. **`cargo semver-checks` gate** — add to `ci.yml` once the crate reaches `1.0.0`; this is the LP-6 mechanical enforcement.
 
-Items 2 and 3 are the only entries here that a task can be authored against without a
-further spec pass. Everything in §3.1 marked *Vacuous in core* is deliberately absent from
-this list: an item with no call site yields no verifiable task.
+**[MODIFIED v1.3.0]** Only item 3's built-in half is task-authorable without a further spec
+pass. Item 2 is *permitted* (LP-3 satisfied, §4.8.1) but not yet *designed*, and item 4 needs
+an L2 decision — three distinct states that the v1.2.0 text collapsed into one. Everything in
+§3.1 marked *Vacuous in core* is deliberately absent from this list: an item with no call site
+yields no verifiable task.
 
 ## 6. Drawbacks & Alternatives
 
@@ -417,6 +455,9 @@ this list: an item with no call site yields no verifiable task.
 | `[PORTABILITY]` | `crates/nodus/src/portability.rs` | `ExtensionRole`, `CapabilityManifest`, `HostCapabilities`, `validate_manifest`; the Schema/Storage/Policy/Config traits — the §3.1 evidence base |
 | `[ENV-EXT]` | `crates/nodus/src/environment.rs` | `EnvironmentProvider`, `StubEnvironment`, `Instance` — the LP-18 realized surface |
 | `[RUN-VARIANTS]` | `crates/nodus/src/workflows.rs` | The orthogonal `run_with_*` family — LP-5 composability evidence |
+| `[GUARD-CTX-A]` | `crates/domain/src/tool_security.rs` | LP-3 host context A (§4.8.1) — runtime tool guard, pre-execution severity-rule evaluation |
+| `[GUARD-CTX-B]` | `crates/domain/src/hooks.rs` | LP-3 host context B (§4.8.1) — plugin-hook interception, parallel deny-aggregation |
+| `[HOST-EMBED]` | `crates/core/src/model_bridge.rs` | The canonical LP-2 host adaptor: `contract::InferenceBackend` → `nodus::ModelProvider`, kept outside the crate so LP-1 holds |
 | `[API-SURFACE]` | `crates/nodus/src/lib.rs` | Public re-export surface — LP-6 versioning scope |
 | `[CI]` | `crates/nodus/.github/workflows/ci.yml` | LP-6 regression gate |
 | `[EXTRACTION]` | `crates/nodus/EXTRACTION.md` | LP-6 extraction checklist |
@@ -425,6 +466,7 @@ this list: an item with no call site yields no verifiable task.
 
 | Version | Date | Author | Notes |
 | --- | --- | --- | --- |
+| 1.3.0 | 2026-07-31 | Core Team | Added §4.8 — the first **LP-3 admission records** under the L1 §4.14 rule authored in the same pass, reaching **different dispositions for the two open seams**, which is the gate doing work rather than a half-finished pass. **`PolicyProvider` (LP-11) — SATISFIED.** Context A: the runtime tool guard (`crates/domain/src/tool_security.rs`), deciding whether a tool call may execute, evaluating every call pre-execution against severity-ranked signature rules. Context B: plugin-hook interception (`crates/domain/src/hooks.rs`), nine `HookEvent` kinds evaluated **in parallel** with deny-if-any-`Block` aggregation. Independence is established by **documented divergence and not by our own reading**: the host's Stable `l1-interception-model.md` exists precisely to unify "the currently-divergent fail-behaviours of the plugin-hook and tool-security realizations" (INT-3), and two mechanisms that already disagree on fail direction — severity classification vs parallel deny-aggregation — are §4.14's strongest signal. LP-3's second half was already satisfied by construction: `evaluate(&self, gate: &str, context: &Value) -> bool` names only `&str` and nodus's own `Value`, so the interface needs no change; the host types it must never name (`HookEvent`, hook matcher/rule types, `tool_security::Severity`, scanner signature-rule types, `contract::*`) are all absent. The host need is specified rather than hypothetical — `l1-interception-model` §165–167 records that nodus "already carries the *observe* seam … the mechanic it lacks … is the **decide** seam" and assigns the realization here. **`StorageProvider` (LP-15) — NOT SATISFIED**: only one context (`crates/store-local`, a provider rather than a second *decision shape*); the missing evidence is named precisely — a second integration persisting workflow state under a different durability/locality contract, the `l1-deployment-neutrality` DN-3 local-vs-remote axis LP-15 already cites — so its `STORE`/`LOAD` hook points stay unplannable while the separate LP-15 **built-in conformance** fix remains ungated, since it touches neither hook points nor run-parameter variants. Updated accordingly: §3's LP-3 row (per-seam dispositions replacing the blanket "both held pending"), §3.1's LP-11 row (**unblocked**, with the four items still needing design named — effect-class notion, `gate` derivation, denial signal, `run_with_policy` combinators), and §5 item 2, whose v1.2.0 text called the call site task-authorable while omitting the gate this same document asserts in §3/§2/§4.4 — corrected from the other side, since the gate is now genuinely open but the seam is *permitted, not yet designed*: the difference between "not allowed" and "not specified". §5's closing sentence rewritten to separate the three states it had collapsed. Related Specifications gains the host-side `l1-interception-model`; Canonical References gain the two divergence-evidence files and the LP-2 host adaptor. |
 | 1.2.0 | 2026-07-30 | Core Team | Reconciled the twelve deferred Invariant-Compliance obligations LP-9…LP-20, each of whose L1 Document History entries names *this* spec as their carrier — new §3.1. Replaces the binary Realized/Pending axis of `l2-nodus-runtime` §3.1 with a **four-way** one, because these are host-supplied seams and the binary form misreports them: **Satisfied structurally** (LP-10 — discharged by absence of vocabulary, and load-bearing in four sibling specs while having had no row here), **Vacuous in core** (LP-9/12/13/14/16/17/19/20 — the gated construct is absent, so the seam has no call site and nothing is owed until it lands; vocabulary from `l2-nodus-compensation` §2), **Seam declared, wiring pending** (LP-11 and LP-15 — traits ship and are re-exported but `evaluate` / `store` / `load` have **zero call sites**, so a host implementing them observes no behaviour change: published API that silently does nothing, not deferred work), and **Partially realized** (LP-18 — rule (c) discharged via NE-3/NE-7/NE-10, rules (a)/(b) not, and closing them is an LP-6 *major* change since `EnvironmentProvider::open` returns `Instance` not `Result`). Records two structural findings: **LP-11's absent call site alone blocks LP-16, LP-17, and LP-20**, so four invariants reduce to one hook in `execute_command`; and LP-13 → LP-9 → LP-12 are ordered stages of one absent import mechanism, not three independent gaps. Names an L1 divergence: L1 §4.1 specifies an *in-memory* built-in store while the crate ships `NoopStorageProvider`, which never round-trips within an invocation (also `put`/`get`/`delete` vs `store`/`load`, no `delete`). Corrected three stale surfaces against `portability.rs`: §4.2 registry (5 roles → 8, adding `Dialog`/`Environment`/`Config`, plus a *Wired* column, and un-marking `SchemaProvider` as pending when §5 already recorded it delivered), §4.7 `ExtensionRole` reference enum (5 → 8 variants) and its built-in-host prose (3 → 5 roles provided, with `Dialog`'s deliberate exclusion explained), and `from_workflow`'s derivation rules (adds the `ASK`/`CONFIRM` → `Dialog` rule and the never-derived roles). §1 seven-invariants → twenty; §4.5 module map marked delivered; §5 re-ordered so the only two task-authorable items (LP-11 call site, LP-15 built-in) lead. Flags for L1 reconciliation that §4.1 — self-declared "the authoritative extension point registry" — still lists four roles against the implementation's eight. |
 | 1.1.0 | 2026-06-27 | Core Team | LP-8 implemented: §4.7 capability manifest + pre-run satisfiability gate (`CapabilityManifest`, `ExtensionRole`, `HostCapabilities`, `validate_manifest`, `run_with_manifest` / `run_with_manifest_and_audit`, `NODUS:CAPABILITY_UNMET`); §3 LP-8 row → Implemented; status RFC → Stable |
 | 1.0.0 | 2026-06-24 | Core Team | Initial spec — LP-1…LP-7 compliance table; SchemaProvider seam; StorageProvider + PolicyProvider pending LP-3 interfaces; extraction artifacts |

@@ -1,6 +1,6 @@
 # Nodus Portability and Extension Contract
 
-**Version:** 1.13.0
+**Version:** 1.14.0
 **Status:** Stable
 **Layer:** concept
 
@@ -46,7 +46,7 @@ Rules that every implementation of this spec (and its host projects) MUST NOT vi
 
 - **LP-2 Extension via abstract interfaces**: every integration point with the host environment is expressed as a named abstract interface (trait, protocol, or equivalent). Concrete implementations of that interface live in the host project or in separate adaptor crates — never in the library core. The library ships exactly one built-in implementation per interface, sufficient for in-process testing without I/O.
 
-- **LP-3 Two-host generalisation rule**: a pattern or feature observed in one host project is admitted into nodus only when its abstraction is demonstrably useful to at least two independent host contexts and requires no host-specific type in its interface. Single-host optimisations remain in the host project's adaptor layer.
+- **LP-3 Two-host generalisation rule**: a pattern or feature observed in one host project is admitted into nodus only when its abstraction is demonstrably useful to at least two independent host contexts and requires no host-specific type in its interface. Single-host optimisations remain in the host project's adaptor layer. [MODIFIED v1.14.0] What counts as a *host context*, what makes two of them *independent*, and the record that fixes the disposition are defined in **§4.14** — without that record the gate is unfalsifiable, and a seam held behind an unfalsifiable gate is indistinguishable from one abandoned.
 
 - **LP-4 Vocabulary isolation**: the built-in schema vocabulary (command names, reserved variable names) is a fixed, versioned baseline. Host-specific commands are declared in schema files (§schema:) loaded at runtime; they do not modify library constants. A library release never adds a host-specific command to the shared vocabulary.
 
@@ -348,6 +348,47 @@ run_settlement(step, host):
 
 Two properties hold, mirroring LP-16 at higher stakes. First, **no unmetered fallback** (VS-5): every non-`SETTLED` exit leaves value untransferred *and* the paid step not taken — the runtime never routes around the paywall or retries outside the authorized bound, and a renegotiated over-price aborts rather than loops (VS-6). Second, **the workflow never funds itself** (LP-10): it declares a settlement and reads a remaining figure, but the envelope, the rail, and the funding credential are host-held — a workflow assembled under untrusted influence (NL-11) therefore cannot mint a payment beyond its pre-consented envelope. No rail means a settlement step is an unsatisfiable LP-8 capability, rejected before the run (additive).
 
+### 4.14 LP-3 Admission Evidence [ADDED v1.14.0]
+
+LP-3 is a governance gate: it decides whether a seam may be *wired*, not how it is built. As
+originally written it named a threshold ("two independent host contexts") without saying what
+satisfies it, which made it **unfalsifiable** — a seam could sit behind it indefinitely with no
+statement of what would ever open it. This section makes the judgment checkable.
+
+**A host context** is a distinct decision-making integration that would consume the seam,
+identified by *what it decides and how it fails* — not by who owns it. Two entry points of a
+single host project are two contexts when they would exercise the seam differently; two
+separately-owned projects that would consume it identically are **one**. The unit is the
+decision shape, because that is what the abstraction has to span.
+
+**Independence** means neither context derives its behaviour from the other: a change to one's
+policy does not mechanically determine the other's. The strongest positive signal is
+**documented divergence** — two realizations that already disagree, especially on fail
+direction, since a seam that must span an existing disagreement is demonstrably not a
+single-context optimisation. Two contexts that agree on every axis are weak evidence even when
+separately owned, because nothing about them exercises the abstraction.
+
+**The record.** Satisfaction is fixed by an *admission record* in the realizing L2 spec, naming:
+
+1. both contexts, each with what it decides and how it fails;
+2. the evidence that they are independent (ideally the documented divergence);
+3. the host-specific types the seam must **not** name — checked against the interface as it
+   stands, since LP-3's second half ("requires no host-specific type in its interface") is
+   verifiable by inspection and is often already satisfied while the first half is open;
+4. the disposition — **satisfied** or **not satisfied** — and, when not, the specific missing
+   evidence that would settle it.
+
+**Dispositions are per seam, never blanket.** Each extension role is judged on its own record;
+satisfying LP-3 for one seam says nothing about another. A rule that admits everything is not a
+gate, so a pass that finds one seam satisfied and another not is the expected shape, not a
+half-finished one.
+
+**Absent a record, a seam stays interface-only** — published on the public surface if that
+helps hosts implement against it, but never consulted by the runtime. This is the state LP-2
+already permits; §4.14 only requires that it be a recorded decision rather than an unexamined
+default, because an interface a host can implement but that nothing ever calls is otherwise
+indistinguishable from a working seam.
+
 ## 5. Implementation Notes
 
 The LP-invariants are evaluated in the order that minimises rework:
@@ -378,6 +419,7 @@ The LP-invariants are evaluated in the order that minimises rework:
 
 | Version | Date | Author | Notes |
 | --- | --- | --- | --- |
+| 1.14.0 | 2026-07-30 | Core Team | Added §4.14 (LP-3 Admission Evidence) and pointed LP-3 at it. LP-3 named a threshold ("two independent host contexts") without saying what satisfies it, making the gate **unfalsifiable** — a seam could sit behind it indefinitely with nothing stating what would ever open it, which is what happened: `PolicyProvider` and `StorageProvider` shipped as re-exported public API that no code path consults, and LP-11's absent call site silently blocked LP-16/LP-17/LP-20 for multiple planning cycles with no one able to say when the gate was met. §4.14 defines a **host context** by *what it decides and how it fails* rather than by ownership (two entry points of one project are two contexts when they exercise the seam differently; two separately-owned projects that consume it identically are one — the unit is the decision shape, because that is what the abstraction must span); defines **independence** as neither context deriving its behaviour from the other, with **documented divergence** — especially on fail direction — as the strongest positive signal, since a seam that must span an existing disagreement is demonstrably not a single-context optimisation, while two contexts agreeing on every axis are weak evidence even when separately owned; requires an **admission record** in the realizing L2 naming both contexts, the independence evidence, the host-specific types the seam must not name (LP-3's second half being verifiable by inspection and often already satisfied while the first half is open), and the disposition with the missing evidence spelled out when unsatisfied; and fixes that dispositions are **per seam, never blanket**, so a pass finding one seam satisfied and another not is the expected shape. Absent a record a seam stays interface-only — the state LP-2 already permits, now required to be a recorded decision rather than an unexamined default. Governance refinement only: no invariant added, none relaxed, no runtime behaviour implied. L1 stays Stable (C9); `l2-nodus-portability` 1.3.0 carries the first admission records under this rule. |
 | 1.13.0 | 2026-07-23 | Core Team | Added LP-20 (obligation-gated effect seam) — an effectful step MAY declare its effect **gated on a named obligation** (a host-tracked precondition some prior event must have discharged), the runtime guaranteeing the host's obligation check runs before the effect via the LP-11 `decide → effect → observe` ordering and aborting fail-closed with a typed NODUS:* when undischarged (never a silent proceed, never a hang). The workflow-side carrier of a *deferred* control: one step's action records that a later dependent effect is blocked until a required action has genuinely completed. Three rules — **discharge recognized only on genuine completion** never on an attempt or a look-alike step (the host owns what counts, LP-2); **per LP-10 a workflow declares the dependency but never marks its own obligation discharged**, so a workflow assembled under untrusted influence (NL-11) cannot self-satisfy its precondition; and **an obligation open at run end is surfaced in the terminal RunManifest, not dropped** (composing HO-10 completeness honesty), since a silently forgotten obligation is a policy that quietly did not apply, indistinguishable from one satisfied. Obligation namespace, tracking store, and discharge predicate entirely host-supplied (LP-2, no obligation/scanner/policy in core); nodus contributes only the declare-a-gate-and-let-the-host-resolve-it seam and the ordering guarantee. The dynamic *precondition* complement to the LP-11 per-effect gate (LP-11 asks is-this-effect-allowed-now, LP-20 asks has-the-required-prior-action-happened) and to the static LP-8 manifest; purely additive. The nodus realization of the new main l1-convergence-gate deferred-obligation contract (CG-5 gated-on-genuine-discharge / CG-6 outstanding-obligations-surfaced), the workflow-side half of a control the host places at a convergence boundary. L1 stays Stable (C9); l2-nodus-portability carries LP-20 as a pending Invariant-Compliance obligation reconciled at magic.task (LP-8…LP-19 precedent). |
 | 1.12.0 | 2026-07-23 | Core Team | Added LP-19 (host-supplied exposure switch seam) — a workflow MAY read a **named exposure switch** (a staged behaviour change, an experiment arm, a reserved holdout) whose value is supplied entirely by the host; nodus computes no assignment, holds no rollout state, and names no fraction/hash/subject/bucketing-key/targeting-rule (LP-2 — no rollout vocabulary in core), defining only how a value the host already decided **enters and behaves inside a run**: (a) **resolved once, frozen for the run** — mid-run re-resolution forbidden, so a run can never straddle two variants with half its steps on each side, which would make its trace attributable to neither arm and quietly poison any comparison built on it (the runtime-side guarantee behind the HO-18 manifest record), and a suspended run (NL-12/DG-4) resumes under the values it started with rather than under whatever the host would decide now; (b) **fail-closed to a declared safe value** — an unresolvable switch (unknown name, unavailable ruleset, stale beyond the host's bound) yields the declared safe value, normally the unchanged behaviour, never an error that halts the run and never an implicit *on*, with an undeclared safe value being a pre-run validation failure in the LP-8 family surfaced before the first step; (c) **read-only, ordinary, provenance-carrying** — the value enters as an ordinary value with configuration provenance (NL-11/NL-20 kinship — being a switch confers no trust) and, per LP-10, a workflow reads its switches but can never set, widen, flip, or self-assign one, requesting an arm not being a vocabulary the language has. Purely additive (a workflow reading no switch behaves exactly as today; a host resolving none supplies every safe value). The workflow-side realization of the new main l1-staged-rollout contract — host-computed deterministic assignment (SR-2), fail-closed local evaluation (SR-9), and the non-straddling requirement that makes per-run arm attribution meaningful (SR-11 via HO-18). L1 stays Stable (C9); l2-nodus-portability carries LP-19 as a pending Invariant-Compliance obligation reconciled at magic.task (LP-8…LP-18 precedent). |
 | 1.11.0 | 2026-07-23 | Core Team | Added LP-18 (environment-liveness seam) — where a host supplies an ephemeral execution environment for a workflow's effectful steps, its availability is a declared capability (LP-8, rejected pre-run on a host providing none, never mid-step) and its disappearance mid-run is a **typed fail-fast failure, never a hang and never a silent substitution**: (a) a step whose environment vanishes aborts with a typed NODUS:* naming the environment identity and routes to `@err:`/halts, the runtime never blocking indefinitely on a gone environment and never quietly retrying the step into a *different* one, since a step that silently re-runs elsewhere has lost every precondition its predecessors established; (b) a suspended run (NL-12/DG-4) whose environment no longer exists fails its **resume** typed rather than resuming into a freshly-provisioned environment that merely looks the same — telling a workflow it resumed when its accumulated state is gone is the most damaging available lie, because every later step then reasons from a world that no longer holds; (c) nodus captures nothing — preserving what an ending environment held is wholly host-side (LP-1/LP-2, no image/container/mount/path/snapshot in core) and the runtime contributes only the per-step environment identity on the trace (HO-2/HO-7) so a host can correlate a residue it captured to the steps that produced it. Purely additive (a workflow needing no environment, or a host with a single always-present one, behaves exactly as today). The workflow-side realization of the new main l1-environment-lifecycle contract — EL-2 *failed* distinct from *gone*, EL-7 same-instance-or-report-a-failed-resume, EL-5 every-exit-path-names-a-capture-owner (capture side wholly host-held). L1 stays Stable (C9); l2-nodus-portability carries LP-18 as a pending Invariant-Compliance obligation reconciled at magic.task (LP-8…LP-17 precedent). |
