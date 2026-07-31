@@ -24,6 +24,7 @@ use nodus::{
     workflows,
 };
 use std::sync::Arc;
+use std::sync::Mutex;
 use std::sync::atomic::{AtomicUsize, Ordering};
 
 // ─── Workflow fixture ─────────────────────────────────────────────────────────
@@ -478,5 +479,123 @@ fn no_policy_supplied_is_byte_for_byte_unchanged() {
         via_plain.status,
         Status::Ok,
         "must remain unaffected by LP-11's addition"
+    );
+}
+
+// ─── LP-16 effect risk-class descriptors ──────────────────────────────────────
+
+const RISK_DECORATED_WF: &str = r#"§wf:risk_decorated_test v1.0
+§runtime: { core: schema.nodus }
+@in: { query }
+@out: $out
+@err: ESCALATE(human)
+@steps:
+  1. GEN($in.query) +reversible=true +external=true +value=money → $out
+"#;
+
+/// Policy that permits everything but records the last `context` it was asked
+/// to evaluate, so a test can inspect exactly what the gate passed through.
+struct CapturingPolicy {
+    seen: Arc<Mutex<Option<Value>>>,
+}
+
+impl PolicyProvider for CapturingPolicy {
+    fn evaluate(&self, _gate: &str, context: &Value) -> bool {
+        *self.seen.lock().unwrap() = Some(context.clone());
+        true
+    }
+}
+
+fn context_pairs(context: Value) -> Vec<(String, Value)> {
+    match context {
+        Value::Map(pairs) => pairs,
+        other => panic!("expected the captured context to be a Value::Map, got {other:?}"),
+    }
+}
+
+#[test]
+fn risk_descriptors_reach_context_when_declared() {
+    let seen = Arc::new(Mutex::new(None));
+    let policy = CapturingPolicy { seen: seen.clone() };
+    let result =
+        workflows::run_with_policy(RISK_DECORATED_WF, "risk_decorated_test.nodus", None, policy)
+            .expect("run_with_policy must succeed when the effect is permitted");
+
+    assert_eq!(
+        result.status,
+        Status::Ok,
+        "a permitted, decorated GEN step must not degrade status; errors: {:?}",
+        result.errors
+    );
+
+    let captured = seen
+        .lock()
+        .unwrap()
+        .clone()
+        .expect("the policy must have been consulted for the gated GEN step");
+    let pairs = context_pairs(captured);
+    let get = |key: &str| pairs.iter().find(|(k, _)| k == key).map(|(_, v)| v.clone());
+    assert_eq!(
+        get("reversible"),
+        Some(Value::Text("true".to_string())),
+        "declared +reversible=true must reach context verbatim; pairs: {pairs:?}"
+    );
+    assert_eq!(
+        get("external"),
+        Some(Value::Text("true".to_string())),
+        "declared +external=true must reach context verbatim; pairs: {pairs:?}"
+    );
+    assert_eq!(
+        get("value"),
+        Some(Value::Text("money".to_string())),
+        "declared +value=money must reach context verbatim; pairs: {pairs:?}"
+    );
+}
+
+#[test]
+fn undeclared_risk_descriptors_are_absent_from_context_not_defaulted() {
+    let seen = Arc::new(Mutex::new(None));
+    let policy = CapturingPolicy { seen: seen.clone() };
+    let result = workflows::run_with_policy(MANIFEST_WF, "manifest_test.nodus", None, policy)
+        .expect("run_with_policy must succeed when the effect is permitted");
+
+    assert_eq!(result.status, Status::Ok, "errors: {:?}", result.errors);
+
+    let captured = seen
+        .lock()
+        .unwrap()
+        .clone()
+        .expect("the policy must have been consulted for the gated GEN step");
+    let pairs = context_pairs(captured);
+    for key in ["reversible", "external", "value"] {
+        assert!(
+            pairs.iter().all(|(k, _)| k != key),
+            "an undecorated step's context must omit '{key}' entirely, never default it \
+             to Null/false/\"none\"; pairs: {pairs:?}"
+        );
+    }
+}
+
+#[test]
+fn risk_descriptors_are_inert_without_a_policy_provider() {
+    // Mirrors Phase 24's Guardrail 5 regression: decorating a step with
+    // +reversible/+external/+value must not change behaviour when no
+    // PolicyProvider is present to consult them.
+    let via_plain =
+        workflows::run(RISK_DECORATED_WF, "risk_decorated_test.nodus", None).expect("plain run");
+    let via_explicit_noop = workflows::run_with_policy(
+        RISK_DECORATED_WF,
+        "risk_decorated_test.nodus",
+        None,
+        NoopPolicyProvider,
+    )
+    .expect("run_with_policy with the explicit noop");
+
+    assert_eq!(via_plain.status, via_explicit_noop.status);
+    assert_eq!(via_plain.vars, via_explicit_noop.vars);
+    assert_eq!(
+        via_plain.status,
+        Status::Ok,
+        "must remain unaffected by LP-16's addition"
     );
 }

@@ -1528,13 +1528,25 @@ impl Executor {
         // every host that does not opt in.
         if let Some(class) = effect_class_of(&cmd.name) {
             let gate = class.as_gate_str();
-            let context = Value::Map(vec![
+            let mut context_pairs = vec![
                 ("command".to_string(), Value::Text(cmd.name.clone())),
                 (
                     "args".to_string(),
                     Value::List(cmd.args.iter().cloned().map(Value::Text).collect()),
                 ),
-            ]);
+            ];
+            // LP-16: optional consequence descriptors ride the existing
+            // +modifier=value grammar — carried into context only when the
+            // step actually declares them (omitted, not defaulted, otherwise).
+            for key in ["+reversible", "+external", "+value"] {
+                if let Some((_, value)) = cmd.modifiers.iter().find(|(k, _)| k == key) {
+                    context_pairs.push((
+                        key.trim_start_matches('+').to_string(),
+                        Value::Text(value.clone()),
+                    ));
+                }
+            }
+            let context = Value::Map(context_pairs);
             if !self.policy.evaluate(gate, &context) {
                 let error_detail = format!("policy denied gate '{gate}' for '{}'", cmd.name);
                 self.emit(ctx, |seq, correlation_id| ExecutionEvent::StepError {
