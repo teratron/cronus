@@ -2,10 +2,11 @@
 //!
 //! Provides the vocabulary-extension seam ([`SchemaProvider`]), a built-in
 //! in-memory implementation of the storage seam ([`StorageProvider`] /
-//! [`InMemoryStorageProvider`]), and an interface-only contract for policy
-//! evaluation ([`PolicyProvider`]) whose executor wiring is pending LP-3
-//! graduation. Each trait ships with a built-in implementation sufficient for
-//! in-process use without I/O, matching the LP-2 pattern established by
+//! [`InMemoryStorageProvider`] — its executor wiring stays pending LP-3),
+//! and the per-effect authorization gate ([`PolicyProvider`] / [`EffectClass`]
+//! / [`effect_class_of`], wired into `Executor::execute_command`, LP-11). Each
+//! trait ships with a built-in implementation sufficient for in-process use
+//! without I/O, matching the LP-2 pattern established by
 //! [`crate::executor::StubProvider`] and [`crate::observability::NoopAuditProvider`].
 //!
 //! It also defines the LP-8 capability manifest ([`CapabilityManifest`]) and the
@@ -104,20 +105,21 @@ impl StorageProvider for InMemoryStorageProvider {
     }
 }
 
-// ─── PolicyProvider (pending LP-3) ───────────────────────────────────────────
+// ─── PolicyProvider (LP-11) ───────────────────────────────────────────────────
 
 /// Runtime policy evaluation for host-defined gates.
 ///
-/// This interface is specified but executor integration is deferred until LP-3
-/// is satisfied (two independent hosts require policy evaluation beyond
-/// `!!`-rules). The `evaluate` contract is boolean permit/deny only; spend
-/// tracking and approval workflows are host-side concerns.
+/// Gates every `ModelCall`/`Deferred` effect ([`EffectClass`]) in
+/// `Executor::execute_command` before the effect happens (LP-11) — see
+/// [`effect_class_of`]. The `evaluate` contract is boolean permit/deny only;
+/// spend tracking and approval workflows are host-side concerns.
 pub trait PolicyProvider {
     /// Evaluate a named policy gate.
     ///
-    /// `gate` is the host-defined policy identifier. `context` is the current
-    /// variable environment snapshot. Returns `true` to permit the action,
-    /// `false` to deny it.
+    /// `gate` is the effect-class string ([`EffectClass::as_gate_str`]).
+    /// `context` is a pre-effect `Value::Map` snapshot of the command name and
+    /// its unresolved argument strings. Returns `true` to permit the effect,
+    /// `false` to deny it — a denial never halts the run.
     fn evaluate(&self, gate: &str, context: &Value) -> bool;
 }
 
@@ -181,6 +183,50 @@ const MODEL_COMMANDS: &[&str] = &["GEN", "ANALYZE"];
 /// Dialog commands — those the executor dispatches to its [`crate::executor::DialogProvider`].
 /// A workflow invoking one without a `+default` requires the [`ExtensionRole::Dialog`] role.
 const DIALOG_COMMANDS: &[&str] = &["ASK", "CONFIRM"];
+
+// ─── Effect Classification (LP-11) ───────────────────────────────────────────
+
+/// The class of an effectful step, for the [`PolicyProvider`] gate (LP-11).
+///
+/// Realized narrower than the two-role taxonomy above might suggest: a third
+/// `ToolUse` class is deliberately absent. Every `tool`-shaped builtin command
+/// (`FETCH`, `WRITE`, `GIT`, `NOTIFY`, …) is a fixed, zero-dependency stub with
+/// no host-swappable seam behind it — gating one would authorize nothing real.
+/// `ToolUse` activates only once a generic host-tool extension point exists.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum EffectClass {
+    /// A model-backed command (`GEN`, `ANALYZE`) — see [`MODEL_COMMANDS`].
+    ModelCall,
+    /// A deferred/external completion (`ASK`, `CONFIRM`) — see [`DIALOG_COMMANDS`].
+    Deferred,
+}
+
+impl EffectClass {
+    /// The `gate` string passed to [`PolicyProvider::evaluate`]. The DSL has no
+    /// syntax for a step to declare an arbitrary named gate, so the effect
+    /// class itself is the only host-matchable vocabulary that exists today.
+    pub fn as_gate_str(self) -> &'static str {
+        match self {
+            EffectClass::ModelCall => "model_call",
+            EffectClass::Deferred => "deferred",
+        }
+    }
+}
+
+/// Classify a command by its effect class, if it has one.
+///
+/// Returns `None` for every builtin command outside `MODEL_COMMANDS` /
+/// `DIALOG_COMMANDS` — `LOG`, `COUNTER`, `DATE`, and the rest are purely
+/// in-memory and touch no host-swappable seam, so they are never gated.
+pub fn effect_class_of(command: &str) -> Option<EffectClass> {
+    if MODEL_COMMANDS.contains(&command) {
+        Some(EffectClass::ModelCall)
+    } else if DIALOG_COMMANDS.contains(&command) {
+        Some(EffectClass::Deferred)
+    } else {
+        None
+    }
+}
 
 /// An LP-2 extension-point role a workflow may require from its host.
 ///
@@ -486,6 +532,31 @@ mod tests {
     fn builtin_schema_provider_empty_reserved() {
         let p = BuiltinSchemaProvider;
         assert!(p.host_reserved_variables().is_empty());
+    }
+
+    #[test]
+    fn effect_class_of_model_commands() {
+        assert_eq!(effect_class_of("GEN"), Some(EffectClass::ModelCall));
+        assert_eq!(effect_class_of("ANALYZE"), Some(EffectClass::ModelCall));
+    }
+
+    #[test]
+    fn effect_class_of_dialog_commands() {
+        assert_eq!(effect_class_of("ASK"), Some(EffectClass::Deferred));
+        assert_eq!(effect_class_of("CONFIRM"), Some(EffectClass::Deferred));
+    }
+
+    #[test]
+    fn effect_class_of_non_effectful_command_is_none() {
+        assert_eq!(effect_class_of("LOG"), None);
+        assert_eq!(effect_class_of("COUNTER"), None);
+        assert_eq!(effect_class_of("FETCH"), None);
+    }
+
+    #[test]
+    fn effect_class_gate_strings() {
+        assert_eq!(EffectClass::ModelCall.as_gate_str(), "model_call");
+        assert_eq!(EffectClass::Deferred.as_gate_str(), "deferred");
     }
 
     #[test]

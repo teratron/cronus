@@ -9,6 +9,9 @@
 //!   wiring (LP-2 no-op contract)
 //! - `InMemoryStorageProvider` round-trips within one invocation and shares
 //!   no state across instances (LP-2 built-in sufficiency, §4.1/§4.11)
+//! - `PolicyProvider` gates a `ModelCall` and a `Deferred` effect before it
+//!   runs, non-halting on denial, byte-for-byte unchanged with no policy
+//!   supplied (LP-11, §4.9)
 
 use nodus::{
     executor::{Status, Value},
@@ -332,5 +335,148 @@ fn manifest_rejects_before_side_effects() {
     assert!(
         counter_ok.load(Ordering::SeqCst) > 0,
         "a real run must emit audit events"
+    );
+}
+
+// ─── LP-11 per-effect authorization gate ──────────────────────────────────────
+
+const DEFERRED_WF: &str = r#"§wf:deferred_test v1.0
+§runtime: { core: schema.nodus }
+@in: { query }
+@out: $out
+@err: ESCALATE(human)
+@steps:
+  1. ASK(question) +default=yes → $out
+"#;
+
+struct AllowAllPolicy;
+
+impl PolicyProvider for AllowAllPolicy {
+    fn evaluate(&self, _gate: &str, _context: &Value) -> bool {
+        true
+    }
+}
+
+struct DenyAllPolicy;
+
+impl PolicyProvider for DenyAllPolicy {
+    fn evaluate(&self, _gate: &str, _context: &Value) -> bool {
+        false
+    }
+}
+
+#[test]
+fn policy_permits_model_call_effect() {
+    let result =
+        workflows::run_with_policy(MANIFEST_WF, "manifest_test.nodus", None, AllowAllPolicy)
+            .expect("run_with_policy must succeed when the effect is permitted");
+
+    assert_eq!(
+        result.status,
+        Status::Ok,
+        "a permitted GEN step must not degrade status; errors: {:?}",
+        result.errors
+    );
+    // `$out` is always present (seeded `Value::Null` at context construction) —
+    // the real assertion is that GEN actually ran and overwrote it.
+    assert_ne!(
+        result.vars.get("out"),
+        Some(&Value::Null),
+        "the permitted step's pipeline target must be bound to GEN's real output; vars: {:?}",
+        result.vars
+    );
+}
+
+#[test]
+fn policy_denies_model_call_effect() {
+    let result =
+        workflows::run_with_policy(MANIFEST_WF, "manifest_test.nodus", None, DenyAllPolicy)
+            .expect("run_with_policy returns a RunResult, not a parse error, on denial");
+
+    assert_eq!(
+        result.status,
+        Status::Partial,
+        "a denied effect must degrade status to Partial, not Failed (non-halting); errors: {:?}",
+        result.errors
+    );
+    assert_eq!(
+        result.vars.get("out"),
+        Some(&Value::Null),
+        "a denied step's pipeline target must stay at its seeded default, never GEN's output; vars: {:?}",
+        result.vars
+    );
+    assert!(
+        result
+            .errors
+            .iter()
+            .any(|e| e.code == "NODUS:POLICY_DENIED" && e.reason.contains("model_call")),
+        "denial must record a typed POLICY_DENIED error naming the gate; errors: {:?}",
+        result.errors
+    );
+}
+
+#[test]
+fn policy_permits_deferred_effect() {
+    let result =
+        workflows::run_with_policy(DEFERRED_WF, "deferred_test.nodus", None, AllowAllPolicy)
+            .expect("run_with_policy must succeed when the effect is permitted");
+
+    assert_eq!(
+        result.status,
+        Status::Ok,
+        "a permitted ASK step must resolve via +default and not degrade status; errors: {:?}",
+        result.errors
+    );
+    assert_eq!(
+        result.vars.get("out"),
+        Some(&Value::Text("yes".to_string())),
+        "the permitted dialog's pipeline target must be bound to its +default answer; vars: {:?}",
+        result.vars
+    );
+}
+
+#[test]
+fn policy_denies_deferred_effect() {
+    let result =
+        workflows::run_with_policy(DEFERRED_WF, "deferred_test.nodus", None, DenyAllPolicy)
+            .expect("run_with_policy returns a RunResult, not a parse error, on denial");
+
+    assert_eq!(
+        result.status,
+        Status::Partial,
+        "a denied deferred effect must degrade status to Partial, not Failed; errors: {:?}",
+        result.errors
+    );
+    assert_eq!(
+        result.vars.get("out"),
+        Some(&Value::Null),
+        "a denied dialog's pipeline target must stay at its seeded default — the dialog must never resolve; vars: {:?}",
+        result.vars
+    );
+    assert!(
+        result
+            .errors
+            .iter()
+            .any(|e| e.code == "NODUS:POLICY_DENIED" && e.reason.contains("deferred")),
+        "denial must record a typed POLICY_DENIED error naming the gate; errors: {:?}",
+        result.errors
+    );
+}
+
+#[test]
+fn no_policy_supplied_is_byte_for_byte_unchanged() {
+    // Guardrail 5: every existing run_with_* variant must keep NoopPolicyProvider's
+    // allow-all behaviour now that Executor carries a policy field.
+    let via_plain = workflows::run(MANIFEST_WF, "manifest_test.nodus", None).expect("plain run");
+    let via_explicit_noop =
+        workflows::run_with_policy(MANIFEST_WF, "manifest_test.nodus", None, NoopPolicyProvider)
+            .expect("run_with_policy with the explicit noop");
+
+    assert_eq!(via_plain.status, via_explicit_noop.status);
+    assert_eq!(via_plain.vars, via_explicit_noop.vars);
+    assert_eq!(
+        via_plain.status,
+        Status::Ok,
+        "must remain unaffected by LP-11's addition"
     );
 }

@@ -17,7 +17,7 @@ use crate::observability::{AuditProvider, EnvInteraction, EnvInteractionKind, Fi
 use crate::parser::Parser;
 use crate::portability::{
     CapabilityManifest, ConfigOutcome, ConfigProvider, ExtensionRole, HostCapabilities, Missing,
-    SchemaProvider, validate_manifest,
+    PolicyProvider, SchemaProvider, validate_manifest,
 };
 use crate::transpiler::Transpiler;
 use crate::validator::{ConfigViolation, Diagnostic, Severity, Validator, check_config_values};
@@ -644,6 +644,71 @@ pub fn run_with_dialog_and_audit(
     }
 
     Ok(Executor::with_dialog_and_audit(dialog, audit)
+        .execute_with_params(&ast, input, run_id, started_at))
+}
+
+/// Parse, validate, and execute with a [`PolicyProvider`] gating every
+/// model-call and deferred effect before it happens (LP-11). Uses the
+/// built-in stub model and no-op audit.
+///
+/// A denied effect never runs: its pipeline target stays unbound, a
+/// `NODUS:POLICY_DENIED` error is recorded, and execution continues to the
+/// next step — non-halting, distinct from a `!!`-rule violation. With no
+/// policy supplied elsewhere, the built-in `NoopPolicyProvider` allow-all
+/// applies and this is byte-for-byte today's behaviour.
+pub fn run_with_policy(
+    source: &str,
+    filename: &str,
+    input: Option<Value>,
+    policy: impl PolicyProvider + 'static,
+) -> Result<RunResult, Vec<Diagnostic>> {
+    let ast = Parser::parse(source).map_err(|e| {
+        vec![Diagnostic {
+            severity: Severity::Error,
+            code: "PARSE_ERROR".to_string(),
+            message: e.to_string(),
+            line: 0,
+            column: 0,
+            filename: filename.to_string(),
+        }]
+    })?;
+
+    let report = ValidationReport::new(Validator::validate(&ast, filename));
+    if report.has_errors {
+        return Err(report.diagnostics);
+    }
+
+    Ok(Executor::with_policy(policy).execute(&ast, input))
+}
+
+/// Like [`run_with_policy`] but with a custom [`AuditProvider`]. `run_id` and
+/// `started_at` are forwarded to the run manifest.
+pub fn run_with_policy_and_audit(
+    source: &str,
+    filename: &str,
+    input: Option<Value>,
+    policy: impl PolicyProvider + 'static,
+    audit: impl AuditProvider + 'static,
+    run_id: &str,
+    started_at: &str,
+) -> Result<RunResult, Vec<Diagnostic>> {
+    let ast = Parser::parse(source).map_err(|e| {
+        vec![Diagnostic {
+            severity: Severity::Error,
+            code: "PARSE_ERROR".to_string(),
+            message: e.to_string(),
+            line: 0,
+            column: 0,
+            filename: filename.to_string(),
+        }]
+    })?;
+
+    let report = ValidationReport::new(Validator::validate(&ast, filename));
+    if report.has_errors {
+        return Err(report.diagnostics);
+    }
+
+    Ok(Executor::with_policy_and_audit(policy, audit)
         .execute_with_params(&ast, input, run_id, started_at))
 }
 

@@ -22,6 +22,7 @@ use crate::observability::{
     FieldDescriptor, LoopType, Measurement, NoopAuditProvider, ReproRecipe, RunManifest, RunStatus,
     SourceRef, step_identity,
 };
+use crate::portability::{NoopPolicyProvider, PolicyProvider, effect_class_of};
 use crate::vocab;
 use std::collections::HashMap;
 use std::time::Instant;
@@ -453,6 +454,7 @@ pub struct Executor {
     provider: Box<dyn ModelProvider>,
     audit: Box<dyn AuditProvider>,
     dialog: Box<dyn DialogProvider>,
+    policy: Box<dyn PolicyProvider>,
 }
 
 impl Executor {
@@ -463,6 +465,7 @@ impl Executor {
             provider: Box::new(provider),
             audit: Box::new(NoopAuditProvider),
             dialog: Box::new(DefaultDialogProvider),
+            policy: Box::new(NoopPolicyProvider),
         }
     }
 
@@ -480,6 +483,7 @@ impl Executor {
             provider: Box::new(provider),
             audit: Box::new(audit),
             dialog: Box::new(DefaultDialogProvider),
+            policy: Box::new(NoopPolicyProvider),
         }
     }
 
@@ -494,6 +498,7 @@ impl Executor {
             provider: Box::new(provider),
             audit,
             dialog: Box::new(DefaultDialogProvider),
+            policy: Box::new(NoopPolicyProvider),
         }
     }
 
@@ -504,6 +509,7 @@ impl Executor {
             provider: Box::new(StubProvider),
             audit: Box::new(NoopAuditProvider),
             dialog: Box::new(dialog),
+            policy: Box::new(NoopPolicyProvider),
         }
     }
 
@@ -516,6 +522,32 @@ impl Executor {
             provider: Box::new(StubProvider),
             audit: Box::new(audit),
             dialog: Box::new(dialog),
+            policy: Box::new(NoopPolicyProvider),
+        }
+    }
+
+    /// Create an executor with the built-in model/audit/dialog and a custom
+    /// [`PolicyProvider`] (LP-11).
+    pub fn with_policy(policy: impl PolicyProvider + 'static) -> Self {
+        Executor {
+            provider: Box::new(StubProvider),
+            audit: Box::new(NoopAuditProvider),
+            dialog: Box::new(DefaultDialogProvider),
+            policy: Box::new(policy),
+        }
+    }
+
+    /// Create an executor with a custom [`PolicyProvider`] and audit provider
+    /// (LP-11).
+    pub fn with_policy_and_audit(
+        policy: impl PolicyProvider + 'static,
+        audit: impl AuditProvider + 'static,
+    ) -> Self {
+        Executor {
+            provider: Box::new(StubProvider),
+            audit: Box::new(audit),
+            dialog: Box::new(DefaultDialogProvider),
+            policy: Box::new(policy),
         }
     }
 
@@ -1488,6 +1520,45 @@ impl Executor {
                 reason: violation,
             });
             return Some(Signal::Break);
+        }
+
+        // LP-11: a host-supplied PolicyProvider authorizes a model-call or
+        // deferred effect before it happens. Fail-closed, non-halting — the
+        // built-in NoopPolicyProvider always permits, so this is a no-op for
+        // every host that does not opt in.
+        if let Some(class) = effect_class_of(&cmd.name) {
+            let gate = class.as_gate_str();
+            let context = Value::Map(vec![
+                ("command".to_string(), Value::Text(cmd.name.clone())),
+                (
+                    "args".to_string(),
+                    Value::List(cmd.args.iter().cloned().map(Value::Text).collect()),
+                ),
+            ]);
+            if !self.policy.evaluate(gate, &context) {
+                let error_detail = format!("policy denied gate '{gate}' for '{}'", cmd.name);
+                self.emit(ctx, |seq, correlation_id| ExecutionEvent::StepError {
+                    step_index: step_num,
+                    step_command: cmd.name.clone(),
+                    error_code: vocab::error_code::POLICY_DENIED.to_string(),
+                    error_detail: error_detail.clone(),
+                    step_identity: step_identity(step_num, &cmd.name),
+                    fault_identity: FaultIdentity {
+                        step_identity: step_identity(step_num, &cmd.name),
+                        code: vocab::error_code::POLICY_DENIED.to_string(),
+                        discriminator: None,
+                    },
+                    seq,
+                    correlation_id,
+                    annotations: EventAnnotations::default(),
+                });
+                ctx.errors.push(RuntimeError {
+                    code: vocab::error_code::POLICY_DENIED.to_string(),
+                    step: step_num,
+                    reason: error_detail,
+                });
+                return None;
+            }
         }
 
         // Dialog commands resolve through the DialogProvider and may suspend the

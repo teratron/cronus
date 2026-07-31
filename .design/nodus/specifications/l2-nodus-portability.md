@@ -1,6 +1,6 @@
 # Nodus Portability Implementation (Rust)
 
-**Version:** 1.4.0
+**Version:** 1.5.0
 **Status:** Stable
 **Layer:** implementation
 **Implements:** l1-nodus-portability.md
@@ -11,8 +11,9 @@ Concrete Rust implementation of the nodus portability and extension contract.
 Maps each LP-invariant from `l1-nodus-portability.md` to its enforcing mechanism in
 `crates/nodus`. Specifies the `SchemaProvider` vocabulary-extension seam, the
 `InMemoryStorageProvider` built-in (conformant per LP-2/LP-15, though its executor wiring
-stays unconsulted — §3.1) and the `PolicyProvider` trait interface (shipped, no call
-site — §3.1), and documents the extraction artifacts that deliver LP-6 compliance.
+stays unconsulted — §3.1) and the `PolicyProvider` per-effect authorization gate, wired
+into `Executor::execute_command` for `ModelCall`/`Deferred` effects (§4.9, LP-11), and
+documents the extraction artifacts that deliver LP-6 compliance.
 
 §3 maps LP-1…LP-8, the invariants that existed when this spec was written. §3.1
 records the realization status of LP-9…LP-20, added to the L1 by later additive
@@ -106,7 +107,7 @@ These twelve are host-supplied seams, so the binary *Realized / Pending* axis us
 | --- | --- |
 | LP-9 Extraction attestation | **Vacuous in core.** No bundle-load path exists (zero occurrences of `bundle` / `witness` / `attest`-as-verification), so the verify-before-load hook has no call site. The `EXTRACTION.md` + `ci.yml` artifacts are LP-6 deliverables (§4.6), not an LP-9 witness. Nodus never signs — verification is the host's (LP-2) — so the core's obligation begins only when an import path does. |
 | LP-10 Host-granted authority, never self-authored | **Satisfied structurally.** Discharged by absence of vocabulary: `KNOWN_COMMANDS` holds no policy-writing command; `CapabilityManifest` exposes only `require_*` builders (declare) and getters (read) with no grant/relax/widen operation; acceptance authority sits behind `ConfigProvider` (`l2-nodus-config.md` LP-10 row); `Budget` is enforced by the run loop and unreadable by the workflow (`l2-nodus-environment.md` NE-13). Load-bearing in four sibling specs (cited by NL-14 / NL-17 / NL-20 DC-10 / NL-21) while having had no row here — the reason it needs one. |
-| LP-11 Per-effect authorization seam | **Seam declared, wiring designed — DESIGN COMPLETE [v1.4.0], not yet built.** `PolicyProvider` + `NoopPolicyProvider` ship, but `evaluate` has **zero call sites** in `crates/nodus` today. Wiring was held by LP-3, which §4.8.1 records as **satisfied**; §4.9 now specifies the Rust shape a task can build against: `EffectClass{ModelCall,Deferred}` realized narrower than L1's three-way sketch (`ToolUse` deliberately vacuous — every tool-shaped builtin command is a fixed stub with no host-swappable seam to gate); `gate`/`context` concrete shape (the effect-class name as the gate string, a raw pre-resolution `Value::Map` snapshot as context); the call site in `execute_command` (mirrors the `!!`-rule check's position, not its consequence); the denial signal — `StepError` with a new `NODUS:POLICY_DENIED` code, **not** `ConstraintHit` (§4.4 corrects that earlier claim: `ConstraintHit` is scoped to hard `!!`-constraints by its own doc comment and by `l2-nodus-errors.md`'s explicit "unchanged" guarantee); `Signal`-return `None` (mirroring the `DialogOutcome::Timeout`/`::Rejected` non-halting precedent, not `Signal::Skip`/`Signal::Break`); and the `run_with_policy`/`run_with_policy_and_audit` combinators (LP-5). A genuine, previously-unflagged finding surfaced while grounding this: `WorkflowFile.error_decl` (the `@err:` handler) has **zero call sites in `executor.rs`** — parsed, validated, transpiled, never dispatched — so L1 §4.7's `route_to(@err)` described a mechanism that does not exist; corrected there (v1.14.1) rather than silently built here, since a full `@err:` dispatch mechanism is NL-9's obligation, not LP-11's. |
+| LP-11 Per-effect authorization seam | **Implemented [v1.5.0].** `Executor::execute_command` gates every `ModelCall`/`Deferred` effect (`EffectClass{ModelCall,Deferred}`, reusing `MODEL_COMMANDS`/`DIALOG_COMMANDS`; `ToolUse` deliberately unrealized — every tool-shaped builtin command is a fixed stub with no host-swappable seam to gate) through `self.policy.evaluate(gate, context)` before the effect happens — `gate` the effect-class string, `context` a raw pre-resolution `Value::Map` snapshot (§4.9.2). On denial: `ExecutionEvent::StepError` with `NODUS:POLICY_DENIED` (not `ConstraintHit`, which stays scoped to hard `!!`-constraints per §4.4), a `RuntimeError` pushed to `ctx.errors`, and a bare `None` return — non-halting, mirroring `DialogOutcome::Timeout`/`::Rejected`; `RunResult.status` degrades to `Partial`, the pipeline target stays at its seeded default. `Executor` carries a fourth `policy: Box<dyn PolicyProvider>` field (default `NoopPolicyProvider`) across every constructor; `run_with_policy`/`run_with_policy_and_audit` mirror `run_with_dialog`'s exact shape. 444 tests pass (was 435; +9: 4 `effect_class_of`/gate-string unit tests, 5 `run_with_policy` integration tests covering permit/deny on both classes plus a `NoopPolicyProvider` regression). `@err:` dispatch remains unbuilt (NL-9, out of scope per §4.9.6) — `POLICY_DENIED` surfaces via `RunResult.errors` exactly like every other non-fatal typed error. |
 | LP-12 Imported-bundle admission vetting | **Vacuous in core.** Same absent load path as LP-9, and explicitly sequenced after it (attest → vet → run, §4.8 of the L1). No classifier call site can exist before a bundle can be loaded. |
 | LP-13 Addressable versioned import resolution | **Vacuous in core.** No resolver, catalog, pin record, or reference form. `@runtime: { core: <schema-file> }` names a schema file but performs no resolution or pinning. Precedes LP-9/LP-12 in the load order (resolve → attest → vet → run), so the three are one deliverable, not three. |
 | LP-14 Verified-peer delegation seam | **Vacuous in core**, with a named upstream blocker: it specializes NL-12 generalized deferred execution, which `l2-nodus-runtime.md` §3.1 records as **Pending** — the `Status::Paused` + `ResumeDescriptor` lifecycle exists but is human-answer-shaped. A peer seam cannot precede the generalized deferred step it is a special case of. |
@@ -188,7 +189,7 @@ whether any code path actually consults the trait, which is the distinction §3.
 | Environment | `EnvironmentProvider` | `StubEnvironment` | Implemented (`environment.rs`; `l2-nodus-environment.md`) | Yes |
 | Config | `ConfigProvider` | `DefaultConfigProvider` | Implemented (`portability.rs`; `l2-nodus-config.md`) | Yes |
 | Storage | `StorageProvider` | `InMemoryStorageProvider` | Implemented (`portability.rs`; round-trips within an invocation, LP-2/LP-15 conformant — §4.3) | **No** — zero call sites (LP-15, §3.1) |
-| Policy | `PolicyProvider` | `NoopPolicyProvider` | Interface only (§4.4) | **No** — zero call sites (LP-11, §3.1) |
+| Policy | `PolicyProvider` | `NoopPolicyProvider` | Implemented (`executor.rs`; gates `ModelCall`/`Deferred` effects — §4.9) | **Yes** |
 
 > `Dialog`, `Environment`, and `Config` are roles the implementation added after the L1
 > §4.1 taxonomy table was last amended; that table still lists four. L1 §4.1 declares itself
@@ -234,19 +235,20 @@ deferred — LP-3 not satisfied for this seam (§4.8.2); those commands currentl
 against the in-memory variable environment. LP-3 graduation also triggers the addition of
 `run_with_storage` and `run_with_storage_and_audit` API variants to `workflows.rs`.
 
-### 4.4 PolicyProvider — Interface Shipped; Wiring Specified in §4.9
+### 4.4 PolicyProvider — Implemented (LP-11) [MODIFIED v1.5.0]
 
-Trait and built-in ship today; §4.9 specifies the call-site integration LP-3 (§4.8.1)
-now permits:
+Wired: `Executor::execute_command` gates every `ModelCall`/`Deferred` effect through
+`evaluate` before the effect happens. The trait signature is unchanged from what shipped —
+only its callers are new (§4.9):
 
 ```text
 [REFERENCE]
 pub trait PolicyProvider {
     /// Evaluate a named policy gate. Returns `true` if the action is permitted.
     ///
-    /// `gate` is the host-defined policy identifier (e.g., "spend_cap", "tool_access").
-    /// `context` is a pre-effect snapshot of the call as a `Value::Map` — see §4.9
-    /// for its concrete shape at the LP-11 call site.
+    /// `gate` is the effect-class string (`"model_call"` / `"deferred"`,
+    /// `EffectClass::as_gate_str`). `context` is a pre-effect `Value::Map`
+    /// snapshot of the command and its unresolved argument strings — §4.9.2.
     fn evaluate(&self, gate: &str, context: &crate::executor::Value) -> bool;
 }
 
@@ -441,11 +443,11 @@ fix (an in-memory built-in per L1 §4.1 and LP-2) is *not* gated by this record,
 touches neither hook points nor run-parameter variants — the scope §2 defers. Only the wiring
 is held.
 
-### 4.9 Per-Effect Authorization Call-Site Design (LP-11) [ADDED v1.4.0]
+### 4.9 Per-Effect Authorization Call-Site (LP-11) [ADDED v1.4.0, IMPLEMENTED v1.5.0]
 
-LP-3 is satisfied for `PolicyProvider` (§4.8.1); this section specifies the Rust shape a
-task can build against. It is a design, not an implementation — no line here has landed in
-`crates/nodus` yet.
+LP-3 is satisfied for `PolicyProvider` (§4.8.1); this section specifies the Rust shape and
+**is now implemented** in `crates/nodus` exactly as designed — every reference below is the
+real, as-built code, not a projection.
 
 #### 4.9.1 EffectClass — realized narrower than the L1 sketch
 
@@ -519,14 +521,15 @@ fn execute_command(&self, ctx, cmd, step_num) -> Option<Signal> {
     if let Some(violation) = ctx.check_rules(&cmd.name, &cmd.args) { /* unchanged, NL-2 */ }
 
     if let Some(class) = effect_class_of(&cmd.name) {
-        let gate = class.as_str();                       // "model_call" | "deferred"
-        let context = build_context(cmd);                 // §4.9.2
-        if !self.policy.evaluate(gate, &context) {         // decide, pre-effect
+        let gate = class.as_gate_str();                    // "model_call" | "deferred"
+        let context = build_context(cmd);                  // §4.9.2
+        if !self.policy.evaluate(gate, &context) {          // decide, pre-effect
+            let error_detail = format!("policy denied gate '{gate}' for '{}'", cmd.name);
             self.emit(ctx, |seq, cid| ExecutionEvent::StepError {
                 step_index: step_num,
                 step_command: cmd.name.clone(),
                 error_code: vocab::error_code::POLICY_DENIED.to_string(),
-                error_detail: format!("policy denied gate '{gate}' for '{}'", cmd.name),
+                error_detail: error_detail.clone(),
                 step_identity: step_identity(step_num, &cmd.name),
                 fault_identity: FaultIdentity {
                     step_identity: step_identity(step_num, &cmd.name),
@@ -538,11 +541,11 @@ fn execute_command(&self, ctx, cmd, step_num) -> Option<Signal> {
             ctx.errors.push(RuntimeError {
                 code: vocab::error_code::POLICY_DENIED.to_string(),
                 step: step_num,
-                reason: format!("policy denied gate '{gate}'"),
+                reason: error_detail,
             });
-            return None;    // the effect never runs; pipeline_target stays unset;
-        }                   // execution continues to the next step (non-halting)
-    }
+            return None;    // the effect never runs; pipeline_target stays at its
+        }                   // seeded default (e.g. $out : Value::Null); execution
+    }                       // continues to the next step (non-halting)
 
     /* … existing dispatch, StepStart/StepEnd, pipeline_target binding … */
 }
@@ -635,16 +638,16 @@ flagging it here is this pass's contribution, not its remedy.
 Order of implementation across future phases, revised against the §3.1 findings:
 
 1. **SchemaProvider + capability manifest (LP-8)** — delivered. `Schema::with_provider`, the `run_with_schema` variant, and the `CapabilityManifest` / `validate_manifest` gate (§4.7) are purely additive — zero risk to the existing API.
-2. **PolicyProvider call site (LP-11)** — the highest-leverage item: a single pre-effect evaluation hook in `execute_command` converts `PolicyProvider` from a no-op export into a real seam **and** unblocks LP-16, LP-17, and LP-20, all three gated behind the same `decide → effect → observe` ordering. Additive: with no host provider the built-in allow-all preserves today's behaviour byte-for-byte. **[MODIFIED v1.4.0] Now task-authorable.** §4.9 specifies the Rust shape: `EffectClass{ModelCall,Deferred}` (`ToolUse` left vacuous — no host-tool seam exists to gate), the `gate`/`context` shape, the `execute_command` integration point, the `POLICY_DENIED` denial signal (not `ConstraintHit`), non-halting `None`-return semantics, and the `run_with_policy`/`run_with_policy_and_audit` combinators. The three states this item passed through are now closed out: v1.2.0 called it task-authorable while omitting the LP-3 gate (error); v1.3.0 corrected that by opening the gate but left the Rust shape undesigned (permitted-not-designed); v1.4.0 designs it (permitted-and-designed) — the state that actually authors a task with a concrete `Verify` line.
+2. ~~**PolicyProvider call site (LP-11)**~~ — **DONE [v1.5.0].** `Executor::execute_command` gates every `ModelCall`/`Deferred` effect through `self.policy.evaluate`; `NODUS:POLICY_DENIED` (not `ConstraintHit`) is non-halting and degrades `RunResult.status` to `Partial`; `run_with_policy`/`run_with_policy_and_audit` ship. This item passed through all four states the LP-11 arc named: v1.2.0 called it task-authorable while omitting the LP-3 gate (error) → v1.3.0 opened the gate but left the shape undesigned (permitted-not-designed) → v1.4.0 designed it (permitted-and-designed) → v1.5.0 built it. LP-16/LP-17/LP-20 remain blocked behind the same `decide → effect → observe` ordering until their own designs land — unblocking *this* seam does not, by itself, realize theirs.
 3. **StorageProvider built-in + call site (LP-15)** — two separable pieces, correctly separated in practice. **[MODIFIED v1.3.1] The built-in half is DONE**: `InMemoryStorageProvider` replaced the no-op, round-trips within an invocation, and was self-contained exactly as predicted — it did not wait on LP-3. Executor hook points for `STORE`/`LOAD` remain the larger piece, still held: `StorageProvider`'s own LP-3 record (§4.8.2) is **not satisfied** — one host context, not two — unlike `PolicyProvider`'s.
 4. **Environment liveness (LP-18 a/b)** — requires an L2 design decision before it can be planned: giving `EnvironmentProvider::open` a `Result` return and teaching `ResumeDescriptor` an environment identity are breaking changes to published items, so LP-6 classes them **major**. Amend this spec (or `l2-nodus-environment.md`) before authoring a task.
 5. **Import triad (LP-13 → LP-9 → LP-12)** — one deliverable, not three; nothing is owed until a bundle-load path exists. Not plannable today.
 6. **`cargo semver-checks` gate** — add to `ci.yml` once the crate reaches `1.0.0`; this is the LP-6 mechanical enforcement.
 
-**[MODIFIED v1.4.0]** Items 2 and 3's built-in half are both now **task-authorable** — item 2
-as of this pass (§4.9 supplies the Rust shape), item 3's built-in half since v1.3.1. Item 4
-still needs an L2 decision. Everything in §3.1 marked *Vacuous in core* is deliberately
-absent from this list: an item with no call site yields no verifiable task.
+**[MODIFIED v1.5.0]** Item 2 is **done**; item 3's built-in half has been done since v1.3.1
+(its wiring half stays held by its own unsatisfied LP-3 record, §4.8.2). Item 4 still needs
+an L2 decision. Everything in §3.1 marked *Vacuous in core* is deliberately absent from this
+list: an item with no call site yields no verifiable task.
 
 ## 6. Drawbacks & Alternatives
 
@@ -675,6 +678,7 @@ absent from this list: an item with no call site yields no verifiable task.
 
 | Version | Date | Author | Notes |
 | --- | --- | --- | --- |
+| 1.5.0 | 2026-07-31 | Core Team | **Implemented the LP-11 call site designed in v1.4.0 — Phase 24.** `Executor::execute_command` now gates every `ModelCall`/`Deferred` effect through `self.policy.evaluate(gate, context)` before it runs, exactly per §4.9's design; `Executor` gained a fourth `policy: Box<dyn PolicyProvider>` field (default `NoopPolicyProvider`) across all six constructors, plus `with_policy`/`with_policy_and_audit` and the `run_with_policy`/`run_with_policy_and_audit` combinators mirroring `run_with_dialog`'s exact shape. `NODUS:POLICY_DENIED` registered in `vocab.rs` beside the frozen 24-code registry (`Error`, `Runtime` — same as `RULE_VIOLATION`), surfaced via the existing `StepError` event and `ctx.errors`, never `ConstraintHit`. 444 tests pass (was 435; +9): `effect_class_of` classification + gate-string unit tests in `portability.rs`, and five integration tests in `tests/portability.rs` — permit/deny on both `ModelCall` and `Deferred`, plus a `NoopPolicyProvider` regression proving every existing `run_with_*` variant stays byte-for-byte unchanged. **Caught two real assertion errors empirically, not assumed correct**: the test's first draft asserted a denied step's pipeline target is *absent* from `RunResult.vars`; it is not — `$out` (and `$error`/`$meta`/etc.) are seeded to defaults (`Value::Null` for `out`) at context construction regardless of whether any step runs, so "unbound" means "still `Value::Null`", not "key absent" — fixed by asserting against the seeded default instead, which also strengthened the *permitted*-effect assertions (previously vacuously true, since the key is always present). **Self-review before closing the task caught two stale doc comments in the shipped crate itself**, not just the spec: `portability.rs`'s module doc and `PolicyProvider`'s own trait doc still said "executor integration is deferred until LP-3 is satisfied" — both corrected to describe the real, wired gate. §4.9's own three `[REFERENCE]` pseudocode blocks were reconciled to the exact as-built code during this pass: `class.as_str()` corrected to the real method name `as_gate_str()`, and the denial `reason` string corrected to the fuller `"policy denied gate '{gate}' for '{cmd}'"` form the real code emits (the pseudocode had shown a shorter placeholder). §4.2's registry row, §4.4's heading/framing, §3.1's LP-11 row, §5 item 2, and the Overview all updated to Implemented; `Related Specifications`/`Canonical References` needed no new entries (existing `[EXT-POINTS]`/`[PORTABILITY]` aliases already cover the touched files generically). `cargo test -p nodus`: 444 passed, 0 failed; `cargo clippy -p nodus --all-targets -- -D warnings`: clean; `cargo fmt -p nodus -- --check`: one violation (line-wrap in the new integration tests), fixed by `cargo fmt`; `Cargo.toml`/`Cargo.lock` diff empty (LP-1 preserved); every `unwrap`/`expect`/`panic!` hit in the touched files falls inside `#[cfg(test)] mod tests`, none on a production path. |
 | 1.4.0 | 2026-07-31 | Core Team | **Designed the LP-11 call site — new §4.9, first non-vacuous design closing the highest-leverage item in §5.** `EffectClass{ModelCall,Deferred}` realized narrower than L1 §4.7's three-way sketch: `ModelCall`/`Deferred` reuse the existing `MODEL_COMMANDS`/`DIALOG_COMMANDS` constants (already load-bearing in `CapabilityManifest::from_workflow`, §4.7); `ToolUse` is deliberately left **vacuous** — every `tool`-shaped builtin command (`FETCH`, `WRITE`, `GIT`, `NOTIFY`, …) is, on inspection, a fixed zero-dependency stub with no host-swappable seam behind it, so gating one would authorize nothing real, the same shape as the §3.1 *vacuous in core* entries. `gate`/`context`: since the DSL has no syntax for a step to declare a named gate, `gate` is the effect-class string itself and `context` a raw, pre-resolution `Value::Map` snapshot of the command and its unresolved args. Call site: `execute_command`, mirroring the `!!`-rule check's structural position but not its consequence. **Corrected a real defect in §4.4's own doc comment**, found on inspection of `observability.rs` rather than assumed: it claimed the denial reuses `ConstraintHit { halt: false }`, but that variant's own doc comment scopes it to hard `!!NEVER`/`!!ALWAYS` constraints and `l2-nodus-errors.md` states the `RULE_VIOLATION`/`ConstraintHit` path is "unchanged" by any later spec — reusing it would have silently conflated NL-2 and LP-11 under one event type. The real mechanism: a new `NODUS:POLICY_DENIED` code (registered beside the frozen 24-code registry exactly as `CAPABILITY_UNMET` was for LP-8), emitted via the existing `StepError` event (no new `ExecutionEvent` variant — purely additive), `ctx.errors.push`, and a bare `None` return — mirroring `DialogOutcome::Timeout`/`::Rejected`'s existing non-halting precedent, not `Signal::Skip` (a different, branch-scoped primitive that top-level code treats identically to `None` anyway) or `Signal::Break` (which would make every denial fatal, wrong for a per-attempt gate). **A genuine, previously-unflagged finding surfaced while grounding the denial signal**: `WorkflowFile.error_decl` — the parsed `@err:` handler — has **zero call sites in `executor.rs`**. It is parsed, validated, and transpiled but never dispatched, meaning `@err:` routing is not a mechanism the runtime has today; L1 §4.7's `route_to(@err)` pseudocode described something unbuilt. Corrected there (v1.14.1) rather than silently built here — a full `@err:` dispatch mechanism is `l1-nodus-language.md` NL-9's own obligation, touching every error-emitting site, not a thing this one seam's call site should absorb; flagged as a new, real gap rather than a rediscovery of a known one (checked the Backlog first — it wasn't there). `run_with_policy`/`run_with_policy_and_audit` combinators specified mirroring `run_with_dialog`'s exact shape (`PolicyProvider` becomes a fourth `Executor` field). §3.1's LP-11 row, §4.4 (doc-comment correction), and §5 item 2 (closed out through its third and final state: error → permitted-not-designed → permitted-and-designed) all updated; `l2-nodus-errors.md` gains a one-line cross-reference for the new code, matching its own `CAPABILITY_UNMET` precedent. Design only — no line has landed in `crates/nodus`; `magic.task`/`magic.run` build it next. |
 | 1.3.1 | 2026-07-31 | Core Team | Reconciled to the as-built LP-15 fix: `NoopStorageProvider` replaced by `InMemoryStorageProvider` (`Mutex`-guarded, round-trips within an invocation, shares no state across instances), satisfying L1 §4.1's in-memory built-in mandate and LP-2's in-process-sufficiency requirement that the prior no-op met for neither. Updated §4.2's registry row and Overview to Implemented; §4.3 heading and body to record the built-in as conformant while its executor wiring stays held by the unsatisfied LP-15 admission record (§4.8.2); §3.1's LP-15 row split into a resolved built-in half and a still-open wiring half; §5 item 3 marked complete for the built-in and its closing sentence updated to two states (was three, since item 3 no longer shares item 2's "not yet designed" status). Public-API rename (`NoopStorageProvider` → `InMemoryStorageProvider`), acceptable pre-1.0 per LP-6 §5. No new dependency (LP-1); `cargo test -p nodus` 435 passing (was 429), `clippy`/`fmt` clean. |
 | 1.3.0 | 2026-07-31 | Core Team | Added §4.8 — the first **LP-3 admission records** under the L1 §4.14 rule authored in the same pass, reaching **different dispositions for the two open seams**, which is the gate doing work rather than a half-finished pass. **`PolicyProvider` (LP-11) — SATISFIED.** Context A: the runtime tool guard (`crates/domain/src/tool_security.rs`), deciding whether a tool call may execute, evaluating every call pre-execution against severity-ranked signature rules. Context B: plugin-hook interception (`crates/domain/src/hooks.rs`), nine `HookEvent` kinds evaluated **in parallel** with deny-if-any-`Block` aggregation. Independence is established by **documented divergence and not by our own reading**: the host's Stable `l1-interception-model.md` exists precisely to unify "the currently-divergent fail-behaviours of the plugin-hook and tool-security realizations" (INT-3), and two mechanisms that already disagree on fail direction — severity classification vs parallel deny-aggregation — are §4.14's strongest signal. LP-3's second half was already satisfied by construction: `evaluate(&self, gate: &str, context: &Value) -> bool` names only `&str` and nodus's own `Value`, so the interface needs no change; the host types it must never name (`HookEvent`, hook matcher/rule types, `tool_security::Severity`, scanner signature-rule types, `contract::*`) are all absent. The host need is specified rather than hypothetical — `l1-interception-model` §165–167 records that nodus "already carries the *observe* seam … the mechanic it lacks … is the **decide** seam" and assigns the realization here. **`StorageProvider` (LP-15) — NOT SATISFIED**: only one context (`crates/store-local`, a provider rather than a second *decision shape*); the missing evidence is named precisely — a second integration persisting workflow state under a different durability/locality contract, the `l1-deployment-neutrality` DN-3 local-vs-remote axis LP-15 already cites — so its `STORE`/`LOAD` hook points stay unplannable while the separate LP-15 **built-in conformance** fix remains ungated, since it touches neither hook points nor run-parameter variants. Updated accordingly: §3's LP-3 row (per-seam dispositions replacing the blanket "both held pending"), §3.1's LP-11 row (**unblocked**, with the four items still needing design named — effect-class notion, `gate` derivation, denial signal, `run_with_policy` combinators), and §5 item 2, whose v1.2.0 text called the call site task-authorable while omitting the gate this same document asserts in §3/§2/§4.4 — corrected from the other side, since the gate is now genuinely open but the seam is *permitted, not yet designed*: the difference between "not allowed" and "not specified". §5's closing sentence rewritten to separate the three states it had collapsed. Related Specifications gains the host-side `l1-interception-model`; Canonical References gain the two divergence-evidence files and the LP-2 host adaptor. |

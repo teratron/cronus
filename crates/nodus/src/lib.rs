@@ -87,8 +87,9 @@ pub use workflows::{
     TestReport, TestResult, TranspileMode, ValidationReport, run, run_with_audit, run_with_config,
     run_with_config_and_audit, run_with_dialog, run_with_dialog_and_audit, run_with_environment,
     run_with_environment_and_audit, run_with_manifest, run_with_manifest_and_audit,
-    run_with_provider, run_with_provider_and_audit, run_with_schema, run_with_schema_and_audit,
-    scaffold, test, test_with_tags, transpile, validate,
+    run_with_policy, run_with_policy_and_audit, run_with_provider, run_with_provider_and_audit,
+    run_with_schema, run_with_schema_and_audit, scaffold, test, test_with_tags, transpile,
+    validate,
 };
 
 #[cfg(test)]

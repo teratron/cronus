@@ -1,21 +1,35 @@
 ---
 phase: 24
 name: "Per-Effect Authorization Call Site"
-status: Todo
+status: Done
 subsystem: "crates/nodus/src/portability.rs, executor.rs, workflows.rs"
 requires: []
-provides: []
+provides:
+  - "PolicyProvider gate wired into Executor::execute_command for ModelCall/Deferred effects (LP-11)"
+  - "EffectClass{ModelCall,Deferred} + effect_class_of classification (portability.rs)"
+  - "NODUS:POLICY_DENIED error code (vocab.rs) + run_with_policy/run_with_policy_and_audit combinators"
+  - "l2-nodus-portability 1.5.0: LP-11 fully reconciled to as-built"
 key_files:
   created: []
-  modified: []
-patterns_established: []
+  modified:
+    - "crates/nodus/src/portability.rs"
+    - "crates/nodus/src/executor.rs"
+    - "crates/nodus/src/workflows.rs"
+    - "crates/nodus/src/vocab.rs"
+    - "crates/nodus/src/lib.rs"
+    - "crates/nodus/tests/portability.rs"
+    - ".design/nodus/specifications/l2-nodus-portability.md"
+    - ".design/nodus/INDEX.md"
+patterns_established:
+  - "Non-halting denial: push a typed RuntimeError + return None, mirroring DialogOutcome::Timeout/::Rejected — the established shape for 'effect didn't happen, run continues' distinct from Signal::Break's whole-run abort"
+  - "Reserved variables (out/error/meta/...) are always present in RunResult.vars, seeded to defaults at context construction — 'unbound' means 'still the seeded default', never 'key absent'"
 duration_minutes: ~
 ---
 
 # Stage 24 Tasks — Per-Effect Authorization Call Site
 
 **Phase:** 24
-**Status:** Todo
+**Status:** Done
 **Strategic Goal:** Convert `PolicyProvider` from a re-exported, zero-call-site trait into a real pre-effect gate over model-call and deferred effects, exactly as `l2-nodus-portability` §4.9 specifies.
 
 ## Scope note (read before starting)
@@ -68,27 +82,33 @@ it in Track C rather than silently improvising a different shape.
 
 ## Atomic Checklist
 
-- [ ] [T-24A01] `EffectClass` + `effect_class_of` + `NODUS:POLICY_DENIED`
-- [ ] [T-24A02] `Executor.policy` field + `with_policy`/`with_policy_and_audit`
-- [ ] [T-24A03] Gate in `execute_command` + `run_with_policy`/`run_with_policy_and_audit`
-- [ ] [T-24C01] Reconcile `l2-nodus-portability` to the as-built result
-- [ ] [T-24T01] Classification, permit/deny, and no-op-regression coverage
-- [ ] [T-24T02] Run the full gate set and confirm zero-dep
+- [x] [T-24A01] `EffectClass` + `effect_class_of` + `NODUS:POLICY_DENIED`
+- [x] [T-24A02] `Executor.policy` field + `with_policy`/`with_policy_and_audit`
+- [x] [T-24A03] Gate in `execute_command` + `run_with_policy`/`run_with_policy_and_audit`
+- [x] [T-24C01] Reconcile `l2-nodus-portability` to the as-built result
+- [x] [T-24T01] Classification, permit/deny, and no-op-regression coverage
+- [x] [T-24T02] Run the full gate set and confirm zero-dep
 
 ## Detailed Tracking
 
 ### [T-24A01] `EffectClass` + `effect_class_of` + `NODUS:POLICY_DENIED`
 
 - **Spec:** l2-nodus-portability.md §4.9.1, §4.9.4
-- **Status:** Todo
+- **Status:** Done
 - **Assignment:** Agent
 - **Verify:** `cargo check -p nodus` clean; a new unit test in `portability.rs`'s
   `#[cfg(test)] mod tests` asserts `effect_class_of("GEN") == Some(EffectClass::ModelCall)`,
   `effect_class_of("ASK") == Some(EffectClass::Deferred)`, and
   `effect_class_of("LOG") == None`.
+  **Satisfied**: `effect_class_of_model_commands`, `effect_class_of_dialog_commands`,
+  `effect_class_of_non_effectful_command_is_none`, `effect_class_gate_strings` all pass.
 - **Handoff:** T-24A02 adds the `Executor` field this gate will call into; T-24A03 wires
   the actual call site.
+- **Changes:** Added `EffectClass{ModelCall,Deferred}` + `effect_class_of` +
+  `EffectClass::as_gate_str` to `portability.rs`; `NODUS:POLICY_DENIED` to `vocab.rs`
+  (`error_code` module, `error_meta` match, `error_registry_lockstep` test — 28 → 29).
 - **Notes:** Add to `portability.rs`:
+
   ```
   pub enum EffectClass { ModelCall, Deferred }
   pub fn effect_class_of(command: &str) -> Option<EffectClass> {
@@ -97,6 +117,7 @@ it in Track C rather than silently improvising a different shape.
       else { None }
   }
   ```
+
   `MODEL_COMMANDS` and `DIALOG_COMMANDS` already exist in `portability.rs` (used by
   `CapabilityManifest::from_workflow`) — reuse them, do not redefine. `EffectClass` needs
   a way to render as the `gate` string (`"model_call"` / `"deferred"`) for T-24A03 — an
@@ -114,13 +135,18 @@ it in Track C rather than silently improvising a different shape.
 ### [T-24A02] `Executor.policy` field + `with_policy`/`with_policy_and_audit`
 
 - **Spec:** l2-nodus-portability.md §4.9.5
-- **Status:** Todo
+- **Status:** Done
 - **Assignment:** Agent
 - **Verify:** `cargo check -p nodus` clean; `Executor::new(...)`,
   `Executor::with_dialog(...)`, and every other existing constructor still compile
   unchanged (proving the new field has a default and doesn't force every call site to
   supply a policy).
+  **Satisfied**: `cargo check --all-targets` exit 0 after the field was added to all six
+  constructors.
 - **Handoff:** T-24A03 is the only caller of `self.policy`.
+- **Changes:** `Executor.policy: Box<dyn PolicyProvider>` field (default `NoopPolicyProvider`
+  in `new`/`with_stub`/`with_audit`/`with_boxed_audit`/`with_dialog`/`with_dialog_and_audit`);
+  new `with_policy`/`with_policy_and_audit` constructors.
 - **Notes:** Add `policy: Box<dyn PolicyProvider>` as a fourth field on `Executor`
   (alongside `provider`, `audit`, `dialog`), defaulting to `NoopPolicyProvider` in every
   existing constructor. Add `with_policy(policy: impl PolicyProvider + 'static) -> Self`
@@ -131,17 +157,29 @@ it in Track C rather than silently improvising a different shape.
 ### [T-24A03] Gate in `execute_command` + `run_with_policy`/`run_with_policy_and_audit`
 
 - **Spec:** l2-nodus-portability.md §4.9.2, §4.9.3, §4.9.5
-- **Status:** Todo
+- **Status:** Done
 - **Assignment:** Agent
 - **Verify:** `cargo test -p nodus` — a workflow with a `GEN` step run through
   `run_with_policy` against a deny-all `PolicyProvider` produces `Status::Partial`, an
   empty `pipeline_target` binding, and `result.errors` containing one entry with
   `code == "NODUS:POLICY_DENIED"`; the same workflow run through plain `run` (no policy)
   still produces `Status::Ok` (Guardrail 5's regression).
+  **Satisfied, with a correction**: "empty pipeline_target binding" was imprecise —
+  `$out` is always present in `RunResult.vars` (seeded `Value::Null` at context
+  construction); a denial leaves it at that seeded default rather than removing the key.
+  T-24T01's tests assert the corrected form.
 - **Handoff:** T-24C01 reconciles the spec once this is real; T-24T01 adds the full
   coverage matrix.
+- **Changes:** The gate in `execute_command` (after `check_rules`, before the
+  `ASK`/`CONFIRM` dispatch — covers both effect classes with one check since `Deferred`
+  routes through `handle_dialog` afterward); `run_with_policy`/`run_with_policy_and_audit`
+  in `workflows.rs` copying `run_with_dialog`'s shape; re-exported from `lib.rs`. Also
+  corrected two stale doc comments found during this task: `portability.rs`'s module doc
+  and `PolicyProvider`'s trait doc still said "executor integration is deferred until
+  LP-3 is satisfied".
 - **Notes:** In `execute_command`, after the existing `check_rules` (`!!`-rule) block and
   before the `ASK`/`CONFIRM` dialog dispatch, insert:
+
   ```
   if let Some(class) = effect_class_of(&cmd.name) {
       let gate = class.as_gate_str();               // T-24A01's rendering
@@ -153,6 +191,7 @@ it in Track C rather than silently improvising a different shape.
       }
   }
   ```
+
   Follow the phase file's Guardrails 1–3 exactly for the event shape, the return value,
   and the context's raw-args requirement. `step_identity`/`fault_identity` are already
   imported and used by the neighbouring `RULE_VIOLATION` block — reuse them, do not
@@ -164,13 +203,21 @@ it in Track C rather than silently improvising a different shape.
 ### [T-24C01] Reconcile `l2-nodus-portability` to the as-built result
 
 - **Spec:** l2-nodus-portability.md §4.9 (all subsections), §3.1 (LP-11 row), §4.2, §4.4, §5 item 2
-- **Status:** Todo
+- **Status:** Done
 - **Assignment:** Agent
 - **Verify:** `node .magic/scripts/executor.js check-prerequisites --json --require-specs --verify-headers --workspace=nodus`
   reports no `VERSION_DRIFT` and the file header matches its `INDEX.md` row; `grep -n
   "zero call sites" .design/nodus/specifications/l2-nodus-portability.md` no longer
   matches the LP-11 row (the claim becomes false once T-24A03 lands).
+  **Satisfied**: pre-flight `ok: true`, only the expected post-bump `SYNC_GAP`; the LP-11
+  row (§3.1) and §5 item 2 no longer contain "zero call sites"; the one remaining hit is
+  Storage's own row, which is correctly unrelated and unchanged.
 - **Handoff:** Track T.
+- **Changes:** `l2-nodus-portability` 1.4.0 → 1.5.0 — Overview, §4.2 registry row, §4.4
+  heading/framing, §4.9 header + three `[REFERENCE]` blocks (corrected `as_str` →
+  `as_gate_str`, the fuller `reason` string, "stays unset" → "stays at its seeded
+  default"), §3.1's LP-11 row, and §5 item 2 all updated to Implemented/Done. `INDEX.md`
+  row + top-level version synced (1.0.71 → 1.0.72).
 - **Notes:** Patch or minor bump depending on how much §4.9's `[REFERENCE]` pseudocode
   diverges from the real, compiled shape (rename this task's own scope note if
   `effect_class_of`'s actual signature, the `as_gate_str`-equivalent method name, or the
@@ -190,7 +237,7 @@ it in Track C rather than silently improvising a different shape.
 ### [T-24T01] Classification, permit/deny, and no-op-regression coverage
 
 - **Spec:** l2-nodus-portability.md §4.9.1, §4.9.3
-- **Status:** Todo
+- **Status:** Done
 - **Assignment:** Agent
 - **Verify:** `cargo test -p nodus` passes with a net test-count increase covering: (a)
   `effect_class_of` for every `MODEL_COMMANDS`/`DIALOG_COMMANDS` entry plus at least one
@@ -201,7 +248,20 @@ it in Track C rather than silently improvising a different shape.
   unbound); (d) the same permit/deny pair for an `ASK`/`CONFIRM` (`Deferred`) step; (e) a
   plain `run`/`run_with_provider` call with no policy behaves byte-for-byte as before
   this phase (Guardrail 5).
+  **Satisfied**: 444 passed (was 435, +9). First draft asserted "target unbound" as
+  key-*absent* from `RunResult.vars`; both denial tests failed immediately, showing
+  `"out": Null` present in `vars` — reserved variables (`out`/`error`/`meta`/etc.) are
+  always seeded at context construction. Fixed by asserting `vars.get("out") ==
+  Some(&Value::Null)` on denial and `!= Some(&Value::Null)` (later strengthened to the
+  exact expected value) on permit — which also caught that the *permitted* assertions had
+  been vacuously true all along under the original `contains_key` form.
 - **Handoff:** T-24T02 runs the full gate set.
+- **Changes:** 4 unit tests in `portability.rs` (`effect_class_of_model_commands`,
+  `_dialog_commands`, `_non_effectful_command_is_none`, `effect_class_gate_strings`); 5
+  integration tests in `tests/portability.rs` (`policy_permits_model_call_effect`,
+  `policy_denies_model_call_effect`, `policy_permits_deferred_effect`,
+  `policy_denies_deferred_effect`, `no_policy_supplied_is_byte_for_byte_unchanged`) plus a
+  `DEFERRED_WF` fixture and `AllowAllPolicy`/`DenyAllPolicy` test doubles.
 - **Notes:** Place unit tests for `effect_class_of` in `portability.rs`'s own
   `#[cfg(test)] mod tests` (matching where `InMemoryStorageProvider`'s unit tests landed
   in Phase 23). Place the integration tests (b)–(e) in `tests/portability.rs`, following
@@ -217,4 +277,10 @@ it in Track C rather than silently improvising a different shape.
   `cargo fmt -p nodus -- --check`; `git diff --stat -- crates/nodus/Cargo.toml crates/nodus/Cargo.lock`
   empty (LP-1); manual scan confirming no `unwrap()`/`panic!()`/`expect(` added outside
   `#[cfg(test)]`. Run cargo via PowerShell, not Git Bash.
-- **Status:** Todo
+- **Status:** Done — `cargo test -p nodus`: 444 passed / 0 failed (13 suites, all `ok`).
+  `cargo clippy -p nodus --all-targets -- -D warnings`: exit 0. `cargo fmt -p nodus --
+  --check`: initially found one violation (line-wrap in the new integration tests, no
+  logic change), fixed by `cargo fmt`, re-verified clean. `git diff --stat` on
+  `Cargo.toml`/`Cargo.lock`: empty. Manual scan: every `unwrap`/`expect`/`panic!` hit in
+  the touched files (`executor.rs`, `portability.rs`, `workflows.rs`) falls after that
+  file's `#[cfg(test)] mod tests` boundary; none on a production path.

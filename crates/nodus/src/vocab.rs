@@ -267,6 +267,10 @@ pub mod error_code {
     /// effect (NL-22). The original effect stays recorded live — this marks
     /// the compensation attempt as failed, never as if the effect were undone.
     pub const COMPENSATION_FAILED: &str = "NODUS:COMPENSATION_FAILED";
+    /// A host `PolicyProvider` denied a per-effect authorization check before
+    /// the effect ran (LP-11). Non-halting: the effect never occurred, its
+    /// pipeline target stays unbound, and execution continues.
+    pub const POLICY_DENIED: &str = "NODUS:POLICY_DENIED";
 }
 
 /// Severity of a runtime error code.
@@ -346,6 +350,8 @@ pub fn error_meta(code: &str) -> Option<(ErrorSeverity, ErrorCategory)> {
         ec::RESTART_LIMIT => (Warn, Control),
         // Compensation-seam code (NL-22).
         ec::COMPENSATION_FAILED => (Error, Runtime),
+        // Portability-layer code (LP-11).
+        ec::POLICY_DENIED => (Error, Runtime),
         // Non-canonical (incl. deprecated EXECUTION_FAILED) → no metadata.
         _ => return None,
     };
@@ -715,11 +721,12 @@ mod tests {
             CONFIG_INVALID,
             RESTART_LIMIT,
             COMPENSATION_FAILED,
+            POLICY_DENIED,
         ];
         assert_eq!(
             canonical.len(),
-            28,
-            "24 language codes + CAPABILITY_UNMET + CONFIG_INVALID + RESTART_LIMIT + COMPENSATION_FAILED"
+            29,
+            "24 language codes + CAPABILITY_UNMET + CONFIG_INVALID + RESTART_LIMIT + COMPENSATION_FAILED + POLICY_DENIED"
         );
         for code in canonical {
             assert!(
