@@ -63,7 +63,7 @@ code. This phase changes only the built-in's internal behaviour, which §2's def
 - [ ] [T-23A01] Replace `NoopStorageProvider` with an in-memory built-in
 - [ ] [T-23A02] Update re-exports and the stale module/registry documentation
 - [ ] [T-23C01] Reconcile `l2-nodus-portability` to the as-built built-in
-- [ ] [T-23C02] Correct `l2-nodus-portability` §5 item 2 — the LP-11 call site is LP-3-gated
+- [~] [T-23C02] ~~Correct `l2-nodus-portability` §5 item 2~~ — **Cancelled (superseded)**, see below
 - [ ] [T-23T01] Update the Phase-5 contract test and add round-trip coverage
 - [ ] [T-23T02] Run the full gate set and confirm zero-dep
 
@@ -111,7 +111,7 @@ code. This phase changes only the built-in's internal behaviour, which §2's def
 - **Verify:** `grep -n "NoopStorageProvider" .design/nodus/specifications/l2-nodus-portability.md`
   returns only historical Document History rows; `node .magic/scripts/executor.js check-prerequisites --json --require-specs --verify-headers --workspace=nodus`
   reports no `VERSION_DRIFT` and the file header matches its `INDEX.md` row.
-- **Handoff:** T-23C02 corrects the separate §5-item-2 error in the same file.
+- **Handoff:** Track T. (T-23C02, previously the follow-on in this file, is Cancelled — superseded.)
 - **Notes:** Patch-level bump (1.2.0 → 1.2.1) with an `INDEX.md` row sync — the behaviour
   now matches what the L1 already mandated, so this records reality rather than changing a
   contract. Update: §4.2's Built-in cell, §4.3's body and heading, §3.1's LP-15 row (the
@@ -120,22 +120,31 @@ code. This phase changes only the built-in's internal behaviour, which §2's def
   and "executor hook points" — only the first is done. Reconciling spec-to-as-built inside a
   run phase follows the Phase-17 and Phase-20 Track-C precedent.
 
-### [T-23C02] Correct `l2-nodus-portability` §5 item 2 — the LP-11 call site is LP-3-gated
+### [T-23C02] ~~Correct `l2-nodus-portability` §5 item 2~~ — Cancelled (superseded)
 
 - **Spec:** l2-nodus-portability.md §5 item 2 · §3 (LP-3 row) · §2 · §4.4
-- **Status:** Todo
-- **Assignment:** Agent
-- **Verify:** §5 item 2 names the LP-3 gate explicitly and no longer lists the LP-11 call
-  site among items "a task can be authored against without a further spec pass"; the
-  concluding sentence of §5 is updated to match the corrected count.
-- **Handoff:** Completes Track C; hand to Track T.
-- **Notes:** The error: §5 item 2 promoted the LP-11 call site as the highest-leverage
-  task-authorable item while the same document asserts the gate three times (§3's LP-3 row,
-  §2's Constraints, §4.4's heading), and the PLAN Backlog carried a standing line predating
-  the spec pass. The **leverage** claim is unaffected and should stand — LP-11's absent call
-  site really does block LP-16/LP-17/LP-20 — what is wrong is calling it *plannable*.
-  Rewrite it as gated, and state what would open it: a spec amendment documenting the two
-  independent host-usage contexts LP-3 requires. Fold into the same patch bump as T-23C01.
+- **Status:** **Cancelled (superseded)** — do not execute.
+- **Assignment:** —
+- **Verify:** n/a. The condition this task specified is already met in
+  `l2-nodus-portability` 1.3.0: §5 item 2 no longer lists the LP-11 call site as
+  authorable without a further spec pass, and §5's closing sentence was rewritten to
+  separate the three states it had collapsed.
+- **Handoff:** Track C completes at T-23C01; hand to Track T.
+- **Notes:** Superseded by the `l2-nodus-portability` 1.3.0 spec pass, which corrected
+  §5 item 2 **from the opposite direction to the one planned here**. This task assumed the
+  only available fix was to demote the claim — rewrite the call site as LP-3-gated and state
+  what would open the gate. The spec pass instead *opened* the gate: `l1-nodus-portability`
+  1.14.0 §4.14 made LP-3 falsifiable, and §4.8.1 recorded it **satisfied** for
+  `PolicyProvider` on the strength of two divergent host decision shapes (the runtime tool
+  guard and plugin-hook interception) whose divergence the host's own `l1-interception-model`
+  was written to unify.
+  Recorded **Cancelled rather than Done** deliberately: the outcome this task described was
+  reached, but not by this phase, and marking it Done would credit Phase 23 with work another
+  cycle performed. The substantive correction it aimed at survives and is now more accurate —
+  the LP-11 call site is not *ungated*, it is **permitted but not yet designed**, which is an
+  ordinary L2 gap rather than a governance block. That design work is recorded in the
+  Backlog as the next spec target, including the real L1↔L2 contradiction it must settle
+  (L2 §4.4's skip-with-`ConstraintHit` versus L1 §4.7's typed `NODUS:POLICY_DENIED`).
 
 ### [T-23T01] Update the Phase-5 contract test and add round-trip coverage
 
