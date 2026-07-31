@@ -1,6 +1,6 @@
 //! Developer-office workspace registration and elevated-action confinement/
 //! audit wiring (DVO-1, DVO-6, DVO-7). Composition over already-shipped
-//! subsystems: the `store-local` workspace registry, `l2-tool-security`'s
+//! subsystems: the `store-local` workspace registry, tool-security's
 //! authority gate, and its append-only audit log — no new authority
 //! mechanism here, only a thin binding scoped to the dev office.
 //!
@@ -57,7 +57,7 @@ pub fn register_dev_workspace(
 }
 
 /// Run one elevated dev-office action through the confinement/audit chain
-/// (DVO-7): the `l2-tool-security` authority gate first, an append-only
+/// (DVO-7): the tool-security authority gate first, an append-only
 /// audit entry always second — allowed *and* blocked attempts are both
 /// recorded, because an audit trail that only remembers successes isn't one.
 /// If the audit write itself fails, the action is refused (fail-closed):

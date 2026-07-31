@@ -1,4 +1,4 @@
-//! Facade wiring for the loop runner (l2-loop-runner): the adapter-touching
+//! Facade wiring for the loop runner: the adapter-touching
 //! composition — a real clock, a real file-existence oracle, and on-disk
 //! ledger persistence — that the no-I/O domain tier cannot hold.
 //!
@@ -6,7 +6,7 @@
 //! lineage composition is disclosed future work: this facade proves the
 //! CLI → facade → domain wiring end to end over the shipped `Deterministic`
 //! oracle path — the same scope discipline the earlier real-integration
-//! phases used (e.g. Phase 18 landed the CLI over the built adapters first,
+//! stages used (an earlier one landed the CLI over the built adapters first,
 //! deferring TUI/desktop wiring with no parity violation since nothing
 //! divergent shipped).
 

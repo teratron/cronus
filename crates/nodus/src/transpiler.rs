@@ -258,8 +258,8 @@ impl Transpiler {
         for test in &ast.tests {
             lines.push(String::new());
             lines.push(format!("@test:{} {{", test.name));
-            // §10.4(a): raw_lines is the lexed token stream (l2-nodus-testing.md
-            // §2) and is the emission source whenever present — it is the only
+            // raw_lines is the lexed token stream (see the parser's test-body
+            // handling) and is the emission source whenever present — it is the only
             // representation that reproduces the body in the form it was
             // written; the structured fields are a derived view and, being
             // non-empty whenever raw_lines is, previously left this branch
@@ -295,7 +295,7 @@ impl Transpiler {
         // parser helper as @test:, so it reuses the same renderer rather than
         // forking a second one. The normative corpus's own macro_expand.nodus
         // uses the non-braced `@macro: name` form (no body captured today —
-        // macro body expansion is a deferred feature, see PLAN.md Backlog),
+        // macro body expansion is a deferred feature),
         // which collect_braced_raw_lines represents identically to an empty
         // braced body, so raw_lines is empty and no body line is emitted.
         for macro_block in &ast.macros {
@@ -1203,7 +1203,7 @@ level : str
         assert_eq!(comp.args, vec!["$url"]);
     }
 
-    // ─── T-21A01/A02/A03: compact-form control-flow round-trip (NL-6) ────────
+    // ─── compact-form control-flow round-trip (NL-6) ────────
     //
     // Each asserts `parse(src).steps == parse(to_nodus(parse(src))).steps` —
     // the AST-equality NL-6 actually mandates, never source-text equality.
@@ -1290,7 +1290,7 @@ level : str
         );
     }
 
-    // ─── T-22A01: @test: block round-trip (l2-nodus-testing.md §10.4) ────────
+    // ─── @test: block round-trip (§10.4) ────────
     //
     // Asserts `parse(src).tests == parse(to_nodus(parse(src))).tests` — the
     // AST-equality NL-6 mandates, not source-text equality. `TestBlock`
@@ -1332,7 +1332,7 @@ level : str
         );
     }
 
-    // ─── T-22B01/B02: @macro: and human_mode round-trip (NL-6) ───────────────
+    // ─── @macro: and human_mode round-trip (NL-6) ───────────────
 
     #[test]
     fn macro_block_round_trips() {

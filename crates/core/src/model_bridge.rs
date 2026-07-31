@@ -1,4 +1,4 @@
-//! The nodus↔`InferenceBackend` bridge (l1-model-runtime §4.1, MR-2).
+//! The nodus↔`InferenceBackend` bridge (§4.1, MR-2).
 //!
 //! `nodus` is a zero-dependency workflow runtime whose model-backed steps
 //! (`GEN`, `ANALYZE`) drive its own `ModelProvider` trait — a minimal

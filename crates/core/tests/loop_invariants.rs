@@ -1,5 +1,5 @@
-//! Loop-runner invariant acceptance sweep (l2-loop-runner, LG-1…LG-10) —
-//! Phase 19's closing validation (T-19T01). Each testable invariant maps to
+//! Loop-runner invariant acceptance sweep (LG-1…LG-10) —
+//! The closing validation for this subsystem. Each testable invariant maps to
 //! one named test, exercised through the **real facade export chain**
 //! (`cronus_core::loop_runner::{...}`) — proving the assembled facade
 //! re-export composes, not just that each domain module works in isolation.

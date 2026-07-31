@@ -1,12 +1,12 @@
 //! `cronus-model-local` — the streaming REST transport realizing
-//! `l2-model-runtime`: endpoint profiles over the federated local provider
-//! catalog (technology-stack §4.4), the streaming generate call (T-17B02),
+//! Endpoint profiles over the federated local provider
+//! catalog (technology-stack §4.4), the streaming generate call,
 //! plus (in a later phase task) embed/describe/pull and failure mapping.
 //!
 //! This module's scope so far: the endpoint-profile model, its reachability
-//! probe (T-17B01), and the streaming generate call (T-17B02). The
+//! probe, and the streaming generate call. The
 //! *address* (`api_base`) always comes from the caller (the router's
-//! policy, `l2-model-router`) — this crate never invents or looks one up;
+//! policy, owned by the router) — this crate never invents or looks one up;
 //! it only adds the how-to-talk layer (protocol family, capability flags,
 //! probe rules, wire framing) over that address.
 //!
@@ -1486,7 +1486,7 @@ mod tests {
         handle.join().expect("server thread must not panic");
     }
 
-    // ── T-17B03: embed / describe / pull / residency + failure map + egress ──
+    // ── embed / describe / pull / residency + failure map + egress ──
 
     #[test]
     fn embed_is_capability_gated_off_reports_unsupported() {

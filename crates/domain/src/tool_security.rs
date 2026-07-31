@@ -766,7 +766,7 @@ pub enum ToolPermitResult {
     Blocked(String),
 }
 
-/// BA-4's first structural barrier (`l2-service-activation` §4.5): whether
+/// BA-4's first structural barrier (§4.5): whether
 /// `name` names an activation/autostart-shaped capability. No such tool is
 /// ever registered in this codebase today (verified by inspection, not just
 /// this predicate) — this function is the standing guard any future

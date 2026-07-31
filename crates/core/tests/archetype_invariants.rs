@@ -1,5 +1,5 @@
-//! Office-archetype invariant acceptance sweep (l2-archetype-catalog,
-//! OA-1…OA-11) — Phase 20's closing validation (T-20T01). Each testable
+//! Office-archetype invariant acceptance sweep (
+//! OA-1…OA-11) — the closing validation for this subsystem. Each testable
 //! invariant maps to one named test, exercised through the **real facade
 //! export chain** (`cronus_core::archetype::{...}`) — proving the assembled
 //! re-export composes, not just that each domain module works in isolation.

@@ -1,5 +1,5 @@
 //! Integration tests for the Environment/Evaluation contract
-//! (`l1-nodus-environment`, NE-1…NE-13).
+//! (NE-1…NE-13).
 //!
 //! Covers, end-to-end through the public `workflows::run_with_environment*`
 //! surface: deterministic replay, the frozen-evaluation boundary (evaluate

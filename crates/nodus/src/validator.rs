@@ -588,7 +588,7 @@ impl Validator {
             .collect()
     }
 
-    /// W015 (l2-nodus-testing.md §10.3, realizing NT-9's "not a silent
+    /// W015 (§10.3, realizing NT-9's "not a silent
     /// assertion-miss" clause) — a token inside a `@test:` block's `input:`
     /// or `expected:` section that looks like a key-value pair but uses a
     /// separator other than `:` (the corpus case: `expected: { status =
@@ -869,7 +869,7 @@ fn collect_vars_stmt(
                         .to_string(),
                 );
             }
-            // `~MAP` binds `$it` implicitly per element (l2-nodus-control-flow.md §4.3);
+            // `~MAP` binds `$it` implicitly per element (§4.3);
             // declare it before walking the body so E004 does not flag it as undeclared.
             declared.insert("$it".to_string());
             collect_vars_cmd(&mb.command, declared, used);
@@ -2585,14 +2585,14 @@ mod tests {
         );
     }
 
-    // The next two tests were planned as a *fix* (Phase 20 Track B) on the
+    // The next two tests were planned as a *fix* on the
     // assumption that `collect_vars_stmt`'s `Stmt::Switch` arm only tracked
-    // the scrutinee, mirroring the ~MAP/$it gap Phase 17 closed. Plan-time
+    // the scrutinee, mirroring the ~MAP/$it gap closed earlier. Plan-time
     // grounding for that assumption used a `sed` line range that (unnoticed)
     // cut off mid-match-arm, before the arm-walking loop that was already
     // there. No fix was needed — these are regression tests confirming the
     // existing `collect_vars_cmd` calls over `sw.arms`/`sw.default` hold,
-    // now that Phase 20 made `?SWITCH` arm targets reachable via the parser.
+    // now that the parser makes `?SWITCH` arm targets reachable.
 
     #[test]
     fn e004_does_not_fire_on_switch_arm_bound_target_used_later() {

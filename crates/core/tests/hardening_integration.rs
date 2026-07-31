@@ -1,4 +1,4 @@
-//! Cross-subsystem hardening validation (Phase 9 §T-9T01): seeds a real
+//! Cross-subsystem hardening validation: seeds a real
 //! secret into a state tier and proves it reaches none of the three egress
 //! surfaces this phase built — backup, error reporting, telemetry — and that
 //! both consent gates (report + telemetry) block by default.

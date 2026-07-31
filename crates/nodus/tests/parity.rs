@@ -34,7 +34,7 @@ const RETRY_BOUNDED: &str = include_str!("fixtures/retry_bounded.nodus");
 const HALT_PAUSE: &str = include_str!("fixtures/halt_pause.nodus");
 
 /// The normative fixture corpus swept by the NL-6 AST-equality harness
-/// (T-21B01) — every well-formed fixture above, excluding the three
+/// — every well-formed fixture above, excluding the three
 /// deliberately-invalid `lint_*` fixtures (they exist to trigger a specific
 /// validator diagnostic, not to represent round-trippable content).
 const NORMATIVE_CORPUS: &[(&str, &str)] = &[
@@ -391,13 +391,13 @@ mod transpilation {
         );
     }
 
-    /// T-21B01, widened by T-22T01 — the NL-6 mandate ("compact → human →
+    /// The NL-6 mandate ("compact → human →
     /// compact must produce an AST-equal result") verified over the **whole**
-    /// `WorkflowFile`, for the entire normative corpus. `l2-nodus-runtime.md`
-    /// §3 claims this test lives in `workflows.rs`; it lives here instead,
-    /// alongside the fixture corpus it sweeps — the spec is patched (§3,
-    /// Phase 21) to name the real location, the Phase-17 precedent for a
-    /// claim that didn't match where the code/tests actually ended up.
+    /// `WorkflowFile`, for the entire normative corpus. The runtime contract
+    /// once placed this test in `workflows.rs`; it lives here instead,
+    /// alongside the fixture corpus it sweeps — the contract now records the
+    /// real location, correcting a claim that didn't match where the code and
+    /// tests actually ended up.
     ///
     /// Compares parsed ASTs, never source text: three source-level
     /// differences are expected and AST-stable (`core: x.nodus` truncates to
@@ -406,13 +406,13 @@ mod transpilation {
     /// `consume_rest_of_line` before this test ever sees it) — a string-equal
     /// assertion would fail on all three for reasons unrelated to NL-6.
     ///
-    /// Phase 21 scoped this assertion to `.steps` because three fields did
-    /// not yet round-trip: `tests` (fixed per `l2-nodus-testing.md` §10 —
+    /// This assertion was first scoped to `.steps` because three fields did
+    /// not yet round-trip: `tests` (fixed per §10 —
     /// `raw_lines` is now the emission source, with values re-quoted so they
     /// re-lex to the single token they came from) and `macros`/`human_mode`
-    /// (previously never emitted at all — Phase 22 T-22B01/T-22B02). Widening
-    /// this assertion to the whole file is Phase 22's decisive acceptance
-    /// signal (`l2-nodus-testing.md` §10.5): it is unreachable unless all
+    /// (previously never emitted at all). Widening
+    /// this assertion to the whole file is the decisive acceptance
+    /// signal (§10.5): it is unreachable unless all
     /// three are actually fixed, so a regression in any one fails it here.
     #[test]
     fn full_corpus_ast_equal_after_compact_round_trip() {

@@ -187,7 +187,7 @@ impl AdmissionReader for AuthLocalAdmissionReader {
 const DEV_OFFICE_MODULE_ID: &str = "dev-office";
 
 /// The dev office's trigger-loaded module (DVO-4). Composes the shared
-/// `l1-extensions` loader instead of inventing a parallel one — the module
+/// existing extensions loader instead of inventing a parallel one — the module
 /// is a single `ExtensionRegistry` entry toggled Active/Inactive by
 /// [`DevOfficeModule::sync`].
 pub struct DevOfficeModule {

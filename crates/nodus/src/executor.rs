@@ -619,7 +619,7 @@ impl Executor {
         )
     }
 
-    /// The single emission choke point (HO-7, T-15B01). Assigns `seq` from
+    /// The single emission choke point (HO-7). Assigns `seq` from
     /// `ctx.event_count` and the run's bound `correlation_id`, dispatches to
     /// the audit provider, then increments the counter — so a mismatch
     /// between the assigned `seq` and the counter is unrepresentable, not
@@ -1620,7 +1620,7 @@ impl Executor {
         };
 
         let output_vars: Vec<String> = cmd.pipeline_target.iter().cloned().collect();
-        // T-15C01 / HO-14: the dialog path never times its own step (it may
+        // HO-14: the dialog path never times its own step (it may
         // suspend the run awaiting a human) — Unavailable is the honest
         // value, never a fabricated 0 that would bias a downstream average.
         self.emit(ctx, |seq, correlation_id| ExecutionEvent::StepEnd {

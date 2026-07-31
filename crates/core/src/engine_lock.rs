@@ -1,11 +1,11 @@
-//! State-root lock (l2-service-activation §4.7, BA-11): exactly one engine
+//! State-root lock (§4.7, BA-11): exactly one engine
 //! owns a durable-state root at a time. A frontend that cannot take the lock
 //! attaches to the running engine's endpoint instead of starting a second
 //! one — the local instance of the architecture's own hub-and-spoke relation
 //! (INV-4), independent of which activation mode (if any) started the
 //! engine holding it. This is facade-tier, not domain: taking a real
 //! exclusive file lock is I/O, which the no-I/O domain tier may not hold
-//! (`l2-crate-topology` §4.3).
+//! (§4.3).
 
 use std::fs;
 use std::io::{self, Write};

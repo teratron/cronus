@@ -1,5 +1,5 @@
 //! LG-10: objective persistence across in-session reduction. Two runtime
-//! shapes share one durable-slot principle (§4.4 of `l1-loop-governance`):
+//! shapes share one durable-slot principle (§4.4):
 //! discrete iterations already reconstruct fresh from plan/status each time
 //! (LG-5); a continuous-session loop that compacts *in place* instead
 //! re-projects the standing objective + progress cursor into every turn
@@ -121,7 +121,7 @@ mod tests {
     //
     // Covered at the type level by spec::tests::
     // a_loop_spec_with_no_objective_slot_is_a_discrete_iteration_loop
-    // (T-19A01): `LoopSpec.objective_slot: Option<ObjectiveSlot>` being
+    // `LoopSpec.objective_slot: Option<ObjectiveSlot>` being
     // `None` means a caller simply never calls `objective_context_entry` /
     // `re_project_objective` — LG-5's fresh-context-per-iteration governs
     // instead. Not re-tested here to avoid duplicating that assertion.

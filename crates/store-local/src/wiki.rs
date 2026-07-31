@@ -1,5 +1,5 @@
 //! SQLite-backed project-wiki store — a derived projection CACHE
-//! (l2-project-wiki §4.1). Rows are written only by the office regeneration
+//! (§4.1). Rows are written only by the office regeneration
 //! pipeline (later phase tasks); this module owns the schema and the
 //! persistence round-trip. Per PW-3 the store is a rebuildable cache, never a
 //! source of truth — dropping `wiki.db` loses nothing durable.

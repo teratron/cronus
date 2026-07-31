@@ -1,7 +1,7 @@
 //! Integration tests for the observability layer.
 //!
-//! T-4T01: Observer neutrality — audit providers must not alter RunResult.
-//! T-4T02: Public API — run_with_audit / run_with_provider_and_audit contracts.
+//! Observer neutrality — audit providers must not alter RunResult.
+//! Public API — run_with_audit / run_with_provider_and_audit contracts.
 
 use nodus::{
     AuditProvider, Determinism, Durability, ExecutionEvent, ExecutionMode, Executor, LoopType,
@@ -66,7 +66,7 @@ fn run_plain(wf: &str) -> RunResult {
     nodus::workflows::run(wf, "obs_test.nodus", None).expect("plain run")
 }
 
-// ─── T-4T01: Observer neutrality (HO-5) ──────────────────────────────────────
+// ─── Observer neutrality (HO-5) ──────────────────────────────────────
 
 #[test]
 fn observer_neutrality() {
@@ -98,7 +98,7 @@ fn observer_neutrality() {
     );
 }
 
-// ─── T-4T02: Public API integration tests ────────────────────────────────────
+// ─── Public API integration tests ────────────────────────────────────
 
 #[test]
 fn run_with_audit_api() {
@@ -184,7 +184,7 @@ fn run_with_audit_fast_fails_on_invalid_source() {
     assert!(err.is_err(), "should fast-fail on validation errors");
 }
 
-// ─── T-14T01: Run-Manifest Identity & Reproducibility (HO-12/15/18/19/20) ────
+// ─── Run-Manifest Identity & Reproducibility (HO-12/15/18/19/20) ────
 
 const NEVER_FETCH_UPPER: &str = "\
 §wf:never_fetch v1.0
@@ -569,7 +569,7 @@ fn repro_workflow_digest_is_deterministic_and_distinguishing() {
     );
 }
 
-// ─── T-15T01: Aggregation-Safe Event Stream (HO-7 + HO-14) ───────────────────
+// ─── Aggregation-Safe Event Stream (HO-7 + HO-14) ───────────────────
 
 const MULTI_EVENT_WF: &str = "\
 §wf:multi_event v1.0
@@ -785,7 +785,7 @@ fn correlation_id_generated_when_run_id_empty() {
 
 #[test]
 fn dialog_step_elapsed_is_unavailable_timed_step_is_taken() {
-    // T-15C01: the dialog path never times its own step (it may suspend
+    // The dialog path never times its own step (it may suspend
     // awaiting a human) — Unavailable, not a fabricated 0.
     let recorder_dialog = RecordingProvider::new();
     run_with_audit(
@@ -849,7 +849,7 @@ fn measurement_unavailable_is_never_equal_to_taken_zero() {
 
 #[test]
 fn emit_choke_point_is_the_only_record_event_call_site() {
-    // Structural guard for T-15B01: executor.rs must route every emission
+    // Structural guard: executor.rs must route every emission
     // through the single choke point, not call self.audit.record_event
     // directly at N scattered sites. This test pins the source-level
     // discipline so a future edit that bypasses it is caught in review.
@@ -861,7 +861,7 @@ fn emit_choke_point_is_the_only_record_event_call_site() {
     );
 }
 
-// ─── T-16T01: Event Annotations, Cost, Lineage & Completeness ────────────────
+// ─── Event Annotations, Cost, Lineage & Completeness ────────────────
 
 const MAP_WF: &str = "\
 §wf:map_test v1.0

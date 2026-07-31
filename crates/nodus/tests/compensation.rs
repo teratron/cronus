@@ -1,6 +1,6 @@
-//! Integration tests for the compensation seam (NL-22, `l2-nodus-compensation.md`).
+//! Integration tests for the compensation seam (NL-22).
 //!
-//! T-19T01: reverse-completion-order driving, completed-only (a step whose
+//! Reverse-completion-order driving, completed-only (a step whose
 //! own action fails is never compensated), fallible-compensation-continues
 //! (a failed compensation doesn't abort the unwind), armed-not-automatic
 //! (a clean run touches nothing), and observer neutrality (no new

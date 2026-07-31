@@ -149,7 +149,7 @@ impl SandboxPolicy {
     }
 }
 
-/// The filesystem half of the sandbox schema (`l2-sandbox-policy` §4.1) —
+/// The filesystem half of the sandbox schema (§4.1) —
 /// only `read_write` matters for BA-4: a location absent from every entry has
 /// no write path for agent-run code, regardless of what `read_only` or
 /// `include_workdir` (not modeled here — orthogonal to write access) exposes.
@@ -181,7 +181,7 @@ impl FilesystemPolicy {
 }
 
 /// OS activation-registration locations that are filesystem paths
-/// (`l2-service-activation` §4.5, BA-4's second structural barrier): none of
+/// (§4.5, BA-4's second structural barrier): none of
 /// these may ever appear in a `FilesystemPolicy`'s `read_write` set, or
 /// agent-run code would gain a write path to make the engine persistent and
 /// unattended.

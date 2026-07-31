@@ -534,7 +534,7 @@ pub struct RunManifest {
     /// Total events emitted to [`AuditProvider::record_event`] during this run.
     /// Doubles as the HO-7 gap-check: for an undamaged trace this equals the
     /// highest emitted `seq` + 1 (both derive from the same counter through
-    /// the executor's single emission choke point — T-15B01/T-15B02).
+    /// the executor's single emission choke point).
     pub event_count: u32,
     /// Environment-lifecycle interactions for this run (NE-3). Empty for every
     /// run that did not go through [`crate::environment`]'s combinators —

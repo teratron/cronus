@@ -1,4 +1,4 @@
-//! End-to-end validation of the model-transport seam (Phase 17 T-17T01).
+//! End-to-end validation of the model-transport seam.
 //!
 //! Proves a previously-inert model-consuming path — context compaction, which
 //! ships as `NoOpCompactor` returning a fixed placeholder — now produces a

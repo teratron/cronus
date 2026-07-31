@@ -1,4 +1,4 @@
-//! Real Linux activation registration (`l2-service-activation` §4.4).
+//! Real Linux activation registration (§4.4).
 //!
 //! **Login-scoped:** a systemd **user** unit
 //! (`~/.config/systemd/user/cronus.service`) enabled via `systemctl --user`,

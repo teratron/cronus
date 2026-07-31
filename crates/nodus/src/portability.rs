@@ -508,7 +508,7 @@ mod tests {
     fn builtin_host_provides_environment_but_not_dialog() {
         // Environment: StubEnvironment is a complete trivial world (NE-10).
         // Dialog: the default resolver only handles `+default` dialogs, so
-        // builtin() deliberately does NOT provide it (l2-nodus-dialog DG-8).
+        // builtin deliberately does NOT provide it (DG-8).
         let host = HostCapabilities::builtin();
         assert!(host.provides(ExtensionRole::Environment));
         assert!(!host.provides(ExtensionRole::Dialog));

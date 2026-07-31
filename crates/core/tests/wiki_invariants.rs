@@ -1,4 +1,4 @@
-//! Project-wiki invariant acceptance sweep (l2-project-wiki, PW-1…PW-8) — the
+//! Project-wiki invariant acceptance sweep (PW-1…PW-8) — the
 //! phase's closing validation. Each PW invariant maps to one named test, and
 //! every one is exercised **through the real SQLite `WikiStore`** (not an
 //! in-memory fake) and the real domain pipeline, so the guarantees are proven

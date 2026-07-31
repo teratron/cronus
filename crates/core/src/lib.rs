@@ -50,7 +50,7 @@ pub use context_compaction::TransportCompactor;
 pub use cronus_activation_os as activation_os;
 /// The local model-transport adapter, re-exported so a host can construct a
 /// `contract::InferenceBackend` (an `EndpointProfile`) and hand it to the
-/// engine — the wired transport surface (l1-model-runtime §4.1).
+/// engine — the wired transport surface (§4.1).
 pub use cronus_model_local as model;
 pub use loop_bootstrap::{FileExistsBackend, file_exists_spec};
 pub use model_bridge::NodusModelBridge;

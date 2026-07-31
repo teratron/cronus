@@ -1,4 +1,4 @@
-//! Developer-office invariant acceptance sweep (DVO-1…DVO-8) — Phase 22's
+//! Developer-office invariant acceptance sweep (DVO-1…DVO-8) — the
 //! closing validation. Each DVO invariant maps to one named test, exercised
 //! through the real gate, the real facade wiring, and the real domain types
 //! reached via `cronus_core`'s re-exports — matching the

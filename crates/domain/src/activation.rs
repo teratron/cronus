@@ -1,5 +1,5 @@
 //! Activation policy — the domain-tier transition state machine over the
-//! `ActivationRegistry` seam (l2-service-activation §4.4/§4.6, BA-3/BA-5/
+//! `ActivationRegistry` seam (§4.4/§4.6, BA-3/BA-5/
 //! BA-6/BA-7). The seam's `enable`/`disable` are adapter-level primitives
 //! (register exactly this mode / remove whatever is registered); this module
 //! owns the *policy* — the mutual-exclusion ordering, the read-back
@@ -13,7 +13,7 @@ use cronus_contract::{ActivationMode, ActivationRegistry, ActivationState};
 /// What a transition accomplished. `RequiresApproval` is its own variant,
 /// distinct from `Activated` — the registry registered the mode, but the OS
 /// (or the user) has not yet approved it, so a caller must never treat it as
-/// a full success (BA-8, l2-service-activation §4.6).
+/// a full success (BA-8, §4.6).
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum TransitionOutcome {
     Activated(ActivationMode),

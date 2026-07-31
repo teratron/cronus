@@ -1,4 +1,4 @@
-//! Real macOS activation registration (`l2-service-activation` §4.3).
+//! Real macOS activation registration (§4.3).
 //!
 //! **Login-scoped:** a `LaunchAgent` plist in `~/Library/LaunchAgents/`,
 //! loaded via `launchctl`.

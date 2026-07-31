@@ -46,7 +46,7 @@ impl SchemaProvider for TestSchemaProvider {
     }
 }
 
-// ─── T-5T01: LP-4 vocabulary extension gate ──────────────────────────────────
+// ─── LP-4 vocabulary extension gate ──────────────────────────────────
 
 #[test]
 fn host_schema_extends_builtin() {
@@ -101,7 +101,7 @@ fn host_schema_unknown_command_not_dispatched() {
     );
 }
 
-// ─── T-5T02: Noop-provider compilation test ──────────────────────────────────
+// ─── Noop-provider compilation test ──────────────────────────────────
 
 #[test]
 fn noop_storage_and_policy_compile() {

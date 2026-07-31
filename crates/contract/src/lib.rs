@@ -806,7 +806,7 @@ pub enum StreamEvent {
 
 /// The wire-failure taxonomy a transport maps onto (§4.5). Deliberately flat
 /// and small — retry/rotate/fallback policy over these variants lives in
-/// `l2-model-error-recovery`, not here.
+/// the model-error-recovery layer, not here.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum InferenceError {
     ConnectRefused,
@@ -1027,12 +1027,12 @@ mod inference_tests {
 
 // ── Project wiki types ────────────────────────────────────────────────────────
 //
-// The client-facing project wiki (l2-project-wiki) is a derived projection
+// The client-facing project wiki is a derived projection
 // CACHE: pages are rows written only by the office regeneration pipeline and
 // reconstructable from ground truth (PW-3). These are the payload types the
 // store persists; the SQLite store itself lives in `cronus-store-local`.
 
-/// The fixed page-kind hierarchy (l2-project-wiki §4.1). The client wiki is
+/// The fixed page-kind hierarchy (§4.1). The client wiki is
 /// navigable overview → area → detail via `WikiPage::parent_id` + `ord`; the
 /// kinds are closed so no page sits far from the overview (PW-6).
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -1173,7 +1173,7 @@ pub struct WikiChangelogEntry {
 }
 
 /// The wiki store seam the office regeneration pipeline writes through
-/// (l2-project-wiki §4.2). Lives in the ports tier so `cronus-domain` (the
+/// (§4.2). Lives in the ports tier so `cronus-domain` (the
 /// pipeline) never depends on `cronus-store-local` (the SQLite realization);
 /// the client has no handle to this — only the curator-owned pipeline does
 /// (PW-2). The plain `String` error mirrors the other DN-2 seams.
@@ -1240,7 +1240,7 @@ pub trait WikiReadSurface {
     fn changelog(&self, office_id: &str, limit: usize) -> Result<Vec<WikiChangelogEntry>, String>;
 }
 
-// ── Service Activation seam (l2-service-activation §4.1, BA-1…BA-11) ────────
+// ── Service Activation seam (§4.1, BA-1…BA-11) ────────
 
 /// One of the two background modes beyond manual launch (BA-2). Manual
 /// launch itself is not a variant — it is the absence of any registration.
@@ -1252,7 +1252,7 @@ pub enum ActivationMode {
 
 /// Whether a single mode can be offered on this host (BA-10). Per-mode, not
 /// whole-host: a non-systemd Linux host offers `Login` (via XDG autostart)
-/// while reporting `System` unsupported (`l2-service-activation` §4.4).
+/// while reporting `System` unsupported (§4.4).
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum ModeSupport {
     Supported,
@@ -1290,7 +1290,7 @@ pub enum ActivationState {
 /// file, service handle) crosses this trait. The domain tier holds the
 /// mutual-exclusion and consent-bookkeeping policy (§4.4/§4.6) and calls this
 /// seam without ever naming a registry key itself; the adapter crate
-/// (`cronus-activation-os`, minted by `l2-crate-topology` §4.4(a)) holds the
+/// (`cronus-activation-os`, minted by §4.4(a)) holds the
 /// OS calls.
 ///
 /// There is no `set_state` and no persisted mirror: the only way to learn the
@@ -1316,7 +1316,7 @@ pub trait ActivationRegistry: Send + Sync {
     fn disable(&self) -> Result<(), String>;
 }
 
-/// The honest do-nothing default (`l2-service-activation` §5: "seam and probe
+/// The honest do-nothing default (§5: "seam and probe
 /// first ... gives the settings surface something honest to render"). Before
 /// the real per-OS adapter crate is wired in, this reports both modes
 /// `Unsupported` rather than exposing a toggle that silently does nothing
@@ -1528,7 +1528,7 @@ mod activation_tests {
     }
 }
 
-// ── Knowledge Store seam (l2-knowledge-store §4, KB-1…KB-11) ────────────────
+// ── Knowledge Store seam (§4, KB-1…KB-11) ────────────────
 //
 // Named, access-controlled document collections with hybrid semantic+keyword
 // retrieval. The SQLite/sqlite-vec/FTS5 realization lives in
@@ -1818,7 +1818,7 @@ pub enum WriteOverride {
     HumanDirected { audit_ref: String },
 }
 
-/// The knowledge-store seam (`l2-knowledge-store` §4). `cronus-domain`
+/// The knowledge-store seam (§4). `cronus-domain`
 /// composes ingestion and hybrid retrieval over this port; the SQLite +
 /// sqlite-vec + FTS5 realization lives in `cronus-store-local`. No `Send +
 /// Sync` bound — `rusqlite::Connection` is not `Sync` (the `WikiCache` /

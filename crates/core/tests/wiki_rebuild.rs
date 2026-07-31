@@ -1,5 +1,5 @@
 //! End-to-end proof that the project wiki is a rebuildable projection cache
-//! (l2-project-wiki §4.3/§4.4, PW-3/PW-7).
+//! (§4.3/§4.4, PW-3/PW-7).
 //!
 //! Two properties, both through the whole seam (domain pipeline → the real
 //! SQLite `WikiStore`, no fakes):

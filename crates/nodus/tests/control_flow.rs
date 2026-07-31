@@ -82,7 +82,7 @@ fn halt_not_taken_runs_to_completion() {
 
 // ?SWITCH fixtures — scrutinee seeded via an `@in` default. SWITCH_MATCH_WF,
 // SWITCH_DEFAULT_WF and SWITCH_NO_MATCH_WF below declare no arm target at
-// all — their three tests passing unmodified after the Phase 20 parser fix
+// all — their three tests passing unmodified after the parser fix
 // (try_parse_command_from_string) is this suite's non-regression evidence
 // for the no-target case.
 const SWITCH_MATCH_WF: &str = r#"§wf:switch_match v1.0
@@ -121,7 +121,7 @@ const SWITCH_NO_MATCH_WF: &str = r#"§wf:switch_nomatch v1.0
   2. LOG(after) → $out
 "#;
 
-// Each arm binds a trailing → $target (l2-nodus-control-flow's NL-10 row:
+// Each arm binds a trailing → $target (NL-10:
 // "?SWITCH arm actions bind their targets in declaration order"). Two
 // distinct target names prove per-arm binding — not a single shared target
 // aliased across the whole switch — and the later step reading whichever
@@ -177,7 +177,7 @@ fn switch_arm_bound_target_reachable_through_run() {
     // Default @in.category = urgent (first arm). Runs through workflows::run
     // (parse → validate → execute), not Executor::execute — proving the
     // arm's → $urgent_pick target is reachable through every validated public
-    // entry point, the same bar Phase 17 set for ~MAP's $it.
+    // entry point, the same bar set earlier for ~MAP's $it.
     let result = workflows::run(SWITCH_ARM_TARGETS_WF, "switch_targets.nodus", None).expect("run");
     assert_eq!(result.status, Status::Ok, "errors: {:?}", result.errors);
     assert_eq!(
@@ -286,7 +286,7 @@ fn retry_reruns_failing_step_up_to_bound() {
 }
 
 // ~MAP — transforms a collection element-by-element via the implicit `$it`
-// binding. Validated end-to-end through workflows::run: until l2-nodus-control-flow's
+// binding. Validated end-to-end through workflows::run: until the NL-10
 // E004 conformance fix, every ~MAP workflow was rejected before it ran.
 const MAP_WF: &str = r#"§wf:map_transform v1.0
 §runtime: { core: schema.nodus }

@@ -1,4 +1,4 @@
-//! SQLite-backed knowledge store (l2-knowledge-store §4): named,
+//! SQLite-backed knowledge store (§4): named,
 //! access-controlled document collections with hybrid semantic (sqlite-vec
 //! ANN) + keyword (FTS5) retrieval. Rows are written only through this
 //! module's write seam, which is where KB-9 (authorship zones) and KB-10
@@ -16,7 +16,7 @@ use cronus_contract::{
 };
 
 /// The embedding vector dimension every `knowledge_chunk_vec` row must match.
-/// One dimension system-wide (l2-knowledge-store §5.1): a model change
+/// One dimension system-wide (§5.1): a model change
 /// requires full re-indexing of the collection, never a mixed-dimension table.
 pub const EMBEDDING_DIM: usize = 768;
 
@@ -360,7 +360,7 @@ impl KnowledgeDb {
     /// documents in `collection_ids`, ascending by distance (closest first).
     /// The `vec0` index is not collection-partitioned, so this over-fetches
     /// from `vec0` and filters by collection/status in a second step
-    /// (l2-knowledge-store §2: "post-ANN filtering").
+    /// (§2: "post-ANN filtering").
     pub fn ann_search(
         &self,
         collection_ids: &[String],

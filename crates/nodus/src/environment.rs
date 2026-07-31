@@ -383,7 +383,7 @@ impl EnvRunResult {
 mod tests {
     use super::*;
 
-    // ── StubEnvironment (T-12A01) ────────────────────────────────────────────
+    // ── StubEnvironment ────────────────────────────────────────────
 
     #[test]
     fn stub_task_ids_is_single_stub_task() {
@@ -408,7 +408,7 @@ mod tests {
         assert!(reward.metadata.is_empty());
     }
 
-    // ── Lifecycle determinism + isolation (T-12A02) ──────────────────────────
+    // ── Lifecycle determinism + isolation ──────────────────────────
 
     #[test]
     fn reset_step_deterministic_across_two_runs() {
@@ -489,7 +489,7 @@ mod tests {
         assert_eq!(*env.released.borrow(), 1);
     }
 
-    // ── Grading modes (T-12D02 / NE-11) ──────────────────────────────────────
+    // ── Grading modes (NE-11) ──────────────────────────────────────
 
     fn reward(score: f64) -> Reward {
         Reward {
@@ -543,7 +543,7 @@ mod tests {
         assert_eq!(out, Reward::no_op());
     }
 
-    // ── Candidate digest (T-12D04 / NE-12) ───────────────────────────────────
+    // ── Candidate digest (NE-12) ───────────────────────────────────
 
     #[test]
     fn same_source_same_digest() {

@@ -1,7 +1,7 @@
 //! Integration tests for the `§config` declarative-configuration surface
-//! (NL-20, `l2-nodus-config.md`).
+//! (NL-20).
 //!
-//! T-13T01: NL-20 shape-check coverage, the secret-neutrality gate, the LP-8
+//! NL-20 shape-check coverage, the secret-neutrality gate, the LP-8
 //! fail-fast path, and the full declaration → proposed → acceptance → run
 //! happy path.
 

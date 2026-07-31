@@ -1,4 +1,4 @@
-//! Project-wiki regeneration pipeline (l2-project-wiki §4.2, PW-1…PW-5, PW-8).
+//! Project-wiki regeneration pipeline (§4.2, PW-1…PW-5, PW-8).
 //!
 //! Office-owned, curator-driven: on a significant office change, map the change
 //! to the affected page kinds, gather each page's ground truth, generate
@@ -21,7 +21,7 @@ use cronus_contract::{
 };
 
 /// A significant office change that triggers incremental regeneration
-/// (l2-project-wiki §4.2). Never per-agent-turn — only office events.
+/// (§4.2). Never per-agent-turn — only office events.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum OfficeChange {
     BoardItemDone,

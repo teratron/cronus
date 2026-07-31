@@ -648,8 +648,8 @@ pub fn run_with_dialog_and_audit(
 }
 
 /// Parse, validate, gate on the `Environment` capability, then run the whole
-/// workflow as one graded unit against `env` (`l1-nodus-environment`
-/// NE-1…NE-13).
+/// workflow as one graded unit against `env`
+/// (NE-1…NE-13).
 ///
 /// Sequence: `env.open(task, seed)` → `env.reset` (its `Observation` seeds the
 /// workflow's `$in.observation`) → execute the workflow → **frozen** →

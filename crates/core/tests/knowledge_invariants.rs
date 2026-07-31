@@ -1,5 +1,5 @@
-//! Knowledge-store invariant acceptance sweep (l2-knowledge-store, KB-1…KB-11)
-//! — Phase 21's closing validation. Each KB invariant maps to one named test,
+//! Knowledge-store invariant acceptance sweep (KB-1…KB-11)
+//! — the closing validation for this subsystem. Each KB invariant maps to one named test,
 //! exercised through the **real SQLite + sqlite-vec `KnowledgeDb`** (not an
 //! in-memory fake store) and the real domain pipeline exported via
 //! `cronus_core`, so the guarantees are proven against actual persistence and

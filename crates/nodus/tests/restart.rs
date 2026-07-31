@@ -1,7 +1,7 @@
-//! Integration tests for the bounded whole-run self-restart (NL-23,
-//! `l2-nodus-restart.md`).
+//! Integration tests for the bounded whole-run self-restart (
+//! NL-23).
 //!
-//! T-18T01: bound/ceiling exhaustion, run-boundary authority (validator
+//! bound/ceiling exhaustion, run-boundary authority (validator
 //! rejection of a nested request), `$restart_count` progression, fresh
 //! reconstruction across attempts, and the no-`restart_max` additivity
 //! baseline.
@@ -59,8 +59,8 @@ impl AuditProvider for RecordingProvider {
 // trailing pipeline target — `try_parse_command_from_string` never looked for
 // a second arrow within the re-parsed action string (confirmed by inspecting
 // the parsed AST directly — every inline `?IF` action's `pipeline_target`
-// came back `None` regardless of source text). Fixed in Phase 20
-// (l2-nodus-control-flow's NL-10 conformance pass, which also covers `?SWITCH`
+// came back `None` regardless of source text). Since fixed by
+// (the NL-10 conformance pass, which also covers `?SWITCH`
 // arm targets); this fixture is now real nodus source run through the full
 // parse → validate → run_with_audit path.
 

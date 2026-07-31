@@ -1,6 +1,6 @@
-//! Per-OS activation-registration adapter (l2-service-activation §4.2-§4.4),
+//! Per-OS activation-registration adapter (§4.2-§4.4),
 //! implementing `cronus_contract::ActivationRegistry`. Minted per
-//! `l2-crate-topology` §4.4(a): OS registration opens registries, writes
+//! §4.4(a): OS registration opens registries, writes
 //! plists/unit files, and shells out to service managers — infrastructure by
 //! every definition, never domain logic.
 //!
@@ -102,7 +102,7 @@ fn derive_mode_state(present: bool, vetoed: Option<bool>, mode: ActivationMode) 
     }
 }
 
-/// The activation adapter (T-18D01 login-scoped + T-18D02 system-scoped):
+/// The activation adapter (login-scoped + system-scoped):
 /// wraps a [`SystemCalls`] implementation as a full `ActivationRegistry`
 /// over both modes.
 pub struct OsActivationAdapter<C: SystemCalls> {

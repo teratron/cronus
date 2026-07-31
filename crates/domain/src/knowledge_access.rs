@@ -1,10 +1,10 @@
-//! Access-gated knowledge-collection reads (l2-knowledge-store §3, KB-4).
+//! Access-gated knowledge-collection reads (§3, KB-4).
 //!
 //! The client never touches [`cronus_contract::KnowledgeStore`] retrieval
 //! directly on a shared collection — it goes through [`GatedKnowledge`],
 //! which runs the uniform `access-grants` check
 //! (`has_access(Knowledge, collection_id, Read)`) **before every query** and
-//! only then delegates. This is the `GatedWiki` precedent (l2-project-wiki
+//! only then delegates. This is the `GatedWiki` precedent (project-wiki
 //! §4.4, PW-7) applied to the same uniform grant model.
 
 use cronus_contract::{KnowledgeStore, RetrievedChunk};

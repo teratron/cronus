@@ -1,6 +1,6 @@
 //! Cross-layer validation for the memory L2 pair: proves the consolidation
-//! (MC-1..10) and intelligence — both query-surface (MI-1/2/3/4/5/7/8/9/13,
-//! Phase 14) and capture-path (MI-6/10/11/12, Phase 15) — invariants hold
+//! (MC-1..10) and intelligence — both query-surface (MI-1/2/3/4/5/7/8/9/13)
+//! and capture-path (MI-6/10/11/12) — invariants hold
 //! together on the built tier, through the real facade and the real SQLite
 //! adapter, not each task's own isolated stub/unit tests.
 

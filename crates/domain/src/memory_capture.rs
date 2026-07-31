@@ -1,5 +1,5 @@
 //! MI-10/MI-11/MI-12: the write-time content transforms that complete the
-//! capture path Phase 14 deferred. MI-6's own gate/dedup/cross-ref needs
+//! capture path an earlier stage deferred. MI-6's own gate/dedup/cross-ref needs
 //! transactional multi-table writes and lives in the store tier
 //! (`cronus-store-local::memory::capture`) — this module is the zero-I/O
 //! half: pure content shaping, no schema, no DB access, composing with a

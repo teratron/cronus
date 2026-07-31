@@ -38,7 +38,7 @@ const IO_TIMEOUT: Duration = Duration::from_secs(30);
 /// always sends `Connection: close`).
 ///
 /// **Disclosed scope:** `http://` only. `https://` (TLS), `robots.txt`
-/// compliance, and rate-limiting (l2-knowledge-store §5.3) are deferred,
+/// compliance, and rate-limiting (§5.3) are deferred,
 /// separately-scoped follow-ups — this proves the fetch mechanics are real
 /// against a hermetic local server, not simulated.
 #[derive(Debug, Default)]
@@ -118,7 +118,7 @@ fn parse_http_url(url: &str) -> Result<(String, u16, String), String> {
 }
 
 /// The default local embedding endpoint — the Ollama convention
-/// (`l2-model-runtime` §4.4's federated provider catalog lists it first
+/// (§4.4's federated provider catalog lists it first
 /// among local defaults; `nomic-embed-text` is a common local embedding
 /// model). **Disclosed default, not a hardcoded assumption baked in
 /// everywhere:** a different local server/model requires constructing
@@ -149,7 +149,7 @@ impl std::fmt::Display for KnowledgeServiceError {
 
 impl std::error::Error for KnowledgeServiceError {}
 
-/// The assembled knowledge-store service (l2-knowledge-store §4.7): the real
+/// The assembled knowledge-store service (§4.7): the real
 /// store, embedding backend, and URL fetcher, composed behind the domain-tier
 /// pipeline. What `crates/cli`'s `cronus knowledge` verbs and any future
 /// agent-facing retrieval tool bind to.
@@ -255,7 +255,7 @@ impl KnowledgeService {
     ///
     /// **Disclosed scope:** `grants` is caller-owned — no subsystem in this
     /// codebase yet has a persisted, SQLite-backed grant store (the
-    /// `l2-resource-sharing` domain algebra is built and tested, but its
+    /// The resource-sharing domain algebra is built and tested, but its
     /// store-tier realization doesn't exist anywhere yet, matching the
     /// project-wide state of `GatedWiki`, which is equally unwired into any
     /// facade). Passing `KnowledgePrincipal::owner(...)` with a fresh

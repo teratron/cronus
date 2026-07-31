@@ -138,22 +138,22 @@ pub enum Command {
         /// Backup id (as shown by `cronus backup list`)
         backup: String,
     },
-    /// Manage background activation (l2-service-activation)
+    /// Manage background activation
     Activation {
         #[command(subcommand)]
         sub: ActivationCommand,
     },
-    /// Run and inspect governed autonomous loops (l2-loop-runner)
+    /// Run and inspect governed autonomous loops
     Loop {
         #[command(subcommand)]
         sub: LoopCommand,
     },
-    /// Office archetypes: a prior on staffing, never a roster (l2-archetype-catalog)
+    /// Office archetypes: a prior on staffing, never a roster
     Archetype {
         #[command(subcommand)]
         sub: ArchetypeCommand,
     },
-    /// Knowledge base: named collections with hybrid semantic+keyword retrieval (l2-knowledge-store)
+    /// Knowledge base: named collections with hybrid semantic+keyword retrieval
     Knowledge {
         #[command(subcommand)]
         sub: KnowledgeCommand,

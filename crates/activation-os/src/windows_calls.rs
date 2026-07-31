@@ -1,4 +1,4 @@
-//! Real Windows activation registration (`l2-service-activation` §4.2).
+//! Real Windows activation registration (§4.2).
 //!
 //! **Login-scoped:** the `HKCU\Software\Microsoft\Windows\CurrentVersion\Run`
 //! value, plus the `StartupApproved\Run` veto read (BA-8: the raw `Run`

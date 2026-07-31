@@ -1,4 +1,4 @@
-//! Hybrid semantic + keyword retrieval (l2-knowledge-store §4.3, KB-1/KB-6/KB-7).
+//! Hybrid semantic + keyword retrieval (§4.3, KB-1/KB-6/KB-7).
 //!
 //! Composes the already-KB-1-scoped store primitives
 //! ([`KnowledgeStore::ann_search`], [`KnowledgeStore::fts_search`],
@@ -33,7 +33,7 @@ impl std::fmt::Display for RetrievalError {
 
 impl std::error::Error for RetrievalError {}
 
-/// Reciprocal Rank Fusion constant (l2-knowledge-store §4.3: "RRF, k=60").
+/// Reciprocal Rank Fusion constant (§4.3: "RRF, k=60").
 const RRF_K: f64 = 60.0;
 
 /// KB-11: an optional pre-retrieval query transformation — keyword

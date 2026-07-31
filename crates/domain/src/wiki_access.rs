@@ -1,4 +1,4 @@
-//! Access-gated project-wiki reads (l2-project-wiki §4.4, PW-7).
+//! Access-gated project-wiki reads (§4.4, PW-7).
 //!
 //! The client never touches [`cronus_contract::WikiReadSurface`] directly on a
 //! shared office — it goes through [`GatedWiki`], which runs the uniform

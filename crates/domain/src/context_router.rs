@@ -30,7 +30,7 @@ pub enum RulePrecedence {
 
 // ── SessionContext seam ───────────────────────────────────────────────────────
 
-/// Minimal session context type.  Real fields wired in T-4C01.
+/// Minimal session context type; real fields are wired in later.
 #[derive(Debug, Clone)]
 pub struct SessionContext {
     pub session_id: String,

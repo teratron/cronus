@@ -1,4 +1,4 @@
-//! Facade wiring for the activation adapter (l2-service-activation): picks
+//! Facade wiring for the activation adapter: picks
 //! the right per-OS `SystemCalls` implementation and wraps it as a full
 //! `ActivationRegistry` — the platform-dispatch decision frontends should
 //! never need to make themselves (INV-2: no domain/platform logic in

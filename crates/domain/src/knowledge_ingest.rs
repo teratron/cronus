@@ -1,4 +1,4 @@
-//! Knowledge-store ingestion pipeline (l2-knowledge-store §4.2, KB-3/KB-5/KB-6).
+//! Knowledge-store ingestion pipeline (§4.2, KB-3/KB-5/KB-6).
 //!
 //! Chunk a source document, embed each chunk, and write the whole set
 //! transactionally through the [`KnowledgeStore`] seam. Domain-logic-first:
@@ -66,7 +66,7 @@ impl std::fmt::Display for IngestError {
 
 impl std::error::Error for IngestError {}
 
-/// Chunking parameters (l2-knowledge-store §4.2 defaults: 512 tokens / 64
+/// Chunking parameters (§4.2 defaults: 512 tokens / 64
 /// overlap, approximated by whitespace-word count — see [`chunk_text`]).
 #[derive(Debug, Clone, Copy)]
 pub struct ChunkParams {
@@ -196,7 +196,7 @@ impl UrlIngester {
     ///
     /// **Disclosed scope:** the production `fetcher` performs a plain
     /// HTTP/1.1 GET — `https://` (TLS), `robots.txt` compliance, and
-    /// rate-limiting (l2-knowledge-store §5.3) are deferred, separately-
+    /// rate-limiting (§5.3) are deferred, separately-
     /// scoped follow-ups. This proves the fetch→extract mechanics are real
     /// against a hermetic local server, not simulated.
     pub fn extract(fetcher: &dyn UrlFetcher, url: &str) -> Result<String, IngestError> {
@@ -300,7 +300,7 @@ pub struct IngestReport {
 /// embedding failure never touches the store at all; a store-level failure
 /// leaves the prior chunk set intact (the store's own transactional
 /// guarantee) — either way the document lands in `Error` with a diagnostic
-/// message, never a half-updated state (l2-knowledge-store §4.4).
+/// message, never a half-updated state (§4.4).
 pub fn ingest_document(
     store: &dyn KnowledgeStore,
     embedder: &dyn EmbeddingBackend,

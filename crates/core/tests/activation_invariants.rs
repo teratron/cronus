@@ -1,5 +1,5 @@
-//! Service-activation invariant acceptance sweep (l2-service-activation,
-//! BA-1…BA-11) — Phase 18's closing validation (T-18T01). Each testable
+//! Service-activation invariant acceptance sweep (
+//! BA-1…BA-11) — the closing validation for this subsystem. Each testable
 //! invariant maps to one named test, exercised through the **real facade
 //! export chain**: the domain policy engine (`cronus_core::activation::
 //! enable`/`disable`) driving a registry that implements the
