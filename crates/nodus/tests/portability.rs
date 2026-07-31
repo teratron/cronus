@@ -14,7 +14,7 @@
 //!   supplied (LP-11, §4.9)
 
 use nodus::{
-    executor::{Status, Value},
+    executor::{DialogOutcome, DialogProvider, Status, Value},
     observability::{AuditProvider, ExecutionEvent, RunManifest},
     portability::{
         BuiltinSchemaProvider, CapabilityManifest, ExtensionRole, HostCapabilities,
@@ -597,5 +597,257 @@ fn risk_descriptors_are_inert_without_a_policy_provider() {
         via_plain.status,
         Status::Ok,
         "must remain unaffected by LP-16's addition"
+    );
+}
+
+// ─── NL-9 uncaught-error handler dispatch ─────────────────────────────────────
+
+/// Two declared steps + a real `@err:` handler, so "the second step never ran"
+/// is directly observable in `result.log`.
+const ERR_HANDLER_WF: &str = r#"§wf:err_handler_test v1.0
+§runtime: { core: schema.nodus }
+@in: { query }
+@out: $out
+@err: ESCALATE(human)
+@steps:
+  1. GEN($in.query) → $out
+  2. LOG($out)
+"#;
+
+/// Same shape, but the `@err:` line carries no handler text at all.
+const EMPTY_ERR_HANDLER_WF: &str = r#"§wf:empty_err_handler_test v1.0
+§runtime: { core: schema.nodus }
+@in: { query }
+@out: $out
+@err:
+@steps:
+  1. GEN($in.query) → $out
+  2. LOG($out)
+"#;
+
+/// No `@err:` line at all.
+const NO_ERR_HANDLER_WF: &str = r#"§wf:no_err_handler_test v1.0
+§runtime: { core: schema.nodus }
+@in: { query }
+@out: $out
+@steps:
+  1. GEN($in.query) → $out
+  2. LOG($out)
+"#;
+
+/// `~RETRY:2` GEN step that fails its first attempt then succeeds.
+const RETRY_ERR_HANDLER_WF: &str = r#"§wf:retry_err_handler_test v1.0
+§runtime: { core: schema.nodus }
+@in: { query }
+@out: $out
+@err: ESCALATE(human)
+@steps:
+  1. ~RETRY:2 GEN($in.query) → $out
+"#;
+
+struct DialogRejects;
+
+impl DialogProvider for DialogRejects {
+    fn ask(&self, _prompt: &str, _modifiers: &[(String, String)]) -> DialogOutcome {
+        DialogOutcome::Rejected
+    }
+
+    fn confirm(&self, _content: &str, _modifiers: &[(String, String)]) -> DialogOutcome {
+        DialogOutcome::Rejected
+    }
+}
+
+/// Denies exactly the first `evaluate` call, permits every call after —
+/// proves a `~RETRY:n` step that fails once then succeeds never reaches
+/// `@err:` dispatch (the error left by the first attempt is truncated by
+/// `run_step_with_retry` itself once the step succeeds).
+struct DenyOncePolicy {
+    calls: AtomicUsize,
+}
+
+impl DenyOncePolicy {
+    fn new() -> Self {
+        Self {
+            calls: AtomicUsize::new(0),
+        }
+    }
+}
+
+impl PolicyProvider for DenyOncePolicy {
+    fn evaluate(&self, _gate: &str, _context: &Value) -> bool {
+        self.calls.fetch_add(1, Ordering::SeqCst) != 0
+    }
+}
+
+fn empty_error_map() -> Value {
+    Value::Map(Vec::new())
+}
+
+#[test]
+fn err_handler_dispatches_on_policy_denial() {
+    let result = workflows::run_with_policy(
+        ERR_HANDLER_WF,
+        "err_handler_test.nodus",
+        None,
+        DenyAllPolicy,
+    )
+    .expect("run_with_policy returns a RunResult, not a parse error, on denial");
+
+    assert_eq!(
+        result.status,
+        Status::Partial,
+        "errors: {:?}",
+        result.errors
+    );
+    let error_pairs = context_pairs(
+        result
+            .vars
+            .get("error")
+            .cloned()
+            .expect("$error is always seeded"),
+    );
+    let get = |key: &str| {
+        error_pairs
+            .iter()
+            .find(|(k, _)| k == key)
+            .map(|(_, v)| v.clone())
+    };
+    assert_eq!(
+        get("code"),
+        Some(Value::Text("NODUS:POLICY_DENIED".to_string()))
+    );
+    assert_eq!(get("step"), Some(Value::Int(1)));
+    assert!(
+        result.log.iter().any(|e| e.command == "ESCALATE"),
+        "the declared @err: handler must actually dispatch; log: {:?}",
+        result.log
+    );
+    assert!(
+        !result.log.iter().any(|e| e.command == "LOG"),
+        "the main step sequence must end after dispatch — step 2 must not run; log: {:?}",
+        result.log
+    );
+}
+
+#[test]
+fn err_handler_dispatches_on_dialog_denial() {
+    let result =
+        workflows::run_with_dialog(DEFERRED_WF, "deferred_test.nodus", None, DialogRejects)
+            .expect("run_with_dialog returns a RunResult, not a parse error, on rejection");
+
+    assert_eq!(
+        result.status,
+        Status::Partial,
+        "errors: {:?}",
+        result.errors
+    );
+    let error_pairs = context_pairs(
+        result
+            .vars
+            .get("error")
+            .cloned()
+            .expect("$error is always seeded"),
+    );
+    let get = |key: &str| {
+        error_pairs
+            .iter()
+            .find(|(k, _)| k == key)
+            .map(|(_, v)| v.clone())
+    };
+    assert_eq!(
+        get("code"),
+        Some(Value::Text("NODUS:DIALOG_REJECTED".to_string()))
+    );
+    assert!(
+        result.log.iter().any(|e| e.command == "ESCALATE"),
+        "the declared @err: handler must actually dispatch; log: {:?}",
+        result.log
+    );
+}
+
+#[test]
+fn no_err_handler_declared_is_unchanged() {
+    let result = workflows::run_with_policy(
+        NO_ERR_HANDLER_WF,
+        "no_err_handler_test.nodus",
+        None,
+        DenyAllPolicy,
+    )
+    .expect("run_with_policy returns a RunResult, not a parse error, on denial");
+
+    assert_eq!(
+        result.status,
+        Status::Partial,
+        "errors: {:?}",
+        result.errors
+    );
+    assert_eq!(
+        result.vars.get("error"),
+        Some(&empty_error_map()),
+        "$error must stay at its seeded default with no handler declared; vars: {:?}",
+        result.vars
+    );
+    assert!(
+        !result.log.iter().any(|e| e.command == "ESCALATE"),
+        "no handler is declared, so nothing may dispatch; log: {:?}",
+        result.log
+    );
+}
+
+#[test]
+fn empty_err_handler_is_unchanged() {
+    let result = workflows::run_with_policy(
+        EMPTY_ERR_HANDLER_WF,
+        "empty_err_handler_test.nodus",
+        None,
+        DenyAllPolicy,
+    )
+    .expect("run_with_policy returns a RunResult, not a parse error, on denial");
+
+    assert_eq!(
+        result.status,
+        Status::Partial,
+        "errors: {:?}",
+        result.errors
+    );
+    assert_eq!(
+        result.vars.get("error"),
+        Some(&empty_error_map()),
+        "$error must stay at its seeded default when @err: carries no handler text; vars: {:?}",
+        result.vars
+    );
+    assert!(
+        !result.log.iter().any(|e| e.command == "ESCALATE"),
+        "an @err: line with no handler text must not dispatch anything; log: {:?}",
+        result.log
+    );
+}
+
+#[test]
+fn retry_then_succeed_never_dispatches_err_handler() {
+    let result = workflows::run_with_policy(
+        RETRY_ERR_HANDLER_WF,
+        "retry_err_handler_test.nodus",
+        None,
+        DenyOncePolicy::new(),
+    )
+    .expect("run_with_policy must succeed once the retried attempt is permitted");
+
+    assert_eq!(
+        result.status,
+        Status::Ok,
+        "a step that succeeds via retry must not degrade status; errors: {:?}",
+        result.errors
+    );
+    assert_eq!(
+        result.vars.get("error"),
+        Some(&empty_error_map()),
+        "retry-then-succeed must never populate $error; vars: {:?}",
+        result.vars
+    );
+    assert!(
+        !result.log.iter().any(|e| e.command == "ESCALATE"),
+        "retry-then-succeed must never dispatch the @err: handler; log: {:?}",
+        result.log
     );
 }

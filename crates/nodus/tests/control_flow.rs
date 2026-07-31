@@ -278,10 +278,44 @@ fn retry_reruns_failing_step_up_to_bound() {
         "errors: {:?}",
         result.errors
     );
+    // NL-9: exhausted retries leave an uncaught DIALOG_TIMEOUT behind, and
+    // RETRY_TIMEOUT_WF declares `@err: ESCALATE(human)` — the handler now
+    // dispatches (l2-nodus-error-dispatch.md), which is the terminal action
+    // for the run, so step 2 (`LOG`) no longer executes. This assertion was
+    // written before NL-9 dispatch existed, when "routes to @err:" was still
+    // documented-but-unbuilt (l1-nodus-language.md's own ~RETRY:n row always
+    // said exhaustion "routes to @err:"); updated to match the real behavior
+    // rather than the pre-fix absence of it.
     assert!(
-        result.log.iter().any(|e| e.command == "LOG"),
-        "the step after an exhausted retry still runs; log: {:?}",
+        result.log.iter().any(|e| e.command == "ESCALATE"),
+        "an exhausted retry's uncaught DIALOG_TIMEOUT must dispatch the declared @err: handler; log: {:?}",
         result.log
+    );
+    assert!(
+        !result.log.iter().any(|e| e.command == "LOG"),
+        "dispatch is the terminal action — the step after an exhausted retry must not run; log: {:?}",
+        result.log
+    );
+    let error_map = result
+        .vars
+        .get("error")
+        .cloned()
+        .expect("$error is always seeded");
+    assert_eq!(
+        error_map,
+        Value::Map(vec![
+            (
+                "code".to_string(),
+                Value::Text("NODUS:DIALOG_TIMEOUT".to_string())
+            ),
+            ("step".to_string(), Value::Int(1)),
+            (
+                "reason".to_string(),
+                Value::Text("dialog 'ASK' timed out before an answer".to_string())
+            ),
+        ]),
+        "$error must carry the triggering DIALOG_TIMEOUT before the handler dispatches; vars: {:?}",
+        result.vars
     );
 }
 

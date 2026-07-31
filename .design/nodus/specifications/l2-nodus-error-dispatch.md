@@ -1,6 +1,6 @@
 # Nodus Uncaught-Error Handler Dispatch (Rust)
 
-**Version:** 1.0.0
+**Version:** 1.0.1
 **Status:** Stable
 **Layer:** implementation
 **Implements:** l1-nodus-language.md
@@ -64,7 +64,7 @@ codes; the mechanism they presume does not exist until this spec is realized.
 
 | L1 Invariant | Implementation |
 | --- | --- |
-| NL-9 Typed I/O / `@err:` contract | `execute_command`/`handle_dialog` already push a `RuntimeError` and return `None` (no `Signal`) for every non-fatal error; the main step loop's `_ => {}` catch-all arm (§4.1) is the one place every such error necessarily reaches, since a `Signal`-returning error (`RULE_VIOLATION`'s `Signal::Break`) is caught by an earlier match arm and never falls through. When `wf.error_decl.handler` is `Some(cmd)` and this step's execution added an entry to `ctx.errors`, `$error` is populated from that entry (§4.2) and `cmd` is dispatched via the ordinary `execute_command` path (§4.3) — then the main step sequence ends (§4.4). A workflow with no `@err:` handler, or one whose handler text does not parse into a recognized command, behaves exactly as today (§4.5). |
+| NL-9 Typed I/O / `@err:` contract | **Implemented [v1.0.1].** `execute_command`/`handle_dialog` already pushed a `RuntimeError` and returned `None` (no `Signal`) for every non-fatal error; the main step loop's `_ => {}` catch-all arm (§4.1) is the one place every such error necessarily reaches, since a `Signal`-returning error (`RULE_VIOLATION`'s `Signal::Break`) is caught by an earlier match arm and never falls through. When `ast.error_decl.handler` is `Some(cmd)` and this step's execution added an entry to `ctx.errors`, `$error` is populated from that entry (§4.2) and `cmd` is dispatched via the ordinary `execute_command` path (§4.3) — then the main step sequence ends (§4.4). A workflow with no `@err:` handler, or an `@err:` line with no handler text, behaves exactly as before this spec (§4.5). 452 tests pass (was 447, +5); a pre-existing `tests/control_flow.rs` test (`retry_reruns_failing_step_up_to_bound`) encoded the pre-fix behavior of an exhausted `~RETRY:n` continuing past its `@err:`-declared handler — corrected to assert the handler now dispatches and the following step does not run. |
 
 ## 4. Detailed Design
 
@@ -117,19 +117,21 @@ referencing `$error.reason` (via ordinary `$var` interpolation) sees it.
 
 ### 4.3 Dispatch reuses the triggering step's own execution path
 
+The real call site names the parsed AST parameter `ast` (not `wf`), and — since a nested
+`if` inside an `if let` is a clippy `collapsible_if` lint — is one let-chain, with no
+separate `err_dispatched` flag (nothing else in the function reads one; `break` alone is
+sufficient):
+
 ```text
 [REFERENCE]
 _ => {
-    if let Some(handler) = wf.error_decl.as_ref().and_then(|d| d.handler.as_ref()) {
-        if ctx.errors.len() > errors_before_this_step {
-            ctx.variables.insert(
-                "error".to_string(),
-                error_to_value(ctx.errors.last().expect("just grew")),
-            );
-            self.execute_command(&mut ctx, handler, step.number);
-            err_dispatched = true;
-            break;
-        }
+    if let Some(handler) = ast.error_decl.as_ref().and_then(|d| d.handler.as_ref())
+        && ctx.errors.len() > errors_before_this_step
+    {
+        let triggering = ctx.errors.last().expect("errors grew past errors_before_this_step");
+        ctx.variables.insert("error".to_string(), error_to_value(triggering));
+        self.execute_command(&mut ctx, handler, step.number);
+        break;
     }
 }
 ```
@@ -156,14 +158,24 @@ before this spec, and the host still applies its own "read the code and decide" 
 `Status` to `Ok` — this spec adds an observable side effect (the handler ran, `$error` was
 populated, remaining steps were skipped), not a reinterpretation of what `Partial` means.
 
-### 4.5 No handler declared, or handler text unparseable
+### 4.5 No handler declared, or `@err:` declared with no handler text
 
-`wf.error_decl` is `None` (no `@err:` line at all) or `Some(ErrorDecl { handler: None, .. })`
-(the raw text did not parse into a recognized `CommandCall`, e.g. free-text notes): there is
-nothing to dispatch, and the main loop's behavior is **byte-for-byte unchanged** from before
-this spec — the `_` arm's `if let Some(handler) = ...` simply does not match, and step
+`ast.error_decl` is `None` (no `@err:` line at all) or `Some(ErrorDecl { handler: None, .. })`:
+there is nothing to dispatch, and the main loop's behavior is **byte-for-byte unchanged** from
+before this spec — the `_` arm's `if let Some(handler) = ...` simply does not match, and step
 execution continues exactly as it does today. `W001`'s existing validator warning ("No @err
 handler...") is unaffected and still fires only for the true-absence case.
+
+**[CORRECTED v1.0.1]** This section originally also named "handler text that does not parse
+into a recognized command" as a second `handler: None` case. Verified against
+`try_parse_command_from_string` (`parser.rs`) rather than assumed: the function returns `None`
+**only** when its input is empty (checked both before and after splitting off a trailing
+`→ $target`) — any other text, including a lowercase free-text sentence with no parentheses,
+becomes `Some(CommandCall { name: <the whole raw text>, args: vec![], .. })`. Dispatching that
+"command" is harmless (it falls to the executor's existing `UNKNOWN_COMMAND` flag, the same
+fallback an unrecognized ordinary step command already gets — `Value::Null`, no error), but it
+is **not** the same as `handler: None`. The only real `handler: None` case is an `@err:` line
+with no text after it at all.
 
 ### 4.6 `l2-nodus-runtime.md` corrections found while grounding this spec
 
@@ -229,4 +241,5 @@ maintenance.
 
 | Version | Date | Author | Notes |
 | --- | --- | --- | --- |
+| 1.0.1 | 2026-07-31 | Core Team | **Implemented the dispatch designed in v1.0.0 — Phase 26.** Landed exactly as designed: the eligibility check, `error_to_value`, and dispatch call site in `execute_inner`'s main loop; no `PolicyProvider`/`AuditProvider` change, no new error code. **Self-review reconciling §4.3's pseudocode against the as-built code found two divergences**: the real parameter is named `ast`, not `wf` (the pseudocode's illustrative name); and the pseudocode's separate nested `if let`+`if` collapses to one let-chain in the real code (`clippy::collapsible_if`), with no `err_dispatched` flag (nothing reads one — a bare `break` suffices) — both corrected. **§4.5 also corrected**, a genuine inaccuracy found while writing the "unparseable handler" test: `try_parse_command_from_string` returns `None` **only** for empty input, never for text that merely doesn't look like a command call — any non-empty `@err:` text becomes `Some(CommandCall{name: <the raw text>, ..})`, which dispatches harmlessly through the executor's existing `UNKNOWN_COMMAND` fallback. The only real `handler: None` case is an `@err:` line with no text at all; the "text that does not parse" framing was never really true. **Found and fixed one real regression, not anticipated at spec time**: `tests/control_flow.rs`'s `retry_reruns_failing_step_up_to_bound` (pre-existing, from an earlier phase) asserted "the step after an exhausted retry still runs" — true only because dispatch didn't exist yet; `RETRY_TIMEOUT_WF` already declares `@err: ESCALATE(human)`, and `l1-nodus-language.md`'s own `~RETRY:n` row has always said exhaustion "routes to `@err:`", so the test's old assertion was pinning the very gap this spec closes. Corrected to assert the handler now dispatches and the following step does not run. 452 tests pass (was 447; +5: `err_handler_dispatches_on_policy_denial`, `err_handler_dispatches_on_dialog_denial`, `no_err_handler_declared_is_unchanged`, `empty_err_handler_is_unchanged`, `retry_then_succeed_never_dispatches_err_handler`); reviewed Phase 24's `policy_denies_model_call_effect`/`policy_denies_deferred_effect` (both use fixtures that already declare `@err:`) and confirmed their existing assertions still hold, not vacuously — no changes needed there. `cargo clippy -p nodus --all-targets -- -D warnings`: one `collapsible_if` finding, fixed (the let-chain above); `cargo fmt -p nodus -- --check`: several line-wrap violations in the new tests, fixed (no logic change); `Cargo.toml`/`Cargo.lock` diff empty (LP-1 preserved); the one new `.expect()` on production code (`ctx.errors.last().expect(...)`) is structurally unreachable-as-`None` — it runs only inside the branch that already proved `ctx.errors.len() > errors_before_this_step`, so the vec is provably non-empty. |
 | 1.0.0 | 2026-07-31 | Core Team | Initial spec. Designed NL-9's `@err:` dispatch mechanism: eligibility is structural (any `RuntimeError` pushed by a step that returns no `Signal` — never an enumerated code list), `$error` (already `RESERVED`+`RUNTIME_OWNED`, never previously written) populated from the triggering error before dispatch, the handler runs via the ordinary `execute_command` path (LP-11/LP-16 apply unchanged), and the main step sequence ends afterward — `Status` computation untouched. Explicitly out of scope: `RULE_VIOLATION` (already has its own dedicated fatal path, structurally excluded — never reaches the check) and `COMPENSATION_FAILED` (structurally cannot occur inside the main loop this spec attaches to). Found and corrected two stale `l2-nodus-runtime.md` §3 claims naming a nonexistent `Status` variant (`RuleViolation`, `Error`) — predating most of this crate's evolution, never previously caught because only §3.1 (additions after v1.0.0) had been repeatedly reconciled; §3's original rows had not. Named, not silently absorbed: implementing this will retroactively activate `@err:` dispatch for nearly every existing fixture (all of which already declare `@err: ESCALATE(human)`), so existing policy/dialog-denial tests will observe new behavior once built — flagged as the expected conformance-fix pattern, not a regression, in §5. |

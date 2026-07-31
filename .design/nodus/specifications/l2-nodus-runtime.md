@@ -1,6 +1,6 @@
 # Nodus Runtime (Rust)
 
-**Version:** 1.3.1
+**Version:** 1.3.2
 **Status:** Stable
 **Layer:** implementation
 **Implements:** l1-nodus-language.md
@@ -38,7 +38,7 @@ A Rust implementation links in-process with any host (desktop, mobile, server) w
 | NL-6 Dual representation | `Transpiler::to_nodus` (compact, lossless) and `Transpiler::to_human` (one-way prose); round-trip test in `workflows.rs` verifies AST equality after compact re-parse |
 | NL-7 Closed value types | `executor::Value` is a closed Rust enum: `Null / Bool / Int / Float / Text / List / Map` — extension requires a source change and a breaking version bump |
 | NL-8 Reserved namespace | `vocab::RUNTIME_OWNED_VARIABLES` (9-element subset of `RESERVED_VARIABLES`); validator emits `Severity::Error` code `E013` if a pipeline target (`→ $name`) names a runtime-owned variable |
-| NL-9 Typed I/O contract | Required `@in` fields (no `?` suffix, no default) verified by executor before step 1; missing input is a pre-run validation error (`has_errors`), not a runtime `Status` — no `Status::Error` variant exists [CORRECTED]. The `@err:` handler-dispatch half of NL-9 is realized by `l2-nodus-error-dispatch.md`: any non-fatal error a step returns with no `Signal` reaches a dispatch check in the main loop, `$error` is populated, and the declared handler runs via the ordinary `execute_command` path before the run ends |
+| NL-9 Typed I/O contract | Required `@in` fields (no `?` suffix, no default) verified by executor before step 1; missing input is a pre-run validation error (`has_errors`), not a runtime `Status` — no `Status::Error` variant exists [CORRECTED]. The `@err:` handler-dispatch half of NL-9 is **implemented [v1.3.2]** by `l2-nodus-error-dispatch.md` (Phase 26): any non-fatal error a step returns with no `Signal` reaches a dispatch check in the main loop, `$error` is populated, and the declared handler runs via the ordinary `execute_command` path before the run ends |
 | NL-10 Sequential pipeline | AST `steps` field is `Vec<Step>` in declaration order; validator emits `Severity::Error` code `E014` when a variable is referenced before any prior step declares it via `→ $name` |
 
 ### 3.1 Invariants added after v1.0.0 — realization status [ADDED v1.3.0]
@@ -244,6 +244,7 @@ Single-character `;` inline comments (only `;;` is recognized) and the `\$` inte
 
 | Version | Date | Change |
 | --- | --- | --- |
+| 1.3.2 | 2026-07-31 | NL-9's row updated from "realized by" to **Implemented** — `l2-nodus-error-dispatch.md` 1.0.0 → 1.0.1 (Phase 26) landed the dispatch mechanism. |
 | 1.3.1 | 2026-07-31 | Corrected §3's NL-2 and NL-9 rows, both naming a `Status` variant that has never existed in `executor::Status` (`RuleViolation`, `Error`) — predating most of this crate's evolution and never previously caught, since only §3.1 (additions after v1.0.0) had been repeatedly reconciled while §3's original rows had not. NL-9's row now also points to the new `l2-nodus-error-dispatch.md`, which realizes the `@err:` handler-dispatch half of NL-9 by attaching to this spec's own main step loop. Related Specifications gains the new sibling spec. |
 | 1.3.0 | 2026-07-30 | Added §3.1 — realization status for NL-11 … NL-23, the thirteen invariants added to `l1-nodus-language.md` after this spec's original compliance table was written. Each of their Document History entries names this spec as carrier of their pending obligation, but no row existed here; the obligations were tracked only in `PLAN.md`'s Backlog. §3.1 makes the stated carrier real: NL-20 realized by `l2-nodus-config`, NL-22 by the new `l2-nodus-compensation`, NL-23 by the new `l2-nodus-restart`, the remaining ten explicitly pending with their additional blockers named (NL-16 external-schema loading, NL-18 `RUN` body expansion, NL-17 layering on the unrealized NL-11). |
 | 1.2.0 | 2026-07-04 | §4.4: real `~PARALLEL` branch execution via `std::thread::scope` when providers are `Send + Sync` (sequential fallback otherwise); bounded width (`max_parallel_branches`, default cap 4); isolated branch environments with deterministic declared-order `~JOIN`; fail-fast without mid-step cancellation; audit interleaving resolved by `(correlation_id, seq)` |

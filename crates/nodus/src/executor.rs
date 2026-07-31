@@ -124,6 +124,17 @@ pub struct RuntimeError {
     pub reason: String,
 }
 
+/// Renders a [`RuntimeError`] as the `$error` value an `@err:` handler sees
+/// (NL-9). Called only at the point of dispatch — `$error` stays at its
+/// seeded empty map for the rest of a run that never reaches one.
+fn error_to_value(err: &RuntimeError) -> Value {
+    Value::Map(vec![
+        ("code".to_string(), Value::Text(err.code.clone())),
+        ("step".to_string(), Value::Int(err.step as i64)),
+        ("reason".to_string(), Value::Text(err.reason.clone())),
+    ])
+}
+
 /// Snapshot a paused run hands to its host so the run can be resumed (DG-4).
 /// The runtime produces this; persistence and re-invocation are host concerns.
 #[derive(Debug, Clone)]
@@ -862,6 +873,7 @@ impl Executor {
                 budget_halted = true;
                 break;
             }
+            let errors_before_this_step = ctx.errors.len();
             match self.run_step_with_retry(&mut ctx, step) {
                 Some(Signal::Halt) => {
                     halted = true;
@@ -875,7 +887,24 @@ impl Executor {
                     paused = true;
                     break;
                 }
-                _ => {}
+                _ => {
+                    // NL-9: a step that returns no Signal but left a new
+                    // RuntimeError behind is "uncaught" — nothing else in the
+                    // language can catch it. Dispatch the declared @err:
+                    // handler once, then end the run's step sequence.
+                    if let Some(handler) = ast.error_decl.as_ref().and_then(|d| d.handler.as_ref())
+                        && ctx.errors.len() > errors_before_this_step
+                    {
+                        let triggering = ctx
+                            .errors
+                            .last()
+                            .expect("errors grew past errors_before_this_step");
+                        ctx.variables
+                            .insert("error".to_string(), error_to_value(triggering));
+                        self.execute_command(&mut ctx, handler, step.number);
+                        break;
+                    }
+                }
             }
         }
 
