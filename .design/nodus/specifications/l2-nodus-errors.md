@@ -1,6 +1,6 @@
 # Nodus Error Taxonomy Implementation (Rust)
 
-**Version:** 1.1.2
+**Version:** 1.3.0
 **Status:** Stable
 **Layer:** implementation
 **Implements:** l1-nodus-language.md
@@ -28,6 +28,8 @@ metadata and enforcement site.
 - [l2-nodus-runtime.md](l2-nodus-runtime.md) — the runtime crate this spec extends; `vocab::error_code`, `Error`, `RuntimeError`, the validator/executor emission sites (§4.7 itemizes the 11 → 24 gap)
 - [l1-nodus-dialog.md](l1-nodus-dialog.md) — owns the `DIALOG_TIMEOUT` / `DIALOG_REJECTED` / `PAUSED` subset
 - [l2-nodus-portability.md](l2-nodus-portability.md) — `NODUS:CAPABILITY_UNMET` (LP-8) and `NODUS:POLICY_DENIED` (LP-11, §4.9.4) are portability-layer runtime codes beyond the §4.6 language set; also documents that `@err:` handler dispatch (this spec's first bullet above) is unrealized in `executor.rs` today
+- [l2-nodus-settlement.md](l2-nodus-settlement.md) — [ADDED v1.2.0] `NODUS:SETTLEMENT_UNACCOUNTED` (LP-17, §4.4) is a further portability-layer runtime code, registering beside `POLICY_DENIED`
+- [l2-nodus-environment.md](l2-nodus-environment.md) — [ADDED v1.3.0] `NODUS:ENV_MEASURE_UNKNOWN` (NE-14, §4.4.1) is a further control-category code, registering beside `CAPABILITY_UNMET`
 - [l2-nodus-error-dispatch.md](l2-nodus-error-dispatch.md) — [ADDED v1.1.1] realizes the `@err:` handler-dispatch mechanism this spec's NL-9 row names as a separate obligation; dispatches against the taxonomy this spec owns without adding any new code
 
 ## 1. Motivation
@@ -111,6 +113,14 @@ Twenty-four canonical codes. `CAPABILITY_UNMET` (category `control`, severity
 `POLICY_DENIED` (category `runtime`, severity `error`) is a further portability-layer
 code, specified by LP-11's call-site design (`l2-nodus-portability.md` §4.9.4) — same
 classification as `RULE_VIOLATION`, since a denied effect is a runtime-stage failure.
+`SETTLEMENT_UNACCOUNTED` (category `runtime`, severity `error`) is the LP-17 portability-layer
+code, specified by `l2-nodus-settlement.md` §4.4 — same classification as `POLICY_DENIED`,
+for a permitted settlement whose rail produced no verifiable receipt (VS-7).
+`ENV_MEASURE_UNKNOWN` (category `control`, severity `error`) is the NE-14 environment-layer
+code, specified by `l2-nodus-environment.md` §4.4.1 — same classification as
+`CAPABILITY_UNMET`, since both are pre-run structural rejections rather than runtime-stage
+effect denials: a profile declaring a token budget with no identified encoder is rejected
+before `env.open`, never mid-run.
 
 ### 4.3 Metadata lookup
 
@@ -184,6 +194,8 @@ than raise it.
 
 | Version | Date | Author | Notes |
 | --- | --- | --- | --- |
+| 1.3.0 | 2026-07-31 | Core Team | §4.2 gains a cross-reference for `ENV_MEASURE_UNKNOWN` (category `control`, severity `error`), the new NE-14 environment-layer code specified by `l2-nodus-environment.md` §4.4.1 — same classification as `CAPABILITY_UNMET`, both pre-run structural rejections rather than runtime-stage effect denials. Not added to §4.5's Emission Points table, matching how `CAPABILITY_UNMET`/`POLICY_DENIED`/`SETTLEMENT_UNACCOUNTED` are handled there. Related Specifications gains the new sibling spec. |
+| 1.2.0 | 2026-07-31 | Core Team | §4.2 gains a cross-reference for `SETTLEMENT_UNACCOUNTED` (category `runtime`, severity `error`), the new LP-17 portability-layer code specified by `l2-nodus-settlement.md` §4.4 — same classification as `POLICY_DENIED`, for a gate-permitted settlement whose rail returned no receipt. Not added to §4.5's Emission Points table, matching how `POLICY_DENIED`/`CAPABILITY_UNMET` are handled there (portability-layer codes are owned and enumerated by their own realization spec). Because it is `Signal`-free like `POLICY_DENIED`, it reaches `l2-nodus-error-dispatch.md`'s NL-9 dispatch check automatically — no change needed to that spec either. Related Specifications gains the new sibling spec. |
 | 1.1.2 | 2026-07-31 | Core Team | NL-9 row updated: dispatch is now **implemented** (Phase 26, `l2-nodus-error-dispatch.md` 1.0.0 → 1.0.1) — "routed to `@err:`" means both a typed code reaching `RunResult.errors` and the declared handler actually running. |
 | 1.1.1 | 2026-07-31 | Core Team | NL-9 row updated: dispatch is now **specified** (`l2-nodus-error-dispatch.md`, new sibling spec), not merely flagged as missing. Eligibility for dispatch is structural (any `RuntimeError` returned with no `Signal`) rather than an enumerated code list, so this document needed no new code and no change to its own emission-point table — `RULE_VIOLATION` keeps the dedicated fatal path this document's NL-2 row already describes, unchanged. Related Specifications gains the new sibling spec. |
 | 1.1.0 | 2026-07-31 | Core Team | §4.2 gains a cross-reference for `POLICY_DENIED` (category `runtime`, severity `error`), the new LP-11 call-site denial code specified by `l2-nodus-portability.md` §4.9.4 — same classification as `RULE_VIOLATION`, sitting beside the frozen 24-code set exactly as `CAPABILITY_UNMET` does for LP-8. Not added to §4.5's Emission Points table, matching how `CAPABILITY_UNMET` is handled there (portability-layer codes are owned and enumerated by their own realization spec, not restated here). |

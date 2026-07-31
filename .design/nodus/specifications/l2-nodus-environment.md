@@ -1,6 +1,6 @@
 # Nodus Environment and Evaluation Implementation (Rust)
 
-**Version:** 1.0.0
+**Version:** 1.1.0
 **Status:** Stable
 **Layer:** implementation
 **Implements:** l1-nodus-environment.md
@@ -11,11 +11,13 @@ Concrete Rust realization of the Environment/Evaluation contract in `crates/nodu
 
 ## Related Specifications
 
-- [l1-nodus-environment.md](l1-nodus-environment.md) — the contract this implements (NE-1…NE-13).
+- [l1-nodus-environment.md](l1-nodus-environment.md) — the contract this implements (NE-1…NE-14).
 - [l2-nodus-runtime.md](l2-nodus-runtime.md) — runtime crate extended here: `executor` (provider seam), the `run_with_*` family, `RunResult`.
-- [l2-nodus-portability.md](l2-nodus-portability.md) — the LP-8 `ExtensionRole`/`CapabilityManifest`/`HostCapabilities` taxonomy this adds `Environment` to.
+- [l2-nodus-portability.md](l2-nodus-portability.md) — the LP-8 `ExtensionRole`/`CapabilityManifest`/`HostCapabilities` taxonomy this adds `Environment` to; [ADDED v1.1.0] NE-14's fail-fast shape is LP-8 kinship (a missing measure is a missing capability) without being a new `ExtensionRole` — the check is profile-shaped, not role-shaped.
 - [l2-nodus-observability.md](l2-nodus-observability.md) — the `AuditProvider`/`ExecutionEvent`/`FieldDescriptor`/`RunManifest` the trajectory projects onto (NE-3).
 - [l2-nodus-dialog.md](l2-nodus-dialog.md) — the sibling extension role whose `step`-suspend shape a `step` reuses (a machine turn vs. a human turn).
+- [l2-nodus-errors.md](l2-nodus-errors.md) — [ADDED v1.1.0] owns `NODUS:ENV_MEASURE_UNKNOWN` (NE-14), registered beside `CAPABILITY_UNMET` in the same pre-run rejection family.
+- [../../main/specifications/l1-tokenization-boundary.md](../../main/specifications/l1-tokenization-boundary.md) — [ADDED v1.1.0] TB-6/TB-7, the measurement contract NE-14 realizes: the measure is the receiving model's own encoder, and an unidentifiable encoder fails loudly rather than defaulting.
 
 ## 1. Motivation
 
@@ -46,6 +48,7 @@ Concrete Rust realization of the Environment/Evaluation contract in `crates/nodu
 | NE-11 Declared grading mode | `GradingMode { Automated, Judge, Hybrid }` is declared on the task/profile (not per run). `evaluate` applies the mode: `Automated` runs a deterministic checker; `Judge` scores via a function-scoped auxiliary model over a published rubric; `Hybrid` runs the checker as a floor first and takes `min(checker, judge)` so a judge may lower but never rescue a checker-failed run. |
 | NE-12 Archivable candidate result | `EnvRunResult::candidate()` yields `CandidateResult { workflow_digest, reward, trajectory, budget }` — a content-addressable tuple. `workflow_digest` is a std-library stable digest over the canonical workflow source (deterministic, zero-dep); a host wanting a cryptographic content-address computes it over the exposed source (LP-2). The candidate space/mutation/search/frontier stay host-side; the crate holds no optimizer. |
 | NE-13 Budget-normalized graded runs | `EnvironmentProfile::budget: Option<Budget>` (`wall_clock_ms`/`max_steps`/`max_tokens`, any subset). `run_with_environment` halts the run uniformly when any declared limit is reached; a budget halt is a **normal outcome** (`Status::Partial`, not an error) with `budget_halted: true` recorded, and `evaluate` runs over what was achieved. The budget is part of the profile identity and copied into `CandidateResult.budget`; the workflow cannot read, extend, or evade it (enforced by the run loop, LP-10 kinship). Steps/tokens are deterministic; wall-clock is host-measured and recorded. A profile with no budget behaves as today. |
+| NE-14 Declared budget measure [ADDED v1.1.0] | `EnvironmentProfile::token_measure: Option<String>` — the identity of the host encoder `max_tokens` is denominated in (§4.4). `run_with_environment` validates the profile before `env.open`: a `budget.max_tokens.is_some()` with `token_measure.is_none()` is a fail-fast `NODUS:ENV_MEASURE_UNKNOWN` `Diagnostic`, returned through the same pre-run `Result<_, Vec<Diagnostic>>` channel LP-8's `validate_manifest` already uses — never a mid-run failure, never a silent default encoder. `token_measure` is opaque to the crate (LP-2 — no tokenizer/counting rule in core) and is copied into `CandidateResult` alongside `budget` (NE-12), so a host optimizer partitions its frontier by `(profile, budget, measure)`. A profile with a wall-clock/step-only budget (no `max_tokens`) carries no measure and is unaffected. |
 
 ## 4. Detailed Design
 
@@ -136,15 +139,38 @@ pub struct Budget { pub wall_clock_ms: Option<u64>,              // NE-13, any s
                     pub max_tokens: Option<u64> }
 pub struct EnvironmentProfile { pub labels: BTreeMap<String,String>,  // NE-6 orthogonal slice labels
                                 pub grading: GradingMode,
-                                pub budget: Option<Budget> }
+                                pub budget: Option<Budget>,
+                                pub token_measure: Option<String> }   // NE-14, opaque encoder identity
 
 pub struct CandidateResult { pub workflow_digest: String,        // NE-12 content address (std digest)
                              pub reward: Reward,
                              pub trajectory_ref: RunId,
-                             pub budget: Option<Budget> }         // rewards under different budgets not comparable
+                             pub budget: Option<Budget>,          // rewards under different budgets not comparable
+                             pub token_measure: Option<String> }  // rewards under different measures not comparable
 ```
 
 `grade` composes the modes with the hybrid floor: `Hybrid` runs the deterministic checker first and returns it on failure (a judge cannot rescue), else takes `min(checker, judge)`.
+
+### 4.4.1 Measure validation (NE-14) [ADDED v1.1.0]
+
+```text
+[REFERENCE]
+fn validate_env_profile(profile: &EnvironmentProfile) -> Result<(), Diagnostic> {
+    let wants_tokens = profile.budget.as_ref().and_then(|b| b.max_tokens).is_some();
+    if wants_tokens && profile.token_measure.is_none() {
+        return Err(diagnostic(ENV_MEASURE_UNKNOWN, "..."));  // fail-fast, pre-run
+    }
+    Ok(())
+}
+```
+
+`run_with_environment` calls this immediately after `env.profile()` and before `env.open` —
+no `Instance` is opened and nothing runs for a rejected profile, mirroring how LP-8's
+`validate_manifest` gate rejects before the executor boots rather than mid-run. The check is
+purely structural (does a token budget have an identified measure), not a capability-role
+check, so it needs no new `ExtensionRole` and no manifest interaction: a host either returns a
+well-formed `profile()` or the run is rejected before `open`, symmetric with how a workflow can
+never read or evade the budget itself once a run is underway (NE-13, LP-10 kinship).
 
 ### 4.5 Public API
 
@@ -167,6 +193,8 @@ Consistent with the orthogonal `run_with_*` combinator family (LP-5); the audit 
 - **Reward bound to a workflow variable** — rejected (violates NE-4/NE-5): entangles grading with control flow and makes runs non-comparable. Reward lives in `EnvRunResult`, outside the `vars` map.
 - **Cryptographic workflow hash in-core** — rejected (LP-1 zero-dep): the crate exposes a std-digest content address and the canonical source; a host needing a cryptographic address computes it (LP-2), exactly as LP-9 attestation is host-supplied.
 - **`builtin()` omits `Environment` (mirror Dialog)** — rejected: the L1 (§4.4) makes the stub a complete world, so a manifest-declaring workflow must stay runnable in-process; the fail-fast is exercised by a host that omits the role.
+- **A new `ExtensionRole::TokenMeasure` for NE-14** — rejected: the measure is a property of one profile's `budget`, not a host capability a manifest derives from workflow commands; a role would let a host "provide" a generic measure-capability while any specific profile still lacked an actual identified encoder, which is exactly the silent-substitution failure NE-14 forbids. A direct pre-open profile check names the real condition.
+- **Defaulting `token_measure` to a fixed built-in encoder** — rejected (the invariant's central rule): an estimate can halt the wrong candidate at the wrong point and produce a reward that looks valid and is not (TB-7); fail-fast is the only response to an unidentifiable measure.
 
 ## 6. Implementation Notes
 
@@ -180,9 +208,11 @@ Order that minimizes rework (follows the L1 §5 sequence): (1) `EnvironmentProvi
 | `[PORT]` | `crates/nodus/src/portability.rs` | `ExtensionRole::Environment`, `HostCapabilities::builtin`, `validate_manifest` |
 | `[AUDIT]` | `crates/nodus/src/observability.rs` | `AuditProvider`/`ExecutionEvent`/`FieldDescriptor`/`RunManifest` the trajectory rides |
 | `[API]` | `crates/nodus/src/workflows.rs` | `run_with_environment` combinators alongside the `run_with_*` family |
+| `[ERR]` | `crates/nodus/src/vocab.rs` | [ADDED v1.1.0] `error_code`/`error_meta` registry `NODUS:ENV_MEASURE_UNKNOWN` registers into |
 
 ## Document History
 
 | Version | Date | Author | Notes |
 | --- | --- | --- | --- |
+| 1.1.0 | 2026-07-31 | Core Team | Closes the NE-14 invariant-traceability gap flagged at the v1.29.0 nodus replan (declared budget measure, added to `l1-nodus-environment` v1.4.0, had never gained a §3 row). New `EnvironmentProfile.token_measure: Option<String>` (§4.4) records the opaque host-encoder identity a `max_tokens` budget is denominated in — LP-2, no tokenizer/counting rule in core. New §4.4.1 designs the fail-fast check: `run_with_environment` validates the profile immediately after `env.profile()` and before `env.open`, rejecting `budget.max_tokens.is_some() && token_measure.is_none()` as a pre-run `NODUS:ENV_MEASURE_UNKNOWN` `Diagnostic` through the same channel LP-8's `validate_manifest` already uses — no `Instance` opens for a rejected profile. Deliberately **not** a new `ExtensionRole`: the condition is profile-shaped (does this specific budget have an identified measure), not role-shaped (does the host provide a measure capability in general) — a role would let the exact silent-substitution failure NE-14 forbids hide behind a satisfied capability check. `CandidateResult` gains `token_measure` alongside `budget` so a host optimizer partitions its frontier by `(profile, budget, measure)` per NE-14's own comparability rule. New error code `NODUS:ENV_MEASURE_UNKNOWN` (`Error`, `Control` — the `CAPABILITY_UNMET` precedent, both pre-run structural rejections) registers in `l2-nodus-errors.md`. §3 gains the NE-14 row; §5 gains two rejected alternatives (a new `ExtensionRole`, a default-encoder fallback). Design only — nothing landed in `crates/nodus` this pass. |
 | 1.0.0 | 2026-07-10 | Core Team | Initial spec — Rust realization of the Environment/Evaluation contract: `EnvironmentProvider` trait + built-in deterministic `StubEnvironment`, closed `open/reset/step/evaluate/release` lifecycle, typed `Reward` carried in `EnvRunResult` (never in `vars`), `Trajectory` as a read-side projection via optional `EnvInteraction` side-band descriptors on existing events (no new `ExecutionEvent` variant, HO-6 preserved), `ExtensionRole::Environment` manifest binding with `builtin()` providing it via the stub (contrast with `Dialog`), `run_with_environment` frozen-boundary combinator, closed `GradingMode` (automated/judge/hybrid floor), `EnvironmentProfile` budget (NE-13, budget-halt = normal `Status::Partial`), and `CandidateResult` content-addressable tuple (NE-12, std-digest, crypto host-supplied). NE-1…NE-13 compliance table. Adds one extension role, no new command/status/error category. |

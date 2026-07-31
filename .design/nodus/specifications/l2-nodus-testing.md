@@ -1,6 +1,6 @@
 # Nodus DSL Testing — Rust Implementation
 
-**Version:** 1.2.1
+**Version:** 1.3.0
 **Status:** Stable
 **Layer:** implementation
 **Implements:** [l1-nodus-testing.md](l1-nodus-testing.md)
@@ -14,10 +14,12 @@ diagnostics for test-related issues.
 
 ## Related Specifications
 
-- [l1-nodus-testing.md](l1-nodus-testing.md) — parent contract; defines NT-1…NT-10 invariants
+- [l1-nodus-testing.md](l1-nodus-testing.md) — parent contract; defines NT-1…NT-11 invariants
 - [l2-nodus-runtime.md](l2-nodus-runtime.md) — Rust runtime module structure and `Executor`
 - [l1-nodus-language.md](l1-nodus-language.md) — `@test:` block as a language-level declaration; **NL-6** dual-representation (compact → human → compact must be AST-equal), the invariant §10.4's round-trip rule realizes for `TestBlock`
 - [l2-nodus-control-flow.md](l2-nodus-control-flow.md) — its §3 NL-6 row governs the same round-trip guard for control-flow statements; §10.5 records why `@test:` bodies were initially outside that guard's assertion scope
+- [l1-nodus-portability.md](l1-nodus-portability.md) — [ADDED v1.3.0] NT-11 differential parity is the executable form of LP-3 (the two-conforming-host requirement); §11 records why the crate has no second path for it to diff
+- [l2-nodus-portability.md](l2-nodus-portability.md) — [ADDED v1.3.0] its §4.8 LP-3 admission records are a *different* two-host comparison (a satisfying host vs. a non-satisfying one, asserting **divergence**) from NT-11's parity harness (two conforming hosts, asserting **equivalence**) — not reusable for this invariant
 
 ## 1. Module Map
 
@@ -187,7 +189,7 @@ into a hard validate-before-run failure on files that parse today. Note the inte
 in source but an empty one in the AST, so it emits **both** `W015` (the pairs were dropped) and
 `W009` (nothing is asserted). That pairing is the intended signal, not a duplicate report.
 
-## 8. NT-1…NT-10 Compliance Table
+## 8. NT-1…NT-11 Compliance Table
 
 | Invariant | Status | Implementation |
 | --- | --- | --- |
@@ -201,6 +203,7 @@ in source but an empty one in the AST, so it emits **both** `W015` (the pairs we
 | NT-8 Schema inheritance | **Implemented** | `Executor::with_stub().execute(ast, ...)` uses the same `ast` (same `§runtime`) |
 | NT-9 Parse-time validation | **Partial** | `E015` duplicate-name enforced; forward-reference variable checks on `@steps:` (E014) cover declared variables; `W015` covers the silent-drop case NT-9's "not a silent assertion-miss" clause targets (§10.3); a full `@test:`-specific forward-reference check remains deferred |
 | NT-10 Route coverage advisory | **Implemented** | `W006` emitted by pre-existing `Validator::w006_route_test_coverage` |
+| NT-11 Differential parity [ADDED v1.3.0] | **Vacuous in core** | See §11 — the crate has one execution path, so §4.7's `check_parity(fixture, path_B)` has no second `path_B` to run against `path_A`'s recorded fixture |
 
 ## 9. Test Coverage
 
@@ -312,6 +315,41 @@ because the gap described here was open. Closing §10.4 is what allows that asse
 widened to the full `WorkflowFile`, which is the observable acceptance signal for this
 section.
 
+## 11. Differential Parity (NT-11) [ADDED v1.3.0]
+
+`l1-nodus-testing.md` §4.7 frames NT-11 as "interpreter↔transpiler or two conforming hosts
+must produce equal observable results, output + trace shape, on a recorded fixture corpus" —
+the executable form of `l1-nodus-portability.md`'s LP-3 two-host requirement. Realizing it
+needs a second `path_B` to run `check_parity` against `path_A`'s recorded `Fixture`.
+
+**The crate has no such second path.** `Transpiler::to_nodus(ast: &WorkflowFile) -> String`
+(`[TRANSPILER]`) emits nodus source text — it is the inverse of parsing, not an alternative
+executor; there is no code path that takes an AST and *runs* it other than `Executor` itself.
+So "interpreter↔transpiler" parity is not two conforming paths to diff, it is one path plus a
+serializer for it — nodus already asserts the correct property for that pair, which is NL-6
+AST-equality (§10.4/§10.5), not NT-11 output/trace-shape equivalence. The two invariants
+target different failure classes: NL-6 catches a `parse → emit → parse` structural drift;
+NT-11 catches two *executions* of the same AST disagreeing on `vars` or event shape, which
+presupposes two executions exist.
+
+**The LP-3 two-host admission record (`l2-nodus-portability.md` §4.8) is not reusable
+either**, despite also comparing two hosts: it proves a *satisfying* `PolicyProvider` host and
+a *non-satisfying* one **diverge** (`Ok` vs `Failed`, by design — that is what a manifest gate
+is for), where NT-11 requires two *conforming* hosts to **agree**. Reusing that harness would
+assert the opposite of what NT-11 means.
+
+No in-crate second conforming host exists to construct one honestly, and building one solely
+to have a `path_B` to diff against would be pure duplication with no product behind it — the
+crate would carry two executors maintained in lockstep for a test to pass, not because a
+second host has any reason to exist. **NT-11 is therefore Vacuous in core** (§8), on the same
+terms `l2-nodus-portability.md` §3.1 already uses for a seam whose gated construct does not
+exist: nothing is owed until a real second conforming execution path does (a second in-process
+host, or an out-of-process host implementing the same contract) — the obligation attaches to
+whoever builds that path, not to this spec inventing one to satisfy the row. Should a genuine
+second host appear (e.g. an embedded/out-of-process runtime consuming the same `WorkflowFile`
+AST), §4.7's `Fixture`/`check_parity` shape already specifies the harness it would run against
+with no further design work here.
+
 ## Canonical References
 
 | Alias | Path | Purpose |
@@ -327,6 +365,7 @@ section.
 
 | Version | Date | Change |
 | --- | --- | --- |
+| 1.3.0 | 2026-07-31 | Closes the NT-11 invariant-traceability gap flagged at the v1.29.0 nodus replan (differential parity, added to `l1-nodus-testing` v1.1.0, had never gained a §8 row). New §11 grounds and resolves the open fork that replan named: does NT-11 realize as vacuous-in-core, or does an in-crate second conforming host make it meaningful? Confirmed by direct inspection of `transpiler.rs` that `to_nodus(ast) -> String` emits source text, not an executable — nodus has exactly one execution path (`Executor`), so "interpreter↔transpiler parity" is not two paths to diff; that pairing's actual correctness property is NL-6 AST-equality (§10.4), a different invariant already realized. Also ruled out reusing `l2-nodus-portability.md` §4.8's LP-3 two-host admission record: that harness proves a satisfying and a non-satisfying host **diverge**, the opposite of NT-11's two-conforming-hosts-**agree** requirement. §8 gains the NT-11 row (Vacuous in core); Related Specifications gains `l1-nodus-portability`/`l2-nodus-portability` cross-references distinguishing the two two-host comparisons. Design-only finding — no code change, since there is no second path to build a harness against; §4.7's `Fixture`/`check_parity` shape stays specified and ready for whenever a real second conforming host exists. |
 | 1.2.1 | 2026-07-30 | Discharges the correction queued when Phase 22 was planned: §10.4(a) claimed `raw_lines` "reproduces the body in the form the author wrote it", which overstates. It preserves the author's **token sequence** (including the §10.2 inline form's `{`/`,`/`}`, which the structured fields discard) but not line breaks — `collect_braced_raw_lines` drops `Newline` tokens, so a multi-line body re-emits flat. Clarified that this is sufficient because NL-6 requires AST-equality rather than source identity, and that re-emitting the line breaks would *break* NL-6 by changing `raw_lines` on re-parse. Text-only precision fix; the two-part rule, `W015`, and every §10 conclusion are unchanged, so the implementation shipped in Phase 22 already matches the corrected wording. |
 | 1.2.0 | 2026-07-30 | Added §10 (body grammar conformance & NL-6 round-trip) and `W015`. Corrects §2, which described a `raw_lines`/structured-fields split that no parse produces — `raw_lines` is the lexed token stream and the structured fields are a derived view, both always populated; the transpiler's emission branch was written against the non-existent state and so never reached its own `raw_lines` path. §10.1/§10.2 fix the canonical body grammar to L1 §4.1's line-per-pair colon form and record the inline-brace form as tolerated-but-not-canonical. §10.3 resolves the `=`-separator question — not legal (L1 admits only `:`), the defect being that non-conforming pairs were dropped *silently*, letting a declared assertion pass without ever being checked; now `W015`, warning-severity so existing corpus files still parse. §10.4 states the two-part round-trip rule (emit from `raw_lines` when present; re-quote values that would not re-lex to a single equal token), which achieves NL-6 AST-equality without storing quoting in the AST. §1 module map gains `transpiler.rs`. |
 | 1.1.0 | 2026-07-04 | Parallel-safe stub (§5): `StubProvider` documented as `Send + Sync`, so `@test:` blocks containing `~PARALLEL` exercise real concurrent branch scheduling with deterministic assertions (input-keyed stub + declared-order `~JOIN`); realizes the NT-5 host extension the language contract permits |

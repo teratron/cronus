@@ -197,3 +197,4 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Updated specification `nodus-testing` (nodus)
 - Updated specification `nodus-portability` (nodus)
 - Updated 4 specifications (nodus)
+- Updated 6 specifications (nodus)
