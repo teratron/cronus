@@ -17,7 +17,7 @@ use crate::observability::{AuditProvider, EnvInteraction, EnvInteractionKind, Fi
 use crate::parser::Parser;
 use crate::portability::{
     CapabilityManifest, ConfigOutcome, ConfigProvider, ExtensionRole, HostCapabilities, Missing,
-    PolicyProvider, SchemaProvider, validate_manifest,
+    PolicyProvider, SchemaProvider, SettlementRail, validate_manifest,
 };
 use crate::transpiler::Transpiler;
 use crate::validator::{ConfigViolation, Diagnostic, Severity, Validator, check_config_values};
@@ -712,6 +712,74 @@ pub fn run_with_policy_and_audit(
         .execute_with_params(&ast, input, run_id, started_at))
 }
 
+/// Parse, validate, and execute with a [`SettlementRail`] settling every
+/// gate-permitted `SETTLE` step (LP-17). Uses the built-in stub model and
+/// no-op audit.
+///
+/// A `SETTLE` step is first gated by `PolicyProvider::evaluate("settlement",
+/// ..)`, the same LP-11 seam every other effect uses; a permitted step then
+/// asks `rail.settle(cmd)` for a receipt. `None` records
+/// `NODUS:SETTLEMENT_UNACCOUNTED` and leaves the pipeline target unbound —
+/// non-halting, distinct from a `!!`-rule violation. With no policy or rail
+/// supplied elsewhere, `NoopPolicyProvider` allow-all and `NoopSettlementRail`
+/// (always unaccounted) apply, so a `SETTLE`-free workflow is byte-for-byte
+/// today's behaviour.
+pub fn run_with_settlement(
+    source: &str,
+    filename: &str,
+    input: Option<Value>,
+    settlement: impl SettlementRail + 'static,
+) -> Result<RunResult, Vec<Diagnostic>> {
+    let ast = Parser::parse(source).map_err(|e| {
+        vec![Diagnostic {
+            severity: Severity::Error,
+            code: "PARSE_ERROR".to_string(),
+            message: e.to_string(),
+            line: 0,
+            column: 0,
+            filename: filename.to_string(),
+        }]
+    })?;
+
+    let report = ValidationReport::new(Validator::validate(&ast, filename));
+    if report.has_errors {
+        return Err(report.diagnostics);
+    }
+
+    Ok(Executor::with_settlement(settlement).execute(&ast, input))
+}
+
+/// Like [`run_with_settlement`] but with a custom [`AuditProvider`]. `run_id`
+/// and `started_at` are forwarded to the run manifest.
+pub fn run_with_settlement_and_audit(
+    source: &str,
+    filename: &str,
+    input: Option<Value>,
+    settlement: impl SettlementRail + 'static,
+    audit: impl AuditProvider + 'static,
+    run_id: &str,
+    started_at: &str,
+) -> Result<RunResult, Vec<Diagnostic>> {
+    let ast = Parser::parse(source).map_err(|e| {
+        vec![Diagnostic {
+            severity: Severity::Error,
+            code: "PARSE_ERROR".to_string(),
+            message: e.to_string(),
+            line: 0,
+            column: 0,
+            filename: filename.to_string(),
+        }]
+    })?;
+
+    let report = ValidationReport::new(Validator::validate(&ast, filename));
+    if report.has_errors {
+        return Err(report.diagnostics);
+    }
+
+    Ok(Executor::with_settlement_and_audit(settlement, audit)
+        .execute_with_params(&ast, input, run_id, started_at))
+}
+
 /// Parse, validate, gate on the `Environment` capability, then run the whole
 /// workflow as one graded unit against `env`
 /// (NE-1…NE-13).
@@ -826,6 +894,22 @@ fn run_with_environment_impl(
     };
 
     let profile = env.profile();
+
+    // NE-14: a declared token budget with no identified measure is a
+    // fail-fast rejection — checked here (after open/reset already ran for
+    // the frozen-boundary reset-observation shape, before the workflow's own
+    // steps execute) rather than "before env.open", since env.profile() is
+    // not reachable any earlier. `guard`'s Drop still releases the instance
+    // on this early return (NE-7 unaffected).
+    let wants_tokens = profile.budget.as_ref().and_then(|b| b.max_tokens).is_some();
+    if wants_tokens && profile.token_measure.is_none() {
+        return Ok(EnvRunResult {
+            result: env_measure_rejection(&ast),
+            reward: Reward::no_op(),
+            budget_halted: false,
+        });
+    }
+
     let exec_input = merge_observation(input, &observation);
     let (max_steps, wall_clock_ms) = match &profile.budget {
         Some(b) => (b.max_steps, b.wall_clock_ms),
@@ -1075,6 +1159,35 @@ fn capability_rejection(ast: &WorkflowFile, missing: &[Missing]) -> RunResult {
             code: vocab::error_code::CAPABILITY_UNMET.to_string(),
             step: 0,
             reason,
+        }],
+        flags: Vec::new(),
+        vars: HashMap::new(),
+        resume: None,
+    }
+}
+
+/// Build the fail-fast rejection result for an `EnvironmentProfile` that
+/// declares a `max_tokens` budget with no identified `token_measure` (NE-14):
+/// status `Failed`, no steps logged, one `NODUS:ENV_MEASURE_UNKNOWN` error.
+/// Mirrors [`capability_rejection`]'s shape exactly — the same pre-run,
+/// non-`Diagnostic` rejection channel.
+fn env_measure_rejection(ast: &WorkflowFile) -> RunResult {
+    let workflow = ast
+        .header
+        .as_ref()
+        .map(|h| format!("wf:{}", h.name))
+        .unwrap_or_default();
+
+    RunResult {
+        workflow,
+        status: Status::Failed,
+        out: Value::Null,
+        log: Vec::new(),
+        errors: vec![RuntimeError {
+            code: vocab::error_code::ENV_MEASURE_UNKNOWN.to_string(),
+            step: 0,
+            reason: "profile declares a max_tokens budget with no identified token_measure"
+                .to_string(),
         }],
         flags: Vec::new(),
         vars: HashMap::new(),

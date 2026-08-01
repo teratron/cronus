@@ -14,12 +14,13 @@
 //!   supplied (LP-11, §4.9)
 
 use nodus::{
-    executor::{DialogOutcome, DialogProvider, Status, Value},
-    observability::{AuditProvider, ExecutionEvent, RunManifest},
+    ast::CommandCall,
+    executor::{DefaultDialogProvider, DialogOutcome, DialogProvider, Status, Value},
+    observability::{AuditProvider, DialogProvenance, ExecutionEvent, RunManifest},
     portability::{
         BuiltinSchemaProvider, CapabilityManifest, ExtensionRole, HostCapabilities,
-        InMemoryStorageProvider, NoopPolicyProvider, PolicyProvider, SchemaProvider,
-        StorageProvider,
+        InMemoryStorageProvider, NoopPolicyProvider, NoopSettlementRail, PolicyProvider,
+        SchemaProvider, SettlementRail, StorageProvider,
     },
     workflows,
 };
@@ -849,5 +850,396 @@ fn retry_then_succeed_never_dispatches_err_handler() {
         !result.log.iter().any(|e| e.command == "ESCALATE"),
         "retry-then-succeed must never dispatch the @err: handler; log: {:?}",
         result.log
+    );
+}
+
+// ─── LP-17 settlement effect seam ─────────────────────────────────────────────
+
+const SETTLE_WF: &str = r#"§wf:settle_test v1.0
+§runtime: { core: schema.nodus }
+@out: $out
+@err: ESCALATE(human)
+@steps:
+  1. SETTLE(vendor, 10.00, invoice) → $out
+  2. LOG($out)
+"#;
+
+/// Rail that permits everything but records the last `CommandCall` it was
+/// asked to settle, so a test can inspect exactly what reached it, and always
+/// returns a fixed receipt.
+struct CapturingSettlementRail {
+    seen: Arc<Mutex<Option<CommandCall>>>,
+}
+
+impl SettlementRail for CapturingSettlementRail {
+    fn settle(&self, cmd: &CommandCall) -> Option<Value> {
+        *self.seen.lock().unwrap() = Some(cmd.clone());
+        Some(Value::Text("receipt-123".to_string()))
+    }
+}
+
+#[test]
+fn settlement_permits_and_settles() {
+    let seen = Arc::new(Mutex::new(None));
+    let rail = CapturingSettlementRail { seen: seen.clone() };
+    let result = workflows::run_with_settlement(SETTLE_WF, "settle_test.nodus", None, rail)
+        .expect("run_with_settlement must succeed when the effect is permitted and settled");
+
+    assert_eq!(
+        result.status,
+        Status::Ok,
+        "a permitted, settled SETTLE step must not degrade status; errors: {:?}",
+        result.errors
+    );
+    assert_eq!(
+        result.vars.get("out"),
+        Some(&Value::Text("receipt-123".to_string())),
+        "the settled receipt must bind to the pipeline target; vars: {:?}",
+        result.vars
+    );
+
+    let captured = seen
+        .lock()
+        .unwrap()
+        .clone()
+        .expect("the rail must have been consulted for the gated SETTLE step");
+    assert_eq!(
+        captured.args,
+        vec![
+            "vendor".to_string(),
+            "10.00".to_string(),
+            "invoice".to_string()
+        ],
+        "the rail must see payee/amount/purpose raw and in order"
+    );
+}
+
+#[test]
+fn settlement_gate_receives_positional_args() {
+    // The decide half reuses the LP-11 gate unchanged: context.args must
+    // already carry [payee, amount, purpose] positionally (§4.2 of the spec).
+    // run_with_policy defaults the act half to NoopSettlementRail, so the
+    // gate permits but the rail never settles — Partial, not Ok — this test
+    // is about what reaches the gate, not the settlement outcome.
+    let seen = Arc::new(Mutex::new(None));
+    let policy = CapturingPolicy { seen: seen.clone() };
+    let result = workflows::run_with_policy(SETTLE_WF, "settle_test.nodus", None, policy)
+        .expect("run_with_policy must succeed (non-halting) when the gate permits");
+
+    assert_eq!(
+        result.status,
+        Status::Partial,
+        "the gate permits, but the default NoopSettlementRail leaves it unaccounted; errors: {:?}",
+        result.errors
+    );
+
+    let captured = seen
+        .lock()
+        .unwrap()
+        .clone()
+        .expect("the policy must have been consulted for the gated SETTLE step");
+    let pairs = context_pairs(captured);
+    let get = |key: &str| pairs.iter().find(|(k, _)| k == key).map(|(_, v)| v.clone());
+    assert_eq!(
+        get("command"),
+        Some(Value::Text("SETTLE".to_string())),
+        "context must name the command; pairs: {pairs:?}"
+    );
+    assert_eq!(
+        get("args"),
+        Some(Value::List(vec![
+            Value::Text("vendor".to_string()),
+            Value::Text("10.00".to_string()),
+            Value::Text("invoice".to_string()),
+        ])),
+        "context.args must carry [payee, amount, purpose] positionally, verbatim; pairs: {pairs:?}"
+    );
+}
+
+#[test]
+fn settlement_denied_by_policy_never_settles() {
+    // run_with_policy wires the default NoopSettlementRail as the act half;
+    // a denied gate must short-circuit before that rail (or any rail) is
+    // ever consulted — observable here as "never settled", since a denied
+    // step's pipeline target stays unbound either way.
+    let result = workflows::run_with_policy(SETTLE_WF, "settle_test.nodus", None, DenyAllPolicy)
+        .expect("run_with_policy returns a RunResult, not a parse error, on denial");
+
+    assert_eq!(
+        result.status,
+        Status::Partial,
+        "a denied settlement must degrade status to Partial, not Failed; errors: {:?}",
+        result.errors
+    );
+    assert_eq!(
+        result.vars.get("out"),
+        Some(&Value::Null),
+        "a denied SETTLE's pipeline target must stay at its seeded default; vars: {:?}",
+        result.vars
+    );
+    assert!(
+        result
+            .errors
+            .iter()
+            .any(|e| e.code == "NODUS:POLICY_DENIED" && e.reason.contains("settlement")),
+        "denial must record a typed POLICY_DENIED error naming the settlement gate; errors: {:?}",
+        result.errors
+    );
+    assert!(
+        !result
+            .errors
+            .iter()
+            .any(|e| e.code == "NODUS:SETTLEMENT_UNACCOUNTED"),
+        "a gate denial must short-circuit before the rail is ever consulted — no \
+         SETTLEMENT_UNACCOUNTED alongside POLICY_DENIED; errors: {:?}",
+        result.errors
+    );
+    assert!(
+        result.log.iter().any(|e| e.command == "ESCALATE"),
+        "a Signal-free POLICY_DENIED on SETTLE must reach NL-9 @err: dispatch automatically; log: {:?}",
+        result.log
+    );
+}
+
+#[test]
+fn settlement_unaccounted_when_rail_returns_none() {
+    let result =
+        workflows::run_with_settlement(SETTLE_WF, "settle_test.nodus", None, NoopSettlementRail)
+            .expect("run_with_settlement must succeed (non-halting) when the rail is unwired");
+
+    assert_eq!(
+        result.status,
+        Status::Partial,
+        "an unaccounted settlement must degrade status to Partial, not Failed; errors: {:?}",
+        result.errors
+    );
+    assert_eq!(
+        result.vars.get("out"),
+        Some(&Value::Null),
+        "an unaccounted SETTLE's pipeline target must stay at its seeded default; vars: {:?}",
+        result.vars
+    );
+    assert!(
+        result
+            .errors
+            .iter()
+            .any(|e| e.code == "NODUS:SETTLEMENT_UNACCOUNTED"),
+        "an unaccounted settlement must record a typed SETTLEMENT_UNACCOUNTED error; errors: {:?}",
+        result.errors
+    );
+    assert!(
+        result.log.iter().any(|e| e.command == "ESCALATE"),
+        "a Signal-free SETTLEMENT_UNACCOUNTED must reach NL-9 @err: dispatch automatically; log: {:?}",
+        result.log
+    );
+    assert!(
+        !result.log.iter().any(|e| e.command == "LOG"),
+        "the main step sequence must end after dispatch — step 2 must not run; log: {:?}",
+        result.log
+    );
+}
+
+#[test]
+fn run_with_manifest_rejects_settle_without_settlement_role() {
+    // A workflow declaring SETTLE, run against the builtin host (which never
+    // provides Settlement), is rejected before any step executes — the same
+    // shape as run_with_manifest_rejects_unmet_capability.
+    let manifest =
+        CapabilityManifest::from_workflow(&nodus::parser::Parser::parse(SETTLE_WF).expect("parse"));
+    let host = HostCapabilities::builtin();
+
+    let result =
+        workflows::run_with_manifest(SETTLE_WF, "settle_test.nodus", None, &manifest, &host)
+            .expect("the manifest gate returns a RunResult, not a parse error");
+
+    assert_eq!(
+        result.status,
+        Status::Failed,
+        "an unsatisfiable Settlement manifest must fail the run"
+    );
+    assert!(
+        result.log.is_empty(),
+        "no step may execute on a rejected run; log: {:?}",
+        result.log
+    );
+    assert!(
+        result
+            .errors
+            .iter()
+            .any(|e| { e.code == "NODUS:CAPABILITY_UNMET" && e.reason.contains("Settlement") }),
+        "rejection must name the missing Settlement capability; errors: {:?}",
+        result.errors
+    );
+}
+
+#[test]
+fn no_settle_step_is_byte_for_byte_unchanged() {
+    // Guardrail: every existing run_with_* variant must keep
+    // NoopSettlementRail's always-unaccounted-but-inert behaviour now that
+    // Executor carries a settlement field — a workflow with no SETTLE step is
+    // completely unaffected.
+    let via_plain = workflows::run(MANIFEST_WF, "manifest_test.nodus", None).expect("plain run");
+    let via_explicit_noop = workflows::run_with_settlement(
+        MANIFEST_WF,
+        "manifest_test.nodus",
+        None,
+        NoopSettlementRail,
+    )
+    .expect("run_with_settlement with the explicit noop");
+
+    assert_eq!(via_plain.status, via_explicit_noop.status);
+    assert_eq!(via_plain.vars, via_explicit_noop.vars);
+    assert_eq!(
+        via_plain.status,
+        Status::Ok,
+        "must remain unaffected by LP-17's addition"
+    );
+}
+
+// ─── DG-9/DG-10 memoizable & promotable approval ──────────────────────────────
+
+/// Always resolves from a (fake) durable prior decision — never re-prompts.
+struct DialogRemembers;
+
+impl DialogProvider for DialogRemembers {
+    fn ask(&self, _prompt: &str, _modifiers: &[(String, String)]) -> DialogOutcome {
+        DialogOutcome::Remembered(Value::Text("remembered-answer".to_string()))
+    }
+
+    fn confirm(&self, _content: &str, _modifiers: &[(String, String)]) -> DialogOutcome {
+        DialogOutcome::Remembered(Value::Text("remembered-answer".to_string()))
+    }
+}
+
+/// Records every event it receives, so a test can inspect an event's
+/// `annotations` after the run completes.
+struct RecordingAudit {
+    events: Arc<Mutex<Vec<ExecutionEvent>>>,
+}
+
+impl AuditProvider for RecordingAudit {
+    fn record_event(&self, event: ExecutionEvent) {
+        self.events.lock().unwrap().push(event);
+    }
+
+    fn run_complete(&self, _manifest: RunManifest) {}
+}
+
+fn step_end_provenance(events: &[ExecutionEvent]) -> Vec<Option<DialogProvenance>> {
+    events
+        .iter()
+        .filter_map(|e| match e {
+            ExecutionEvent::StepEnd { annotations, .. } => Some(annotations.dialog_provenance),
+            _ => None,
+        })
+        .collect()
+}
+
+#[test]
+fn remembered_binds_identically_to_answer() {
+    let result =
+        workflows::run_with_dialog(DEFERRED_WF, "deferred_test.nodus", None, DialogRemembers)
+            .expect("run_with_dialog must succeed when the dialog resolves from memory");
+
+    assert_eq!(
+        result.status,
+        Status::Ok,
+        "a remembered resolution must not degrade status; errors: {:?}",
+        result.errors
+    );
+    assert_eq!(
+        result.vars.get("out"),
+        Some(&Value::Text("remembered-answer".to_string())),
+        "Remembered must bind to the pipeline target exactly like Answer; vars: {:?}",
+        result.vars
+    );
+}
+
+#[test]
+fn step_end_carries_dialog_provenance_answered_and_remembered() {
+    let events = Arc::new(Mutex::new(Vec::new()));
+    workflows::run_with_dialog_and_audit(
+        DEFERRED_WF,
+        "deferred_test.nodus",
+        None,
+        DefaultDialogProvider,
+        RecordingAudit {
+            events: events.clone(),
+        },
+        "run-answered",
+        "2026-01-01T00:00:00Z",
+    )
+    .expect("run_with_dialog_and_audit must succeed with the default (+default) resolver");
+    let answered_provenance = step_end_provenance(&events.lock().unwrap());
+    assert_eq!(
+        answered_provenance,
+        vec![Some(DialogProvenance::Answered)],
+        "a +default-resolved ASK's StepEnd must carry Answered provenance"
+    );
+
+    let events = Arc::new(Mutex::new(Vec::new()));
+    workflows::run_with_dialog_and_audit(
+        DEFERRED_WF,
+        "deferred_test.nodus",
+        None,
+        DialogRemembers,
+        RecordingAudit {
+            events: events.clone(),
+        },
+        "run-remembered",
+        "2026-01-01T00:00:00Z",
+    )
+    .expect("run_with_dialog_and_audit must succeed with a memoizing provider");
+    let remembered_provenance = step_end_provenance(&events.lock().unwrap());
+    assert_eq!(
+        remembered_provenance,
+        vec![Some(DialogProvenance::Remembered)],
+        "a memoized ASK's StepEnd must carry Remembered provenance"
+    );
+}
+
+#[test]
+fn pause_timeout_rejected_carry_no_dialog_provenance() {
+    let events = Arc::new(Mutex::new(Vec::new()));
+    workflows::run_with_dialog_and_audit(
+        DEFERRED_WF,
+        "deferred_test.nodus",
+        None,
+        DialogRejects,
+        RecordingAudit {
+            events: events.clone(),
+        },
+        "run-rejected",
+        "2026-01-01T00:00:00Z",
+    )
+    .expect("run_with_dialog_and_audit must succeed (non-halting) on rejection");
+    // Two StepEnd events: the rejected ASK itself, then the dispatched
+    // @err: ESCALATE handler (DEFERRED_WF declares one, and DIALOG_REJECTED
+    // is Signal-free — NL-9 dispatch fires automatically). Neither carries
+    // dialog provenance: the ASK never resolved, and ESCALATE isn't a
+    // dialog step at all.
+    let provenance = step_end_provenance(&events.lock().unwrap());
+    assert_eq!(
+        provenance,
+        vec![None, None],
+        "neither the rejected ASK nor the dispatched ESCALATE handler carries dialog provenance"
+    );
+}
+
+#[test]
+fn default_dialog_provider_never_returns_remembered() {
+    // Regression: every existing run_with_* variant keeps DefaultDialogProvider's
+    // Answer-or-Pause behaviour byte-for-byte — it never memoizes anything.
+    let via_plain = workflows::run_with_dialog(
+        DEFERRED_WF,
+        "deferred_test.nodus",
+        None,
+        DefaultDialogProvider,
+    )
+    .expect("run_with_dialog with the default provider");
+    assert_eq!(
+        via_plain.vars.get("out"),
+        Some(&Value::Text("yes".to_string())),
+        "DefaultDialogProvider must still resolve via +default, never Remembered"
     );
 }

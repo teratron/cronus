@@ -183,16 +183,22 @@ pub struct EnvironmentProfile {
     pub grading: GradingMode,
     /// Fixed resource ceiling, if any (NE-13). `None` behaves as today.
     pub budget: Option<Budget>,
+    /// Identity of the host encoder `budget.max_tokens` is denominated in
+    /// (NE-14). Opaque to the crate — no tokenizer or counting rule in core
+    /// (LP-1/LP-2). A profile whose budget carries no `max_tokens` needs no
+    /// measure and is unaffected by leaving this `None`.
+    pub token_measure: Option<String>,
 }
 
 impl EnvironmentProfile {
     /// The empty profile the built-in [`StubEnvironment`] publishes: no
-    /// labels, automated (no-op) grading, no budget.
+    /// labels, automated (no-op) grading, no budget, no measure.
     pub fn empty() -> Self {
         EnvironmentProfile {
             labels: BTreeMap::new(),
             grading: GradingMode::Automated,
             budget: None,
+            token_measure: None,
         }
     }
 }
@@ -331,6 +337,11 @@ pub struct CandidateResult {
     /// different budgets are not comparable — a host optimizer MUST partition
     /// its frontier by `(profile, budget)` (NE-13).
     pub budget: Option<Budget>,
+    /// The measure `budget.max_tokens` was denominated in, if any. Rewards
+    /// earned under different measures are not comparable either — a host
+    /// optimizer MUST partition its frontier by `(profile, budget, measure)`,
+    /// never `(profile, budget)` alone (NE-14).
+    pub token_measure: Option<String>,
 }
 
 /// Deterministic `std`-only digest of `source` (NE-12). SipHash via
@@ -367,12 +378,14 @@ impl EnvRunResult {
         workflow_source: &str,
         run_id: &str,
         budget: Option<Budget>,
+        token_measure: Option<String>,
     ) -> CandidateResult {
         CandidateResult {
             workflow_digest: digest_source(workflow_source),
             reward: self.reward.clone(),
             trajectory_ref: run_id.to_string(),
             budget,
+            token_measure,
         }
     }
 }
@@ -579,7 +592,7 @@ mod tests {
             max_steps: Some(5),
             ..Default::default()
         });
-        let candidate = result.candidate("source", "run-42", budget);
+        let candidate = result.candidate("source", "run-42", budget, None);
         assert_eq!(candidate.trajectory_ref, "run-42");
         assert_eq!(candidate.budget, budget);
         assert_eq!(candidate.reward, reward(1.0));

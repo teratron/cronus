@@ -85,11 +85,14 @@ pub enum Durability {
     Transient,
 }
 
-/// Host-supplied annotations that may ride any [`ExecutionEvent`] (HO-9
-/// receipt, HO-11 message, HO-16 anomaly, HO-17 durability) — **one carrier
-/// field per variant** rather than four separate fields, so the all-variant
+/// Annotations that may ride any [`ExecutionEvent`] — **one carrier field per
+/// variant** rather than a separate field per concern, so the all-variant
 /// churn happens once and a future annotation is a struct field, not a
-/// tenth-variant edit.
+/// tenth-variant edit. Most fields are host-supplied (HO-9 receipt, HO-11
+/// message, HO-16 anomaly, HO-17 durability); [`Self::dialog_provenance`] is
+/// the first the crate's own dispatch logic populates directly, since only
+/// the executor — not a host observing the stream after the fact — knows
+/// which `DialogOutcome` variant resolved a step (DG-9).
 ///
 /// `Default` is all-`None` + `Durable`: a host declaring nothing produces a
 /// stream identical to one with no annotations at all (HO-5 preserved).
@@ -110,6 +113,21 @@ pub struct EventAnnotations {
     pub receipt: Option<String>,
     /// HO-17: durable vs. transient.
     pub durability: Durability,
+    /// DG-9: whether a dialog step's `StepEnd` resolved fresh or from a host
+    /// durable prior decision. `None` for every non-dialog event and for a
+    /// dialog step that did not resolve (`Pause`/`Timeout`/`Rejected` decide
+    /// nothing, so they carry no provenance).
+    pub dialog_provenance: Option<DialogProvenance>,
+}
+
+/// DG-9: the provenance of a resolved dialog answer.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum DialogProvenance {
+    /// Resolved fresh — by a human, or a `+default`.
+    Answered,
+    /// Resolved from a host durable prior decision (`+remember`), without
+    /// re-prompting.
+    Remembered,
 }
 
 /// A reference to the source element a produced element derived from
@@ -990,7 +1008,7 @@ mod tests {
         ));
     }
 
-    // ── EventAnnotations carrier (HO-9/11/16/17) ────────────────────────────
+    // ── EventAnnotations carrier (HO-9/11/16/17, DG-9) ───────────────────────
 
     #[test]
     fn event_annotations_default_is_all_none_and_durable() {
@@ -999,6 +1017,12 @@ mod tests {
         assert!(a.anomaly.is_none());
         assert!(a.receipt.is_none());
         assert_eq!(a.durability, Durability::Durable);
+        assert!(a.dialog_provenance.is_none());
+    }
+
+    #[test]
+    fn dialog_provenance_answered_is_never_remembered() {
+        assert_ne!(DialogProvenance::Answered, DialogProvenance::Remembered);
     }
 
     #[test]

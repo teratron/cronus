@@ -11,13 +11,14 @@
 //! refinement — [`Schema`]'s query surface is the seam it would back.
 
 /// Version of the builtin vocabulary (tracks the reference schema it mirrors).
-pub const BUILTIN_SCHEMA_VERSION: &str = "0.4.6";
+pub const BUILTIN_SCHEMA_VERSION: &str = "0.4.7";
 
 /// Known command names (ALL_CAPS). The lexer tags an ALL_CAPS word as a
 /// `CommandName` only when it appears here; anything else lexes as a generic
-/// identifier. 53 commands total; `RUN` is the macro meta-command that
+/// identifier. 54 commands total; `RUN` is the macro meta-command that
 /// bypasses schema vocabulary checks and is recognized before the validation pass.
-/// `ASK` / `CONFIRM` are the human-in-the-loop dialog commands.
+/// `ASK` / `CONFIRM` are the human-in-the-loop dialog commands; `SETTLE` is the
+/// outbound-value-settlement command (LP-17).
 pub const KNOWN_COMMANDS: &[&str] = &[
     "FETCH",
     "STORE",
@@ -72,6 +73,7 @@ pub const KNOWN_COMMANDS: &[&str] = &[
     "RUN",
     "ASK",
     "CONFIRM",
+    "SETTLE",
 ];
 
 /// Tone values accepted by the `+tone=` modifier and the `TONE` command.
@@ -271,6 +273,15 @@ pub mod error_code {
     /// the effect ran (LP-11). Non-halting: the effect never occurred, its
     /// pipeline target stays unbound, and execution continues.
     pub const POLICY_DENIED: &str = "NODUS:POLICY_DENIED";
+    /// A gate-permitted `SETTLE` produced no verifiable receipt from the host
+    /// `SettlementRail` (LP-17, VS-7). Non-halting: the payment is not treated
+    /// as settled, and the pipeline target stays unbound.
+    pub const SETTLEMENT_UNACCOUNTED: &str = "NODUS:SETTLEMENT_UNACCOUNTED";
+    /// An `EnvironmentProfile` declares a `max_tokens` budget with no
+    /// identified `token_measure` (NE-14). Fail-fast pre-run: rejected before
+    /// `execute_for_environment` runs, never a silent default-encoder
+    /// substitution.
+    pub const ENV_MEASURE_UNKNOWN: &str = "NODUS:ENV_MEASURE_UNKNOWN";
 }
 
 /// Severity of a runtime error code.
@@ -352,6 +363,10 @@ pub fn error_meta(code: &str) -> Option<(ErrorSeverity, ErrorCategory)> {
         ec::COMPENSATION_FAILED => (Error, Runtime),
         // Portability-layer code (LP-11).
         ec::POLICY_DENIED => (Error, Runtime),
+        // Portability-layer code (LP-17).
+        ec::SETTLEMENT_UNACCOUNTED => (Error, Runtime),
+        // Environment-layer code (NE-14).
+        ec::ENV_MEASURE_UNKNOWN => (Error, Control),
         // Non-canonical (incl. deprecated EXECUTION_FAILED) → no metadata.
         _ => return None,
     };
@@ -524,8 +539,8 @@ mod tests {
         let schema = Schema::builtin();
         assert!(schema.is_command("RUN"), "RUN must be a known command");
         assert_eq!(
-            BUILTIN_SCHEMA_VERSION, "0.4.6",
-            "version bump must accompany RUN addition"
+            BUILTIN_SCHEMA_VERSION, "0.4.7",
+            "version bump must accompany a command addition (RUN, then SETTLE — LP-17)"
         );
     }
 
@@ -722,11 +737,13 @@ mod tests {
             RESTART_LIMIT,
             COMPENSATION_FAILED,
             POLICY_DENIED,
+            SETTLEMENT_UNACCOUNTED,
+            ENV_MEASURE_UNKNOWN,
         ];
         assert_eq!(
             canonical.len(),
-            29,
-            "24 language codes + CAPABILITY_UNMET + CONFIG_INVALID + RESTART_LIMIT + COMPENSATION_FAILED + POLICY_DENIED"
+            31,
+            "24 language codes + CAPABILITY_UNMET + CONFIG_INVALID + RESTART_LIMIT + COMPENSATION_FAILED + POLICY_DENIED + SETTLEMENT_UNACCOUNTED + ENV_MEASURE_UNKNOWN"
         );
         for code in canonical {
             assert!(

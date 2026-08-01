@@ -18,11 +18,13 @@
 
 use crate::ast::{AbsoluteRule, CommandCall, RuleKind, Step, Stmt, WorkflowFile};
 use crate::observability::{
-    AuditProvider, EnvInteraction, EventAnnotations, ExecutionEvent, ExecutionMode, FaultIdentity,
-    FieldDescriptor, LoopType, Measurement, NoopAuditProvider, ReproRecipe, RunManifest, RunStatus,
-    SourceRef, step_identity,
+    AuditProvider, DialogProvenance, EnvInteraction, EventAnnotations, ExecutionEvent,
+    ExecutionMode, FaultIdentity, FieldDescriptor, LoopType, Measurement, NoopAuditProvider,
+    ReproRecipe, RunManifest, RunStatus, SourceRef, step_identity,
 };
-use crate::portability::{NoopPolicyProvider, PolicyProvider, effect_class_of};
+use crate::portability::{
+    NoopPolicyProvider, NoopSettlementRail, PolicyProvider, SettlementRail, effect_class_of,
+};
 use crate::vocab;
 use std::collections::HashMap;
 use std::time::Instant;
@@ -230,6 +232,10 @@ impl ModelProvider for StubProvider {
 pub enum DialogOutcome {
     /// Resolved with a typed answer (by a human or a `+default`).
     Answer(Value),
+    /// Resolved from a host durable prior decision (`+remember`), without
+    /// re-prompting (DG-9). Binds through the exact same path as `Answer` —
+    /// memoization changes where the value came from, never how it binds.
+    Remembered(Value),
     /// No resolution available; the runtime should suspend (`Status::Paused`).
     Pause,
     /// A `+timeout` elapsed before an answer.
@@ -466,6 +472,7 @@ pub struct Executor {
     audit: Box<dyn AuditProvider>,
     dialog: Box<dyn DialogProvider>,
     policy: Box<dyn PolicyProvider>,
+    settlement: Box<dyn SettlementRail>,
 }
 
 impl Executor {
@@ -477,6 +484,7 @@ impl Executor {
             audit: Box::new(NoopAuditProvider),
             dialog: Box::new(DefaultDialogProvider),
             policy: Box::new(NoopPolicyProvider),
+            settlement: Box::new(NoopSettlementRail),
         }
     }
 
@@ -495,6 +503,7 @@ impl Executor {
             audit: Box::new(audit),
             dialog: Box::new(DefaultDialogProvider),
             policy: Box::new(NoopPolicyProvider),
+            settlement: Box::new(NoopSettlementRail),
         }
     }
 
@@ -510,6 +519,7 @@ impl Executor {
             audit,
             dialog: Box::new(DefaultDialogProvider),
             policy: Box::new(NoopPolicyProvider),
+            settlement: Box::new(NoopSettlementRail),
         }
     }
 
@@ -521,6 +531,7 @@ impl Executor {
             audit: Box::new(NoopAuditProvider),
             dialog: Box::new(dialog),
             policy: Box::new(NoopPolicyProvider),
+            settlement: Box::new(NoopSettlementRail),
         }
     }
 
@@ -534,6 +545,7 @@ impl Executor {
             audit: Box::new(audit),
             dialog: Box::new(dialog),
             policy: Box::new(NoopPolicyProvider),
+            settlement: Box::new(NoopSettlementRail),
         }
     }
 
@@ -545,6 +557,7 @@ impl Executor {
             audit: Box::new(NoopAuditProvider),
             dialog: Box::new(DefaultDialogProvider),
             policy: Box::new(policy),
+            settlement: Box::new(NoopSettlementRail),
         }
     }
 
@@ -559,6 +572,34 @@ impl Executor {
             audit: Box::new(audit),
             dialog: Box::new(DefaultDialogProvider),
             policy: Box::new(policy),
+            settlement: Box::new(NoopSettlementRail),
+        }
+    }
+
+    /// Create an executor with the built-in model/audit/dialog/policy and a
+    /// custom [`SettlementRail`] (LP-17).
+    pub fn with_settlement(settlement: impl SettlementRail + 'static) -> Self {
+        Executor {
+            provider: Box::new(StubProvider),
+            audit: Box::new(NoopAuditProvider),
+            dialog: Box::new(DefaultDialogProvider),
+            policy: Box::new(NoopPolicyProvider),
+            settlement: Box::new(settlement),
+        }
+    }
+
+    /// Create an executor with a custom [`SettlementRail`] and audit provider
+    /// (LP-17).
+    pub fn with_settlement_and_audit(
+        settlement: impl SettlementRail + 'static,
+        audit: impl AuditProvider + 'static,
+    ) -> Self {
+        Executor {
+            provider: Box::new(StubProvider),
+            audit: Box::new(audit),
+            dialog: Box::new(DefaultDialogProvider),
+            policy: Box::new(NoopPolicyProvider),
+            settlement: Box::new(settlement),
         }
     }
 
@@ -1608,6 +1649,12 @@ impl Executor {
             return self.handle_dialog(ctx, cmd, step_num);
         }
 
+        // SETTLE resolves through the SettlementRail (LP-17) and, like dialog,
+        // bypasses the standard value-returning dispatch.
+        if cmd.name == "SETTLE" {
+            return self.handle_settlement(ctx, cmd, step_num);
+        }
+
         let input_vars: Vec<String> = ctx.variables.keys().cloned().collect();
         let step_start = Instant::now();
         self.emit(ctx, |seq, correlation_id| ExecutionEvent::StepStart {
@@ -1700,18 +1747,28 @@ impl Executor {
             self.dialog.confirm(&prompt, &cmd.modifiers)
         };
 
-        let signal = match outcome {
+        // DG-9: dialog_provenance is computed alongside signal, not in a
+        // second pass — Answer/Remembered bind through the identical path
+        // and differ only in which provenance the StepEnd below records.
+        let (signal, dialog_provenance) = match outcome {
             DialogOutcome::Answer(value) => {
                 ctx.log_step(step_num, &cmd.name, value.clone());
                 if let Some(target) = &cmd.pipeline_target {
                     ctx.set_var(target, value);
                 }
-                None
+                (None, Some(DialogProvenance::Answered))
+            }
+            DialogOutcome::Remembered(value) => {
+                ctx.log_step(step_num, &cmd.name, value.clone());
+                if let Some(target) = &cmd.pipeline_target {
+                    ctx.set_var(target, value);
+                }
+                (None, Some(DialogProvenance::Remembered))
             }
             DialogOutcome::Pause => {
                 ctx.paused_at = Some(step_num);
                 ctx.flags.push(vocab::error_code::PAUSED.to_string());
-                Some(Signal::Pause)
+                (Some(Signal::Pause), None)
             }
             DialogOutcome::Timeout => {
                 ctx.errors.push(RuntimeError {
@@ -1719,7 +1776,7 @@ impl Executor {
                     step: step_num,
                     reason: format!("dialog '{}' timed out before an answer", cmd.name),
                 });
-                None
+                (None, None)
             }
             DialogOutcome::Rejected => {
                 ctx.errors.push(RuntimeError {
@@ -1727,7 +1784,7 @@ impl Executor {
                     step: step_num,
                     reason: format!("dialog '{}' was rejected", cmd.name),
                 });
-                None
+                (None, None)
             }
         };
 
@@ -1743,10 +1800,103 @@ impl Executor {
             step_identity: step_identity(step_num, &cmd.name),
             seq,
             correlation_id,
-            annotations: EventAnnotations::default(),
+            annotations: EventAnnotations {
+                dialog_provenance,
+                ..Default::default()
+            },
         });
 
         signal
+    }
+
+    /// Resolve a `SETTLE` step through the [`SettlementRail`] (LP-17).
+    ///
+    /// The LP-11 gate above already decided the step may proceed; this is the
+    /// act half. `Some(receipt)` binds to the pipeline target exactly like any
+    /// other command's return value; `None` means the rail could not produce a
+    /// verifiable receipt (VS-7) and pushes `NODUS:SETTLEMENT_UNACCOUNTED`.
+    /// Both exits return bare `None` — terminal for this step, but Signal-free,
+    /// so a denied or unaccounted settlement reaches NL-9's `@err:` dispatch
+    /// exactly like `POLICY_DENIED` does.
+    fn handle_settlement(
+        &self,
+        ctx: &mut ExecutionContext,
+        cmd: &CommandCall,
+        step_num: u32,
+    ) -> Option<Signal> {
+        let input_vars: Vec<String> = ctx.variables.keys().cloned().collect();
+        self.emit(ctx, |seq, correlation_id| ExecutionEvent::StepStart {
+            step_index: step_num,
+            step_command: cmd.name.clone(),
+            input_vars,
+            step_identity: step_identity(step_num, &cmd.name),
+            seq,
+            correlation_id,
+            annotations: EventAnnotations::default(),
+        });
+
+        let step_start = Instant::now();
+
+        // Length descriptor only, never the raw payee/amount/purpose (§4.4
+        // data-safety boundary, mirroring DG-7's dialog precedent).
+        let args_len: u32 = cmd.args.iter().map(|a| a.len() as u32).sum();
+        self.emit(ctx, |seq, correlation_id| ExecutionEvent::ModelCall {
+            step_index: step_num,
+            command: cmd.name.clone(),
+            input_summary: FieldDescriptor::text(args_len),
+            seq,
+            correlation_id,
+            annotations: EventAnnotations::default(),
+        });
+
+        match self.settlement.settle(cmd) {
+            Some(value) => {
+                ctx.log_step(step_num, &cmd.name, value.clone());
+                if let Some(target) = &cmd.pipeline_target {
+                    ctx.set_var(target, value);
+                }
+            }
+            None => {
+                let payee = cmd.args.first().map(String::as_str).unwrap_or("?");
+                let error_detail =
+                    format!("settlement for '{payee}' produced no verifiable receipt");
+                self.emit(ctx, |seq, correlation_id| ExecutionEvent::StepError {
+                    step_index: step_num,
+                    step_command: cmd.name.clone(),
+                    error_code: vocab::error_code::SETTLEMENT_UNACCOUNTED.to_string(),
+                    error_detail: error_detail.clone(),
+                    step_identity: step_identity(step_num, &cmd.name),
+                    fault_identity: FaultIdentity {
+                        step_identity: step_identity(step_num, &cmd.name),
+                        code: vocab::error_code::SETTLEMENT_UNACCOUNTED.to_string(),
+                        discriminator: None,
+                    },
+                    seq,
+                    correlation_id,
+                    annotations: EventAnnotations::default(),
+                });
+                ctx.errors.push(RuntimeError {
+                    code: vocab::error_code::SETTLEMENT_UNACCOUNTED.to_string(),
+                    step: step_num,
+                    reason: error_detail,
+                });
+            }
+        }
+
+        let elapsed_ms = Measurement::Taken(step_start.elapsed().as_millis() as u64);
+        let output_vars: Vec<String> = cmd.pipeline_target.iter().cloned().collect();
+        self.emit(ctx, |seq, correlation_id| ExecutionEvent::StepEnd {
+            step_index: step_num,
+            step_command: cmd.name.clone(),
+            output_vars,
+            elapsed_ms,
+            step_identity: step_identity(step_num, &cmd.name),
+            seq,
+            correlation_id,
+            annotations: EventAnnotations::default(),
+        });
+
+        None
     }
 
     // ─── Command dispatch ─────────────────────────────────────────────────────

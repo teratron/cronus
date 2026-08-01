@@ -1,6 +1,6 @@
 # Nodus Environment and Evaluation Implementation (Rust)
 
-**Version:** 1.1.0
+**Version:** 1.1.1
 **Status:** Stable
 **Layer:** implementation
 **Implements:** l1-nodus-environment.md
@@ -48,7 +48,7 @@ Concrete Rust realization of the Environment/Evaluation contract in `crates/nodu
 | NE-11 Declared grading mode | `GradingMode { Automated, Judge, Hybrid }` is declared on the task/profile (not per run). `evaluate` applies the mode: `Automated` runs a deterministic checker; `Judge` scores via a function-scoped auxiliary model over a published rubric; `Hybrid` runs the checker as a floor first and takes `min(checker, judge)` so a judge may lower but never rescue a checker-failed run. |
 | NE-12 Archivable candidate result | `EnvRunResult::candidate()` yields `CandidateResult { workflow_digest, reward, trajectory, budget }` — a content-addressable tuple. `workflow_digest` is a std-library stable digest over the canonical workflow source (deterministic, zero-dep); a host wanting a cryptographic content-address computes it over the exposed source (LP-2). The candidate space/mutation/search/frontier stay host-side; the crate holds no optimizer. |
 | NE-13 Budget-normalized graded runs | `EnvironmentProfile::budget: Option<Budget>` (`wall_clock_ms`/`max_steps`/`max_tokens`, any subset). `run_with_environment` halts the run uniformly when any declared limit is reached; a budget halt is a **normal outcome** (`Status::Partial`, not an error) with `budget_halted: true` recorded, and `evaluate` runs over what was achieved. The budget is part of the profile identity and copied into `CandidateResult.budget`; the workflow cannot read, extend, or evade it (enforced by the run loop, LP-10 kinship). Steps/tokens are deterministic; wall-clock is host-measured and recorded. A profile with no budget behaves as today. |
-| NE-14 Declared budget measure [ADDED v1.1.0] | `EnvironmentProfile::token_measure: Option<String>` — the identity of the host encoder `max_tokens` is denominated in (§4.4). `run_with_environment` validates the profile before `env.open`: a `budget.max_tokens.is_some()` with `token_measure.is_none()` is a fail-fast `NODUS:ENV_MEASURE_UNKNOWN` `Diagnostic`, returned through the same pre-run `Result<_, Vec<Diagnostic>>` channel LP-8's `validate_manifest` already uses — never a mid-run failure, never a silent default encoder. `token_measure` is opaque to the crate (LP-2 — no tokenizer/counting rule in core) and is copied into `CandidateResult` alongside `budget` (NE-12), so a host optimizer partitions its frontier by `(profile, budget, measure)`. A profile with a wall-clock/step-only budget (no `max_tokens`) carries no measure and is unaffected. |
+| NE-14 Declared budget measure [ADDED v1.1.0] | **Implemented [v1.1.1] — Phase 29.** `EnvironmentProfile::token_measure: Option<String>` — the identity of the host encoder `max_tokens` is denominated in (§4.4). `run_with_environment_impl` validates the profile immediately after `env.profile()` (both public entry points share this one function): a `budget.max_tokens.is_some()` with `token_measure.is_none()` is a fail-fast `NODUS:ENV_MEASURE_UNKNOWN`, returned as an ordinary `Ok(EnvRunResult{result: RunResult{status: Failed, ..}, ..})` mirroring `capability_rejection`'s exact shape (**not** a `Diagnostic` — that channel is parse/validate-only) — never a mid-run failure, never a silent default encoder. `token_measure` is opaque to the crate (LP-2 — no tokenizer/counting rule in core) and is copied into `CandidateResult` alongside `budget` (NE-12), so a host optimizer partitions its frontier by `(profile, budget, measure)`. A profile with a wall-clock/step-only budget (no `max_tokens`) carries no measure and is unaffected. 471 tests pass (was 467, +4). |
 
 ## 4. Detailed Design
 
@@ -151,26 +151,45 @@ pub struct CandidateResult { pub workflow_digest: String,        // NE-12 conten
 
 `grade` composes the modes with the hybrid floor: `Hybrid` runs the deterministic checker first and returns it on failure (a judge cannot rescue), else takes `min(checker, judge)`.
 
-### 4.4.1 Measure validation (NE-14) [ADDED v1.1.0]
+### 4.4.1 Measure validation (NE-14) [ADDED v1.1.0, CORRECTED v1.1.1]
 
 ```text
 [REFERENCE]
-fn validate_env_profile(profile: &EnvironmentProfile) -> Result<(), Diagnostic> {
-    let wants_tokens = profile.budget.as_ref().and_then(|b| b.max_tokens).is_some();
-    if wants_tokens && profile.token_measure.is_none() {
-        return Err(diagnostic(ENV_MEASURE_UNKNOWN, "..."));  // fail-fast, pre-run
+fn env_measure_rejection(ast: &WorkflowFile) -> RunResult {
+    RunResult {
+        status: Status::Failed,
+        errors: vec![RuntimeError { code: ENV_MEASURE_UNKNOWN, step: 0, .. }],
+        ..  // mirrors capability_rejection's exact shape
     }
-    Ok(())
+}
+
+// inside run_with_environment_impl, immediately after `let profile = env.profile();`:
+let wants_tokens = profile.budget.as_ref().and_then(|b| b.max_tokens).is_some();
+if wants_tokens && profile.token_measure.is_none() {
+    return Ok(EnvRunResult { result: env_measure_rejection(&ast), reward: Reward::no_op(), budget_halted: false });
 }
 ```
 
-`run_with_environment` calls this immediately after `env.profile()` and before `env.open` —
-no `Instance` is opened and nothing runs for a rejected profile, mirroring how LP-8's
-`validate_manifest` gate rejects before the executor boots rather than mid-run. The check is
-purely structural (does a token budget have an identified measure), not a capability-role
-check, so it needs no new `ExtensionRole` and no manifest interaction: a host either returns a
-well-formed `profile()` or the run is rejected before `open`, symmetric with how a workflow can
-never read or evade the budget itself once a run is underway (NE-13, LP-10 kinship).
+**[CORRECTED v1.1.1]** The v1.1.0 text of this section claimed the rejection returns through
+"the same pre-run `Result<_, Vec<Diagnostic>>` channel LP-8's `validate_manifest` already
+uses" and runs "before `env.open`". Neither holds against the real code, verified directly
+against `workflows.rs`'s single shared `run_with_environment_impl` (both public entry points
+delegate to it): the adjacent, already-shipped `ExtensionRole::Environment` manifest
+rejection returns `Ok(EnvRunResult { result: capability_rejection(&ast, &missing), .. })` — an
+ordinary `RunResult { status: Failed, errors: [RuntimeError { code: CAPABILITY_UNMET, .. }] }`
+— **never** `Err(Vec<Diagnostic>)`; that channel is reserved for the parse/validate failures
+earlier in the same function. `env.profile()` — the only source of `budget`/`token_measure` —
+is not called until *after* `env.open`/`env.reset` already ran, both needed to produce the
+`Instance`/`Observation` the frozen-boundary reset-observation shape requires before the
+workflow's own steps execute. NE-14's check therefore inserts **immediately after
+`env.profile()` and before `execute_for_environment`** — no workflow step has executed yet
+(satisfying "never mid-run"), even though the `Instance` is technically already open+reset;
+`guard`'s `Drop` still releases it correctly on this early return (NE-7 unaffected). The check
+is purely structural (does a token budget have an identified measure), not a capability-role
+check, so it needs no new `ExtensionRole` and no manifest interaction — a host either returns
+a well-formed `profile()` or the run is rejected before the workflow runs, symmetric with how
+a workflow can never read or evade the budget itself once a run is underway (NE-13, LP-10
+kinship).
 
 ### 4.5 Public API
 
@@ -214,5 +233,6 @@ Order that minimizes rework (follows the L1 §5 sequence): (1) `EnvironmentProvi
 
 | Version | Date | Author | Notes |
 | --- | --- | --- | --- |
+| 1.1.1 | 2026-08-01 | Core Team | **Implemented the NE-14 seam designed in v1.1.0 — Phase 29, with a real mechanism correction found at plan time and applied here.** `EnvironmentProfile.token_measure`/`CandidateResult.token_measure` landed as designed. **§4.4.1 corrected**: v1.1.0 claimed the rejection used the LP-8 `Diagnostic` channel and ran "before `env.open`" — neither held against the real code (`workflows.rs`'s single shared `run_with_environment_impl`, confirmed both public entry points delegate to it, resolving the plan-time question of whether they had separate bodies). The actual mechanism mirrors the adjacent, already-shipped `ExtensionRole::Environment` rejection exactly: `Ok(EnvRunResult{result: RunResult{status: Failed, errors: [RuntimeError{ENV_MEASURE_UNKNOWN, ..}]}, ..})` via a new `env_measure_rejection` helper (sibling to `capability_rejection`), inserted immediately after `env.profile()` (the only source of the fields being checked) and before `execute_for_environment` — `env.open`/`env.reset` have already run by that point for the frozen-boundary shape, but no *workflow* step has, satisfying "never mid-run"; `guard`'s `Drop` still releases correctly (NE-7 unaffected). This correction was found and recorded honestly at the `/magic.task` planning stage (not silently implemented against the wrong text, the Phase-18 `$restart` precedent) and applied here once the mechanism landed. 471 tests pass (was 467, +4: `max_tokens_with_no_measure_rejects_before_workflow_runs` proving `env.open`/`reset` ran but no workflow step or `evaluate` did, `max_tokens_with_measure_runs_normally`, `no_max_tokens_budget_is_unaffected_by_ne14`, `candidate_carries_token_measure`); clippy/fmt clean; `Cargo.toml`/`Cargo.lock` diff empty (LP-1 preserved); no `unwrap`/`panic!`/`expect` added to any production path. §3's NE-14 row updated to Implemented. |
 | 1.1.0 | 2026-07-31 | Core Team | Closes the NE-14 invariant-traceability gap flagged at the v1.29.0 nodus replan (declared budget measure, added to `l1-nodus-environment` v1.4.0, had never gained a §3 row). New `EnvironmentProfile.token_measure: Option<String>` (§4.4) records the opaque host-encoder identity a `max_tokens` budget is denominated in — LP-2, no tokenizer/counting rule in core. New §4.4.1 designs the fail-fast check: `run_with_environment` validates the profile immediately after `env.profile()` and before `env.open`, rejecting `budget.max_tokens.is_some() && token_measure.is_none()` as a pre-run `NODUS:ENV_MEASURE_UNKNOWN` `Diagnostic` through the same channel LP-8's `validate_manifest` already uses — no `Instance` opens for a rejected profile. Deliberately **not** a new `ExtensionRole`: the condition is profile-shaped (does this specific budget have an identified measure), not role-shaped (does the host provide a measure capability in general) — a role would let the exact silent-substitution failure NE-14 forbids hide behind a satisfied capability check. `CandidateResult` gains `token_measure` alongside `budget` so a host optimizer partitions its frontier by `(profile, budget, measure)` per NE-14's own comparability rule. New error code `NODUS:ENV_MEASURE_UNKNOWN` (`Error`, `Control` — the `CAPABILITY_UNMET` precedent, both pre-run structural rejections) registers in `l2-nodus-errors.md`. §3 gains the NE-14 row; §5 gains two rejected alternatives (a new `ExtensionRole`, a default-encoder fallback). Design only — nothing landed in `crates/nodus` this pass. |
 | 1.0.0 | 2026-07-10 | Core Team | Initial spec — Rust realization of the Environment/Evaluation contract: `EnvironmentProvider` trait + built-in deterministic `StubEnvironment`, closed `open/reset/step/evaluate/release` lifecycle, typed `Reward` carried in `EnvRunResult` (never in `vars`), `Trajectory` as a read-side projection via optional `EnvInteraction` side-band descriptors on existing events (no new `ExecutionEvent` variant, HO-6 preserved), `ExtensionRole::Environment` manifest binding with `builtin()` providing it via the stub (contrast with `Dialog`), `run_with_environment` frozen-boundary combinator, closed `GradingMode` (automated/judge/hybrid floor), `EnvironmentProfile` budget (NE-13, budget-halt = normal `Status::Partial`), and `CandidateResult` content-addressable tuple (NE-12, std-digest, crypto host-supplied). NE-1…NE-13 compliance table. Adds one extension role, no new command/status/error category. |

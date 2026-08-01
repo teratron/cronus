@@ -5,26 +5,24 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-## [nodus-0.2.0] — 2026-06-24
+## [nodus-0.3.0] — 2026-08-01
 
 ### Added (crates/nodus)
 
-- **Observability framework** (`observability.rs`): `AuditProvider` trait (7-method lifecycle), `ExecutionEvent` 10-variant enum (step_start/step_end/step_error/constraint_hit/branch_taken/loop_iteration/macro_enter/macro_exit/model_call/model_response), `NoopAuditProvider`, `RunManifest`, `FieldDescriptor`; executor hook-points wired for all 10 events; HO-1…HO-6 compliant
-- **Observability public API**: `run_with_audit()`, `run_with_provider_and_audit()` — composable with `ModelProvider`
-- **Portability framework** (`portability.rs`): `SchemaProvider` trait + `BuiltinSchemaProvider`; `StorageProvider` + `NoopStorageProvider`; `PolicyProvider` + `NoopPolicyProvider`; LP-1…LP-7 compliant
-- **Portability public API**: `run_with_schema()`, `run_with_schema_and_audit()`; `Schema::with_provider()`, `is_host_command()`; schema-aware lexer (`new_with_schema`) and parser (`parse_with_schema`)
-- **Testing framework** (`workflows.rs`): `evaluate_test_block()` assertion evaluator; `test_with_tags()` with `TestOptions { tags }`; NT-1 block isolation, NT-2 input override, NT-3–NT-4 assertion pass/fail, NT-5 provider neutrality, NT-6 tag filtering, NT-7 ordered reporting
-- **Validator diagnostics**: W001 (route with no covering `@test:` block), W002 (`@test:` block with no `expected:` entries), E015 (duplicate test name in same file)
-- **Testing framework spec**: NT-1…NT-10 compliance table, `TestBlock` AST documentation, `TestReport`/`TestResult` types, diagnostic codes
+- **Per-effect authorization seam (LP-11)**: `PolicyProvider` converted from a re-exported, zero-call-site trait into a real pre-effect gate over model-call and deferred (dialog) effects, via `Executor.policy` + `with_policy`/`with_policy_and_audit`/`run_with_policy`/`run_with_policy_and_audit`; denial is non-halting (`NODUS:POLICY_DENIED`)
+- **Effect risk-class declaration (LP-16)**: `reversible`/`external`/`value` consequence descriptors ride the existing `+modifier=value` grammar into the LP-11 gate's context, letting a host tier its own authorization friction by consequence
+- **Uncaught-error handler dispatch (NL-9)**: a declared `@err:` handler now actually dispatches — structurally, for any `Signal`-free runtime error a step returns — populating `$error` and running the handler via the ordinary command path, ending the step sequence
+- **Settlement effect seam (LP-17)**: a new `SETTLE(payee, amount, purpose) → $target` command, gated by the same LP-11 seam; a new `SettlementRail` trait + `NoopSettlementRail` built-in supply the act half (`Executor.settlement`, `with_settlement`/`with_settlement_and_audit`/`run_with_settlement`/`run_with_settlement_and_audit`); an unaccounted settlement (`NODUS:SETTLEMENT_UNACCOUNTED`) reaches `@err:` dispatch automatically, same as a denial
+- **Memoizable & promotable dialog approval (DG-9/DG-10)**: a new `DialogOutcome::Remembered(Value)` variant lets a host resolve `ASK`/`CONFIRM` from a durable prior decision, binding through the exact same path as a fresh `Answer`; a new `DialogProvenance` (`Answered`/`Remembered`) rides the shared `EventAnnotations.dialog_provenance` field on the step's trace event — the promotion of a stably-repeated decision to a standing preference is entirely host-side, requiring no further nodus code
+- **Declared budget measure (NE-14)**: `EnvironmentProfile.token_measure` records the host encoder identity a graded run's token budget is denominated in; a profile declaring a token budget with no identified measure is rejected before the workflow runs (`NODUS:ENV_MEASURE_UNKNOWN`), never silently defaulted; carried through to `CandidateResult` so an outer-loop optimizer partitions its frontier by `(profile, budget, measure)`
+- **Earlier in this release cycle** (Phases 8–23, each with its own L2 realization spec): the 24-code error taxonomy and closed vocabulary registries; the human-in-the-loop dialog contract (`ASK`/`CONFIRM`, `Status::Paused`); the v0.7 control-flow surface (`?SWITCH`/`~RETRY`/`!HALT`/`!PAUSE`); the Environment/Evaluation contract (NE-1…NE-13 — `EnvironmentProvider`, graded runs, hybrid grading, budget halts, archivable candidates); the `§config` declarative-configuration surface (NL-20); the observability event model in full (all 20 HO invariants — run-manifest identity, aggregation-safe sequencing, cost/receipt/lineage/completeness annotations); bounded whole-run self-restart (NL-23) and the compensation seam (NL-22); the built-in durable-state store (`InMemoryStorageProvider`, LP-15)
 
 ### Changed (crates/nodus)
 
-- `TestBlock` AST node: `input: Vec<(String, String)>`, `expected: Vec<(String, String)>`, `tags: Vec<String>` typed fields added alongside `raw_lines` backward-compat companion
-- `parse_test_block()`: now populates typed fields from `input:`/`expected:`/`tags:` key-value lines
-- `test()` function: replaced stub pass-on-Ok with full per-block assertion evaluation
-- Runtime specification revised for observability, then portability
-- Test count: 126 → 142 → 143 → 163 → 166 → **204** over the release cycle
-- All 8 nodus workspace specs promoted to `Stable`
+- Closed the NL-6 dual-representation round-trip guarantee (compact → human → compact must be AST-equal) across the **whole** `WorkflowFile`, not just `.steps` — control-flow statements, `@test:` blocks, macros, and human-mode all now round-trip losslessly (Phases 17, 20, 21, 22)
+- `l2-nodus-portability` §3.1 now tracks realization status for all twelve LP-9…LP-20 invariants added since the original compliance table; three are now Implemented (LP-11, LP-16, LP-17)
+- Test count: 204 (v0.2.0) → **471** over the release cycle
+- All 20 nodus workspace specs remain `Stable`
 
 ## [Unreleased]
 
@@ -59,7 +57,6 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Completed 5 tasks (main)
 - Updated task execution state (main)
 - Added a specification (main)
-- Updated 2 specifications (nodus)
 - Added 11 specifications (main)
 - Added 3 specifications (main)
 - Added a specification (main)
@@ -85,16 +82,6 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Added a specification (main)
 - Added a specification (main)
 - Updated a specification (main)
-- Updated task plan and task index (nodus)
-- Completed milestone 7 (nodus)
-- Added a specification (nodus)
-- Added a specification (nodus)
-- Completed milestone 8 (nodus)
-- Added a specification (nodus)
-- Completed milestone 9 (nodus)
-- Completed milestone 10 (nodus)
-- Added a specification (nodus)
-- Completed milestone 11 (nodus)
 - Updated a specification (main)
 - Completed milestone 7 (main)
 - Completed milestone 8 (main)
@@ -103,14 +90,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Added a specification (main)
 - Added a specification (main)
 - Updated a specification (main)
-- Updated a specification (nodus)
 - Added a specification (main)
-- Updated a specification (nodus)
-- Updated a specification (nodus)
 - Added a specification (main)
 - Updated a specification (main)
 - Updated a specification (main)
 - Added a specification (main)
+- Updated a specification (main)
+- Added a specification (main)
+- Updated a specification (main)
 - Updated a specification (main)
 - Updated a specification (main)
 - Updated a specification (main)
@@ -142,7 +129,6 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Advanced office features: deliberation rounds, virtual-staging version control with role authority, the heartbeat inner monologue, lookahead planning, building-level orchestration, on-device voice input, and the visual automation canvas (main)
 - Content, sharing & dev-workflow subsystems: a uniform access-grant sharing model, a content-addressed file store with reference-tracking garbage collection, CRDT-merged notes with soft delete, and the five-stage development-delivery pipeline with a two-stage quality gate (main)
 - Updated 20 specifications (main)
-- Updated 3 specifications (nodus)
 - Added a specification (main)
 - Added a specification (main)
 - Added a specification (main)
@@ -189,12 +175,6 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Added a specification (main)
 - Updated a specification (main)
 - Added a specification (main)
-- Completed task (nodus)
 - Updated a specification (main)
 - Updated a specification (main)
 - Updated 8 specifications (main)
-- Completed 2 tasks (nodus)
-- Updated specification `nodus-testing` (nodus)
-- Updated specification `nodus-portability` (nodus)
-- Updated 4 specifications (nodus)
-- Updated 6 specifications (nodus)

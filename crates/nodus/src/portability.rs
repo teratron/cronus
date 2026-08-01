@@ -132,6 +132,34 @@ impl PolicyProvider for NoopPolicyProvider {
     }
 }
 
+// ─── SettlementRail (LP-17) ──────────────────────────────────────────────────
+
+/// The act half of the LP-17 settlement seam: attempt to settle a
+/// gate-permitted `SETTLE` and return proof.
+///
+/// The decide half needs no new trait — it is an ordinary [`PolicyProvider`]
+/// gate over [`EffectClass::Settlement`]. `PolicyProvider::evaluate` returns
+/// only `bool`, with no channel for a receipt, so settling and proving are a
+/// separate capability.
+pub trait SettlementRail {
+    /// Attempt to settle a permitted payment. `cmd.args` carries
+    /// `[payee, amount, purpose]` raw, exactly as declared — nodus parses
+    /// none of them (LP-1/LP-2). `None` means unaccounted (VS-7): the rail
+    /// could not produce a verifiable receipt, and the payment MUST NOT be
+    /// treated as settled.
+    fn settle(&self, cmd: &CommandCall) -> Option<Value>;
+}
+
+/// No-op settlement rail: no rail is wired, so every settlement is
+/// unaccounted (VS-8: cannot pay without a real rail).
+pub struct NoopSettlementRail;
+
+impl SettlementRail for NoopSettlementRail {
+    fn settle(&self, _cmd: &CommandCall) -> Option<Value> {
+        None
+    }
+}
+
 // ─── ConfigProvider (NL-20) ──────────────────────────────────────────────────
 
 /// The outcome of a host reviewing a shape-checked `§config` candidate set
@@ -184,11 +212,16 @@ const MODEL_COMMANDS: &[&str] = &["GEN", "ANALYZE"];
 /// A workflow invoking one without a `+default` requires the [`ExtensionRole::Dialog`] role.
 const DIALOG_COMMANDS: &[&str] = &["ASK", "CONFIRM"];
 
+/// Settlement commands — those the executor dispatches to its
+/// [`crate::executor::SettlementRail`]. A workflow invoking one always
+/// requires the [`ExtensionRole::Settlement`] role (LP-17).
+const SETTLEMENT_COMMANDS: &[&str] = &["SETTLE"];
+
 // ─── Effect Classification (LP-11) ───────────────────────────────────────────
 
 /// The class of an effectful step, for the [`PolicyProvider`] gate (LP-11).
 ///
-/// Realized narrower than the two-role taxonomy above might suggest: a third
+/// Realized narrower than the two-role taxonomy above might suggest: a fourth
 /// `ToolUse` class is deliberately absent. Every `tool`-shaped builtin command
 /// (`FETCH`, `WRITE`, `GIT`, `NOTIFY`, …) is a fixed, zero-dependency stub with
 /// no host-swappable seam behind it — gating one would authorize nothing real.
@@ -199,6 +232,8 @@ pub enum EffectClass {
     ModelCall,
     /// A deferred/external completion (`ASK`, `CONFIRM`) — see [`DIALOG_COMMANDS`].
     Deferred,
+    /// An outbound value transfer (`SETTLE`) — see [`SETTLEMENT_COMMANDS`] (LP-17).
+    Settlement,
 }
 
 impl EffectClass {
@@ -209,6 +244,7 @@ impl EffectClass {
         match self {
             EffectClass::ModelCall => "model_call",
             EffectClass::Deferred => "deferred",
+            EffectClass::Settlement => "settlement",
         }
     }
 }
@@ -216,13 +252,16 @@ impl EffectClass {
 /// Classify a command by its effect class, if it has one.
 ///
 /// Returns `None` for every builtin command outside `MODEL_COMMANDS` /
-/// `DIALOG_COMMANDS` — `LOG`, `COUNTER`, `DATE`, and the rest are purely
-/// in-memory and touch no host-swappable seam, so they are never gated.
+/// `DIALOG_COMMANDS` / `SETTLEMENT_COMMANDS` — `LOG`, `COUNTER`, `DATE`, and
+/// the rest are purely in-memory and touch no host-swappable seam, so they
+/// are never gated.
 pub fn effect_class_of(command: &str) -> Option<EffectClass> {
     if MODEL_COMMANDS.contains(&command) {
         Some(EffectClass::ModelCall)
     } else if DIALOG_COMMANDS.contains(&command) {
         Some(EffectClass::Deferred)
+    } else if SETTLEMENT_COMMANDS.contains(&command) {
+        Some(EffectClass::Settlement)
     } else {
         None
     }
@@ -251,6 +290,8 @@ pub enum ExtensionRole {
     Environment,
     /// `§config` host-acceptance authority ([`ConfigProvider`]).
     Config,
+    /// Outbound value settlement backend ([`SettlementRail`]).
+    Settlement,
 }
 
 /// What a workflow declares it needs from its host to execute (LP-8).
@@ -349,6 +390,9 @@ impl CapabilityManifest {
             {
                 manifest.roles.insert(ExtensionRole::Dialog);
             }
+            if SETTLEMENT_COMMANDS.contains(&name) {
+                manifest.roles.insert(ExtensionRole::Settlement);
+            }
             if !vocab::is_known_command(name) {
                 manifest.roles.insert(ExtensionRole::Vocabulary);
                 manifest.commands.insert(cmd.name.clone());
@@ -435,8 +479,11 @@ impl HostCapabilities {
     /// the default dialog resolver only handles `+default`-marked dialogs), and
     /// [`ExtensionRole::Config`] (the [`DefaultConfigProvider`] — like
     /// `Environment`, a complete trivial acceptor, not merely absent like
-    /// `Dialog`). It declares no host-extension commands and no named
-    /// capabilities.
+    /// `Dialog`). [`ExtensionRole::Settlement`] is likewise **not** provided —
+    /// [`NoopSettlementRail`] never settles anything, so a manifest-declaring
+    /// workflow is rejected pre-run rather than discovering unaccounted
+    /// settlements one step at a time. It declares no host-extension commands
+    /// and no named capabilities.
     pub fn builtin() -> Self {
         let mut host = Self::new();
         host.roles.insert(ExtensionRole::Model);
@@ -547,6 +594,12 @@ mod tests {
     }
 
     #[test]
+    fn effect_class_of_settlement_command() {
+        assert_eq!(effect_class_of("SETTLE"), Some(EffectClass::Settlement));
+        assert_eq!(EffectClass::Settlement.as_gate_str(), "settlement");
+    }
+
+    #[test]
     fn effect_class_of_non_effectful_command_is_none() {
         assert_eq!(effect_class_of("LOG"), None);
         assert_eq!(effect_class_of("COUNTER"), None);
@@ -633,6 +686,29 @@ mod tests {
     }
 
     #[test]
+    fn builtin_host_does_not_provide_settlement() {
+        // NoopSettlementRail never settles anything, so builtin deliberately
+        // does NOT provide Settlement (LP-17) — same shape as Dialog.
+        let host = HostCapabilities::builtin();
+        assert!(!host.provides(ExtensionRole::Settlement));
+    }
+
+    #[test]
+    fn noop_settlement_rail_never_settles() {
+        let rail = NoopSettlementRail;
+        let cmd = CommandCall {
+            name: "SETTLE".to_string(),
+            args: vec![
+                "vendor".to_string(),
+                "10.00".to_string(),
+                "invoice".to_string(),
+            ],
+            ..Default::default()
+        };
+        assert_eq!(rail.settle(&cmd), None);
+    }
+
+    #[test]
     fn validate_manifest_satisfiable_empty() {
         let manifest = CapabilityManifest::new().require_role(ExtensionRole::Model);
         let host = HostCapabilities::builtin();
@@ -672,6 +748,22 @@ mod tests {
         assert!(
             manifest.roles().contains(&ExtensionRole::Model),
             "GEN workflow must require the Model role: {manifest:?}"
+        );
+    }
+
+    #[test]
+    fn manifest_from_settle_workflow_requires_settlement() {
+        let src = "\
+§wf:s v1.0
+@out: $receipt
+@steps:
+  1. SETTLE(vendor, 10.00, invoice) → $receipt
+";
+        let ast = crate::parser::Parser::parse(src).expect("parse");
+        let manifest = CapabilityManifest::from_workflow(&ast);
+        assert!(
+            manifest.roles().contains(&ExtensionRole::Settlement),
+            "SETTLE workflow must require the Settlement role: {manifest:?}"
         );
     }
 

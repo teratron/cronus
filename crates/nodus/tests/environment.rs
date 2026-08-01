@@ -263,6 +263,7 @@ fn max_steps_budget_halts_with_partial_status() {
                     max_steps: Some(2),
                     ..Default::default()
                 }),
+                token_measure: None,
             }
         }
         fn open(&self, task: &TaskId, seed: Seed) -> Instance {
@@ -359,8 +360,8 @@ fn candidate_digest_deterministic_and_content_addressed() {
         max_steps: Some(10),
         ..Default::default()
     });
-    let c1 = result.candidate(ENV_WF, "run-1", budget);
-    let c2 = result.candidate(ENV_WF, "run-1", budget);
+    let c1 = result.candidate(ENV_WF, "run-1", budget, None);
+    let c2 = result.candidate(ENV_WF, "run-1", budget, None);
     assert_eq!(
         c1.workflow_digest, c2.workflow_digest,
         "the same source must always produce the same digest"
@@ -369,10 +370,215 @@ fn candidate_digest_deterministic_and_content_addressed() {
     assert_eq!(c1.trajectory_ref, "run-1");
 
     let different_source = ENV_WF.replace("env_test", "env_test_renamed");
-    let c3 = result.candidate(&different_source, "run-1", budget);
+    let c3 = result.candidate(&different_source, "run-1", budget, None);
     assert_ne!(
         c1.workflow_digest, c3.workflow_digest,
         "a changed workflow source must change the digest"
+    );
+}
+
+#[test]
+fn candidate_carries_token_measure() {
+    let env = StubEnvironment;
+    let host = HostCapabilities::builtin();
+    let result = workflows::run_with_environment(
+        ENV_WF,
+        "env_test.nodus",
+        None,
+        &env,
+        &host,
+        &"__stub__".to_string(),
+        1,
+    )
+    .expect("run");
+
+    let budget = Some(Budget {
+        max_tokens: Some(1000),
+        ..Default::default()
+    });
+    let candidate = result.candidate(
+        ENV_WF,
+        "run-1",
+        budget,
+        Some("gpt-tokenizer-v1".to_string()),
+    );
+    assert_eq!(
+        candidate.token_measure,
+        Some("gpt-tokenizer-v1".to_string()),
+        "the profile's measure must carry through to the archived candidate"
+    );
+}
+
+// ─── NE-14 declared budget measure ────────────────────────────────────────────
+
+/// Same call-tracking shape as `InstrumentedEnv`, but its `profile()` is
+/// configurable so a test can declare a `max_tokens` budget with or without a
+/// `token_measure`.
+struct MeasureEnv {
+    profile: EnvironmentProfile,
+    calls: Arc<Mutex<Vec<&'static str>>>,
+    opened: Arc<Mutex<u32>>,
+}
+
+impl MeasureEnv {
+    fn new(profile: EnvironmentProfile) -> Self {
+        MeasureEnv {
+            profile,
+            calls: Arc::new(Mutex::new(Vec::new())),
+            opened: Arc::new(Mutex::new(0)),
+        }
+    }
+}
+
+impl EnvironmentProvider for MeasureEnv {
+    fn task_ids(&self) -> Vec<TaskId> {
+        vec!["t1".to_string()]
+    }
+
+    fn profile(&self) -> EnvironmentProfile {
+        self.profile.clone()
+    }
+
+    fn open(&self, task: &TaskId, seed: Seed) -> Instance {
+        *self.opened.lock().unwrap() += 1;
+        Instance::new(task.clone(), seed)
+    }
+
+    fn reset(&self, _inst: &mut Instance) -> Observation {
+        self.calls.lock().unwrap().push("reset");
+        Observation(nodus::executor::Value::Text("seeded".to_string()))
+    }
+
+    fn step(&self, _inst: &mut Instance, action: Action) -> Observation {
+        self.calls.lock().unwrap().push("step");
+        Observation(action.0)
+    }
+
+    fn evaluate(&self, _inst: &Instance) -> Reward {
+        self.calls.lock().unwrap().push("evaluate");
+        Reward {
+            score: Some(1.0),
+            metadata: Default::default(),
+        }
+    }
+
+    fn release(&self, _inst: Instance) {
+        self.calls.lock().unwrap().push("release");
+    }
+}
+
+#[test]
+fn max_tokens_with_no_measure_rejects_before_workflow_runs() {
+    let env = MeasureEnv::new(EnvironmentProfile {
+        labels: Default::default(),
+        grading: GradingMode::Automated,
+        budget: Some(Budget {
+            max_tokens: Some(1000),
+            ..Default::default()
+        }),
+        token_measure: None,
+    });
+    let host = HostCapabilities::builtin();
+
+    let result = workflows::run_with_environment(
+        ENV_WF,
+        "env_test.nodus",
+        None,
+        &env,
+        &host,
+        &"t1".to_string(),
+        1,
+    )
+    .expect("the NE-14 gate returns an EnvRunResult, not a parse error");
+
+    assert_eq!(result.result.status, Status::Failed);
+    assert!(
+        result.result.log.is_empty(),
+        "no workflow step may execute on a rejected run"
+    );
+    assert!(
+        result
+            .result
+            .errors
+            .iter()
+            .any(|e| e.code == "NODUS:ENV_MEASURE_UNKNOWN"),
+        "rejection must record ENV_MEASURE_UNKNOWN; errors: {:?}",
+        result.result.errors
+    );
+    assert_eq!(
+        *env.opened.lock().unwrap(),
+        1,
+        "env.open already ran for the frozen-boundary reset-observation shape (NE-14's check is after profile(), not before open)"
+    );
+    assert_eq!(
+        *env.calls.lock().unwrap(),
+        vec!["reset", "release"],
+        "reset ran, then the rejection short-circuits before any workflow step or evaluate — \
+         but release still fires via the guard's Drop (NE-7 unaffected); calls: {:?}",
+        env.calls.lock().unwrap()
+    );
+}
+
+#[test]
+fn max_tokens_with_measure_runs_normally() {
+    let env = MeasureEnv::new(EnvironmentProfile {
+        labels: Default::default(),
+        grading: GradingMode::Automated,
+        budget: Some(Budget {
+            max_tokens: Some(1000),
+            ..Default::default()
+        }),
+        token_measure: Some("gpt-tokenizer-v1".to_string()),
+    });
+    let host = HostCapabilities::builtin();
+
+    let result = workflows::run_with_environment(
+        ENV_WF,
+        "env_test.nodus",
+        None,
+        &env,
+        &host,
+        &"t1".to_string(),
+        1,
+    )
+    .expect("run");
+
+    assert_eq!(
+        result.result.status,
+        Status::Ok,
+        "an identified measure must not be rejected; errors: {:?}",
+        result.result.errors
+    );
+    assert!(
+        env.calls.lock().unwrap().contains(&"evaluate"),
+        "the run must proceed all the way to evaluate; calls: {:?}",
+        env.calls.lock().unwrap()
+    );
+}
+
+#[test]
+fn no_max_tokens_budget_is_unaffected_by_ne14() {
+    // A profile with no token budget at all (or no budget) carries no measure
+    // and is unaffected — the regression every other environment test already
+    // exercises implicitly; this one asserts it explicitly for NE-14.
+    let env = MeasureEnv::new(EnvironmentProfile::empty());
+    let host = HostCapabilities::builtin();
+
+    let result = workflows::run_with_environment(
+        ENV_WF,
+        "env_test.nodus",
+        None,
+        &env,
+        &host,
+        &"t1".to_string(),
+        1,
+    )
+    .expect("run");
+
+    assert_eq!(result.result.status, Status::Ok);
+    assert!(
+        env.calls.lock().unwrap().contains(&"evaluate"),
+        "an unbudgeted profile must run to completion unaffected by NE-14"
     );
 }
 
