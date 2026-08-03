@@ -47,6 +47,7 @@
 - <https://github.com/langchain-ai/langchain>
 - <https://github.com/aaif-goose/goose>
 - <https://github.com/microsoft/agent-framework>
+- <https://github.com/affaan-m/ECC>
 
 ## Spec-Driven Development
 
@@ -120,6 +121,8 @@
 - <https://github.com/Comfy-Org/ComfyUI>
 - <https://github.com/firecrawl/firecrawl>
 - <https://github.com/jamiepine/voicebox>
+- <https://github.com/rasbt/LLMs-from-scratch>
+- <https://github.com/getagentseal/codeburn>
 
 ## Harness
 
@@ -164,8 +167,11 @@
 - <https://github.com/mountain-loop/yaak>
 - <https://github.com/aptakube/aptakube>
 - <https://github.com/affaan-m/ECC>
+- <https://github.com/getagentseal/codeburn>
 
 ## Misc
 
-- [Ralph loop агенты, оракул и право на мутацию: как не путать execution loop с evolution loop](https://habr.com/ru/articles/1017180/)
-- [Loop Engineering: как перестать промптить вручную и начать проектировать циклы для ИИ-агентов](https://ai4dev.ru/posts/loop-engineering/)
+- [Ralph loop агенты, оракул и право на мутацию: как не путать execution loop с evolution loop](https://habr.com/ru/articles/1017180)
+- [Loop Engineering: как перестать промптить вручную и начать проектировать циклы для ИИ-агентов](https://ai4dev.ru/posts/loop-engineering)
+- [How to Build a Dynamic Workflow Engine for Your Need?](https://www.nected.ai/blog/dynamic-workflow-engine)
+- [APILayer Unified Suite](https://github.com/public-apis/public-apis)
