@@ -124,6 +124,9 @@
 - <https://github.com/rasbt/LLMs-from-scratch>
 - <https://github.com/getagentseal/codeburn>
 - <https://github.com/garrytan/gstack>
+- <https://github.com/thedotmack/claude-mem>
+- <https://github.com/pbakaus/impeccable>
+- <https://github.com/multica-ai/andrej-karpathy-skills>
 
 ## Harness
 
