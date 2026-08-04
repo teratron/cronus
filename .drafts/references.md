@@ -123,6 +123,7 @@
 - <https://github.com/jamiepine/voicebox>
 - <https://github.com/rasbt/LLMs-from-scratch>
 - <https://github.com/getagentseal/codeburn>
+- <https://github.com/garrytan/gstack>
 
 ## Harness
 

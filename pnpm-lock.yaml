@@ -36,8 +36,8 @@ importers:
         specifier: ^2.5.6
         version: 2.5.6
       fallow:
-        specifier: ^3.11.0
-        version: 3.11.0
+        specifier: ^3.13.0
+        version: 3.13.0
 
   apps/desktop:
     dependencies:
@@ -259,43 +259,43 @@ packages:
       '@noble/hashes':
         optional: true
 
-  '@fallow-cli/darwin-arm64@3.11.0':
-    resolution: {integrity: sha512-wSBCS3rInx7OslJ2oHaVtWzwi9gnW/t6yuOp/WsrQ1rVb3R10koSG/4CWfwKob2yycLGW4pwjGPY/Fl7Ky0irA==}
+  '@fallow-cli/darwin-arm64@3.13.0':
+    resolution: {integrity: sha512-IOdTZd6rsF/T4pRYoeMCezjq00D7iRZlqF1SG8NaF8ZQmSAn2qweW3JPz+IBAEiCgrmUVjLdOqTpj9mcwgAAqQ==}
     cpu: [arm64]
     os: [darwin]
 
-  '@fallow-cli/darwin-x64@3.11.0':
-    resolution: {integrity: sha512-eAfUHmB9dwOgT1DjJkVILnlVF/sQGEZE5dOJfaBFqZErqm0EArC6Xr/Tt41niBCkS4oHfpGQ/41g1+oeOqS/fQ==}
+  '@fallow-cli/darwin-x64@3.13.0':
+    resolution: {integrity: sha512-3Jf/r90wYrbsxC223BGNQap4eDynGdWMzI/sEaL3kC8+o0jUEM/eJeyjms8DccA7liZjyO74juIAmLPj4UUNog==}
     cpu: [x64]
     os: [darwin]
 
-  '@fallow-cli/linux-arm64-gnu@3.11.0':
-    resolution: {integrity: sha512-4JND8XJzP/IMx4G1hNIiMTtGuEtLYeH176tA1C0Uc8EayM9PQdoDP/w7D1z+gkT8zUFSQr0cQ894WWDgyfoQ1w==}
+  '@fallow-cli/linux-arm64-gnu@3.13.0':
+    resolution: {integrity: sha512-3sYDCYnexWFIY+qKbznupFG4lkeMyVpYD810naLntD/O4KwyDT/b7hNL3NKkk4HdWXFyw/SH0Vj0K1u3EP7rlA==}
     cpu: [arm64]
     os: [linux]
 
-  '@fallow-cli/linux-arm64-musl@3.11.0':
-    resolution: {integrity: sha512-2Yrx4U8CO4dDdi+N8tW7MdjSJ/HP7JJo4JtJUJ3B0KBS4uK/k+r11E8hhEoqU0GqeSf9t7HutyhVnh89+Glt3g==}
+  '@fallow-cli/linux-arm64-musl@3.13.0':
+    resolution: {integrity: sha512-YBqEt7Zy0nnDgQA/mW016/5YAelMwyQnSlchoc2417bqq/YSQ33gc7J0Og1GxhfPeaeoZoQdrgJItr4gO93ifA==}
     cpu: [arm64]
     os: [linux]
 
-  '@fallow-cli/linux-x64-gnu@3.11.0':
-    resolution: {integrity: sha512-DHIv99vJBSXYDz9Xk5MWq+m920F4GZ4lkvaNOvo5a8s/t7Huo0j++YOXfg4XwKXiFUXy+1VYoZ+7Lfb6pqMstQ==}
+  '@fallow-cli/linux-x64-gnu@3.13.0':
+    resolution: {integrity: sha512-2Il2ekskSUeCP6ZdOFaM04ZdWN9W1NIsEZWgQKuUAsQR1oZwf+ydabHrtzouXRnNePIBnW4YjCuoN3MrI96vCQ==}
     cpu: [x64]
     os: [linux]
 
-  '@fallow-cli/linux-x64-musl@3.11.0':
-    resolution: {integrity: sha512-QlPWMu3G6FYUa0HWIzG5B75dFQ284SMIJLNK3NlzyOAPWZgzXt5Sex6XTyKcSak1FrKysePbAoXD6yZaZ3U/jQ==}
+  '@fallow-cli/linux-x64-musl@3.13.0':
+    resolution: {integrity: sha512-PxsGmZpcVREunGKmhx54fNHKEF9p13Zo86pl+YWlxP2AaNMh9I7jIF7oMqe7lE1wOmz3OA6BN507RdkQ65gzhA==}
     cpu: [x64]
     os: [linux]
 
-  '@fallow-cli/win32-arm64-msvc@3.11.0':
-    resolution: {integrity: sha512-3ZxW0i2IOG+L1ByITjKX87NTz16XJk0NZs1UebhyDE/P6XRANTnSA1/JkHPi3CMBd1Khd+EuDA64BzbwjCBFkw==}
+  '@fallow-cli/win32-arm64-msvc@3.13.0':
+    resolution: {integrity: sha512-yrbK2E0whjl3zYwd2qs6hrOVFVT5P0dQHW53cM8sDHCxppEUvNUi/oMBpRpGOhi9juMnwJDfgOcpGA3v+CbezA==}
     cpu: [arm64]
     os: [win32]
 
-  '@fallow-cli/win32-x64-msvc@3.11.0':
-    resolution: {integrity: sha512-XkowUPGSZrecXw+aLQF+UAWnlQWSk2CwnagqUqlbVJw5zsABDa8HliMyDWXWkhm1PGOH32PAqJLE7T0xJ5Ax6A==}
+  '@fallow-cli/win32-x64-msvc@3.13.0':
+    resolution: {integrity: sha512-+X2nUW4+/99BL0G6bLCTMdtFoI7pj4uwcPMyV3ArRgVanDEGuTHJ4of7SHYijsk/1Cw/ngXRpUrVlawDWUQS0Q==}
     cpu: [x64]
     os: [win32]
 
@@ -889,13 +889,13 @@ packages:
     resolution: {integrity: sha512-KfYbmpRm0VbLjEvVa9yGwCi9GI34xvi7A/HXYWQO65CSD2u3MczUJSuwXKFIxlGsgBQizV9q5J9NHj4VG0n+pA==}
     engines: {node: '>=12.0.0'}
 
-  fallow-type-aware@3.10.0:
-    resolution: {integrity: sha512-cKvAYeDybtQKDA5cMX+EfTv4aP5U9qH7eVus2zXbZdZzfQNwetBwZaa9XqLcU1XxAklFm9jS7JWhAhbl1tbNKA==}
+  fallow-type-aware@3.13.0:
+    resolution: {integrity: sha512-OKdChzA6kgfljlQlPKHKgaUKDOCvdVEf4lK2E6M4iEBAnm801Ph4y9thH+rDdkfQ1XDyuG2qpxSYUyezuzG+zQ==}
     engines: {node: '>=20'}
     hasBin: true
 
-  fallow@3.11.0:
-    resolution: {integrity: sha512-fYNnZZnxMjmjDGCuUsDe4rCs1w9c5YMbmRVm5jHN0BK8oCJJlz/lt4z/FVJtC+uFmkmWvSK1YSvQacFGArHTrA==}
+  fallow@3.13.0:
+    resolution: {integrity: sha512-r31glq8ID8dd9gC+7H9yyIcWM6mr6RDuRnJuv7u2YJs9B1wvbMbhjnMrosbyPydQ9QO+tH4TIHQYJd9wz5jT7w==}
     engines: {node: '>=22'}
     hasBin: true
 
@@ -1473,28 +1473,28 @@ snapshots:
 
   '@exodus/bytes@1.15.1': {}
 
-  '@fallow-cli/darwin-arm64@3.11.0':
+  '@fallow-cli/darwin-arm64@3.13.0':
     optional: true
 
-  '@fallow-cli/darwin-x64@3.11.0':
+  '@fallow-cli/darwin-x64@3.13.0':
     optional: true
 
-  '@fallow-cli/linux-arm64-gnu@3.11.0':
+  '@fallow-cli/linux-arm64-gnu@3.13.0':
     optional: true
 
-  '@fallow-cli/linux-arm64-musl@3.11.0':
+  '@fallow-cli/linux-arm64-musl@3.13.0':
     optional: true
 
-  '@fallow-cli/linux-x64-gnu@3.11.0':
+  '@fallow-cli/linux-x64-gnu@3.13.0':
     optional: true
 
-  '@fallow-cli/linux-x64-musl@3.11.0':
+  '@fallow-cli/linux-x64-musl@3.13.0':
     optional: true
 
-  '@fallow-cli/win32-arm64-msvc@3.11.0':
+  '@fallow-cli/win32-arm64-msvc@3.13.0':
     optional: true
 
-  '@fallow-cli/win32-x64-msvc@3.11.0':
+  '@fallow-cli/win32-x64-msvc@3.13.0':
     optional: true
 
   '@jridgewell/gen-mapping@0.3.13':
@@ -1921,24 +1921,24 @@ snapshots:
 
   expect-type@1.4.0: {}
 
-  fallow-type-aware@3.10.0:
+  fallow-type-aware@3.13.0:
     dependencies:
       typescript: 7.0.2
     optional: true
 
-  fallow@3.11.0:
+  fallow@3.13.0:
     dependencies:
       detect-libc: 2.1.2
     optionalDependencies:
-      '@fallow-cli/darwin-arm64': 3.11.0
-      '@fallow-cli/darwin-x64': 3.11.0
-      '@fallow-cli/linux-arm64-gnu': 3.11.0
-      '@fallow-cli/linux-arm64-musl': 3.11.0
-      '@fallow-cli/linux-x64-gnu': 3.11.0
-      '@fallow-cli/linux-x64-musl': 3.11.0
-      '@fallow-cli/win32-arm64-msvc': 3.11.0
-      '@fallow-cli/win32-x64-msvc': 3.11.0
-      fallow-type-aware: 3.10.0
+      '@fallow-cli/darwin-arm64': 3.13.0
+      '@fallow-cli/darwin-x64': 3.13.0
+      '@fallow-cli/linux-arm64-gnu': 3.13.0
+      '@fallow-cli/linux-arm64-musl': 3.13.0
+      '@fallow-cli/linux-x64-gnu': 3.13.0
+      '@fallow-cli/linux-x64-musl': 3.13.0
+      '@fallow-cli/win32-arm64-msvc': 3.13.0
+      '@fallow-cli/win32-x64-msvc': 3.13.0
+      fallow-type-aware: 3.13.0
 
   fdir@6.5.0(picomatch@4.0.5):
     optionalDependencies:
