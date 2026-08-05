@@ -127,6 +127,7 @@
 - <https://github.com/thedotmack/claude-mem>
 - <https://github.com/pbakaus/impeccable>
 - <https://github.com/multica-ai/andrej-karpathy-skills>
+- <https://github.com/deepbeepmeep/Wan2GP>
 
 ## Harness
 
