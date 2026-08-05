@@ -1,6 +1,6 @@
 # Model Runtime
 
-**Version:** 1.2.1
+**Version:** 1.3.0
 **Status:** Stable
 **Layer:** concept
 
@@ -168,6 +168,33 @@ Layer 2 realizations and concrete backends MUST NOT violate these.
   configuration*, and it is then a recipe field (RR-2 ambient layer) rather than an
   invisible operational choice.
 
+- **MR-16 Feasibility is a running property, not a load-time verdict.** [ADDED v1.3.0] The
+  MR-7 gate answers *can this model start here*. It does not answer *will it still fit an
+  hour in*, and three ordinary facts make that a different question. **The load transient
+  can exceed the steady state**: a naive materialization can peak at roughly twice the
+  resident footprint, so a model that fits once resident may fail while arriving — the gate
+  reasons about the **peak**, and the loading path is required to stay within the figure the
+  gate approved rather than the figure the model ends at. **Resident is not active**: for
+  architectures where only a fraction of the parameters participate per step, one "size"
+  number mis-predicts both directions — memory is governed by what must be resident,
+  throughput by what is active, and a feasibility estimate driven by parameter count alone
+  is wrong for an entire family of models. **Demand grows with the working context**: the
+  per-sequence attention state grows with the sequence, so resource use rises through a
+  session under a constant model and a constant placement; the same run that started
+  comfortably can cross the boundary later, and the growth rate is itself an
+  architecture-declared characteristic (some families deliberately trade recall for a
+  slower-growing state).
+  Two obligations follow. The estimate is driven by **declared resource characteristics** —
+  resident footprint, active fraction, per-symbol state growth, load-transient peak — that
+  travel with the portable model definition (MR-5), never by a single size scalar; where a
+  characteristic is absent it is an unknown that degrades the estimate's confidence (MR-14),
+  never a zero. And crossing the boundary **mid-run is a managed transition, never a crash
+  or a silent truncation**: the runtime re-enters the same ordered response it already owns —
+  reduce the working set through the context toolkit, move to a named degradation tier
+  (MR-15), then stop honestly with the shortfall stated — and the transition is recorded on
+  the run, because an unrecorded mid-run placement change is exactly the misattribution
+  MR-15 exists to prevent.
+
 > A Layer 2 spec cannot reach RFC status until every MR-n invariant above is addressed in
 > its "Invariant Compliance" section.
 
@@ -333,6 +360,7 @@ named by structural idea, not by product.
 
 | Version | Date | Change |
 | --- | --- | --- |
+| 1.3.0 | 2026-08-05 | Added MR-16 (feasibility is a running property, not a load-time verdict) — MR-7 answers *can this start here* and not *will it still fit an hour in*, which three ordinary facts make a different question: the **load transient** can peak near twice the resident footprint, so a model that fits once resident may fail while arriving (the gate reasons about the peak and the loading path must honour the approved figure); **resident is not active**, so for architectures where only a fraction of parameters participate per step a single size scalar mis-predicts memory and throughput in opposite directions; and **demand grows with the working context**, since per-sequence attention state grows with the sequence — a run that started comfortably crosses the boundary later, at a growth rate that is itself an architecture-declared characteristic. Two obligations: the estimate is driven by declared resource characteristics (resident footprint, active fraction, per-symbol state growth, transient peak) riding the MR-5 portable definition, with an absent characteristic degrading confidence (MR-14) rather than counting as zero; and a mid-run crossing is a **managed transition** — reduce the working set, then a named degradation tier (MR-15), then an honest stop with the shortfall stated — recorded on the run, since an unrecorded mid-run placement change is the misattribution MR-15 exists to prevent. |
 | 1.0.0 | 2026-06-25 | Initial model: local-first provider-abstracted serving runtime — content-addressed model store with verifiable registry acquisition, portable declarative model definition, explicit load/unload lifecycle with fit-gated hardware scheduling, streaming inference contract with an industry-compatible surface, managed observable server, thin clients, and digest-reproducible references (MR-1…MR-12). |
 | 1.1.0 | 2026-06-25 | MR-13…MR-14 added — multi-device placement (split across an accelerator set before CPU fallback) with mixture-of-expert footprint sizing (resident-total vs active-per-token); calibrated honest estimates (figures labeled estimate vs measurement, recalibrated by recorded `(model, placement, hardware)` residency/throughput, community sharing opt-in under the telemetry gate). §5.5 extended; ideas-to-adopt rows added for multi-accelerator fit, MoE sizing, measured calibration, hardware-preset simulation, and a community-measured corpus. |
 | 1.2.0 | 2026-07-23 | Added MR-15 (degrade before refusing) — where a model does not fit the fastest placement the runtime MUST consider a **named degradation tier** trading throughput for capacity before refusing under the MR-7 fit gate, refusal becoming the last answer rather than the first; the reason is a product one, since on a local-first system running on hardware the user already owns "your machine cannot run this" is far more often a failure of the runtime than a fact about the machine, and a runtime that only refuses is unusable on exactly the modest hardware it exists to serve. Three obligations: the tier's cost is **stated before the run** as a calibrated basis-carrying estimate (MR-14) so a slow run is chosen rather than discovered; the tier used is **recorded on the run** so a slow result is attributable to the placement instead of being mistaken for a model or prompt regression; and a tier **changes speed, never outputs** — a placement that alters results is a different configuration, and therefore a reproduction-recipe field (RR-2 ambient layer), not an invisible operational choice. |
