@@ -1,6 +1,6 @@
 # Output Contracts
 
-**Version:** 1.0.0
+**Version:** 1.0.1
 **Status:** Stable
 **Layer:** concept
 
@@ -17,6 +17,7 @@ This spec governs inline output validation only. Post-task toolchain quality gat
 - [l1-execution-graph.md](l1-execution-graph.md) — Validation fires at the node's output phase; on failure, the node is re-entered within the same graph run.
 - [l1-kanban-model.md](l1-kanban-model.md) — A card with an output contract: the contract is recorded on the card and its status updated when validation passes.
 - [l2-quality-pipeline.md](l2-quality-pipeline.md) — Concrete quality toolchain; output contracts complement it with schema and semantic checks that run before toolchain gates.
+- [l1-input-binding.md](l1-input-binding.md) — [ADDED v1.0.1] the **twin on the consumer side** of the same work unit: OC governs the value a unit *produces* (schema + validators + retry-with-verdict); input binding governs the values it *consumes* (declared binders + typed located rejections + bind-before-invoke). The machinery is deliberately opposite — the producer side retries with feedback, the consumer side rejects without retry, since re-binding an unchanged invocation yields the same rejection.
 
 ## 1. Motivation
 
@@ -153,4 +154,5 @@ A task should use an output contract when its correctness can be evaluated from 
 
 | Version | Date | Summary |
 | --- | --- | --- |
+| 1.0.1 | 2026-08-05 | Related Specifications extended with `l1-input-binding`, the consumer-side twin closing the input/output asymmetry: same unit, opposite machinery (producer retries with verdicts, consumer rejects without retry). Link-only; no invariant changed. |
 | 1.0.0 | 2026-06-24 | Initial stable spec — schema + callable + criteria validators, retry budget, verdict injection, escalation model, interaction with quality gates |
