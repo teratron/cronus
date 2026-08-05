@@ -1,6 +1,6 @@
 # Design Identity
 
-**Version:** 1.0.0
+**Version:** 1.0.1
 **Status:** Stable
 **Layer:** concept
 
@@ -41,6 +41,8 @@ craft layer those compose with.
 - [l1-attestation.md](l1-attestation.md) — Provenance/integrity witness for an imported identity package (AT-*); the source-provenance record of DI-4.
 - [l1-extension-marketplace.md](l1-extension-marketplace.md) — Addressable, version-pinned, stable-identity resolution (XM-*) for an identity acquired from an external source (DI-4).
 - [l1-security.md](l1-security.md) — Local-first, egress-gated import and secret-safe assets (DI-9).
+- [l1-negative-specification.md](l1-negative-specification.md) — [ADDED v1.0.1] the general form of DI-6: the blocked *default tells* are this identity family's **built-in** negative layer, and a project-declared avoid-list is the **user** layer DI-7's layered rule catalog already anticipates. DI-5's named auto-vs-advisory boundary is the discipline NEG-9 generalizes across domains.
+- [l1-adjustment-vocabulary.md](l1-adjustment-vocabulary.md) — [ADDED v1.0.1] the client-facing steering layer over a rendered surface: its axes (emphasis, density, colour, motion) move an artifact *within* the acceptable region, and the craft bar (DI-5/DI-6) remains the floor no adjustment may cross.
 - [l1-nodus-portability.md](../../nodus/specifications/l1-nodus-portability.md) — The workflow-library schema/vocabulary-extension (LP-4) and addressable import (LP-13) seams this pattern already generalizes host-side; see §5.7.
 
 ## 1. Motivation
@@ -340,4 +342,5 @@ lifecycle), it graduates via a spec amendment then — not speculatively now.
 
 | Version | Date | Change |
 | --- | --- | --- |
+| 1.0.1 | 2026-08-05 | Related Specifications extended with `l1-negative-specification` (DI-6 default tells generalized as the built-in negative layer; a project avoid-list is DI-7's user layer; DI-5's auto-vs-advisory boundary generalized as NEG-9) and `l1-adjustment-vocabulary` (client steering within the acceptable region, with the craft bar as the floor). Link-only; no invariant changed. |
 | 1.0.0 | 2026-07-09 | Initial model: design identity — a named, layered, schema-validated visual-language catalog as data (DI-1) with one-active-per-scope cosmetic-only switching (DI-2), token contract as the single visual source of truth (DI-3), provenance-tagged + fidelity-declared (verbatim/normalized/hybrid) attested import (DI-4); a tiered craft-conformance bar with a named auto-vs-advisory boundary (DI-5), distinctiveness-over-default rejecting generic template output (DI-6), data-driven extensible craft rules (DI-7), uniform application across office UI and agent-generated surfaces resolving the app-UI custom-theme question (DI-8), and local-first secret-safe non-authoritative assets (DI-9); ideas-to-adopt mapping (mined from a studied open-source design-agent platform's design-system-as-data catalog + anti-default craft rubric) + nodus-relevance disposition (Reuse behind the LP-4 schema-provider / LP-13 import seams, no new nodus invariant). |

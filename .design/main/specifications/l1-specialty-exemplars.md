@@ -1,6 +1,6 @@
 # Specialty Exemplars
 
-**Version:** 1.0.0
+**Version:** 1.0.1
 **Status:** Stable
 **Layer:** concept
 
@@ -22,7 +22,8 @@ This is a sibling to, not a replacement for, model benchmarking. [l1-model-bench
 - [l1-employee-availability.md](l1-employee-availability.md) - A consumer boundary: competency gates who *can* be staffed; availability governs who currently *is* — the profile is a fitness signal, never an availability override (EMP-6).
 - [l1-routing.md](l1-routing.md) - Boundary: routing consumes model-benchmarking's task-class signal; specialty competency is a staffing signal — related economy, different decision, kept distinct.
 - [l1-security.md](l1-security.md) - Exemplars are authored fixtures with no user data; runs respect secret isolation and no-exfiltration (SEC-2, INV-7).
-- [l2-budget-engine.md](l2-budget-engine.md) - Budget caps that bound suite runs on metered credentials (SE-9).
+- [l2-budget-engine.md](l2-budget-engine.md) - Budget caps that bound suite runs on metered credentials (SE-9)
+- [l1-negative-specification.md](l1-negative-specification.md) - [ADDED v1.0.1] the **negative counterpart**: SE-2/SE-5 grade by distance from a gold-standard exemplar, which is silent about proximity to a declared anti-reference. NEG-2 states why neither instrument implies the other; a candidate can score well against the exemplar and still land on something the principal excluded..
 
 ## 1. Motivation
 
@@ -209,6 +210,7 @@ The distinguishing move is the **gold-standard exemplar as the grading anchor** 
 
 | Version | Date | Change |
 | --- | --- | --- |
+| 1.0.1 | 2026-08-05 | Related Specifications extended with `l1-negative-specification` — the negative counterpart to exemplar-anchored grading: distance from a good example is silent about proximity to a bad one (NEG-2), so a candidate can score well against the exemplar and still land on an excluded outcome. Link-only; no invariant changed. |
 | 1.0.0 | 2026-07-03 | Initial concept: per-specialty competency instrument — one concentrated suite per office specialty (role-catalog axis), each probe graded by structured comparison against a human-authored gold-standard reference exemplar on two separated axes, correctness and craftsmanship (SE-1…SE-11); competency profiles feed staffing as a signal, never an override; deterministic-first, exemplar-anchored grading composing the evaluation-suite grader taxonomy; craft standard drawn from the office quality standards. Sibling to l1-model-benchmarking (task-class fitness for the router), demarcated in §4.6. |
 
 ## Canonical References

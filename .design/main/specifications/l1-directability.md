@@ -1,6 +1,6 @@
 # Directability
 
-**Version:** 1.0.0
+**Version:** 1.0.1
 **Status:** Stable
 **Layer:** concept
 
@@ -23,6 +23,7 @@ This is the direct-manipulation twin of [l1-conversational-control.md](l1-conver
 - [l1-project-wiki.md](l1-project-wiki.md) - PW-2 office-maintained / PW-4 grounded-and-attributed; DIR-3 keeps authored wiki content office-owned — a client steer on the knowledge lens is a *requested correction*, not a direct overwrite.
 - [l1-automation-canvas.md](l1-automation-canvas.md) - AC-7 pinned-partial-re-execution *requested, not run*; the per-lens precedent for request-steers versus direct-steers (DIR-3).
 - [l1-security.md](l1-security.md) - The authority and human-confirmation gates a steer inherits unchanged (DIR-4, SEC-9/SEC-10).
+- [l1-adjustment-vocabulary.md](l1-adjustment-vocabulary.md) - [ADDED v1.0.1] **Distinct subject, same instinct**: DIR steers *operations on the office substrate* and re-projects the lens (DIR-1/DIR-2); an adjustment steers a **produced artifact's own dimensions** along a named bidirectional axis. DIR-5's accepted-steer-as-standing-constraint is what ADJ-10's recorded trail feeds.
 - [l1-office-control.md](l1-office-control.md) - Distinct: that spec is office *lifecycle* states (pause/hibernate); directability is *content* steering of the office's work through its lenses.
 
 ## 1. Motivation
@@ -182,4 +183,5 @@ Primarily a main-workspace host control concept. The portable runtime participat
 
 | Version | Date | Author | Notes |
 | --- | --- | --- | --- |
+| 1.0.1 | 2026-08-05 | Core Team | Related Specifications extended with `l1-adjustment-vocabulary` — the same steering instinct on a different subject: DIR steers substrate operations and re-projects the lens, an adjustment moves a produced artifact along one of its own named bidirectional axes; DIR-5 standing-constraint reconciliation is what the ADJ-10 trail feeds. Link-only; no invariant changed. |
 | 1.0.0 | 2026-07-24 | Core Team | Initial spec — directability: the office is directable, not co-driven. Direct manipulation on any fabric lens is a first-class control binding over the one operation (DIR-1), applied to the substrate not the projection (DIR-2), respecting each lens's own authority via a direct/request-steer spectrum (DIR-3), under identical gates to any surface (DIR-4); an accepted steer becomes a standing constraint reconciled with autonomy, never silently reverted (DIR-5); steering is always optional so full automation stays the foundation (DIR-6); legible/reversible/traceable (DIR-7); scope-respecting (DIR-8); honest control — no dead controls, no faked agency (DIR-9). The direct-manipulation sibling of conversational-control; rides on l1-office-fabric; the steering half of the office-integration pair. Main-only host control concept. |
