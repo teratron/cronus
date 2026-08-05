@@ -1,6 +1,6 @@
 # Agent-Assisted Development Workflow
 
-**Version:** 1.0.0
+**Version:** 1.0.1
 **Status:** Stable
 **Layer:** concept
 
@@ -15,6 +15,7 @@ The technology-agnostic model for human-agent collaborative software development
 - [l1-quality-standards.md](l1-quality-standards.md) — Mandatory quality gates apply at the Review stage.
 - [l1-version-control.md](l1-version-control.md) — Workspace isolation and commit authority during development.
 - [l1-harness-engineering.md](l1-harness-engineering.md) — Evaluation loop for continuous improvement of the workflow itself.
+- [l1-change-containment.md](l1-change-containment.md) — [ADDED v1.0.1] the edit-footprint lens at the Review stage: DW-4's "nothing extra" spec-compliance verdict is exactly the containment verdict, and CTN-8 gives it a closed finding vocabulary distinct from the correctness and complexity lenses.
 - [l2-development-workflow.md](l2-development-workflow.md) — Cronus implementation of this pipeline.
 
 ## 1. Motivation
@@ -172,3 +173,4 @@ Accumulated session history is the primary cause of context pollution and inflat
 | Version | Date | Change |
 | --- | --- | --- |
 | 1.0.0 | 2026-06-24 | Initial Stable — DW-1…DW-10 invariants, five-stage pipeline, context discipline rules |
+| 1.0.1 | 2026-08-05 | Related Specifications extended with `l1-change-containment` — the edit-footprint lens that gives DW-4's "nothing extra" verdict a closed finding vocabulary at the Review stage. Link-only; no invariant changed. |

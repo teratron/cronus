@@ -4,7 +4,7 @@
 <!-- Maximum 100 lines. Agent updates AFTER each completed action. -->
 
 **Workspace:** main
-**Updated:** 2026-07-31 17:03
+**Updated:** 2026-08-05 15:39
 **Phase:** none open
 **Status:** Active
 
@@ -12,7 +12,7 @@
 
 - **Task:** `/magic.task` (bare, no workspace arg → resolved to `main` per Priority 3 default) — **registry-sync replan: 6 newly-orphaned concept-only L1s absorbed into Phase 0, PLAN's stale `Based on` header (frozen at INDEX v1.0.124 since Phase 22 opened) resynced to v1.0.153, and a RULES-parity gap fixed (TASKS.md said v1.5.0, RULES.md is v1.6.0).** Not a content gap — PLAN.md's Phase 0 body had been kept current through v1.0.146 by un-narrated `/magic.spec` waves; only the header pointer and these 6 newest orphans (`l1-office-fabric`/`l1-directability` the office-integration pair, `l1-document-understanding`/`l1-content-segmentation` the ingestion front, `l1-extension-points`, `l1-conversation-rewind`) needed fixing. Pre-flight `ok:true` after: 236 specs, 234 Stable/2 RFC/0 Draft, 0 orphans, header parity clean.
 - **Spec:** INDEX v1.0.153 (236 specs) · PLAN v2.47.0 · TASKS v1.38.0 · RULES v1.6.0. Backlog: 2 (both RFC concept-only L1: `l1-spec-driven-governance`, `l1-dynamic-harness`).
-- **Next Action:** Plan complete — author new scope via /magic.spec main (or /magic.status for a briefing)
+- **Next Action:** Run /magic.task main to update the plan
 
 ## Progress
 

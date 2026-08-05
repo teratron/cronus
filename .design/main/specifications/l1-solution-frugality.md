@@ -1,6 +1,6 @@
 # Solution Frugality
 
-**Version:** 1.0.0
+**Version:** 1.0.1
 **Status:** Stable
 **Layer:** concept
 
@@ -26,6 +26,7 @@ own *tooling*; frugality right-sizes the *code the agent produces for the user's
 
 ## Related Specifications
 
+- [l1-change-containment.md](l1-change-containment.md) — [ADDED v1.0.1] the **other axis**, independent of this one: frugality bounds the *size of the solution*, containment bounds the *footprint of the edit* (which existing lines a change is entitled to touch). Three seams: FR-7's *delete* findings against code the current change did not orphan are scheduled as their own change, never folded in (CTN-3); FR-4 root-cause locality is a containment **warrant**, not creep, and must not be flagged as such (CTN-1b/CTN-6); FR-1's comprehension-before-frugality is extended there to *removal* (CTN-2), which this ladder does not reach.
 - [l1-harness-composition.md](l1-harness-composition.md) — the sibling right-sizing discipline, applied to a **different subject**: composition trims the agent's own harness (roles/skills/hooks); this trims the *deliverable code*. Same anti-bloat spirit, non-overlapping targets.
 - [l1-quality-standards.md](l1-quality-standards.md) — **orthogonal, composed**: quality asks "is it correct, tested, clean?"; frugality asks "is it the least code that is correct?". Frugality never overrides a quality gate (FR-3/FR-9); the two run together.
 - [l1-code-intelligence.md](l1-code-intelligence.md) — the reuse rung (FR-2) needs a queryable view of the existing corpus to answer "does this already live here?"; code-intelligence is that lookup surface.
@@ -319,3 +320,4 @@ primitive and the lint hooks, not the judgement of when to be frugal.
 | Version | Date | Author | Notes |
 | --- | --- | --- | --- |
 | 1.0.0 | 2026-07-11 | Core Team | Initial spec — solution frugality as the output-side anti-over-engineering discipline (sibling to harness-composition's tooling-side right-sizing): comprehension precedes frugality (FR-1); the reuse-before-build ladder — YAGNI / reuse-in-codebase / stdlib / native / installed-dep / one-expression / minimum, first-hold-wins (FR-2); the hard negligence floor — never cut validation/data-loss-handling/security/accessibility/requested-scope/calibration (FR-3); root-cause locality (FR-4); tunable non-self-elevated intensity off/advisory/enforced/aggressive (FR-5, composes SEC-10); disclosed simplification with an upgrade trigger, harvestable debt ledger, no-trigger rot flag (FR-6, composes operational-ledger + self-improvement); complexity-only scoped non-mutating frugality review/audit with a closed finding vocabulary (FR-7); output economy — unrequested justification prose is complexity, requested reports exempt (FR-8); proportional verification — one runnable check for non-trivial logic, composes quality-standards' mandatory-test gate (FR-9); measured-not-asserted with an honest counterfactual — never fabricate a per-instance savings number (FR-10). Projects onto nodus as macro-reuse + a frugality-lint family with no new language primitive (§4.6). Composes harness-composition / quality-standards / code-intelligence / memory-intelligence (MI-13) / operational-ledger / self-improvement / security (SEC-10) / development-workflow / workflow-language. Derived from studied prior art on agentic code minimalism. |
+| 1.0.1 | 2026-08-05 | Core Team | Related Specifications extended with `l1-change-containment` — the independent edit-footprint axis, naming the three seams explicitly: FR-7 delete-findings against code this change did not orphan are scheduled separately (CTN-3), FR-4 root-cause locality is a containment warrant rather than scope creep (CTN-1b/CTN-6), and FR-1 comprehension-first extends to removal (CTN-2). Link-only; no invariant changed. |
