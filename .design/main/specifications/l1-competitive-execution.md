@@ -1,6 +1,6 @@
 # Competitive Execution
 
-**Version:** 1.1.0
+**Version:** 1.1.1
 **Status:** Stable
 **Layer:** concept
 
@@ -20,6 +20,7 @@ This is the third fan-out mode in the coordination family, distinct from the two
 - [l1-work-liveness.md](l1-work-liveness.md) — per-attempt exclusive claim (WL-1), single active run (WL-4), stranded-attempt reconciliation (WL-5); the unit-level mechanics each attempt rides on.
 - [l1-reproduction-recipe.md](l1-reproduction-recipe.md) — [ADDED v1.1.0] the winner's recipe records the fidelity it was selected at and the fidelity it was produced at (CE-10), so a shipped artifact is never confused with the sketch that won.
 - [l1-version-control.md](l1-version-control.md) — the isolated per-attempt working copy (a scratch branch/worktree) that realizes CE-3 so rival attempts never collide on shared files.
+- [l1-fidelity-variants.md](l1-fidelity-variants.md) — [ADDED v1.1.1] the **general axis** CE-10 is a special case of: the reduced attempts are declared fidelity variants, so the record shows what the selection was actually made on, and the winner's full-fidelity re-production is a move to the reference variant. FV adds nothing to the tournament itself; it makes the proxy runs legible.
 - [../../nodus/specifications/l1-nodus-language.md](../../nodus/specifications/l1-nodus-language.md) — NL-13 competitive `~PARALLEL` selection is the nodus-workflow realization of this contract (select one branch result, discard the rest).
 
 ## 1. Motivation
@@ -154,5 +155,6 @@ The judge is always **independent of the attempts** (an attempt cannot rank itse
 
 | Version | Date | Author | Notes |
 | --- | --- | --- | --- |
+| 1.1.1 | 2026-08-05 | Core Team | Related Specifications extended with `l1-fidelity-variants` — the general axis CE-10 is the worked special case of: proxy attempts are declared variants (so the record shows what the selection ran on) and the winner's re-production is a move to the reference variant. Link-only; no invariant changed. |
 | 1.1.0 | 2026-07-23 | Core Team | Added CE-10 (proxy-fidelity selection) — the N attempts MAY run at a reduced, **declared** fidelity used only to select, with the winner re-produced at full fidelity before entering mainline (CE-6), changing the tournament's economics from N full attempts to N cheap plus one full and making width affordable where CE-7's budget headroom would otherwise cap N at one. Three binding conditions, each closing a way the saving becomes a lie: **uniform fidelity across attempts** (a contest of unequally-resourced candidates measures fidelity rather than quality and crowns whichever tried hardest); **the proxy is validated, not assumed** (a low-fidelity ranking is a hypothesis of agreement with the full-fidelity ranking, measured periodically against full-fidelity contests — a proxy that does not rank alike is worse than no tournament, since it selects wrongly with confidence and pays for the privilege); and **the proxy is recorded** in the result (CE-9) and in the winner's reproduction recipe so the shipped artifact is never confused with the sketch that won. On unvalidatable or degraded agreement the contest reverts to full fidelity and reports that it did. |
 | 1.0.0 | 2026-07-04 | Core Team | Initial concept: best-of-N quality-selection fan-out — N independent complete attempts at the *same* whole unit, each isolated (per-attempt scratch worktree), an independent judge selects exactly one whole winner by a declared criterion (gate-objective / scored / judged), losing attempts discarded never merged, winner integrated + gated as one whole; uncertainty-justified & recorded (CE-1), bounded width & honest afford (CE-7), contained failure & honest all-fail (CE-8), observable & attributed (CE-9); the third coordination-family fan-out mode beside parallel-staffing (throughput, integrate-all) and deliberation (synthesis, blend-all). Nodus realization: l1-nodus-language NL-13 competitive `~PARALLEL` selection. |

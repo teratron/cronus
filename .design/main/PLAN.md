@@ -1,8 +1,8 @@
 # Implementation Plan
 
-**Version:** 2.55.0
+**Version:** 2.56.0
 **Generated:** 2026-07-31
-**Based on:** .design/main/INDEX.md v1.0.162
+**Based on:** .design/main/INDEX.md v1.0.163
 **Status:** Active
 
 ## Overview
@@ -287,6 +287,10 @@ Execution mode: **Parallel** (C3); tracks grouped by file independence. Critical
 *Concept absorbed in v2.55.0 (registry sync INDEX v1.0.161 → v1.0.162). Stable, `concept-only` (C28) — no authored `Implements:` L2 yet; it is an authored project artifact with a governing contract rather than a component to build, and it phases only once an L2 realization reaches Stable via `/magic.spec`. The residual delta in this sync is two link-only patch amendments (`l1-project-wiki` 1.0.1, `l1-pattern-codification` 1.0.2) drawing the boundary and the pathway to it.*
 
 - [x] **Project Vocabulary** ([l1-project-vocabulary.md](specifications/l1-project-vocabulary.md)) [L1] — `concept-only` — the governing artifact that lets a project say something short and exact (VOC-1…VOC-10): one canonical term per concept (VOC-1); displaced synonyms listed with the entry rather than merely absent (VOC-2); relationships between terms, since confusion is about connection (VOC-3); ambiguities resolved on the record (VOC-4); the vocabulary governs produced artifacts — identifiers, titles, durable records — not only conversation (VOC-5); authored during the work when the distinction is live (VOC-6); a term earns canonical status through the codification pathway and is never self-decreed by a generator (VOC-7); authoritative and distinct from the client-facing plain-language glossary, which is a derived projection (VOC-8); precision the goal and volume a cost, an unconsulted vocabulary worse than none (VOC-9); adherence and compression measured, not asserted (VOC-10). Nodus projection needs no new primitive — the schema vocabulary is already a validated controlled vocabulary, selective disclosure is already the volume control, and author-chosen names are lintable at the validate-before-run stage.
+
+*Concept absorbed in v2.56.0 (registry sync INDEX v1.0.162 → v1.0.163). Stable, `concept-only` (C28) — no authored `Implements:` L2 yet; it is a declaration-and-disclosure contract over an axis that already exists wherever a capability has cheap and expensive operating points, not a component to build, and it phases only once an L2 realization reaches Stable via `/magic.spec`. The residual delta in this sync is two link-only patch amendments (`l1-model-runtime` 1.3.1, `l1-competitive-execution` 1.1.1) drawing the boundary and the special case to it.*
+
+- [x] **Fidelity Variants** ([l1-fidelity-variants.md](specifications/l1-fidelity-variants.md)) [L1] — `concept-only` — the axis MR-15 explicitly declines (a degradation tier trades speed and never alters outputs; a result-altering configuration is *something else*, and that something else had no owner): a fidelity variant changes the output while a placement tier does not, and conflating them lets a quality regression enter through the door reserved for changes promised not to alter anything (FV-1); the variant set declared, ordered, and profiled (FV-2); selection explicit or policy-driven, never opportunistic (FV-3); the variant travels with the artifact as a recipe field (FV-4); measurement is within-variant, generalizing MB-5 to every variant-bearing capability (FV-5); a declared floor below which the answer is a stated refusal (FV-6); no silent upgrade either (FV-7); the quality effect measured and sliced, never assumed monotone, with `UNKNOWN` a first-class value (FV-8); a named reference variant anchoring the axis (FV-9). Nodus projection needs no new primitive — the config surface declares the choice, the run-record annotation carries it, and the environment contract's comparability partition already expresses the within-variant rule.
 
 ## Phase 1 — Seed I: Foundation
 

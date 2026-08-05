@@ -1,6 +1,6 @@
 # Model Runtime
 
-**Version:** 1.3.0
+**Version:** 1.3.1
 **Status:** Stable
 **Layer:** concept
 
@@ -34,6 +34,7 @@ the substrate that routing schedules onto and that the provider catalog implemen
 - [l2-dashboard.md](l2-dashboard.md) - Runtime analytics (measured residency/throughput) that recalibrate fit estimates (MR-14).
 - [l1-telemetry.md](l1-telemetry.md) - Consent gate governing any opt-in sharing of measured performance beyond the device (MR-14).
 - [l1-reproduction-recipe.md](l1-reproduction-recipe.md) - [ADDED v1.2.0] Consumes MR-3 content-addressed identity and MR-12 versioned references (RR-3); a degradation tier that would alter outputs is a recipe field, not an operational choice (MR-15).
+- [l1-fidelity-variants.md](l1-fidelity-variants.md) - [ADDED v1.3.1] Owns **the other side of the MR-15 line**: a tier trades throughput for capacity and never alters outputs, and MR-15 explicitly classifies a result-altering configuration as *a different configuration* rather than a degradation. That configuration class — the same capability at a lower cost and a different output — is what FV declares, selects, records, floors, and measures. MR-7/MR-16 force the choice; FV governs how it is made and disclosed.
 - [l1-model-adaptation.md](l1-model-adaptation.md) - [ADDED v1.2.1] Owns the lifecycle of the **optional adapters** MR-5 names as a definition field: produce, evaluate, attach, detach, version; MR-6 load/unload realizes attach/detach over the frozen base.
 
 ## 1. Motivation
@@ -360,6 +361,7 @@ named by structural idea, not by product.
 
 | Version | Date | Change |
 | --- | --- | --- |
+| 1.3.1 | 2026-08-05 | Related Specifications extended with `l1-fidelity-variants` — the owner of the class MR-15 explicitly hands off: a result-altering configuration is not a degradation tier, and the axis of same-capability-lower-output now has a spec that declares, selects, records, floors, and measures it. Link-only; no invariant changed. |
 | 1.3.0 | 2026-08-05 | Added MR-16 (feasibility is a running property, not a load-time verdict) — MR-7 answers *can this start here* and not *will it still fit an hour in*, which three ordinary facts make a different question: the **load transient** can peak near twice the resident footprint, so a model that fits once resident may fail while arriving (the gate reasons about the peak and the loading path must honour the approved figure); **resident is not active**, so for architectures where only a fraction of parameters participate per step a single size scalar mis-predicts memory and throughput in opposite directions; and **demand grows with the working context**, since per-sequence attention state grows with the sequence — a run that started comfortably crosses the boundary later, at a growth rate that is itself an architecture-declared characteristic. Two obligations: the estimate is driven by declared resource characteristics (resident footprint, active fraction, per-symbol state growth, transient peak) riding the MR-5 portable definition, with an absent characteristic degrading confidence (MR-14) rather than counting as zero; and a mid-run crossing is a **managed transition** — reduce the working set, then a named degradation tier (MR-15), then an honest stop with the shortfall stated — recorded on the run, since an unrecorded mid-run placement change is the misattribution MR-15 exists to prevent. |
 | 1.0.0 | 2026-06-25 | Initial model: local-first provider-abstracted serving runtime — content-addressed model store with verifiable registry acquisition, portable declarative model definition, explicit load/unload lifecycle with fit-gated hardware scheduling, streaming inference contract with an industry-compatible surface, managed observable server, thin clients, and digest-reproducible references (MR-1…MR-12). |
 | 1.1.0 | 2026-06-25 | MR-13…MR-14 added — multi-device placement (split across an accelerator set before CPU fallback) with mixture-of-expert footprint sizing (resident-total vs active-per-token); calibrated honest estimates (figures labeled estimate vs measurement, recalibrated by recorded `(model, placement, hardware)` residency/throughput, community sharing opt-in under the telemetry gate). §5.5 extended; ideas-to-adopt rows added for multi-accelerator fit, MoE sizing, measured calibration, hardware-preset simulation, and a community-measured corpus. |
