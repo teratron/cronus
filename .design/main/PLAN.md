@@ -1,8 +1,8 @@
 # Implementation Plan
 
-**Version:** 2.49.0
+**Version:** 2.50.0
 **Generated:** 2026-07-31
-**Based on:** .design/main/INDEX.md v1.0.155
+**Based on:** .design/main/INDEX.md v1.0.156
 **Status:** Active
 
 ## Overview
@@ -261,6 +261,10 @@ Execution mode: **Parallel** (C3); tracks grouped by file independence. Critical
 *Concept absorbed in v2.49.0 (registry sync INDEX v1.0.154 → v1.0.155). Stable, `concept-only` (C28) — no authored `Implements:` L2 yet; it is a contract every invocable surface adopts, not a component to build, and it phases only once an L2 realization reaches Stable via `/magic.spec`. The residual delta in this sync is two substantive amendments to concepts already listed in Phase 0 (`l1-interception-model` 1.2.0 INT-10, `l1-agent-tool-ergonomics` 1.3.0 ATE-13) plus one link-only patch (`l1-output-contracts` 1.0.1).*
 
 - [x] **Input Binding** ([l1-input-binding.md](specifications/l1-input-binding.md)) [L1] — `concept-only` — the consumer-side twin of `l1-output-contracts` (IB-1…IB-12): declared ordered typed binders as the single source for both runtime supply and the advertised schema (IB-1); bind-before-invoke making *did not run* a structural outcome and the rejection class safely re-invocable (IB-2); rejection as a typed first-class outcome with an effectively uninhabited fault channel (IB-3); four located modes — absent / unreadable / malformed / ill-shaped — each implying a different fix and a different responsible actor (IB-4); optional means absent never invalid (IB-5); two supply phases with composition-phase needs sealed before mounting, so an unmet dependency fails at assembly not in production (IB-6); the untyped channel a bounded fallback (IB-7); once-only inputs bound once and last, enforced at declaration (IB-8); ordered short-circuit binding with a stable, learnable first rejection (IB-9); a default ceiling on every caller-sized input (IB-10); composing/wrapping binders as the single-parse reuse mechanism (IB-11); a separate rejection channel that indicts the advertisement rather than the implementation (IB-12). Nodus projection needs no new construct — move `@in` enforcement ahead of the first step (candidate amendment to the typed-I/O invariant, deliberately not applied), split the input error taxonomy into the four modes, bind optional inputs to the existing null value.
+
+*Concept absorbed in v2.50.0 (registry sync INDEX v1.0.155 → v1.0.156). Stable, `concept-only` (C28) — no authored `Implements:` L2 yet; it is a policy every generating surface adopts, not a component to build, and it phases only once an L2 realization reaches Stable via `/magic.spec`. The residual delta in this sync is three substantive amendments to concepts already listed in Phase 0 (`l1-memory-intelligence` 1.1.0 MI-14, `l1-usage-allowance` 1.1.0 UA-8, `l1-resource-sharing` 1.1.0 RS-9).*
+
+- [x] **Content Language** ([l1-content-language.md](specifications/l1-content-language.md)) [L1] — `concept-only` — the language of model-generated content (CL-1…CL-10), the question interface localization does not answer: declared per surface not emergent (CL-1); keyed on artifact kind rather than one global locale, since the real requirement is usually split between conversational and technical output (CL-2); one stable language per durable corpus kind as a retrieval-integrity requirement — drift halves lexical recall, defeats dedup, and blocks consolidation merges while reporting nothing (CL-3); record separate from display, a translation being a derived projection with provenance (CL-4); quoted and technical material reproduced never translated (CL-5); structural enforcement where the field is not model-authored, checked where it is (CL-6); unstated preference grounded then assumed on the record (CL-7); a cross-language retrieval gap bridged or stated, never a bare empty result (CL-8); forward-only language change with an explicit audited migration (CL-9); consistency measured, not asserted (CL-10). Nodus projection needs no new primitive — the validated config surface carries the policy field, value provenance expresses the derived-translation relation, and schema/vocabulary prose classifies with the technical artifacts.
 
 ## Phase 1 — Seed I: Foundation
 

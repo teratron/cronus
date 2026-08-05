@@ -1,6 +1,6 @@
 # Resource Sharing
 
-**Version:** 1.0.0
+**Version:** 1.1.0
 **Status:** Stable
 **Layer:** concept
 
@@ -41,6 +41,8 @@ Rules every Layer 2 implementation MUST NOT violate:
 - **RS-6 (Additive grants):** grants are additive; granting `read` to a group does not affect any individual user's separate write grant on the same resource.
 - **RS-7 (Audit trail):** every grant creation and revocation is an append-only audit event; no silent grant mutation.
 - **RS-8 (Applicable scope):** the model applies to: knowledge collections, skills, tools, notes, channels, files, and prompt templates. It does NOT apply to sessions, memories, system configuration, or agent-internal state.
+
+- **RS-9 (Grants are non-escalating, and a read surface is read-only by construction):** [ADDED v1.1.0] the authority to **create, extend, or delegate** a grant belongs to the owner and to `write` holders only; a `read` grant confers **no** ability to mint a further grant, to widen its own permission, or to extend access to another principal. A share issued for reading is therefore a **terminal leaf** in the access graph, not a node that can grow one. Two structural consequences follow. The interface reached through a read grant exposes **no mutating operation at all** — the operations are absent, not present-and-refused — so a read share cannot become a write path through a missed check; and any credential or link minted **for** a read share is itself issued only by a principal holding `write`, so the read side of the system can never bootstrap more access than it was given. This is the sharing-surface expression of authority-not-self-authored (SEC-10): access is granted downward by someone who holds it, never sideways or upward by someone who received it.
 
 > L2 specs cannot reach RFC status until all invariants here are addressed in their "Invariant Compliance" section.
 
@@ -126,3 +128,10 @@ graph TD
 | Alias | Path | Purpose |
 | --- | --- | --- |
 | `[IMPL]` | `.design/main/specifications/l2-resource-sharing.md` | Concrete implementation: table schema, query patterns, Rust types. |
+
+## Document History
+
+| Version | Date | Author | Notes |
+| --- | --- | --- | --- |
+| 1.1.0 | 2026-08-05 | Core Team | Added RS-9 (grants are non-escalating; a read surface is read-only by construction) — the authority to create, extend, or delegate a grant belongs to the owner and `write` holders only, so a `read` grant is a terminal leaf in the access graph rather than a node that can grow one. Two structural consequences: the interface reached through a read grant exposes **no** mutating operation (absent, not present-and-refused), so a read share cannot become a write path through a missed check; and any credential or link minted *for* a read share is issued only by a `write` holder, so the read side cannot bootstrap more access than it was given. The sharing-surface expression of SEC-10 authority-not-self-authored: access is granted downward by someone who holds it, never sideways or upward by someone who received it. |
+| 1.0.0 | — | Core Team | Initial spec — uniform grant triple, principal types, two permission levels, default-private, owner invariant, additive grants, audit trail, applicable scope (RS-1…RS-8). |

@@ -1,6 +1,6 @@
 # Usage Allowance & Quota Windows
 
-**Version:** 1.0.0
+**Version:** 1.1.0
 **Status:** Stable
 **Layer:** concept
 
@@ -117,6 +117,24 @@ Rules every Layer 2 implementation MUST NOT violate:
   never carries or reveals the credential/secret behind a lane (composes security and
   telemetry, and the log-legibility secret-safety rule).
 
+- **UA-8 (Exhaustion degrades acquisition before access; a cost guard is not a safety
+  guard):** [ADDED v1.1.0] when an allowance nears or reaches exhaustion, the capabilities
+  it gates are shed in a **declared order**, and that order puts **acquisition** — the
+  spend-driving work: generating, enriching, summarizing, indexing, capturing new material
+  — ahead of **access** to what was already acquired. Recall, search, and reading the
+  existing corpus are the **last** things to degrade, because they cost little and because
+  making already-paid-for knowledge unreachable to save money is the one degradation that
+  destroys value instead of deferring it. Two consequences bind this. **The order is
+  declared, not emergent**: an implementation that simply fails whichever request happens to
+  arrive after the cap has no policy, only an accident. And **a cost guard's fail direction
+  is decided separately from a safety guard's**: a safety guard that cannot reach its
+  decision fails **closed** (INT-3), but a *metering or quota* guard that cannot reach its
+  own counter is answering a budget question, not a safety one — its failure MUST NOT
+  silently deny work, and its declared direction (fail-open with the overage recorded, or
+  fail-closed) is an explicit, human-set policy rather than an inheritance from the safety
+  rule. Conflating the two is how a broken counter becomes an outage, or a spend cap becomes
+  unenforceable — the direction is chosen per guard class and recorded, never assumed.
+
 > L2 specs cannot reach RFC status until all invariants here are addressed in their
 > "Invariant Compliance" section.
 
@@ -199,4 +217,5 @@ allowance model informs; office-control acts.
 
 | Version | Date | Author | Notes |
 | --- | --- | --- | --- |
+| 1.1.0 | 2026-08-05 | Core Team | Added UA-8 (exhaustion degrades acquisition before access; a cost guard is not a safety guard) — near or at exhaustion, capabilities are shed in a **declared** order that puts spend-driving acquisition (generating, enriching, summarizing, indexing, capturing) ahead of access to what was already acquired, so recall/search/reading degrade **last**: making already-paid-for knowledge unreachable to save money destroys value instead of deferring it, and an implementation that simply fails whichever request arrives after the cap has an accident rather than a policy. Second half separates fail directions by guard class: a safety guard that cannot decide fails closed (INT-3), but a metering/quota guard that cannot reach its counter is answering a budget question — its direction (fail-open with the overage recorded, or fail-closed) is an explicit human-set policy, never inherited from the safety rule, since conflating them turns a broken counter into an outage or a spend cap into a fiction. |
 | 1.0.0 | 2026-07-07 | Core Team | Initial spec — the external-allowance member of the token economy: rolling-window allowance model with a daily + weekly minimum, per resource/lane (UA-1); provider-authoritative-when-reported else locally-estimated, the two never conflated (UA-2); remaining as a first-class readout displayed/refreshed through the unified readout mechanism, source-tagged and never silently stale (UA-3, the "remaining daily/weekly token balance" surface); consumed by routing/effort and office-control not merely displayed (UA-4); honest provider-aligned window reset (UA-5); observation does not consume the allowance (UA-6); local-first and secret-safe, credential never surfaced (UA-7). Distinct from input-context and output-generation budgets; the leading signal behind office-control exhaustion/recovery. Main-only (a host/provider quota concern). |
