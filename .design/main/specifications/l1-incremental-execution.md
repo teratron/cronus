@@ -1,6 +1,6 @@
 # Incremental Execution
 
-**Version:** 1.0.0
+**Version:** 1.0.1
 **Status:** Stable
 **Layer:** concept
 
@@ -16,6 +16,7 @@ Re-running a workflow graph after a small change without redoing the work a chan
 - [l1-inference-cache.md](l1-inference-cache.md) - The inference-side sibling: that caches a model's prompt-prefix computation; this caches a workflow step's whole output. Complementary layers, different grains.
 - [l1-attestation.md](l1-attestation.md) - Content-addressing (AT-2) the transitive-input cache key composes.
 - [l1-deployment-neutrality.md](l1-deployment-neutrality.md) - The memoization store is a host-supplied seam (durable or in-memory), on-device by default.
+- [l1-order-independent-production.md](l1-order-independent-production.md) - [ADDED v1.0.1] the same determinism instinct applied **across positions of one artifact** rather than across runs of one step: IE-4 gates *memoization* on a step being a deterministic function of its declared inputs; OIP additionally requires a global index, uniform partitioning, and a seam-safe join — things a cache never needs. The overlap is the instinct, not the contract.
 - [../../nodus/specifications/l1-nodus-language.md](../../nodus/specifications/l1-nodus-language.md) - Determinism (NL-6) is what makes a step's output a pure function of its inputs, and therefore safely memoizable.
 
 ## 1. Motivation
@@ -106,4 +107,5 @@ Nodus is a natural host for this: its determinism contract (NL-6) is exactly the
 
 | Version | Date | Author | Notes |
 | --- | --- | --- | --- |
+| 1.0.1 | 2026-08-05 | Core Team | Related Specifications extended with `l1-order-independent-production` — the same determinism instinct across positions of one artifact rather than across runs of one step; IE-4 protects a cache and needs no global index, uniform partitioning, or join. Link-only; no invariant changed. |
 | 1.0.0 | 2026-07-23 | Core Team | Initial spec — incremental workflow re-execution via per-step output memoization: content-addressed cache key over transitive input identity (IE-1), recompute-only-the-affected-cone (IE-2), cache-hit-equals-recomputation correctness (IE-3), determinism-gated memoizability (IE-4), fail-safe-to-recompute freshness escape for external/non-deterministic steps (IE-5), invalidation-by-identity-not-time with bounded eviction never serving stale (IE-6), opt-in/observable/disable-to-diagnose (IE-7), host-supplied local-first rebuildable cache (IE-8). Distinct from checkpoint/resume (continues an interrupted run) and inference-cache (prompt-prefix, not step-output). nodus realization composes determinism NL-6 + deferred/effect NL-12 + memoized-approval precursor + StorageProvider LP-15 — no new language primitive. Mined from a studied node-graph generative-pipeline execution engine's input-signature output cache. Concept-only. |

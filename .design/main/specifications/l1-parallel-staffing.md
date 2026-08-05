@@ -1,6 +1,6 @@
 # Parallel Staffing
 
-**Version:** 1.0.0
+**Version:** 1.0.1
 **Status:** Stable
 **Layer:** concept
 
@@ -22,6 +22,7 @@ This is the horizontal complement to the existing coordination stack: adaptive t
 - [l1-change-merge.md](l1-change-merge.md) - Reviewable typed-delta merge for shared artifacts; the fan-in discipline when partitions touch the same document.
 - [l1-deliberation.md](l1-deliberation.md) - The sibling fan-out: multiple perspectives on the *same* question synthesized into one answer; demarcated from volume partitioning in §4.5.
 - [l1-quality-standards.md](l1-quality-standards.md) - The integrated whole — not each partition — is what passes the definition-of-done gates.
+- [l1-order-independent-production.md](l1-order-independent-production.md) - [ADDED v1.0.1] the **production-side** property that makes this spec's fan-in lossless rather than merely orderly: PS-5 isolation prevents siblings from *interfering*, but not from depending on **when** they ran. OIP-1 (a unit is a pure function of its position and the frozen inputs) is what PS-2 decomposition and PS-6 integration silently assume; OIP-4/OIP-5 add the global offset and uniform partitioning the fan-in needs.
 - [l2-agent-session.md](l2-agent-session.md) - Concrete subagent spawn semantics and independent per-instance iteration budgets the width policy composes with.
 
 ## 1. Motivation
@@ -138,6 +139,7 @@ None substitutes for another: parallel staffing *consumes* the task graph's part
 
 | Version | Date | Change |
 | --- | --- | --- |
+| 1.0.1 | 2026-08-05 | Related Specifications extended with `l1-order-independent-production` — the production-side property PS-2/PS-6 assume without stating: isolation stops siblings interfering but not depending on when they ran, and a perfectly staffed set of isolated workers still yields an incoherent artifact if each reads the clock. Link-only; no invariant changed. |
 | 1.0.0 | 2026-07-02 | Initial concept: volume-justified same-specialty scale-out — ephemeral same-role instances under one accountable hired lead, parallelism only via disjoint decomposition (WL-1/WL-9), bounded width (budget + coordination guard), isolated siblings with mediated observable coordination, first-class fan-in with merge + gates, learning consolidated to the employee scope, contained failure with honest salvage, fully attributed (PS-1…PS-9). |
 
 ## Canonical References

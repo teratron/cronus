@@ -1,8 +1,8 @@
 # Implementation Plan
 
-**Version:** 2.53.0
+**Version:** 2.54.0
 **Generated:** 2026-07-31
-**Based on:** .design/main/INDEX.md v1.0.159
+**Based on:** .design/main/INDEX.md v1.0.161
 **Status:** Active
 
 ## Overview
@@ -279,6 +279,10 @@ Execution mode: **Parallel** (C3); tracks grouped by file independence. Critical
 
 - [x] **Negative Specification** ([l1-negative-specification.md](specifications/l1-negative-specification.md)) [L1] — `concept-only` — the shared shape behind four locally-invented instances (corrected assumption → anti-pattern, default tells at a craft bar, forbidden construct under a tripwire, banned register in prose): an exclusion as a first-class artifact with identity, rationale, origin, and affirmation date (NEG-1); positive and negative independent, neither implying the other (NEG-2); three origins with different conflict authority (NEG-3); the exclusion reaches the generator before production, review being the second line never the only one (NEG-4); the alternative named wherever one exists (NEG-5); bounded, dated, revisited (NEG-6); an explicit principal request outranks an exclusion with the conflict surfaced once (NEG-7); a violation names the matched signal and its origin (NEG-8); checkable subset checked, taste remainder named advisory (NEG-9); firing rate measured with both extremes actionable (NEG-10). Nodus projection needs no new primitive — validated config surface, validation stage, cache-stable prefix placement, provenance on an externally-sourced avoid-list.
 - [x] **Adjustment Vocabulary** ([l1-adjustment-vocabulary.md](specifications/l1-adjustment-vocabulary.md)) [L1] — `concept-only` — the client's named handle on a produced artifact's own dimensions, replacing free-form revision: an adjustment edits, never regenerates (ADJ-1); closed, named, shared vocabulary (ADJ-2); every axis bidirectional, since a one-way verb is a ratchet (ADJ-3); one axis per adjustment (ADJ-4); re-applicable and bounded, honest at the limit (ADJ-5); reversible along the axis (ADJ-6); axes declared per artifact kind (ADJ-7); no verdict on the previous version, so steering is not read as failure (ADJ-8); free-form direction always available with a promotion path (ADJ-9); the trail recorded and readable as revealed preference (ADJ-10). Nodus projection needs no new primitive — a revise step with a declared axis, the dialog channel, memoizable decisions, per-step trace annotations.
+
+*Concept absorbed in v2.54.0 (registry sync INDEX v1.0.160 → v1.0.161). Stable, `concept-only` (C28) — no authored `Implements:` L2 yet; it is a property a producer either holds or does not, not a component to build, and it phases only once an L2 realization reaches Stable via `/magic.spec`. The residual delta in this sync is two link-only patch amendments (`l1-parallel-staffing` 1.0.1, `l1-incremental-execution` 1.0.1) drawing the boundaries to it.*
+
+- [x] **Order-Independent Production** ([l1-order-independent-production.md](specifications/l1-order-independent-production.md)) [L1] — `concept-only` — the property that makes splitting a multi-unit artifact safe (OIP-1…OIP-10), assumed by the staffing and decomposition specs and never stated: the unit at position *i* is a pure function of *i* and a frozen input set (OIP-1), protected by four prohibitions — production order, wall-clock, unseeded randomness (variation from a position-derived seed), unpinned live sources (OIP-2); one shared frozen input identity (OIP-3); global offset supplied to every producer (OIP-4); uniform partitions with the remainder last (OIP-5); a declared, ordered, seam-safe join (OIP-6); cross-unit inconsistency as the characteristic failure, undetectable by per-unit gates (OIP-7); reducing concurrency as a diagnosis, never a remedy (OIP-8); named, bounded holds for asynchronous readiness (OIP-9); any subset independently re-producible (OIP-10). Nodus projection needs no new primitive — a positional loop is the carrier, the deferred-step mechanism is the named hold, and three of the four prohibitions are statically flaggable at the validate-before-run stage.
 
 ## Phase 1 — Seed I: Foundation
 
