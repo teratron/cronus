@@ -1,12 +1,12 @@
 # Agent-Assisted Development Workflow
 
-**Version:** 1.0.1
+**Version:** 1.1.0
 **Status:** Stable
 **Layer:** concept
 
 ## Overview
 
-The technology-agnostic model for human-agent collaborative software development. A feature request enters a five-stage pipeline — **Design → Plan → Execute → Review → Deliver** — governed by ten invariants. Agents handle mechanical execution; humans decide direction, approve designs, and authorize irreversible actions.
+The technology-agnostic model for human-agent collaborative software development. A feature request enters a five-stage pipeline — **Design → Plan → Execute → Review → Deliver** — governed by eleven invariants. Agents handle mechanical execution; humans decide direction, approve designs, and authorize irreversible actions.
 
 ## Related Specifications
 
@@ -53,7 +53,9 @@ Rules every Layer 2 implementation MUST NOT violate:
 - **DW-9 (Review neutrality):** A task reviewer agent receives no prior knowledge of the implementer's decisions or rationale. Stated implementation rationale is a claim, not evidence; the reviewer judges the code on its merits.
 - **DW-10 (Critical findings block):** Critical or Important review findings block advancement to the next task. Minor findings are recorded in the progress ledger for the final whole-branch review.
 
-> L2 specs cannot reach RFC status until all ten invariants here are addressed in their "Invariant Compliance" section.
+- **DW-11 (Release notes describe the delivered system, never the path to it):** [ADDED v1.1.0] the user-facing note for a delivered change states **what a consumer can now do that they could not before** — the difference between the base and what shipped. The branch's development narrative is a **different document**: internal version bumps that never reached the trunk, defects introduced and fixed within the branch, review outcomes and plan approvals, scope negotiations, merge and rebase activity, and work that is queued rather than shipped are all excluded, because a reader has no context in which any of them exist. Three consequences bind it. A property of the shipped system is documented **as a property**, never as a fix to something the reader never had. Contributor-facing changes are **segregated** from consumer-facing ones rather than interleaved. And when a delivery genuinely contains nothing consumer-facing, the honest note **says exactly that in one sentence** rather than padding with narrative — a release note that has to reach for content is one that has stopped being read. (Composes the reference-containment discipline: a note shipped to consumers must not cite internal planning artifacts they do not receive.)
+
+> L2 specs cannot reach RFC status until all eleven invariants here are addressed in their "Invariant Compliance" section.
 
 ## 4. Detailed Design
 
@@ -173,4 +175,5 @@ Accumulated session history is the primary cause of context pollution and inflat
 | Version | Date | Change |
 | --- | --- | --- |
 | 1.0.0 | 2026-06-24 | Initial Stable — DW-1…DW-10 invariants, five-stage pipeline, context discipline rules |
+| 1.1.0 | 2026-08-05 | Added DW-11 (release notes describe the delivered system, never the path to it) — the user-facing note is the base→shipped difference stated as what a consumer can now do; the branch's development narrative (internal version bumps that never reached the trunk, defects introduced and fixed within the branch, review outcomes, plan approvals, scope negotiations, merge/rebase activity, queued-not-shipped work) belongs to a different document, because the reader has no context in which any of it exists. A property of the shipped system is documented as a property, never as a fix to something the reader never had; contributor-facing changes are segregated, not interleaved; and a delivery with nothing consumer-facing gets one honest sentence rather than padding — a note that reaches for content stops being read. Composes reference containment: a consumer-facing note must not cite internal planning artifacts consumers never receive. |
 | 1.0.1 | 2026-08-05 | Related Specifications extended with `l1-change-containment` — the edit-footprint lens that gives DW-4's "nothing extra" verdict a closed finding vocabulary at the Review stage. Link-only; no invariant changed. |
