@@ -1,8 +1,8 @@
 # Implementation Plan
 
-**Version:** 2.54.0
+**Version:** 2.55.0
 **Generated:** 2026-07-31
-**Based on:** .design/main/INDEX.md v1.0.161
+**Based on:** .design/main/INDEX.md v1.0.162
 **Status:** Active
 
 ## Overview
@@ -283,6 +283,10 @@ Execution mode: **Parallel** (C3); tracks grouped by file independence. Critical
 *Concept absorbed in v2.54.0 (registry sync INDEX v1.0.160 → v1.0.161). Stable, `concept-only` (C28) — no authored `Implements:` L2 yet; it is a property a producer either holds or does not, not a component to build, and it phases only once an L2 realization reaches Stable via `/magic.spec`. The residual delta in this sync is two link-only patch amendments (`l1-parallel-staffing` 1.0.1, `l1-incremental-execution` 1.0.1) drawing the boundaries to it.*
 
 - [x] **Order-Independent Production** ([l1-order-independent-production.md](specifications/l1-order-independent-production.md)) [L1] — `concept-only` — the property that makes splitting a multi-unit artifact safe (OIP-1…OIP-10), assumed by the staffing and decomposition specs and never stated: the unit at position *i* is a pure function of *i* and a frozen input set (OIP-1), protected by four prohibitions — production order, wall-clock, unseeded randomness (variation from a position-derived seed), unpinned live sources (OIP-2); one shared frozen input identity (OIP-3); global offset supplied to every producer (OIP-4); uniform partitions with the remainder last (OIP-5); a declared, ordered, seam-safe join (OIP-6); cross-unit inconsistency as the characteristic failure, undetectable by per-unit gates (OIP-7); reducing concurrency as a diagnosis, never a remedy (OIP-8); named, bounded holds for asynchronous readiness (OIP-9); any subset independently re-producible (OIP-10). Nodus projection needs no new primitive — a positional loop is the carrier, the deferred-step mechanism is the named hold, and three of the four prohibitions are statically flaggable at the validate-before-run stage.
+
+*Concept absorbed in v2.55.0 (registry sync INDEX v1.0.161 → v1.0.162). Stable, `concept-only` (C28) — no authored `Implements:` L2 yet; it is an authored project artifact with a governing contract rather than a component to build, and it phases only once an L2 realization reaches Stable via `/magic.spec`. The residual delta in this sync is two link-only patch amendments (`l1-project-wiki` 1.0.1, `l1-pattern-codification` 1.0.2) drawing the boundary and the pathway to it.*
+
+- [x] **Project Vocabulary** ([l1-project-vocabulary.md](specifications/l1-project-vocabulary.md)) [L1] — `concept-only` — the governing artifact that lets a project say something short and exact (VOC-1…VOC-10): one canonical term per concept (VOC-1); displaced synonyms listed with the entry rather than merely absent (VOC-2); relationships between terms, since confusion is about connection (VOC-3); ambiguities resolved on the record (VOC-4); the vocabulary governs produced artifacts — identifiers, titles, durable records — not only conversation (VOC-5); authored during the work when the distinction is live (VOC-6); a term earns canonical status through the codification pathway and is never self-decreed by a generator (VOC-7); authoritative and distinct from the client-facing plain-language glossary, which is a derived projection (VOC-8); precision the goal and volume a cost, an unconsulted vocabulary worse than none (VOC-9); adherence and compression measured, not asserted (VOC-10). Nodus projection needs no new primitive — the schema vocabulary is already a validated controlled vocabulary, selective disclosure is already the volume control, and author-chosen names are lintable at the validate-before-run stage.
 
 ## Phase 1 — Seed I: Foundation
 

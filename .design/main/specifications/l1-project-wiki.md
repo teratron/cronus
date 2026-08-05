@@ -1,6 +1,6 @@
 # Project Wiki
 
-**Version:** 1.0.0
+**Version:** 1.0.1
 **Status:** Stable
 **Layer:** concept
 
@@ -16,6 +16,7 @@ A client-facing, office-maintained, living documentation surface for each projec
 - [l1-operational-ledger.md](l1-operational-ledger.md) - Authoritative facts the wiki cites; grounding source for PW-4.
 - [l1-kanban-model.md](l1-kanban-model.md) - Project state (work done, in flight) the wiki projects from.
 - [l1-office-visualization.md](l1-office-visualization.md) - Shares the projection-not-source, observational pattern (OVZ-1); the wiki is the documentary projection, the office view the spatial one.
+- [l1-project-vocabulary.md](l1-project-vocabulary.md) - [ADDED v1.0.1] The **authored source** this wiki's glossary page is a projection of: the governing vocabulary is internal, authoritative, and optimized for precision; PW-1's glossary is client-facing, plain-language, and derived (PW-3). Conflating them yields a governing artifact rewritten for readability and an outward document nobody may edit.
 - [l1-navigation-model.md](l1-navigation-model.md) - The Wiki tab through which the client reaches this surface.
 
 ## 1. Motivation
@@ -129,4 +130,5 @@ Largely a main-workspace product surface; the portable runtime contributes only 
 
 | Version | Date | Author | Notes |
 | --- | --- | --- | --- |
+| 1.0.1 | 2026-08-05 | Core Team | Related Specifications extended with `l1-project-vocabulary` — the authored, authoritative source of which the PW-1 glossary page is a plain-language client-facing projection (PW-3). Link-only; no invariant changed. |
 | 1.0.0 | 2026-06-26 | Core Team | Initial spec — client-facing living project documentation: plain-language client surface (PW-1), office-maintained never client-curated (PW-2), projection-not-source (PW-3), grounded & attributed anti-hallucination (PW-4), living & freshness-honest with stale flags + changelog (PW-5), navigable & searchable (PW-6), scoped & access-controlled (PW-7), distinct from agent knowledge base and internal design/SDD artifacts (PW-8); event-driven incremental regeneration; reached via a dedicated Wiki navigation tab; nodus-relevance mapping. |
