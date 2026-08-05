@@ -1,6 +1,6 @@
 # Telemetry
 
-**Version:** 1.0.0
+**Version:** 1.0.1
 **Status:** Stable
 **Layer:** concept
 
@@ -13,6 +13,7 @@ The technology-agnostic model of improvement data: Cronus may collect anonymized
 - [l1-security.md](l1-security.md) - Data-vs-telemetry separation and egress authorization (SEC-3/4).
 - [l1-architecture.md](l1-architecture.md) - Security of client data (INV-7).
 - [l1-error-reporting.md](l1-error-reporting.md) - A separate, also consent-gated, diagnostic channel.
+- [l1-artifact-derived-observation.md](l1-artifact-derived-observation.md) - [ADDED v1.0.1] The **uninstrumented-source** sibling and a deliberate boundary: telemetry is what the product emits about *itself* by design; artifact-derived observation is what is reconstructed about a *foreign* tool from the trail it wrote for its own purposes. Neither substitutes for the other, and anything derived from a foreign artifact crosses this same egress gate.
 
 ## 1. Motivation
 
@@ -58,3 +59,10 @@ Examples of program metrics: operation latencies, error/repair counts, feature u
 | --- | --- | --- |
 | `[SECURITY]` | `.design/main/specifications/l1-security.md` | Data separation and egress |
 | `[ARCH]` | `.design/main/specifications/l1-architecture.md` | Client-data security invariant |
+
+## Document History
+
+| Version | Date | Author | Notes |
+| --- | --- | --- | --- |
+| 1.0.1 | 2026-08-05 | Core Team | Related Specifications extended with `l1-artifact-derived-observation` — the uninstrumented-source sibling, drawing the boundary explicitly: telemetry is what the product emits about itself by design; artifact-derived observation is what is reconstructed about a foreign tool from the trail it wrote for its own purposes, and its derived output crosses this same consent-gated egress. Link-only; no invariant changed. |
+| 1.0.0 | — | Core Team | Initial spec — consent-gated, opt-in, on-device-first telemetry with data-vs-telemetry separation. |

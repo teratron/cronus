@@ -1,6 +1,6 @@
 # Cost Rating & Pricing
 
-**Version:** 1.0.0
+**Version:** 1.0.1
 **Status:** Stable
 **Layer:** concept
 
@@ -27,6 +27,7 @@ silently wrong.
 - [l1-cache-stable-context.md](l1-cache-stable-context.md) — CSC-11 separates `cache_read` / `cache_creation` / fresh-`input` / `output` token *counts*; CR-2 prices each of those classes at its own rate (a cache-read unit is billed at a fraction of a fresh-input unit). Rating is the pricing complement of that count-separation.
 - [l1-model-benchmarking.md](l1-model-benchmarking.md) — MB-3's `derived_cost from catalog pricing` is a consumer of this layer; CR owns the catalog pricing MB-3 assumes, and MB-7 profile staleness is the fitness-profile parallel of CR-6 rate staleness.
 - [l1-optimization-integrity.md](l1-optimization-integrity.md) — OI-4 efficacy parity needs a trustworthy per-stage cost to prove a saving; CR-4 (fail-visible unknown rate) is the cost-side of OI-8 (unverified is never rendered as verified), and CR-5 basis-labeling is OI-4's estimate-vs-measured honesty applied to price.
+- [l1-outcome-attributed-cost.md](l1-outcome-attributed-cost.md) — [ADDED v1.0.1] the downstream consumer that closes the loop rating leaves open: rating derives *what was spent*, attribution answers *what the spend produced and whether it lasted*. CR-5 basis labeling and CR-8 auditable inputs travel through attribution unchanged — nothing there re-prices anything, and rating deliberately knows nothing about work items or outcomes.
 - [l1-operational-health.md](l1-operational-health.md) — OH-6 cost/usage accounting is fed priced records; a mispricing (stale card, blended-rate regression) surfaces there via CR-8, not only on the provider invoice.
 - [l1-routing.md](l1-routing.md) — the router consumes rated cost as a selection signal (RTG cost weighting); an unpriced or stale-priced lane is a signal the router must be able to see as such (CR-4/CR-6), not read as free.
 - [l1-telemetry.md](l1-telemetry.md) — the only egress path for cost metrics, opt-in and program-data-only; native amounts and rate provenance never leave the device except through it.
@@ -191,4 +192,5 @@ mapping is additive and warrants no new NL invariant.
 
 | Version | Date | Author | Notes |
 | --- | --- | --- | --- |
+| 1.0.1 | 2026-08-05 | Core Team | Related Specifications extended with `l1-outcome-attributed-cost` — the consumer that attributes priced records to the outputs they produced and to a later survival verdict, closing the loop this layer deliberately leaves open. Link-only; no invariant changed. |
 | 1.0.0 | 2026-07-15 | Core Team | Initial spec — cost rating as the owned middle step (meter → **rate** → charge) between usage metering and budget enforcement: single-producer derivation distinct from metering and charging (CR-1), per-class rates never one blended rate composing CSC-11/HO-8 class separation (CR-2), honest exact-then-family-marked rate resolution (CR-3), fail-visible unknown rate never a silent zero — the cost-side of OI-8 (CR-4), estimate-vs-provider-reported basis labeling with authoritative supersession (CR-5), dated/sourced/staleness-flagged rates paralleling MB-7 (CR-6), explicit currency with immutable native amount and provenance-marked conversion (CR-7), reconstructable/auditable priced record feeding OH-6 + OI-4 (CR-8); §4.2 fail-visible per-class rating pseudocode, §4.3 estimate-superseded-by-authoritative; nodus-relevance mapping needing no new NL invariant — HO-8 already meters per-class counts `counts-only`, the host rates them via an LP-2 pricing seam (additive; a host that prices nothing behaves as today). Owns the `catalog pricing` that l1-model-benchmarking MB-3, l2-dashboard, l2-model-router, and l2-deep-research each assumed without a governing contract. Distilled from an adoption pass over an external LLM cost-tracking reference whose per-call token/latency/success accounting, provider breakdown, and budget-alert surface were already realized by l2-budget-engine / l1-usage-allowance / l1-operational-health / l1-dashboard — CR captures the one unowned delta: the honest rating layer, with the reference's silent-zero-on-unknown-model and blended/hardcoded-currency assumptions inverted into fail-visible invariants. |
