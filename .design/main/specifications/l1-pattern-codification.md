@@ -1,6 +1,6 @@
 # Pattern Codification
 
-**Version:** 1.0.2
+**Version:** 1.1.0
 **Status:** Stable
 **Layer:** concept
 
@@ -22,6 +22,7 @@ The load-bearing rule is that promotion is **earned, not automatic**. Repetition
 - [l1-facilitation.md](l1-facilitation.md), [l1-inner-monologue.md](l1-inner-monologue.md) — decide *when* to surface a promotion proposal without interrupting (PC-2).
 - [../../nodus/specifications/l1-nodus-dialog.md](../../nodus/specifications/l1-nodus-dialog.md) — DG-10 promotable remembered decision is the nodus-workflow realization: a stably-repeated `+remember` decision surfaced as a host-promotable rule candidate.
 
+- [l1-scoped-generalization.md](l1-scoped-generalization.md) - [ADDED v1.1.0] The **orthogonal axis** this pathway does not carry: PC-1/PC-4 measure recurrence across **time** and decide *bindingness*; SG-3 measures recurrence across **independent contexts** and decides *scope*. Both gates apply to every pattern, and neither substitutes for the other (SG-11) — without the second, observations that recurred on many dates inside one project produce a ratified rule that silently claims to hold everywhere.
 - [l1-project-vocabulary.md](l1-project-vocabulary.md) - [ADDED v1.0.2] A **consumer of this pathway**: a domain term earns canonical status exactly as any pattern does (PC-1 repetition→candidate, PC-2 propose→ratify→write, PC-5 retire when it stops holding), and VOC-7 restates the no-self-promotion rule for coinages a generator invents.
 - [l1-model-adaptation.md](l1-model-adaptation.md) - [ADDED v1.0.1] The **model-plane** sibling: this codifies experience into inspectable *rules* (context plane); that distils verified experience into a reversible weight *adaptation*, under the same earned-and-ratified discipline (PC-1/PC-2) at higher consequence (MA-5).
 ## 1. Motivation
@@ -49,6 +50,7 @@ Rules every Layer 2 realization MUST NOT violate. They are technology-neutral.
 - **PC-3 (Tiered bindingness, rising with evidence):** knowledge occupies tiers of increasing bindingness — a transient **observation** (non-binding), a consolidated **advisory pattern** (informs, does not constrain), and a ratified **rule** (enforceable) — and an item rises a tier only as it accrues evidence and ratification (PC-1/PC-2). **Bindingness is never assigned above the evidence that earned it**: a fresh observation is never treated as a rule, and a candidate is never enforced as if ratified.
 
 - **PC-4 (Recurrence is detectable because observations are time-stamped):** every observation carries a **capture date**, so "did this recur on distinct occasions" is a real query rather than a vibe — recurrence across distinct times is the candidate signal PC-1 requires (composing the bi-temporal record). The date is the load-bearing unit of the promotion query; an undated observation cannot participate in recurrence detection.
+  [MODIFIED v1.1.0] Recurrence across distinct **times** is the only recurrence this invariant measures, and it is deliberately **not** a claim about where the pattern holds: repeated observation inside one context establishes that the pattern is real, never that it generalizes. Applicability is decided by the separate independent-context gate in `l1-scoped-generalization` (SG-3), and a pattern that clears PC without clearing SG is a ratified rule with a **narrow** scope — a normal and common outcome, since the strictest conventions are usually the most local (SG-11).
 
 - **PC-5 (Re-validated and reversible):** a ratified rule carries its **ratification** and **last-review** provenance. A rule unreviewed for a long span, or **contradicted by new evidence**, is **re-surfaced for re-ratification or demotion** — never silently kept as law. Codification is **reversible**: a norm that stops holding is demoted **non-destructively**, not enforced against the evidence. A rule is a standing hypothesis the evidence keeps earning.
 
@@ -127,5 +129,6 @@ Consolidation deepens memory; distillation grows capability; codification grows 
 
 | Version | Date | Author | Notes |
 | --- | --- | --- | --- |
+| 1.1.0 | 2026-08-06 | Core Team | PC-4 clarified and the missing axis named: time-recurrence establishes the pattern is **real**, never that it **generalizes**; applicability is decided by the separate independent-context gate in the new `l1-scoped-generalization` (SG-3), the two axes orthogonal (SG-11) so a pattern clearing PC without clearing SG is a ratified rule with a **narrow** scope. Removes an implicit universality claim that was never intended; no PC invariant relaxed. |
 | 1.0.2 | 2026-08-05 | Core Team | Related Specifications extended with `l1-project-vocabulary` — a consumer of this ratification pathway: a domain term becomes canonical through PC-1/PC-2 and retires through PC-5, and a generator never self-promotes a coinage. Link-only; no invariant changed. |
 | 1.0.0 | 2026-07-09 | Core Team | Initial stable spec — pattern codification: the disciplined memory-to-governance pathway by which a stable, dated behavioral pattern becomes an enforceable rule. Earned not automatic — recurrence is a candidate, a rule needs durability + human ratification (PC-1); propose → ratify → write, the human the sole author of binding norms (PC-2); tiered bindingness rising only with evidence (PC-3); recurrence detectable because observations are dated (PC-4); rules dated, periodically re-validated, and reversibly demoted (PC-5); provisional/experimental patterns quarantined from direct promotion, graduated first (PC-6); auditable evidence-and-ratification pathway (PC-7); feeds governance without becoming it and never self-grants authority (PC-8). Generalizes SEC-9 (permission promotion) to any behavioral norm; sibling to EXT-7 (patterns → capabilities). Composes l1-memory-consolidation / l1-security / l2-agent-constitution / l1-practice-analytics / l1-operational-ledger. Distilled from an adoption pass over an external agent-memory reference (layered memory with an agent-proposed, human-ratified promotion pipeline observation → rule). |
