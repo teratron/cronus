@@ -1,6 +1,6 @@
 # Tool Composition Model
 
-**Version:** 1.1.0
+**Version:** 1.2.0
 **Status:** Stable
 **Layer:** concept
 
@@ -17,6 +17,8 @@ This spec governs compositional structure only. Tool lifecycle (installation, sa
 - [l1-orchestration.md](l1-orchestration.md) — Orchestrator delegates toolkit-level capability units to workers; ORC-5 context isolation applies per toolkit invocation.
 - [l1-execution-graph.md](l1-execution-graph.md) — Tool calls are nodes in the execution graph; toolkit dispatcher is a routing node.
 - [l2-extension-registry.md](l2-extension-registry.md) — Concrete tool registration, manifest format, and MCP integration.
+- [l1-action-gating.md](l1-action-gating.md) — [ADDED v1.2.0] AG-2's consequence classification (reversibility, blast radius, external visibility, value at stake) is the taxonomy TC-8 selects affordance sets from; gating decides *how much friction* a classified action carries, TC-8 decides *whether the agent sees it at all*.
+- [l1-interception-model.md](l1-interception-model.md) — [ADDED v1.2.0] INT-6's strip axis is the mechanism TC-8's class predicate drives: strip removes a capability from the affordance set invisibly at zero token cost, which is what a class-derived set does to everything outside it.
 
 ## 1. Motivation
 
@@ -43,6 +45,8 @@ Rules every Layer 2 implementation MUST NOT violate:
 - **TC-5 (Single authorization surface):** permission to invoke a toolkit grants access to all member tools. Member tools do not carry separate authorization checks beyond the toolkit grant. This invariant is enforced by the executor; a caller invoking a member tool directly (bypassing the toolkit) receives the same authorization outcome as invoking via the dispatcher.
 - **TC-6 (Nested toolkits as opaque members):** a toolkit may include another toolkit as a member. The nested toolkit appears as a single, opaque tool in the parent dispatcher; its internal structure is invisible to the parent. Nesting depth is bounded at compile/registration time to prevent unbounded recursion.
 - **TC-7 (Deferred tool resolution at scale):** when the catalog of tools/toolkits available to an agent exceeds a configured size threshold, the surface presented to the agent MUST reduce to a *searchable index* rather than the full union of member schemas. A tool's full schema is materialized on demand by a relevance query; until materialized, only its name and a short descriptor are visible and it cannot be invoked. Once materialized, a tool is callable identically to an eagerly-loaded one and retains its toolkit membership, single authorization surface (TC-5), dependency ordering (TC-3), and dispatcher routing (TC-2). Below the threshold, all tools are exposed directly. The threshold and search breadth are configurable (defaults ship); the reduction MUST be observable — the agent can tell that more tools exist beyond the currently loaded set, so it never assumes the loaded subset is exhaustive.
+- **TC-8 (Effect-class affordance selection):** [ADDED v1.2.0] the set of capabilities exposed to an agent MUST be expressible as a **predicate over the declared consequence classification** — read-only, non-destructive, workspace-scoped, and the like — and not only as an enumerated list of names. The classification is the one already required for gating (`l1-action-gating` AG-2: reversibility, blast radius, external visibility, value at stake); this invariant reuses it as the **selector for the affordance surface** (the strip axis of `l1-interception-model` INT-6) rather than introducing a second taxonomy. Two consequences are binding. First, **a newly added capability joins the correct sets by being classified**, never by every call site being found and edited — a name list silently omits the new capability from the restriction it obviously belongs to, and the omission is invisible because nothing fails. Second, an **unclassified capability is excluded from every class-derived set**, never silently included: a class-derived set is a claim about what the agent can do to the world, and an unclassified member makes that claim false in the dangerous direction. An explicitly enumerated set remains available for cases with no clean class, and the two compose (a class-derived base with named additions or removals), each addition or removal being visible as such rather than dissolved into an opaque list.
+
 
 ## 4. Detailed Design
 
@@ -195,5 +199,6 @@ This is complementary to toolkits, not a replacement: toolkits decide membership
 
 | Version | Date | Summary |
 | --- | --- | --- |
+| 1.2.0 | 2026-08-06 | TC-8 added — **effect-class affordance selection**: the exposed capability set must be expressible as a predicate over the AG-2 consequence classification (read-only, non-destructive, workspace-scoped), not only as an enumerated name list, reusing the gating taxonomy as the selector for INT-6's strip axis rather than inventing a second one. Two binding consequences: a **newly added capability joins the correct sets by being classified** rather than by every call site being found and edited — the name-list failure is silent, since nothing errors when the new capability is simply absent from a restriction it obviously belongs to; and an **unclassified capability is excluded from every class-derived set**, because such a set is a claim about what the agent can do to the world and an unclassified member falsifies it in the dangerous direction. Enumerated sets remain available and compose with class-derived ones, with each named addition or removal visible as such. |
 | 1.0.0 | 2026-06-24 | Initial stable spec — toolkit unit, dispatcher auto-derivation, dependency DAG, parallel execution, nested toolkits, single authorization surface |
 | 1.1.0 | 2026-06-25 | TC-7 added — deferred tool resolution at scale: past a configured catalog-size threshold the agent surface reduces to a relevance-searchable index with on-demand schema materialization, complementing static toolkit grouping by bounding context cost; materialized tools retain membership/auth/deps/routing; reduction is observable. §4.7 added; drawbacks extended. No downstream L2 declares `Implements:` this spec — no cascade. |

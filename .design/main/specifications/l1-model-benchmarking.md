@@ -1,6 +1,6 @@
 # Model Benchmarking
 
-**Version:** 1.0.1
+**Version:** 1.1.0
 **Status:** Stable
 **Layer:** concept
 
@@ -23,6 +23,8 @@ This closes a measurement gap the evaluation family leaves open: [l1-evaluations
 - [l1-retrieval-evaluation.md](l1-retrieval-evaluation.md) - Sibling measurement discipline: fixture as ground truth, baseline persistence, delta reporting, no opaque single score (RE-1/RE-3/RE-5 precedents).
 - [l1-security.md](l1-security.md) - Probes contain no user data; benchmark traffic respects secret isolation and no-exfiltration (INV-7, SEC-2).
 - [l2-budget-engine.md](l2-budget-engine.md) - Budget caps that bound benchmark runs on metered credentials (MB-8).
+- [l1-reasoning-spend.md](l1-reasoning-spend.md) - [ADDED v1.1.0] RSN-7 requires the reasoning class to be reported as its own figure inside MB-3's token dimension: two candidates producing the same answer with a tenfold deliberation gap are economically different, and a combined total hides it at exactly the moment the comparison exists to expose it.
+- [l1-output-contracts.md](l1-output-contracts.md) - [ADDED v1.1.0] OC-4's retry budget is the production value MB-10 requires an output-validity retry to be measured at; raising it for a benchmark measures the harness's persistence, not the model's compliance.
 
 ## 1. Motivation
 
@@ -61,6 +63,13 @@ Rules every Layer 2 implementation MUST NOT violate. They are technology-neutral
 - **MB-8 (Bounded, isolated, off the hot path):** benchmark execution is budget-capped per probe and per run (tokens and wall time), runs in isolation with no access to production state, and never executes on the routing hot path. Runs against metered credentials occur only under an explicitly configured budget or an explicit user action — benchmarking is never a silent background cost.
 
 - **MB-9 (Honest failure accounting):** timeout, refusal, malformed output, and provider error are first-class typed outcomes, recorded with their reason and counted against the quality dimension — never dropped, never silently retried until they pass. Nondeterminism is handled by a declared trial count with variance reported alongside the mean; an unstable result is marked unstable, not averaged into false confidence. A fault in the grader or benchmark harness itself invalidates the probe run — no score is recorded against the model and the fault is surfaced — it is never counted as a model failure.
+
+- **MB-10 (Retry policy is part of the measured unit, and it is asymmetric):** [ADDED v1.1.0] the fixed harness of MB-5 includes its **retry configuration**, and that configuration splits into **two classes that must be set in opposite directions under measurement**:
+
+  - **Availability retries** — transient transport and provider-side conditions (rate limiting, throttling, service unavailability). These measure the provider's queue on the day, not the candidate. They MAY be relaxed generously so a quota event does not destroy a long run, and a probe that succeeded after them is scored normally with its attempt count recorded.
+  - **Output-validity retries** — malformed, contract-failing, or non-compliant model output re-requested until it passes. These **are the measured property**. They MUST stay at the production value, identical across candidates, because raising them measures the harness's persistence rather than the model's compliance: a candidate that produces valid output on the third attempt is not a candidate that produces valid output, and a benchmark that retries until it passes reports a first-attempt compliance rate that no user will ever experience.
+
+  **Attempts are counted and reported** in both classes — a score with a hidden retry count is unreproducible, and the counts themselves are a result (a candidate needing three attempts to satisfy the same contract is the finding, not noise to be smoothed away). The retry configuration is recorded in the run's provenance (MB-7) and is part of what makes two runs comparable (MB-5): results produced under different output-retry allowances are **not** comparable and MUST NOT be pooled. This is the measurement-side complement to MB-9's rule against silently retrying a failure until it passes — MB-9 forbids the practice, MB-10 states which retries are legitimate, which are the measurement itself, and what must be recorded either way.
 
 > L2 specs cannot reach RFC status until all invariants here are addressed in their "Invariant Compliance" section.
 
@@ -186,6 +195,7 @@ None substitutes for another; this spec is the only member that measures the mod
 
 | Version | Date | Change |
 | --- | --- | --- |
+| 1.1.0 | 2026-08-06 | Core Team | MB-10 added — **retry policy is part of the measured unit, and it is asymmetric**. MB-5 fixed the harness across candidates and MB-9 forbade silently retrying a failure until it passes, but neither said which retries are legitimate. The split: **availability retries** (rate limiting, throttling, service unavailability) measure the provider's queue on the day rather than the candidate, so they MAY be relaxed generously to keep a quota event from destroying a long run; **output-validity retries** (malformed or contract-failing output re-requested until it passes) **are the measured property** and MUST stay at the production value across candidates, because a candidate that produces valid output on the third attempt is not a candidate that produces valid output, and a suite that retries until it passes publishes a first-attempt compliance rate no user will ever experience. Attempts are counted and reported in both classes — a score with a hidden retry count is unreproducible, and the count is itself a result. The configuration joins MB-7 provenance and MB-5 comparability: runs under different output-retry allowances MUST NOT be pooled. |
 | 1.0.0 | 2026-07-02 | Initial concept: hardcoded three-class micro-benchmark (code / content / instruction-compliance probes) measuring base-model fitness per task class on quality + time + tokens/cost (MB-1…MB-9); fitness profiles feed the model router as a signal, never an override; deterministic-first grading composing the evaluation-suite grader taxonomy. |
 | 1.0.1 | 2026-07-03 | Added a Related Specifications cross-reference to the new sibling spec l1-specialty-exemplars (per-specialty competency graded against gold-standard reference exemplars, staffing consumer); demarcation only, no invariant or logic change. |
 
