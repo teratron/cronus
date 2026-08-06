@@ -1,6 +1,6 @@
 # Office Archetype
 
-**Version:** 1.0.0
+**Version:** 1.0.1
 **Status:** Stable
 **Layer:** concept
 
@@ -25,6 +25,8 @@ The word to hold onto is **starting point**. An archetype is a *prior on hiring*
 - [l1-storage-model.md](l1-storage-model.md) - STO-3 catalog-vs-instance, which OA-6 mirrors.
 - [l1-dev-office.md](l1-dev-office.md) - A specially-gated office, not an archetype instance; §4.7 draws the line.
 - [l2-archetype-catalog.md](l2-archetype-catalog.md) - The Layer 2 realization: shipped archetypes, their role requirements, and the coverage gap.
+- [l1-corpus-originality.md](l1-corpus-originality.md) - [ADDED v1.0.1] The admission gate that makes OA-10's compose-never-fork **detectable** rather than merely prohibited: an inline near-copy of a preset role is measured against the catalog, not left to a reviewer's memory.
+- [l1-parallel-staffing.md](l1-parallel-staffing.md) - [ADDED v1.0.1] PS-1/PS-4 place team **width** downstream of observed volume; §5 cites them in rejecting a scenario roster's pre-fixed size mode.
 
 ## 1. Motivation
 
@@ -168,6 +170,12 @@ The developer office row is the sharpest. It is tempting to model it as "the arc
 
 **Alternative — ship offices with their staff already hired.** This is the request in its most direct form, and it is rejected by OA-1 and, upstream, by OFF-4 and `l1-office-model` §5, which recorded the fixed org chart as considered and rejected on evidence. The practical objection is independent of the invariant: a prepopulated office spends context, memory, and budget on specialists the project has not asked for, and converts a helpful prior into a boundary the manager cannot cross. What the request actually wants — an office that feels like it already understands the trade — is delivered by the pool, the norms, and the shape, none of which requires hiring anyone.
 
+**Alternative — a named scenario roster with staged activation.** [ADDED v1.0.1] A tempting refinement of the previous alternative, and rejected on the same grounds. The shape: a catalog of named scenarios (*ship an MVP*, *run an incident*, *launch a campaign*), each carrying an explicit **roster** of specialties grouped by activation condition (*always* / *from week three* / *as needed* / *after the fix*), plus a size mode that fixes how many specialists the scenario runs with. One selection deploys the whole team. It is genuinely attractive — it reads as expertise, it is easy to browse, and it makes an office look ready before it has done anything.
+
+It is still a fixed org chart, with the staging making it worse rather than better. OA-1 rejects the roster itself; the staging additionally moves the hire decision from *the work as it actually developed* to *a calendar the scenario author guessed at*, which is the OFF-4 violation in its most confident form — a specialist hired in week three because the template said week three, not because week three's work called for one. The size mode compounds it by fixing team width in advance, when width is exactly what should follow from the work's observed volume (PS-1/PS-4). And a roster grouped by activation phase quietly acquires the power OA-3 denies: whatever is not in a group has no activation condition, which in practice reads as *not part of this scenario*.
+
+What the scenario roster actually gets right is worth keeping, and the existing contract already carries it: the **pool** says which specialties this kind of work plausibly draws on, the **norms** say how the domain works, the **shape** says what structure to grow into if it grows. Those change what the manager expects without pre-deciding what it hires or when. The one genuine addition — that a domain's typical work arrives in *phases* with different specialty demands — belongs in the norms as domain knowledge the manager reads, not as a schedule that hires on its behalf.
+
 **Alternative — let the archetype bound the pool (hires outside it are refused).** Rejected by OA-3. A domain boundary is a prediction, and real work crosses domains: an advertising office needs to read a contract; a finance office needs a data pipeline. An archetype that could refuse would fail exactly on the projects most worth doing.
 
 **Alternative — let archetypes carry capability grants, so a domain "just works" out of the box.** Rejected by OA-4/SEC-10. It would make installing content a path to widening authority, which is the attack the authority plane exists to close. The archetype may declare a need; the human grants it.
@@ -192,3 +200,4 @@ The developer office row is the sharpest. It is tempting to model it as "the arc
 | Version | Date | Notes |
 | --- | --- | --- |
 | 1.0.0 | 2026-07-10 | Initial spec. Reconciles domain-scoped staffing presets with `l1-office-model` OFF-4 and its §5 rejection of the fixed org chart by defining an archetype as a **prior on hiring** — candidate pool, org shape, bounded seed, domain norms — rather than a roster (OA-1/OA-2). Establishes OA-3 (the pool cannot refuse a hire), OA-4 (an archetype carries no authority; SEC-10), OA-5 (third-party archetype text is an injection surface, vetted before admission), OA-9 (archetypes are falsifiable and their deviations recorded), OA-10 (composes the role catalog, never forks it), and OA-11 (the archetype-free office is complete). §4.7 separates the archetype from the workspace blueprint, the role preset, the developer office, and the competency profile. |
+| 1.0.1 | 2026-08-06 | §5 records **named scenario roster with staged activation** as considered and rejected — a catalog of named scenarios each carrying a phase-grouped roster (*always* / *from week three* / *as needed* / *after the fix*) plus a fixed size mode, deployed in one selection. Rejected on OA-1 (it is a roster), on OFF-4 in its most confident form (staging moves the hire decision from the work as it developed to a calendar the scenario author guessed at), on PS-1/PS-4 (it fixes team width in advance, when width should follow observed volume), and on OA-3 (a phase-grouped roster quietly reads as *not part of this scenario* for anything ungrouped). What the shape gets right — that a domain's work arrives in phases with different specialty demands — belongs in the **norms** as domain knowledge the manager reads, never as a schedule that hires on its behalf. Related Specifications record `l1-corpus-originality` (makes OA-10 compose-never-fork detectable rather than merely prohibited) and `l1-parallel-staffing`. Documentation-only; no invariant changed. |

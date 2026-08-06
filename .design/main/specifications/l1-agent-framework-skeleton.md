@@ -1,6 +1,6 @@
 # Agent Framework Skeleton
 
-**Version:** 1.0.0
+**Version:** 1.0.1
 **Status:** Stable
 **Layer:** concept
 
@@ -34,6 +34,8 @@ map that shows how they compose.
 - [l1-quality-standards.md](l1-quality-standards.md) - Tiered quality gates; the deployment gate of AFS-11.
 - [l1-telemetry.md](l1-telemetry.md) - Privacy-first observation; the data-safety boundary of AFS-9.
 - [l1-security.md](l1-security.md) - Secret isolation, sandboxing, no exfiltration; AFS-12.
+- [l1-host-native-rendering.md](l1-host-native-rendering.md) - [ADDED v1.0.1] The full contract AFS-14's "canonical-source → per-host adapter distribution with drift detection" hands off to: render determinism (HNR-2), declared fidelity classes per-unit/collapsed/opaque with honest loss (HNR-3/HNR-4), section roles as the split contract (HNR-5), stable slug identity (HNR-6), declared destinations (HNR-7), and previewable idempotent materialization (HNR-8). AFS-14 states that a canonical catalog projects outward; that spec states what a projection must guarantee.
+- [l1-corpus-originality.md](l1-corpus-originality.md) - [ADDED v1.0.1] The admission gate keeping the AFS-14 role catalog free of re-skins; demarcated from AFS-13, whose novelty rule guards a self-improvement **lineage** across generations rather than a **catalog** at rest.
 
 ## 1. Motivation
 

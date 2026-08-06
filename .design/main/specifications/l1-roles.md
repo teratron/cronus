@@ -1,6 +1,6 @@
 # Roles
 
-**Version:** 1.1.0
+**Version:** 1.2.0
 **Status:** Stable
 **Layer:** concept
 
@@ -15,6 +15,8 @@ The technology-agnostic model of the office's workforce: a **role** is a defined
 - [l1-storage-model.md](l1-storage-model.md) - Preset (catalog) vs instance, and scope lifecycle (STO-3/5).
 - [l1-orchestration.md](l1-orchestration.md) - Hired roles receive delegated work and a place in the hierarchy.
 - [l2-role-catalog.md](l2-role-catalog.md) - Concrete catalog, preset list, definition format, hire/fire, commands.
+- [l1-corpus-originality.md](l1-corpus-originality.md) - [ADDED v1.2.0] The content half of the ROL-9 admission gate: a custom role must be substantively new against the catalog, not a noun-swapped copy of a preset with borrowed justifications.
+- [l1-host-native-rendering.md](l1-host-native-rendering.md) - [ADDED v1.2.0] How a catalog role is materialized into a foreign host's native format when the principal wants it available in a neighbouring tool; the role definition stays the single authored source (HNR-1).
 
 ## 1. Motivation
 
@@ -40,6 +42,7 @@ Rules every Layer 2 implementation MUST NOT violate:
 - **ROL-7 (Catalog integrity):** preset roles are authoritative blueprints in the immutable program tier; customizing a preset produces a custom copy rather than editing the preset (STO-3).
 - **ROL-8 (Hierarchy placement):** a hired role has a place in the office hierarchy (a reporting line), consistent with the adaptive topology (ORC-2).
 - **ROL-9 (Anti-sprawl justification gate):** [ADDED v1.1.0] creating a **custom** role (rather than reusing or extending a preset) requires the role to justify itself on at least **two independent** axes — for example distinct **expertise** (a specialty no existing role covers), a **parallelism** benefit (it enables work to run concurrently), **context isolation** (it keeps an unrelated concern out of another role's context), or genuine **reuse** (it will be needed repeatedly). One weak reason is insufficient; when the gate is not cleared, reusing or extending an existing role is preferred over minting a new one. This keeps the workforce from fragmenting into many thin, overlapping specialists, and is the role-level application of the harness right-sizing discipline (`l1-harness-composition.md` HC-5); a role whose justifying gap later closes is pruned under the same discipline (HC-3, non-destructively per ROL-4).
+  [MODIFIED v1.2.0] The gate has **two halves and both must clear**. The axes above judge whether the role is *warranted* — the reasons for its existence. They do **not** judge whether its **content** is new, and a role produced by taking an existing definition and swapping its domain nouns inherits perfectly good-sounding reasons along with everything else it copied. A custom role therefore additionally clears the corpus-originality admission gate (`l1-corpus-originality.md` ORI-1): measured against the whole catalog **and** any sibling candidates (ORI-2), on neutralized content (ORI-3), against published calibrated thresholds (ORI-5). A near-duplicate is resolved by making the definition substantively distinct or by **declaring** it a variant/specialization of the named preset it resembles (ORI-8) — never by loosening either half of the gate. The cost of admitting it is that the manager's selection between the two becomes arbitrary (ORI-11), which is the same fragmentation ROL-9 already exists to prevent, arriving by a route the axes cannot see.
 
 > L2 specs cannot reach RFC status until all invariants here are addressed in their "Invariant Compliance" section.
 
@@ -97,5 +100,6 @@ Hiring is instantiation (ROL-3); firing is a non-destructive release (ROL-4); th
 
 | Version | Date | Notes |
 | --- | --- | --- |
+| 1.2.0 | 2026-08-06 | ROL-9 extended with a **content half**: the ≥2-independent-axes test judges whether a custom role is *warranted*, never whether its *definition* is new — and a noun-swapped copy of a preset inherits credible justifications along with its body, so the axes structurally cannot see the most common sprawl route. A custom role now additionally clears the `l1-corpus-originality` admission gate (ORI-1/ORI-2 corpus **and** sibling candidates, ORI-3 neutralized content, ORI-5 published calibrated thresholds), with near-duplicates resolved by substantive distinctness or a **declared** variant relationship (ORI-8), never by loosening either half. Stated cost model: an admitted near-duplicate makes the manager's selection between the two arbitrary (ORI-11) — the same workforce fragmentation ROL-9 already targets. Additive; no existing behavior relaxed. |
 | 1.1.0 | 2026-07-02 | ROL-9 added — anti-sprawl justification gate: a custom role must justify itself on ≥2 independent axes (distinct expertise / parallelism / context isolation / reuse); one weak reason is insufficient, reuse-or-extend-a-preset preferred otherwise. Resolves the long-standing "custom-role sprawl" TBD in Drawbacks; the role-level application of l1-harness-composition HC-5 (a role whose justifying gap later closes is pruned non-destructively per ROL-4 + HC-3). Additive — L1 stays Stable; l2-role-catalog carries ROL-9 as a pending Invariant-Compliance obligation reconciled at magic.task. |
 | 1.0.0 | 2026-06-24 | Initial stable spec — roles as specialties (ROL-1), preset + custom (ROL-2), hire=instantiate (ROL-3), fire=non-destructive release (ROL-4), manager-driven staffing (ROL-5), composition contract (ROL-6), catalog integrity (ROL-7), hierarchy placement (ROL-8). |
