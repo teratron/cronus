@@ -82,7 +82,7 @@ minimumReleaseAgeExclude:
   - '@vitejs/plugin-react@6.0.4 || 6.0.5'
   - react-dom@19.2.8
   - react@19.2.8
-  - "@types/node@26.1.2"
+  - '@types/node@26.1.2 || 26.2.0'
   - fallow-type-aware@3.10.0 || 3.13.0
   - jsdom@30.0.0 || 30.0.1
   - '@types/react-dom@19.2.4'
