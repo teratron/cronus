@@ -1,6 +1,6 @@
 # Project Context
 
-**Generated:** 2026-08-01
+**Generated:** 2026-08-12
 
 ## Active Technologies
 
@@ -18,25 +18,14 @@
 ├── .cargo/
 │   └── config.toml
 ├── .claude/
-│   ├── commands/
-│   ├── rules/
-│   ├── scheduled_tasks.lock
-│   └── skills/
 ├── .codex/
-│   ├── prompts/
-│   ├── rules/
-│   └── skills/
 ├── .design/
-│   ├── .cache/
-│   ├── .graph-cache/
 │   ├── .version
 │   ├── INDEX.md
 │   ├── RULES.md
-│   ├── graph-before.json
 │   ├── graph-snapshot.json
 │   ├── main/
 │   ├── nodus/
-│   ├── wiki/
 │   └── workspace.json
 ├── .drafts/
 │   ├── TODO.md
@@ -49,13 +38,14 @@
 │   ├── release.drawio.svg
 │   ├── technology-stack-research.md
 │   └── ui-ux.md
-├── .env
 ├── .env.example
 ├── .github/
 │   ├── dependabot.yml
 │   └── workflows/
 ├── .gitignore
+├── .magic/
 ├── .markdownlint.json
+├── .qwen/
 ├── .release/
 │   ├── program/
 │   └── state/
@@ -111,3 +101,4 @@
 - T-29T01: Added `MeasureEnv` test double + 4 integration tests in `tests/environment.rs` (rejection proves `env.open`/`reset` ran but no workflow step or `evaluate` did; measure-present regression; no-budget regression; `CandidateResult` carries the measure through). Reconciled `l2-nodus-environment.md` 1.1.0 → 1.1.1 — §4.4.1's `Diagnostic`/"before `env.open`" claims corrected to the real mechanism; §3's NE-14 row → Implemented. `INDEX.md` row + top-level version synced. `cargo test -p nodus` — 471 passed (was 467; +4), 0 failed; clippy `-D warnings` clean; fmt clean; no `.unwrap()`/`panic!()`/`unreachable!()`/`.expect(` outside `#[cfg(test)]`; `git diff --stat` on `Cargo.toml`/`Cargo.lock` empty (LP-1 preserved)
 
 **All three phases planned in the `/magic.task nodus` cycle (27, 28, 29) are now Done.**
+

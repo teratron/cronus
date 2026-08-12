@@ -179,3 +179,5 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Updated a specification (main)
 - Updated 8 specifications (main)
 - Updated specification `model-runtime` (main)
+- Updated task plan and task index (nodus)
+- Updated a specification (nodus)
