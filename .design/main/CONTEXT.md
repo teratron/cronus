@@ -1,6 +1,6 @@
 # Project Context
 
-**Generated:** 2026-07-31
+**Generated:** 2026-08-12
 
 ## Active Technologies
 
@@ -18,24 +18,14 @@
 ├── .cargo/
 │   └── config.toml
 ├── .claude/
-│   ├── commands/
-│   ├── rules/
-│   ├── scheduled_tasks.lock
-│   └── skills/
 ├── .codex/
-│   ├── prompts/
-│   ├── rules/
-│   └── skills/
 ├── .design/
-│   ├── .cache/
-│   ├── .graph-cache/
 │   ├── .version
 │   ├── INDEX.md
 │   ├── RULES.md
-│   ├── graph-before.json
+│   ├── graph-snapshot.json
 │   ├── main/
 │   ├── nodus/
-│   ├── wiki/
 │   └── workspace.json
 ├── .drafts/
 │   ├── TODO.md
@@ -48,13 +38,14 @@
 │   ├── release.drawio.svg
 │   ├── technology-stack-research.md
 │   └── ui-ux.md
-├── .env
 ├── .env.example
 ├── .github/
 │   ├── dependabot.yml
 │   └── workflows/
 ├── .gitignore
+├── .magic/
 ├── .markdownlint.json
+├── .qwen/
 ├── .release/
 │   ├── program/
 │   └── state/
