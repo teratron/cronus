@@ -65,6 +65,7 @@ pub mod skills;
 pub mod state;
 pub mod store;
 pub mod telemetry;
+pub mod tool_receipts;
 pub mod tool_security;
 pub mod trigger_triage;
 pub mod version_control;

@@ -698,6 +698,7 @@ dependencies = [
  "cronus-domain",
  "cronus-model-local",
  "cronus-store-local",
+ "getrandom 0.4.3",
  "nodus",
  "serde_json",
 ]

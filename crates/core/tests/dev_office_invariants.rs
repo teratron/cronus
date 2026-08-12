@@ -17,6 +17,7 @@ use cronus_core::dev_office_workspace::{
     run_elevated_action,
 };
 use cronus_core::development_workflow::{AdvanceError, Pipeline, QualityGate};
+use cronus_core::receipts_bootstrap::ReceiptedDispatch;
 use cronus_core::tool_security::ToolPolicy;
 use cronus_core::workspace::{WorkspaceId, WorkspaceManager, WorkspaceTemplate};
 
@@ -251,17 +252,18 @@ fn dvo6_the_dev_workspace_scope_never_reaches_another_workspaces_store() {
 #[test]
 fn dvo7_elevated_actions_pass_the_authority_gate_and_are_always_audited() {
     let audit_path = temp_dir("dvo7-audit").join("audit.jsonl");
+    let mut dispatch = ReceiptedDispatch::new(audit_path.clone());
 
     let allowed = ToolPolicy::default();
     assert!(
-        run_elevated_action(&allowed, &audit_path, "dev.self_edit").is_ok(),
+        run_elevated_action(&mut dispatch, &allowed, "dev.self_edit").is_ok(),
         "DVO-7: an unblocked elevated action passes the tool-security gate"
     );
 
     let mut blocked = ToolPolicy::default();
     blocked.disabled_tools.push("dev.dangerous_op".to_string());
     assert!(
-        run_elevated_action(&blocked, &audit_path, "dev.dangerous_op").is_err(),
+        run_elevated_action(&mut dispatch, &blocked, "dev.dangerous_op").is_err(),
         "DVO-7: the authority gate still refuses a disabled action"
     );
 

@@ -17,6 +17,12 @@ cronus-activation-os = { workspace = true }
 # call the transport — nodus itself gains no dependency (LP-1 preserved).
 nodus = { workspace = true }
 serde_json = { workspace = true }
+# The receipts facade (`receipts_bootstrap.rs`) reads OS entropy to birth a
+# session's `ReceiptKey` — the one non-deterministic act tool-receipts needs
+# (TR-5). `getrandom` is deliberately absent from cronus-domain's boundary-
+# guard allowlist, so it lives here instead, the same reason cronus-auth-local
+# already depends on it for secret generation.
+getrandom = { workspace = true }
 
 # Benchmarks use a std-only timing harness (no external bench crate — see the
 # dependency policy). Each bench target is a plain `fn main()` gated behind

@@ -17,7 +17,7 @@ pub use cronus_domain::{
     loop_runner, memory_capture, memory_intelligence, mission, notes, office_control,
     orchestration, paths, quality, redact, research, resource_sharing, roles, router,
     sandbox_policy, scheduler, secrets, self_improvement, session, skills, state, store, telemetry,
-    tool_security, trigger_triage, version_control, voice, wiki_access, wiki_regen,
+    tool_receipts, tool_security, trigger_triage, version_control, voice, wiki_access, wiki_regen,
 };
 
 // The facade-wiring modules whose default implementation reaches into an
@@ -36,6 +36,7 @@ pub mod knowledge_bootstrap;
 pub mod loop_bootstrap;
 pub mod memory;
 pub mod model_bridge;
+pub mod receipts_bootstrap;
 pub mod workspace;
 
 pub use activation_bootstrap::{

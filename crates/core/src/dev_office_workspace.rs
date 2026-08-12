@@ -1,23 +1,21 @@
 //! Developer-office workspace registration and elevated-action confinement/
-//! audit wiring (DVO-1, DVO-6, DVO-7). Composition over already-shipped
-//! subsystems: the `store-local` workspace registry, tool-security's
-//! authority gate, and its append-only audit log — no new authority
-//! mechanism here, only a thin binding scoped to the dev office.
+//! audit/receipt wiring (DVO-1, DVO-6, DVO-7). Composition over
+//! already-shipped subsystems: the `store-local` workspace registry,
+//! tool-security's authority gate, and the receipts facade — no new
+//! authority mechanism here, only a thin binding scoped to the dev office.
 //!
-//! **Disclosed scope boundary:** the elevated-action audit entries here ride
-//! `tool_security::AuditEntry` — a real, already-shipped, append-only
-//! logged-audit-trail mechanism — not a MAC-signed, tamper-evident,
-//! model-unforgeable "tool receipt". That stronger primitive has no
-//! implementation anywhere in this project yet; building it is a
-//! substantial, security-sensitive subsystem in its own right and belongs
-//! in its own spec-driven phase, not improvised inline here. What's wired
-//! is the real, composable piece that exists today.
+//! **Disclosed scope boundary:** `run_elevated_action` is the one
+//! production call site this codebase routes through
+//! [`crate::receipts_bootstrap::ReceiptedDispatch`] — there is no general
+//! tool-dispatch surface yet, so this is exactly one receipted path, not
+//! project-wide coverage (`l1-tool-receipts` TR-8/INV-9). Every future call
+//! site adopts receipts by construction, since `Receipted<T>` is the only
+//! way `invoke` returns a value.
 
 use std::path::Path;
 
-use cronus_domain::tool_security::{
-    AuditEntry, ToolPermitResult, ToolPolicy, append_audit_entry, now_ms,
-};
+use crate::receipts_bootstrap::ReceiptedDispatch;
+use cronus_domain::tool_security::ToolPolicy;
 use cronus_store_local::workspace::{
     Workspace, WorkspaceError, WorkspaceId, WorkspaceManager, WorkspaceTemplate,
 };
@@ -56,48 +54,27 @@ pub fn register_dev_workspace(
     )
 }
 
-/// Run one elevated dev-office action through the confinement/audit chain
-/// (DVO-7): the tool-security authority gate first, an append-only
-/// audit entry always second — allowed *and* blocked attempts are both
-/// recorded, because an audit trail that only remembers successes isn't one.
-/// If the audit write itself fails, the action is refused (fail-closed):
-/// an unaudited elevated action is never allowed to proceed silently.
-///
-/// `action_name` rides `category` rather than `tool_name`/`finding_id`:
-/// `tool_security::append_audit_entry` only serializes
-/// `ts`/`layer`/`category`/`severity`/`outcome` today, so those two fields
-/// would be silently dropped — composing the real shipped behavior, not the
-/// full `AuditEntry` shape it happens to accept.
+/// Run one elevated dev-office action through the confinement/audit/receipt
+/// chain (DVO-7, TR-1, TR-7): the tool-security authority gate first,
+/// unchanged; a receipt binding the gate's verdict always second — allowed
+/// *and* blocked attempts are both receipted, because an audit trail that
+/// only remembers successes isn't one. If the audit write itself fails,
+/// the action is refused (fail-closed): an unaudited elevated action is
+/// never allowed to proceed silently — the same contract this function
+/// had before it routed through `ReceiptedDispatch`.
 ///
 /// Nothing here reaches the workspace registry at all — an elevated action
 /// has no parameter or capability that could touch another workspace's
 /// store (the INV-8 boundary assertion), by plain absence, not a runtime
 /// check that could be bypassed.
 pub fn run_elevated_action(
+    dispatch: &mut ReceiptedDispatch,
     policy: &ToolPolicy,
-    audit_path: &Path,
     action_name: &str,
 ) -> Result<(), String> {
-    let permit = policy.is_permitted(action_name);
-    let outcome: &'static str = if matches!(permit, ToolPermitResult::Allowed) {
-        "allowed"
-    } else {
-        "blocked"
-    };
-    let entry = AuditEntry {
-        timestamp: now_ms(),
-        layer: "dev-office",
-        tool_name: Some(action_name.to_string()),
-        finding_id: format!("dev-office:{action_name}"),
-        category: format!("elevated-action:{action_name}"),
-        severity: "info".to_string(),
-        outcome,
-    };
-    append_audit_entry(audit_path, &entry).map_err(|e| format!("audit logging failed: {e}"))?;
-    match permit {
-        ToolPermitResult::Allowed => Ok(()),
-        ToolPermitResult::Blocked(reason) => Err(reason),
-    }
+    let (_binding, receipted) =
+        dispatch.invoke(policy, action_name, action_name.as_bytes(), || Ok(()))?;
+    receipted.into_parts().0
 }
 
 #[cfg(test)]
@@ -157,28 +134,29 @@ mod tests {
     }
 
     #[test]
-    fn elevated_action_allowed_by_policy_is_audited() {
+    fn elevated_action_allowed_by_policy_is_audited_and_receipted() {
         let dir = temp_dir("audit-allowed");
         let audit_path = dir.join("audit.jsonl");
+        let mut dispatch = ReceiptedDispatch::new(audit_path.clone());
         let policy = ToolPolicy::default();
 
-        let result = run_elevated_action(&policy, &audit_path, "dev.self_edit");
+        let result = run_elevated_action(&mut dispatch, &policy, "dev.self_edit");
         assert!(result.is_ok());
 
         let logged = std::fs::read_to_string(&audit_path).unwrap();
-        assert!(logged.contains("dev-office"));
         assert!(logged.contains("dev.self_edit"));
         assert!(logged.contains("\"outcome\":\"allowed\""));
     }
 
     #[test]
-    fn elevated_action_blocked_by_policy_is_still_audited_and_refused() {
+    fn elevated_action_blocked_by_policy_is_still_audited_receipted_and_refused() {
         let dir = temp_dir("audit-blocked");
         let audit_path = dir.join("audit.jsonl");
+        let mut dispatch = ReceiptedDispatch::new(audit_path.clone());
         let mut policy = ToolPolicy::default();
         policy.disabled_tools.push("dev.self_edit".to_string());
 
-        let result = run_elevated_action(&policy, &audit_path, "dev.self_edit");
+        let result = run_elevated_action(&mut dispatch, &policy, "dev.self_edit");
         assert!(result.is_err());
 
         let logged = std::fs::read_to_string(&audit_path).unwrap();
