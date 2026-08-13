@@ -1,7 +1,7 @@
 # Dynamic Harness Pattern
 
-**Version:** 0.1.0
-**Status:** RFC
+**Version:** 1.0.0
+**Status:** Stable
 **Layer:** concept
 
 ## Overview
@@ -24,7 +24,7 @@ Both senses are governed by the invariants below. Neither may weaken the frozen 
 - [l1-orchestration.md](l1-orchestration.md) — office-model orchestration; the dynamic harness runs inside one executor of it
 - [l2-model-router.md](l2-model-router.md) — an existing L2 realization of DH facets: dynamic routing, bandit exploration, promotion-by-score, circuit breaker
 - [l2-context-management.md](l2-context-management.md) — an existing L2 realization of DH-5 context-shaping adaptation
-- [l2-self-improvement.md](l2-self-improvement.md) — an existing L2 realization of DH-8/DH-10 online learning and promotion gates
+- [l2-self-improvement.md](l2-self-improvement.md) — a related but non-conformant precedent: durable calibration/mistake/template learning from live operation, but unconditionally additive rather than gated — no DH-10 promotion-gate-with-margin step and no DH-8 machine-checkable predicted-flip scoring; a DH-8/DH-10 realization would need its own design, not an extension of this one
 - [../../nodus/specifications/l1-nodus-observability.md](../../nodus/specifications/l1-nodus-observability.md) — the read-only observer contract (`AuditProvider`) that DH-2/DH-7 build upon
 - [../../nodus/specifications/l1-nodus-portability.md](../../nodus/specifications/l1-nodus-portability.md) — the extension-point contract (LP-1…LP-7) that the nodus integration (§4.7) must satisfy
 
@@ -191,7 +191,7 @@ Nodus is a portable, std-only, zero-dependency workflow DSL library. It already 
 | Experience observability (DH-7) | `ExecutionEvent` (closed taxonomy) + `RunManifest` already provide step-indexed, **content-free** events (`FieldDescriptor` carries shape, never raw text). | No new library type required: the **data-safety boundary is exactly what makes layered digests shareable**. Digestion is a host-side consumer of the event stream keyed by `run_id` + `step_index`; nodus already guarantees the stable addressing DH-7 back-pointers need. |
 | Falsification ledger (DH-8) | `RunManifest.run_id` and `ExecutionEvent.step_index` give stable change addressing. | The manifest is a host-side append-only record; nodus supplies the addressing and the per-step pass/fail signal. No library coupling. |
 | Genome & drift (DH-9) | The parser/AST already fully describe a workflow's structure. | A **pure function over the AST** → structural signature (step/macro counts, schema vocabulary, interceptor chain, policy blocks, contract shape). Pure, std-only, no I/O — a natural nodus-library addition that satisfies LP-5. |
-| Promotion gate & durable provisional state (DH-10) | `PolicyProvider` and `StorageProvider` are **defined but "pending LP-3"** (awaiting a second independent host). | The dynamic harness is that **second host**: it needs `PolicyProvider` to express the promotion gate / approval and `StorageProvider` to hold provisional-vs-promoted adaptation state, the append-only ledger, and the genome baseline. This satisfies the LP-3 two-host rule and **graduates both traits** from pending to active executor integration. |
+| Promotion gate & durable provisional state (DH-10) | `PolicyProvider` **already graduated LP-3** — `l2-nodus-portability.md` §4.8.1 records the runtime tool-security guard and the plugin-hook interception as its two independent host contexts, wired since LP-11 [v1.5.0] and consumed by LP-16/LP-17. `StorageProvider` has not: §4.8.2 records only one host context, so its `store`/`load` call sites stay unwired. | The dynamic harness **consumes** the already-wired `PolicyProvider` for the promotion-gate decision — no graduation work needed there. `StorageProvider` (provisional-vs-promoted state, the append-only ledger, the genome baseline) is the one seam the harness could supply a genuine second, independent host context for — but that is a possible *consequence* of building the harness, not a justification for building it: DH-10 does not depend on `StorageProvider` graduating, since a harness may hold its provisional state host-side without ever touching this nodus seam. |
 
 The portability discipline is preserved: every addition is an abstract interface with a built-in no-op, no host type enters the library, and the schema vocabulary baseline is untouched (LP-4).
 
@@ -203,7 +203,7 @@ Recommended order, chosen to keep each step verifiable before the next:
 2. **Trace digestion** (DH-7) — build the host-side layered digester over the existing event stream; verify every digest claim carries a back-pointer.
 3. **Falsification ledger** (DH-8) — emit manifests with machine-checkable predictions; wire the next-evaluation verdict computation.
 4. **Genome function** (DH-9) — pure AST→signature; add distance and drift-from-baseline as local-only comparisons.
-5. **Promotion gate + durable state** (DH-10) — graduate `PolicyProvider`/`StorageProvider`; gate provisional changes before they become durable.
+5. **Promotion gate + durable state** (DH-10) — consume the already-wired `PolicyProvider`; gate provisional changes before they become durable. Optionally graduate `StorageProvider` if provisional state is held nodus-side rather than host-side.
 6. **Runtime substitution** (DH-6) and **verification independence** (DH-11) — last, because they depend on more than one runtime being wired and on the contract being stable.
 
 ## 6. Drawbacks & Alternatives
@@ -228,11 +228,12 @@ Recommended order, chosen to keep each step verifiable before the next:
 | --- | --- | --- |
 | `[HARNESS-ENG]` | `.design/main/specifications/l1-harness-engineering.md` | The offline sibling; DH reuses HE-3/HE-4/HE-6/HE-8 and must not relax them |
 | `[NODUS-OBS]` | `crates/nodus/src/observability.rs` | `AuditProvider` observer-neutrality + `ExecutionEvent`/`FieldDescriptor` content-free taxonomy that DH-2/DH-7 build on |
-| `[NODUS-PORT]` | `crates/nodus/src/portability.rs` | `PolicyProvider`/`StorageProvider` pending-LP-3 traits DH-10 graduates; `ModelProvider` substitution seam for DH-6 |
+| `[NODUS-PORT]` | `crates/nodus/src/portability.rs` | `PolicyProvider` (already LP-3-graduated, DH-10 consumes) and `StorageProvider`'s still-open LP-3 seam (DH-10 could supply its second host context for); `ModelProvider` substitution seam for DH-6 |
 | `[NODUS-PORT-SPEC]` | `.design/nodus/specifications/l1-nodus-portability.md` | LP-1…LP-7 contract every §4.7 extension must satisfy |
 
 ## Document History
 
 | Version | Date | Author | Notes |
 | --- | --- | --- | --- |
+| 1.0.0 | 2026-08-13 | Core Team | RFC→Stable — the adversarial verification the 0.1.0 entry flagged as pending, completed. Post-Update Review (spec-critic) verified every `Related Specifications` and `Canonical References` link resolves and every cited spec is genuinely Stable, then found and fixed two stale/overclaimed technical premises rather than accepting the draft's own framing at face value: (1) §4.7's DH-10 row asserted `PolicyProvider`/`StorageProvider` were *both* "pending LP-3, awaiting a second independent host" and that this harness would be *the* second host graduating both — checked against the current `l2-nodus-portability.md` (v1.7.1, Stable) and found stale: `PolicyProvider` **already graduated** independently (§4.8.1 — the runtime tool-security guard and the plugin-hook interception are its two host contexts, wired since LP-11 [v1.5.0] and consumed by LP-16/LP-17), while `StorageProvider` genuinely remains single-context (§4.8.2, unwired). Corrected §4.7's DH-10 row, §5's Implementation Notes step 5, and the `[NODUS-PORT]` Canonical Reference to state the harness *consumes* the already-wired `PolicyProvider` and only *could* supply `StorageProvider`'s missing second context as a possible consequence, never a justification, of being built. (2) The `l2-self-improvement.md` Related-Specifications entry claimed it as "an existing L2 realization of DH-8/DH-10" — read in full and found non-conformant: its calibration/mistake/template writes are unconditionally additive with no promotion-gate-with-margin step and no machine-checkable predicted-flip scoring, so it is related by theme (learning from live operation) but does not realize either invariant; reworded to state that honestly rather than implying DH-8/DH-10 are already covered by extension. No change to the DH-1…DH-12 invariants themselves — both findings were in the illustrative nodus-integration/related-specs material, not the contract. Version bumped straight to 1.0.0 on first Stable promotion per project convention (`l1-dev-office` 0.1.0→1.0.0, `l1-loop-governance` 0.2.0→1.0.0 precedent), folding the corrections into the same promotion event rather than a separate patch. |
 | 0.1.0 | 2026-06-25 | Core Team | Initial RFC — DH-1…DH-12; two-mode model (runtime adaptation / runtime substitution); interceptor chain taxonomy; layered sourced experience observability; falsification ledger with machine-checkable predicted flips; structural genome + advisory drift; promotion-gated online adaptation; nodus integration via write-capable interceptor seam, runtime-substitution abstraction, AST genome function, and LP-3 graduation of PolicyProvider/StorageProvider. Adversarial verification of invariants pending (research pass interrupted by quota) |

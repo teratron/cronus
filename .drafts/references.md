@@ -129,6 +129,7 @@
 - <https://github.com/pbakaus/impeccable>
 - <https://github.com/multica-ai/andrej-karpathy-skills>
 - <https://github.com/deepbeepmeep/Wan2GP>
+- <https://github.com/modem-dev/hunk>
 
 ## Harness
 

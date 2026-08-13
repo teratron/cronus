@@ -1,7 +1,7 @@
 # Spec-Driven Governance
 
-**Version:** 1.0.0
-**Status:** RFC
+**Version:** 1.0.1
+**Status:** Stable
 **Layer:** concept
 
 ## Overview
@@ -376,3 +376,10 @@ Mechanics are named structurally, not by product.
 | `[TASKGRAPH]` | `.design/main/specifications/l1-task-graph-model.md` | Authoritative decomposition and status lifecycle governed by §5.2. |
 | `[QUALITY]` | `.design/main/specifications/l1-quality-standards.md` | Authoritative tiered quality gates enforced by the review of §5.5. |
 | `[SKELETON]` | `.design/main/specifications/l1-agent-framework-skeleton.md` | Sibling meta-spec; governs agent anatomy where this governs their artifacts. |
+
+## Document History
+
+| Version | Date | Author | Notes |
+| --- | --- | --- | --- |
+| 1.0.1 | 2026-08-13 | Core Team | RFC→Stable. Post-Update Review (spec-critic): found and fixed one genuine `RULES.md` §5 compliance gap — this file had shipped since its 2026-06-25 authoring with no `Document History` section at all, a mandatory table ("Every spec must have: Overview, Motivation, Document History") this entry retroactively supplies. All other checks passed clean: all 9 `Related Specifications` links and all 4 `Canonical References` paths resolve and their targets are genuinely Stable; L1 purity holds (no stack/tool/language names inside SDG-1…SDG-15, the one `nodus`-adjacent mention stays confined to the meta-level "reference engine... not a dependency" framing already in §2); no `RULES.md` contradiction; the §3→§5 and §5.10→§7 section-number gaps are the established, deliberate convention this doc's own Overview cites its sibling `l1-agent-framework-skeleton.md` as following (canonical template numbers preserved, unused optional/layer-specific sections simply skipped rather than triggering renumbering — confirmed against that sibling's identical 1,2,3,5,7 pattern). Distinct, separately-noted finding *not* fixed here (out of this file's scope): `l1-agent-framework-skeleton.md` itself — already Stable — has the same missing-Document-History gap; left for its own future amendment rather than touched as a side effect of this review. |
+| 1.0.0 | 2026-06-25 | Core Team | Initial RFC — SDG-1…SDG-15: artifact-before-action gate, the Concept/Implementation two-layer model with parent-gated promotion, encapsulated bounded lifecycle with adaptive-weight completeness gate, quarantine cascade, registry parity, the four-surface drift-guard family, the autonomous decision protocol with closed escalation whitelist and Decision-Record grammar, two-stage artifact review, the artifact knowledge graph, one-way traceability containment, finalize-never-auto-commit, closed-loop retrospective with delivery metrics, session continuity with single-next-step resume, and the two operating profiles (trust / audit) over one engine. Distilled as a meta-spec from a reference spec-driven-development engine studied for its mechanics, named structurally and not by product per §2's source-agnostic constraint. |
