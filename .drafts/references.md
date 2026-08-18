@@ -130,6 +130,8 @@
 - <https://github.com/multica-ai/andrej-karpathy-skills>
 - <https://github.com/deepbeepmeep/Wan2GP>
 - <https://github.com/modem-dev/hunk>
+- <https://github.com/oraios/serena>
+- <https://github.com/Panniantong/Agent-Reach>
 
 ## Harness
 
@@ -145,6 +147,7 @@
 - <https://github.com/ruvnet/agent-harness-generator>
 - <https://github.com/tinyhumansai/tinyagents>
 - <https://github.com/ShunsukeHayashi/gws-harness>
+- <https://github.com/deepseek-ai/deepseek-harness>
 
 ## UI/UX
 

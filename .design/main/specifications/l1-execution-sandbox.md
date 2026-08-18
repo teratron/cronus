@@ -1,6 +1,6 @@
 # Execution Sandbox Confinement
 
-**Version:** 1.0.0
+**Version:** 1.0.1
 **Status:** Stable
 **Layer:** concept
 
@@ -16,6 +16,7 @@ OS-level confinement of the code and commands the agent runs. Where client secur
 - [l2-execution-workspace.md](l2-execution-workspace.md) - The isolated filesystem environment the sandboxed code runs inside; confinement applies within it.
 - [l1-policy-governance.md](l1-policy-governance.md) - Posture tiers may select how strict the confinement profile is.
 - [l1-environment-lifecycle.md](l1-environment-lifecycle.md) - The independent lifetime axis: this spec governs *what code may do* once running, that one governs *when the environment exists* and what happens to its work when it ends.
+- [l1-execution-locus.md](l1-execution-locus.md) - **Orthogonal and composed**: ES says *how confined* execution is on each axis; LOC says *which world* it happens in. A locus may be confined or unconfined, and selecting one never relaxes an axis (LOC-7).
 
 ## 1. Motivation
 
@@ -107,4 +108,5 @@ A bypass of any one does not relax the others.
 
 | Version | Date | Author | Notes |
 | --- | --- | --- | --- |
+| 1.0.1 | 2026-08-19 | Core Team | Related Specifications record the new `l1-execution-locus` as **orthogonal and composed**: ES says how confined execution is on each axis, LOC says which world it happens in — a locus may be confined or unconfined, and selecting one never relaxes an axis (LOC-7). Link-only; no invariant added or changed. |
 | 1.0.0 | 2026-06-26 | Core Team | Initial spec — OS-level execution confinement of agent-run code: deny-by-default across four axes (operations/privileges/resources/filesystem+image), operation allowlist, least-privilege capability drop, resource bounds, read-only root, runtime-image digest pinning, explicit audited escalation, fail-closed for untrusted code, independent layered barriers (ES-1…ES-9). |

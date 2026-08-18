@@ -1,6 +1,6 @@
 # Declarative Configuration Surfaces
 
-**Version:** 1.1.0
+**Version:** 1.1.1
 **Status:** Stable
 **Layer:** concept
 
@@ -23,6 +23,7 @@ The consequence is structural, not cosmetic: adding a new configurable component
 - [l1-operational-health.md](l1-operational-health.md) - Alert rules, thresholds, and role-to-channel mappings are configuration surfaces governed by this contract (OH-13).
 - [l1-storage-model.md](l1-storage-model.md) - Where accepted configurations durably live (DC-6).
 - [../../nodus/specifications/l1-nodus-language.md](../../nodus/specifications/l1-nodus-language.md) - The workflow-language realization: a configuration section declares a validated surface (NL-20).
+- [l1-composition-layering.md](l1-composition-layering.md) - The set-valued sibling: DC-11 resolves one **field value** from a layer stack; LAY resolves the **set of components** from one. Different objects, different operations — DC never answers *what exists*, LAY never answers *what a setting is*. Demarcated in that spec's §4.6.
 
 ## 1. Motivation
 
@@ -168,5 +169,6 @@ Three of five classes are structurally unavailable to the surface. A design that
 
 | Version | Date | Author | Notes |
 | --- | --- | --- | --- |
+| 1.1.1 | 2026-08-19 | Core Team | Related Specifications record the new `l1-composition-layering` — the **set-valued sibling** of DC-11: DC-11 resolves one field value from a layer stack, LAY resolves the set of components from one. Different objects, different operations, demarcated in that spec's §4.6. Link-only; no invariant added or changed. |
 | 1.1.0 | 2026-08-13 | Core Team | Added DC-11 (layered resolution with per-field authority) — DC-1…DC-10 governed *one* declaration and its editing, and never said what happens when several layers each supply a value for it. An effective value resolves from an ordered stack (built-in → operator → project/workspace → per-invocation) and **each field declares the lowest-trust layer permitted to set it**, with three consequences: **environment-owned fields are operator-only** (key bindings, display preferences, local tool paths, credentials describe the operator's environment, not the component's behavior — a checkout that can rearrange the operator's controls holds a capability nobody granted); **a lower-trust value never feeds an exec-adjacent decision** (configuration merges by field identity with no memory of install origin, which is fine for tuning and unacceptable for deciding what code runs); and **lower-trust configuration is disclosed** (the dangerous case is an unnoticed override, not a bad one — project tuning of a shared component is wanted, invisible project tuning is not). The authority floor is part of the DC-1 declaration, validated by the owner like any other constraint (DC-3), and a below-floor attempt is refused with the reason rather than silently dropped or silently applied. Extends the authority-preservation stance of DC-10 from *who may propose* to *which layer may govern*. |
 | 1.0.0 | 2026-07-23 | Core Team | Initial spec — declarative, owner-validated configuration surfaces: the owner publishes the single machine-readable declaration with no second copy anywhere (DC-1), every editing surface generated from it so a new configurable component adds no editor code (DC-2), owner-side semantic validation with typed explanatory rejection since shape-validity is never sufficient (DC-3), nothing effective until accepted and application atomic with the prior configuration remaining effective until then (DC-4), three kinds single/template/instance with kind-determined actions (DC-5), durable + attributed + revertible (DC-6), identical mechanism for built-in and extension-supplied components with no privileged internal path (DC-7), stable hierarchical addressing with renaming as a recorded migration (DC-8), secrets write-only through the surface and never echoed/rendered/traced (DC-9), permission-gated and never a channel for self-widening authority (DC-10). Concept-only. |

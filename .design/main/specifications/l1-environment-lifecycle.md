@@ -1,6 +1,6 @@
 # Execution Environment Lifecycle
 
-**Version:** 1.0.0
+**Version:** 1.0.1
 **Status:** Stable
 **Layer:** concept
 
@@ -25,6 +25,7 @@ Two neighbours are deliberately *not* this spec. The sandbox confinement contrac
 - [l1-work-liveness.md](l1-work-liveness.md) - Ownership and next-move guarantees for the run that occupies an instance.
 - [l1-declarative-configuration.md](l1-declarative-configuration.md) - An environment specification is a configuration surface and obeys that contract (DC-1/DC-5 template-and-instance kinship).
 - [../../nodus/specifications/l1-nodus-portability.md](../../nodus/specifications/l1-nodus-portability.md) - Host-supplied provider seams; a run whose environment disappears mid-flight fails typed rather than hanging (LP-18).
+- [l1-execution-locus.md](l1-execution-locus.md) - An environment instance **is** a locus; EL owns its existence over time, LOC owns which capabilities are bound to it and the rule that they are substituted together (LOC-2). The operator's own machine is a locus EL never provisioned.
 
 ## 1. Motivation
 
@@ -179,4 +180,5 @@ Three properties follow from anchoring rather than copying. Capture is **cheap e
 
 | Version | Date | Author | Notes |
 | --- | --- | --- | --- |
+| 1.0.1 | 2026-08-19 | Core Team | Related Specifications record the new `l1-execution-locus`: an environment instance **is** a locus, EL owning its existence over time and LOC owning which capabilities are bound to it and the rule that they are substituted together (LOC-2); the operator's own machine is a locus EL never provisioned. Link-only; no invariant added or changed. |
 | 1.0.0 | 2026-07-23 | Core Team | Initial spec — the lifetime contract for ephemeral execution environments, distinct from the sandbox confinement policy (authority, not time) and from organizational workspace lifecycle (durable, not ephemeral): specification/instance split so an environment is reproducible from a name and never configured ad hoc (EL-1); a closed observable status set with provisioning and resuming as progress-bearing states and *failed* kept distinct from *gone* (EL-2); intent accepted immediately with a provisional identity and durably queued rather than making the human wait on a spinner (EL-3); exactly-once, in-order reconciliation of the provisional identity onto the real one, with queued intent surfaced on provisioning failure (EL-4); **every exit path names its capture owner** — explicit destroy, idle/expiry reap, quota eviction, host crash, failed resume, deliberate abandonment — since work vanishes silently on precisely the routes nobody enumerated and the reap is the dominant one (EL-5); residue captured as a verifiable base-anchored delta rather than an opaque blob, so capture is cheap enough to be mandatory, reviewable, and applicable elsewhere (EL-6); suspension preserves while destruction captures, and a resume restores the same instance or reports a failed resume rather than silently substituting a new one (EL-7); bounded lifetime with a declared reaper (EL-8); scoped revocable credentials never issued before *ready* and revoked on suspend/fail/destroy, with exposed services enumerated by name (EL-9); provisioning secrets injected and never recorded in the specification, record, trace, or residue (EL-10). Concept-only. |

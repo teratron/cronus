@@ -1,6 +1,6 @@
 # Input Binding
 
-**Version:** 1.0.0
+**Version:** 1.1.0
 **Status:** Stable
 **Layer:** concept
 
@@ -181,6 +181,23 @@ Rules every Layer 2 implementation MUST NOT violate:
   declared schema, its description, the examples the caller was trained on — not the
   implementation. A surface whose rejections are indistinguishable from its errors cannot
   tell "my callers are confused" from "my code is broken".
+
+- **IB-13 Deferred satisfaction is legitimate until settlement, and a defect after it**: `[ADDED
+  v1.1.0]` where a surface is assembled from parts that mount **concurrently**, a unit whose
+  composition-phase need is not yet supplied **waits** rather than failing — a provider not yet
+  mounted is not a missing provider, and IB-6's "not mountable" would otherwise reject every
+  legitimate mount-ordering race. That deferral is bounded by a declared **settlement point**:
+  once assembly settles, every unit that is **enabled and still unsatisfied** is a startup
+  failure, and the failure **enumerates, per unit, the exact needs that were never supplied**.
+  Waiting is a state, never an outcome. Without the settlement assertion IB-6's guarantee
+  inverts into its worst form — the unit neither runs nor fails, emits no output and no error,
+  and the only symptom is a capability that is silently absent; the operator's first evidence is
+  a feature that does nothing, with nothing anywhere naming what it was waiting for. Two
+  corollaries: an intentionally-disabled unit is exempt (it was never expected to activate), and
+  the settlement report distinguishes **failed to activate** (it ran and threw — report its
+  original fault) from **never activated** (it is still waiting — report its unresolved needs),
+  because the two have different first actions and collapsing them loses the one piece of
+  information that locates the problem.
 
 > L2 specs cannot reach RFC status until all invariants here are addressed in their "Invariant Compliance" section.
 
@@ -365,4 +382,5 @@ contributes the limit and the judgement.
 
 | Version | Date | Author | Notes |
 | --- | --- | --- | --- |
+| 1.1.0 | 2026-08-19 | Core Team | IB-13 added — **deferred satisfaction is legitimate until settlement, and a defect after it**, reconciling IB-6 with concurrent assembly. IB-6 says an unsatisfied composition-phase need makes a unit unmountable, which is right at the end of assembly and wrong during it: where parts mount concurrently, a provider not yet mounted is not a missing provider, and rejecting every mount-ordering race would forbid the ordinary case. The reconciliation is a declared **settlement point** — waiting is permitted before it and is a startup failure after it, with the failure enumerating **per unit** the exact needs never supplied. Without the assertion IB-6's guarantee inverts into its worst form: the unit neither runs nor fails, emits no output and no error, and the only symptom is a silently absent capability whose first evidence is a feature that does nothing with nothing naming what it awaited. Two corollaries: a deliberately-disabled unit is exempt, and the report separates **failed to activate** (ran and threw — carry its original fault) from **never activated** (still waiting — carry its unresolved needs), since the two have different first actions and collapsing them discards the one fact that locates the problem. Composes the new `l1-composition-layering` (LAY-3 disabled entries are the exempt class) and `l1-composition-binding` (a composition that cannot load never reaches settlement — CBD-8). Distilled from an adoption pass over an external plugin-framework-based agent-harness reference. Additive; no existing invariant weakened. |
 | 1.0.0 | 2026-08-05 | Core Team | Initial spec — input binding as the consumer-side twin of output contracts, closing the asymmetry where nothing governed how a unit obtains its inputs or what happens when it cannot: declared typed binders as the single source for both runtime supply and the advertised schema, with the body forbidden to reach into the raw envelope (IB-1); bind-before-invoke making *did not run* a structural outcome rather than a self-report, and the whole rejection class safely re-invocable (IB-2); rejection as a typed first-class outcome on the normal channel with an effectively uninhabited fault channel, so a binding failure cannot be dropped by a forgetful intermediary (IB-3); four distinguishable located modes — absent / unreadable / malformed / ill-shaped — because each implies a different corrective action and a different responsible actor (IB-4); optional means absent and never invalid, closing the quiet-corruption path where a malformed value becomes a default (IB-5); two supply phases with composition-phase needs sealed before mounting, so an unmet dependency fails at assembly rather than in production traffic (IB-6); the untyped dynamic channel as a bounded fallback that never substitutes for a declarable need (IB-7); once-only inputs bound once and last, enforced at declaration rather than detected at run time (IB-8); ordered short-circuit binding whose first rejection is stable and therefore learnable (IB-9); a default ceiling on every caller-sized input, the input-side twin of the output overflow guard (IB-10); composing and wrapping binders as the single-parse reuse mechanism (IB-11); and a separate rejection channel, since a rising rejection rate indicts the advertisement rather than the implementation (IB-12). Nodus projection needs no new construct: move input enforcement ahead of the first step (recorded as a candidate amendment to the typed-I/O invariant, deliberately not applied here), split the input error taxonomy into the four modes, and fix optional-input semantics onto the existing null value. Concept-only. |
