@@ -1,6 +1,6 @@
 # Conversation Rewind
 
-**Version:** 1.1.0
+**Version:** 1.2.0
 **Status:** Stable
 **Layer:** concept
 
@@ -24,6 +24,7 @@ Rewind is the user's direct control over conversation history — a steering act
 - [l1-version-control.md](l1-version-control.md) / [l1-change-merge.md](l1-change-merge.md) - The branch/fork discipline rewind mirrors for history, and the delta-reversal path for file-level side effects.
 - [l1-office-model.md](l1-office-model.md) - Office-per-project isolation (OFF-1) bounds what a rewind may restore or reach (RW-8).
 - [l1-compensation.md](l1-compensation.md) - [ADDED v1.1.0] the remediation path RW-5 lacked: a surfaced irreversible effect with a declared compensating action MAY be undone by its business inverse (CO-2), run reverse-order over a failed scope; where compensation is unavailable or fails, RW-5 honest surfacing still holds (CO-10).
+- [l1-evidence-archive.md](l1-evidence-archive.md) - [ADDED v1.2.0] the durable substrate rewind points anchor to (RW-1): EA-1 archive-before-reduce keeps a rewind target reachable through an automatic compaction, and EA-5/EA-8 supply the honest horizon a refused target is named against.
 
 ## 1. Motivation
 
@@ -48,7 +49,7 @@ The resolving idea reuses machinery Cronus already has and adds the missing user
 
 Rules every Layer 2 implementation MUST NOT violate:
 
-- **RW-1 (Message-anchored rewind points):** the conversation maintains a restore point at each user-message boundary, capturing both the conversation context and the office's derived state as of that boundary (composing the checkpoint/snapshot mechanism, CR-2 / session checkpoints). A user MAY select any prior user message as a rewind target.
+- **RW-1 (Message-anchored rewind points):** the conversation maintains a restore point at each user-message boundary, capturing both the conversation context and the office's derived state as of that boundary (composing the checkpoint/snapshot mechanism, CR-2 / session checkpoints). A user MAY select any prior user message as a rewind target. [AMENDED v1.2.0] Rewind points anchor to **archived ranges** (`l1-evidence-archive` EA-1/EA-2), not to whatever survives in the live context — so rewind depth is bounded by the archive's retention horizon (EA-5/EA-8) and never by an automatic compaction that ran in between. A target inside a compacted region is restored by expanding its archived range (EA-3); a target outside the retained horizon is **refused with the horizon named**, never silently re-pointed at the nearest surviving message. Without this anchoring RW-3's fork-never-destroy guarantee is one-sided: the user's deliberate rewind preserves history while the system's automatic reduction destroys it, and the invariant then protects only the branch the user could already see.
 
 - **RW-2 (Reuse — verbatim or edited):** rewinding to a message lets the user **reuse** it — re-run it unchanged or edit it and run the revised version — and the reused message re-enters as a fresh, intent-resolved turn (CC-3). Rewind restores the *starting state*; the office re-derives from it, so the re-run MAY produce a different result and MUST NOT be presented as a guaranteed replay of the prior outcome.
 
@@ -155,5 +156,6 @@ Primarily a main-workspace host mechanic. The runtime participates where a rewou
 
 | Version | Date | Author | Notes |
 | --- | --- | --- | --- |
+| 1.2.0 | 2026-08-20 | Core Team | Amended RW-1 — rewind points anchor to **archived ranges** (`l1-evidence-archive` EA-1/EA-2) rather than to whatever survives in the live context, so rewind depth is bounded by the archive retention horizon and never by an automatic compaction that ran in between; a target inside a compacted region is restored by expanding its archived range (EA-3), and a target beyond the horizon is refused with the horizon named rather than silently re-pointed at the nearest surviving message. Closes the one-sidedness in RW-3: without it the user's deliberate rewind preserves history while the system's automatic reduction destroys it, leaving fork-never-destroy protecting only the branch the user could already see. Related Specifications extended with l1-evidence-archive. |
 | 1.1.0 | 2026-07-26 | Core Team | Amended RW-5 — surfacing the irreversible is the honest **floor**, not the ceiling: where a surfaced effect has a **declared compensating action** (l1-compensation CO-2), the rewind MAY **offer to compensate** it (execute the business inverse) rather than only naming and orphaning it; where compensation is unavailable or fails, RW-5 honest surfacing still holds and a scope with an un-compensated live effect is never reported cleanly rewound (CO-10). Compensation is the remediation path this invariant otherwise lacked. Related Specifications extended with l1-compensation. |
 | 1.0.0 | 2026-07-24 | Core Team | Initial spec — conversation rewind: message-anchored rewind points (RW-1); reuse a message verbatim or edited, restoring state not replaying an outcome (RW-2); fork-not-destroy so rewind is itself reversible (RW-3); reversible derived state restored atomically-or-reported and board work reconciled via the liveness sweep (RW-4); irreversible/external side effects surfaced honestly, never pretended-away (RW-5); safe-quiesce before restore (RW-6); legible/attributed/auditable (RW-7); office-isolation and access-scope bounded (RW-8); user-initiated, optional, never an autonomous behavior (RW-9). Reuses the crash-recovery restore/reconcile/honesty machinery under a user-selected, message-anchored trigger; composes directability (steer + honest control), office-control (safe quiesce), work-liveness/convergence (board reconciliation), and version-control (fork discipline). Main-only host mechanic. |

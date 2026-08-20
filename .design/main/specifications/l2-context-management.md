@@ -1,6 +1,6 @@
 # Context Management
 
-**Version:** 1.0.4
+**Version:** 1.1.0
 **Status:** Stable
 **Layer:** implementation
 **Implements:** l1-orchestration.md
@@ -15,6 +15,7 @@ Concrete context-window management for agent sessions: adaptive input-token budg
 - [l2-agent-session.md](l2-agent-session.md) - TurnContext and IterationBudget; context management runs as a prologue step.
 - [l2-model-router.md](l2-model-router.md) - Context window size is a routing signal; this spec reads the discovered window.
 - [l2-context-router.md](l2-context-router.md) - Memory and rules injection; these system messages are subject to trim cascade.
+- [l1-evidence-archive.md](l1-evidence-archive.md) - [ADDED v1.1.0] EA-1 archive-before-reduce, EA-2 artifacts-carry-handles, EA-3 expansion-on-demand; the concept this spec's reduction cascade must satisfy before it removes anything.
 
 ## 1. Motivation
 
@@ -34,6 +35,10 @@ A production agent system must run profitably on any model — a 4k local model 
 | --- | --- |
 | ORC-3 Context isolation | Trim and compact are session-scoped; no cross-session context leaks. |
 | ORC-5 Tool sandbox | Sanitize orphaned `tool` messages before trimming to avoid provider API errors. |
+| EA-1 Archive-before-reduce | [ADDED v1.1.0] Every reduction path — trim cascade (§4.2), tool-output truncation (§4.7/§4.9), compaction (§4.3) — archives the affected range before removing it. An archive-write failure aborts that reduction and leaves the content raw; it never fails the turn (EA-12). |
+| EA-2 Artifacts are addresses | [ADDED v1.1.0] The summary message metadata carries the archived-range handle alongside `{compacted: true, summarized_count: n}`; the truncation annotation carries the handle for the omitted remainder. A reduction artifact without a resolvable handle is malformed. |
+| EA-3 Expansion on demand | [ADDED v1.1.0] A handle in context resolves to the original range through an ordinary expansion call, so re-reading a truncated tool output no longer requires re-running the tool — and a range whose producing command is non-deterministic or no longer reproducible stays recoverable at all. |
+| EA-10 Evidence, never ambient | [ADDED v1.1.0] Archived content is never re-injected automatically; the cascade's budgets are computed over live context only, and an expansion is an explicit act that re-enters the budget like any other content. |
 
 ## 4. Detailed Design
 
@@ -125,7 +130,19 @@ Self-summary format (structured, dense, ≤1000 tokens):
 - <constraints, preferences, specific values not to lose>
 ```
 
-The session history is updated in-place after compaction; the summary message carries `{compacted: true, summarized_count: n}` in its metadata.
+[MODIFIED v1.1.0] Step 6 is preceded by a mandatory archive write: the `older` range is
+committed to the evidence archive **before** it is replaced (EA-1). The write is a
+precondition, not a side effect — if it fails, compaction aborts and returns the original
+messages unchanged, exactly as the step-7 failure path already does, and the session
+reports unrelieved pressure rather than dropping content it could not preserve.
+
+The live session history is then updated in place; the summary message carries
+`{compacted: true, summarized_count: n}` **plus the handle of the archived range it stands
+for** (EA-2). "In place" now describes only the live message list — the replaced turns
+persist in the archive and expand back on demand (EA-3). Note also that step 4's 2000-char
+per-message truncation happens on the way *into* the summarization prompt: what the
+utility model sees is already lossy, which is precisely why the unabridged range must be
+archived first rather than reconstructed from the summary afterwards.
 
 ### 4.4 Message protection
 
@@ -274,7 +291,12 @@ preserveRecentBudget = min(MAX_PRESERVE_RECENT_TOKENS,
 
 When a tool output exceeds `TOOL_OUTPUT_MAX_CHARS`, it is truncated with a standard
 annotation so the agent knows exactly how much was omitted and can request the full
-content via a re-read tool call if needed:
+content via a re-read tool call if needed. [MODIFIED v1.1.0] The full output is archived
+before truncation (EA-1) and the annotation carries the archived-range handle (EA-2), so
+the omitted remainder is recovered by **expanding the handle** rather than by re-running
+the tool — which matters most for the outputs a re-read cannot reproduce: a
+non-deterministic command, a one-shot network fetch, a build whose inputs have since
+changed:
 
 ```text
 [REFERENCE]
@@ -298,8 +320,10 @@ Tools listed in `PRUNE_PROTECTED_TOOLS` bypass this function entirely.
 3. **Recent tail selection:** binary-search the turn list from the tail inward
    (`splitTurn()`) to find the minimum tail slice that fits within `preserveRecentBudget`.
    Preserve that slice intact.
-4. **Older portion compaction:** for each message in the older portion, truncate tool
-   outputs to `TOOL_OUTPUT_MAX_CHARS` (skip protected tools), then feed the result to the
+4. **Older portion compaction:** [MODIFIED v1.1.0] archive the older portion in full
+   first (one write for the whole range — the same content is not archived again by each
+   stage that touches it, EA-12); then, for each message in that portion, truncate tool
+   outputs to `TOOL_OUTPUT_MAX_CHARS` (skip protected tools) and feed the result to the
    compaction LLM call (§4.3).
 5. **Reassembly:** the compaction summary replaces the older portion; the recent tail is
    appended unchanged to produce the final message list.
@@ -467,4 +491,5 @@ conversation instead of a summary.
 
 | Version | Date | Notes |
 | --- | --- | --- |
+| 1.1.0 | 2026-08-20 | Compaction is no longer destructive. Added EA-1/EA-2/EA-3/EA-10 compliance rows and reordered the reduction cascade: the affected range is archived **before** trim, tool-output truncation, or LLM compaction removes it (§4.3, §4.7), an archive-write failure aborts that reduction and leaves the content raw rather than dropping what it could not preserve, and every artifact left behind — the summary message metadata, the truncation annotation — carries the handle of the range it stands for. "Updated in-place" now describes only the live message list. Consequences: the omitted remainder of a truncated tool output is recovered by expanding the handle instead of re-running the tool (which a non-deterministic command, a one-shot fetch, or a since-changed build cannot reproduce), and the step-4 2000-char pre-summarization truncation stops being a silent one-way loss. Range archived once per reduction pass, not once per stage (EA-12). |
 | 1.0.4 | 2026-07-16 | Disclosed simplification (FR-6) recorded in §5: the shipped compactor is a no-op returning a placeholder summary — compaction inert until a summarization model is bound; upgrade trigger = configured utility-model binding. History table added with this entry. |

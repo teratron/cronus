@@ -1,6 +1,6 @@
 # Observation Retention
 
-**Version:** 1.0.0
+**Version:** 1.1.0
 **Status:** Stable
 **Layer:** concept
 
@@ -20,6 +20,7 @@ This spec owns the *shape and honesty* of the retained record. What is measured 
 - [l1-storage-model.md](l1-storage-model.md) - Where the record physically lives, its durability tier, and its encryption posture.
 - [l1-operational-ledger.md](l1-operational-ledger.md) - The accounting record whose long-horizon totals must survive rotation of the fine tier.
 - [l1-diagnostic-log.md](l1-diagnostic-log.md) - The forensic plane with its own lifecycle; it is not tiered and is not governed here.
+- [l1-evidence-archive.md](l1-evidence-archive.md) - [ADDED v1.1.0] The owner of the non-numeric plane this spec scopes out (§2); it inherits OR-5 append-only immutability and OR-7 resolution honesty, and deliberately does not inherit the tiering — text has no loss-bounded coarsening, so it degrades by losing range instead.
 - [../../nodus/specifications/l1-nodus-observability.md](../../nodus/specifications/l1-nodus-observability.md) - Source-side event contract: append-only immutability (HO-3), cost classes (HO-8), completeness honesty (HO-10), and the aggregation-safe measurement guarantee (HO-14) this layer rolls up.
 
 ## 1. Motivation
@@ -40,7 +41,7 @@ Multi-resolution retention resolves all four. Coarse points are derived (never s
 - Observations arrive as an append-only stream from the runtime; this layer stores and serves them, it never produces them and never re-collects.
 - Tier count, per-tier coarsening factor, and per-tier storage budget are configurable; the values named in this spec are shape, not contract.
 - The record is not a general-purpose database: it answers range queries over named series and nothing else. Point deletion, mid-history edits, and back-dated inserts are out of scope by design (OR-5).
-- A "series" is a named, uniformly-sampled numeric quantity attributed to a monitored unit. Non-numeric observations (events, log lines, traces) have their own lifecycle and are not tiered here.
+- A "series" is a named, uniformly-sampled numeric quantity attributed to a monitored unit. Non-numeric observations (events, log lines, traces) have their own lifecycle and are not tiered here. [AMENDED v1.1.0] That exclusion now names its owner rather than leaving the plane unclaimed: the raw non-numeric evidentiary trace — conversational turns, tool invocations and their outputs — belongs to `l1-evidence-archive`, which reuses this spec's append-only immutability (OR-5 / EA-4) and resolution-honesty (OR-7 / EA-8) disciplines but **cannot** reuse its tiering. Coarsening a numeric series preserves extremes and anomaly rates exactly; the only "coarsening" text admits is a summary, which is precisely the artifact whose unverifiability the archive exists to prevent. So that plane degrades by losing *range* visibly rather than fidelity invisibly — the same honesty, a different mechanism.
 
 ## 3. Core Invariants
 
@@ -155,4 +156,5 @@ Each tier owns a storage budget. When a tier reaches its budget, the **oldest wh
 
 | Version | Date | Author | Notes |
 | --- | --- | --- | --- |
+| 1.1.0 | 2026-08-20 | Core Team | Amended §2 — the non-numeric exclusion (events, log lines, traces) now names its owner instead of leaving the plane unclaimed: `l1-evidence-archive` takes the raw evidentiary trace, inheriting OR-5 append-only immutability and OR-7 resolution honesty while deliberately **not** inheriting multi-resolution tiering, because a numeric series coarsens with bounded loss (extremes and anomalous fraction stay exact) whereas the only coarsening text admits is a summary — the artifact whose unverifiability that spec exists to prevent. Related Specifications extended with l1-evidence-archive. |
 | 1.0.0 | 2026-07-23 | Core Team | Initial spec — multi-resolution retention of the operational record: one logical series at several resolutions with automatic tier selection (OR-1), aggregate sufficiency so coarse tiers answer avg/min/max/anomaly-rate exactly rather than storing a mean (OR-2), gaps recorded as distinguishable values with covered-vs-expected counts so absence is never read as zero (OR-3), budget-bounded retention with a measured-and-reported horizon (OR-4), append-only immutable history with whole-segment rotation (OR-5), derived-and-backfilled coarse tiers never independently collected (OR-6), resolution + truncation honesty on every answer (OR-7), working set bounded by active series not by horizon or query range (OR-8), local and inspectable retention policy (OR-9). Concept-only. |

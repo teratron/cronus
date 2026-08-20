@@ -1,6 +1,6 @@
 # Search
 
-**Version:** 1.0.0
+**Version:** 1.1.0
 **Status:** Stable
 **Layer:** concept
 
@@ -28,6 +28,7 @@ navigable attribution, and secret-safety.
 - [l1-event-mesh.md](l1-event-mesh.md) — content-change events keep the search index fresh incrementally (SRCH-6).
 - [l1-system-readout.md](l1-system-readout.md) — shares the honest-freshness and read-only-projection discipline (SRCH-5/SRCH-6 parallel SR-5/SR-7).
 - [l1-security.md](l1-security.md) — search never surfaces secrets or crosses an access boundary (SRCH-3).
+- [l1-evidence-archive.md](l1-evidence-archive.md) — [ADDED v1.1.0] the retained record SRCH-9 exposes as its own scope; EA-8 owns durability, addressing, and horizon honesty, this spec owns the query surface over it.
 - [l1-dev-office.md](l1-dev-office.md) — elevated dev-office content is not searchable without admission (SRCH-3, DVO-3).
 - [l1-memory-intelligence.md](l1-memory-intelligence.md) — memory recall is one federated source, not replaced by this surface.
 - [l1-knowledge-base.md](l1-knowledge-base.md) — KB retrieval is another federated source; SRCH federates, it does not re-implement it.
@@ -115,6 +116,23 @@ Rules every Layer 2 implementation MUST NOT violate:
   graphical frontends — the same scopes, the same federated sources, the same ranking
   and freshness semantics — only the rendering differs (consistent with command
   parity, INV-3).
+
+- **SRCH-9 (History as a distinct, opt-in scope):** [ADDED v1.1.0] the evidence
+  archive — the retained record of what was said and done, including turns and tool
+  outputs that automatic reduction removed from the live context — is reachable as
+  its own scope, **never folded into** `global`. It is a different plane: `global`
+  searches what currently *is*, this scope searches what *was*, and merging them
+  would return a result the user cannot navigate to and cannot distinguish from
+  present content. Three semantics differ inside it. SRCH-6 freshness **inverts**:
+  archived content is immutable (`l1-evidence-archive` EA-4), so a hit is never
+  stale and MUST NOT be refreshed, re-reconciled, or dropped for having aged. SRCH-4
+  attribution names the archived range and the session it belongs to, and navigates
+  by **expansion** (EA-3) rather than by jumping to a live surface. Coverage is
+  stated: a query whose range exceeds the retention horizon reports what is missing
+  instead of silently narrowing (EA-8). SRCH-3 isolation, SRCH-5 read-only, SRCH-7
+  no-egress, and the secret-safety rules apply unchanged — the archive is the
+  system's densest concentration of sensitive content (EA-6/EA-7), so a search
+  surface over it is exactly where those rules matter most.
 
 > L2 specs cannot reach RFC status until all invariants here are addressed in their
 > "Invariant Compliance" section.
@@ -214,4 +232,5 @@ This keeps SRCH a thin unifying surface, not a second copy of every domain's sea
 
 | Version | Date | Author | Notes |
 | --- | --- | --- | --- |
+| 1.1.0 | 2026-08-20 | Core Team | Added SRCH-9 (history as a distinct, opt-in scope) — the evidence archive is reachable as its own scope and never folded into `global`, because `global` searches what currently *is* while the archive searches what *was*, and merging them returns results the user can neither navigate to nor tell apart from present content. Inside the scope three semantics differ: SRCH-6 freshness **inverts** (archived content is immutable per EA-4, so a hit is never stale and is never refreshed or dropped for age), SRCH-4 attribution names the archived range and navigates by expansion (EA-3) rather than by jumping to a live surface, and coverage beyond the retention horizon is reported rather than silently narrowed (EA-8). Isolation, read-only, no-egress, and secret-safety apply unchanged and matter most here (EA-6/EA-7). Related Specifications extended with l1-evidence-archive. |
 | 1.0.0 | 2026-07-07 | Core Team | Initial spec — application-wide scope-aware federated search: explicit selectable scope global/office/settings always visible, results never cross scope (SRCH-1); one unified query federated over heterogeneous sources into one ranked list (SRCH-2); isolation & access-respecting, never surfaces secrets nor crosses office/dev-office boundaries (SRCH-3); attributed & navigable results pointing to a real place (SRCH-4); read-only projection (SRCH-5); fresh via incremental event-driven indexing with honest reconciliation of stale hits (SRCH-6); bounded & economical, index-not-rescan, lexical-default/semantic-opt-in, local-first (SRCH-7); cross-frontend parity (SRCH-8, INV-3). Settings is a deliberately separate scope, not a global source. Federates memory/KB/code search as sources rather than replacing them. Main-only (a host find-surface). |
