@@ -49,6 +49,7 @@
 - <https://github.com/microsoft/agent-framework>
 - <https://github.com/affaan-m/ECC>
 - <https://github.com/SeloraHomes/ha-selora-ai>
+- <https://github.com/traycerai/traycer>
 
 ## Spec-Driven Development
 
