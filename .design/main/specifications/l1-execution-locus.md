@@ -1,6 +1,6 @@
 # Execution Locus
 
-**Version:** 1.0.0
+**Version:** 1.1.0
 **Status:** Stable
 **Layer:** concept
 
@@ -68,6 +68,10 @@ Rules every Layer 2 implementation MUST NOT violate:
 - **LOC-9 (A locus change invalidates world-derived state rather than silently reusing it):** state derived from a world — indexes, caches, read-before-write records, discovered inventories, resolved paths — is **keyed by locus** and is invalidated, re-derived, or explicitly carried over when the locus changes. Silently reusing world-derived state across a locus change is forbidden; it is the mechanism by which a stale local index answers questions about a remote world with total confidence.
 
 - **LOC-10 (A locus declares the properties that change how it must be used):** a locus declares the operational facts a correct consumer needs — whether its world is shared with the operator's own, whether it survives the operation that created it, its round-trip cost class, and what happens to its contents when it ends. These are not implementation details: a consumer that batches its calls, one that streams, and one that preserves a residue behave differently by necessity, and a locus that hides these properties forces every consumer to be tuned for the locus it was written against, which reintroduces LOC-4's fork through the back door.
+
+- **LOC-11 (One decider per application; every surface is *delivered* the default locus, never derives it):** `[ADDED v1.1.0]` the application-wide default locus is resolved in exactly **one** place and distributed to every window, panel, and surface. No surface computes it independently, and exactly **one** user gesture changes it — every other surface reads. Where N surfaces each derive the default from the same inputs, they drift the moment those inputs change at different times, and the product develops several simultaneous opinions about where work runs, each internally consistent. This is LOC-8's composition-time selection given a cardinality: composition-time is *when*, and a single decider is *how many*.
+
+- **LOC-12 (Two distinct binding disciplines — a preference that follows, and a binding that never moves):** `[ADDED v1.1.0]` a surface's association with a locus is one of exactly two kinds, and which one it is MUST be declared rather than left to behaviour. A **preference** (a pin) resolves to its target while that target can serve and to the application default while it cannot, so a surface whose preferred locus becomes unavailable **auto-follows** and returns on its own when the locus is usable again; nothing is lost because a preference holds no locus-bound state. A **binding** is fixed for the container's lifetime: any container holding live locus-bound handles (LOC-3) — an open session, a terminal, a running view — binds its locus at creation and **never** migrates, because re-pointing it would silently reinterpret every handle it holds against a different world. Moving such a container to another locus is a **clone**: a new container is created there and the original is left intact. Availability for a binding is established when the container is created, not polled continuously — a bound container whose locus later becomes unreachable reports that state (LOC-6) rather than silently re-binding.
 
 > L2 specs cannot reach RFC status until all invariants here are addressed in their "Invariant Compliance" section.
 
@@ -145,6 +149,29 @@ The stale-index case is the one that bites hardest, because an index is *designe
 
 An environment instance is a locus; the operator's own machine is a locus that no lifecycle provisioned. The distinction matters because LOC-1 binds *every* world-touching capability, including the ones that run when no environment has been provisioned at all — that default host is a locus with a name, not the absence of one.
 
+### 4.6 Selection across many surfaces (LOC-11 / LOC-12) [ADDED v1.1.0]
+
+LOC-8 settles *when* a locus is chosen. It leaves open two questions that a product with many windows answers badly by default: **how many things decide**, and **what happens to a surface whose locus goes away**.
+
+```text
+[REFERENCE]
+default_locus        := resolved ONCE per application, delivered to every surface   (LOC-11)
+                        changed by exactly one gesture; no surface writes it
+
+surface_association  := preference(target) | binding(locus)                          (LOC-12)
+
+resolve(preference(t)) := t if t can serve, else default_locus     // auto-follows, and returns
+resolve(binding(l))    := l, for the container's whole lifetime    // never re-pointed
+
+move a bound container elsewhere := CLONE into the new locus, original left intact
+```
+
+**Why one decider.** Each surface deriving the default from shared inputs is locally correct and collectively wrong: the inputs change at different moments in different windows, and the product ends up running work in two worlds while every window believes it is showing the current one. Centralising the decision costs a delivery mechanism and removes the entire class.
+
+**Why a preference follows and a binding does not.** The difference is whether the surface holds locus-bound state. A picker or a filter holds none — its association is a hint, and following the default when its preference cannot serve is strictly better than showing a dead surface. An open session, a terminal, or a running view holds handles that LOC-3 makes valid only in the locus that issued them; re-pointing such a container does not move it, it reinterprets its handles against a world where they mean something else or nothing. Hence **clone-not-migrate**: the honest way to "open this elsewhere" is a second container in that locus, which also keeps LOC-5's stamping truthful — each container's artifacts carry the one world they were produced in.
+
+**Why availability is checked at binding time and not continuously.** Polling every bound container's locus is both expensive and misleading: a transient unreachability would tear down live work that would have recovered. The check belongs where the commitment is made; afterwards, unavailability surfaces through LOC-6's visible refusal on the next operation, which is where the user can act on it.
+
 ## 5. Drawbacks & Alternatives
 
 - **Declaring a locus is friction on every world-touching capability.** Every file, process, and terminal capability gains a resolution step it did not have. Accepted: the alternative is that each one independently assumes the host, and the assumption is invisible until a second locus exists.
@@ -182,4 +209,5 @@ Nodus already carries the environment as an extension role; the locus rules shar
 
 | Version | Date | Author | Notes |
 | --- | --- | --- | --- |
+| 1.1.0 | 2026-08-20 | Core Team | Amendment — LOC-11 one decider per application: the default locus is resolved in exactly one place and delivered to every surface, changed by exactly one gesture, because N surfaces deriving it from shared inputs drift the moment those inputs change at different times and the product develops several simultaneous, internally consistent opinions about where work runs (LOC-8 gave the *when*; this gives the *how many*). LOC-12 two declared binding disciplines: a **preference** resolves to its target while that target can serve and to the default while it cannot, so a surface auto-follows and returns on its own — safe precisely because a preference holds no locus-bound state; a **binding** is fixed for its container's lifetime because the container holds LOC-3 handles, and re-pointing it would reinterpret every handle against a different world rather than move it, so relocation is **clone-not-migrate** (a second container elsewhere, original intact), which also keeps LOC-5 stamping truthful. Availability for a binding is established at creation, not polled — continuous polling would tear down live work on transient unreachability, while LOC-6's visible refusal on the next operation surfaces it where the user can act. New §4.6. Additive: no existing invariant weakened; L1 stays Stable (C9). Distilled from an adoption pass over an external multi-provider agent-orchestration desktop client with several concurrently reachable execution hosts. |
 | 1.0.0 | 2026-08-19 | Core Team | Initial spec — the execution locus: one coherent world (filesystem, process table, network position, acting identity), with **the locus as the unit of substitution, never the individual capability**. Every world-touching capability declares its locus and none assumes the host (LOC-1); co-resident capabilities move as a set, since a shell in one world and a file reader in another produce tools that individually succeed and jointly describe an impossible world — a failure that errors nowhere, consumes the agent's turns, and yields a confidently wrong account (LOC-2); handles are locus-bound and crossing is an explicit transfer, never a reinterpretation of the same string against a different world (LOC-3); moving the locus must not fork the consumers, which is the leverage the model exists for — one substitution, whole-product effect (LOC-4); the active locus is observable and stamped onto every artifact that claims something about a world, an unstamped observation being evidence about nowhere (LOC-5); a capability absent from the active locus refuses visibly and never falls back, since a host fallback recreates the split world at the exact seam the locus was introduced to close (LOC-6); confinement composes with a locus and never defines one, conflating them producing the unmade claim that a remote world is inherently safe (LOC-7); locus selection is a composition decision rather than a per-call argument, because a per-call locus makes coherence unenforceable and hands the choice of where effects land to the least accountable participant (LOC-8); world-derived state is keyed by locus and invalidated or explicitly carried across a change, which is what stops a stale local index from answering confidently about a remote world (LOC-9); and a locus declares the operational properties that change how it must be used — sharing, persistence, round-trip cost, end-of-life disposition — since hiding them tunes every consumer to one locus and reintroduces the fork (LOC-10). Closes the previously-unmodeled execution-host dimension; demarcated from `l1-execution-sandbox` (how confined) and `l1-environment-lifecycle` (does the instance exist) in §4.5. Distilled from an adoption pass over an external plugin-framework-based agent-harness reference. Concept-only. |

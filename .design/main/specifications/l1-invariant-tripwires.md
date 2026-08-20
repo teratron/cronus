@@ -1,6 +1,6 @@
 # Invariant Tripwires
 
-**Version:** 1.0.0
+**Version:** 1.1.0
 **Status:** Stable
 **Layer:** concept
 
@@ -149,6 +149,19 @@ Rules every Layer 2 implementation MUST NOT violate:
   entirely. It fails on a **new** occurrence; the pre-existing backlog is recorded and
   reduced as its own work. Adoptability is a correctness property here, not a convenience:
   an unadoptable gate protects nothing.
+
+- **TW-11 A tripwire declares what it cannot see, and its precision trade is a recorded
+  decision**: `[ADDED v1.1.0]` no mechanical check covers its rule completely — some evasions
+  need analysis the checking mechanism cannot perform, and some legitimate sites will match a
+  pattern narrow enough to catch the real ones. Both are stated **at the tripwire**: the
+  uncovered shapes named as known limits, and any accepted false positive recorded with why
+  tightening the pattern would cost more than it saves. The two failure modes this prevents
+  are opposite and equally damaging. Broadening a pattern until it covers an unreachable
+  case floods the change with noise and gets the tripwire disabled (TW-5, TW-10). Leaving
+  the gap unstated lets the inventory (TW-9) count the rule as enforced when a whole class
+  of violation walks past it — a false assurance worse than no check, because nobody looks
+  for what a green gate has already cleared. A declared limit is also the honest input to
+  TW-6: a gap a structural check cannot close is where a behavioral test is owed.
 
 > L2 specs cannot reach RFC status until all invariants here are addressed in their "Invariant Compliance" section.
 
@@ -302,4 +315,5 @@ requiring a new primitive:
 
 | Version | Date | Author | Notes |
 | --- | --- | --- | --- |
+| 1.1.0 | 2026-08-20 | Core Team | Amendment — TW-11: a tripwire declares what it cannot see, and its precision trade is a recorded decision. No mechanical check covers its rule completely; the uncovered shapes are named at the tripwire as known limits, and any accepted false positive is recorded with why tightening would cost more than it saves. Prevents two opposite failures: broadening a pattern until it reaches an uncheckable case, which floods changes with noise and gets the tripwire disabled (TW-5/TW-10), and leaving the gap unstated, which lets the TW-9 inventory count a rule as enforced while a whole class of violation walks past — a false assurance worse than no check, since nobody looks for what a green gate has cleared. A declared limit is also the honest input to TW-6: a gap a structural check cannot close is where a behavioral test is owed. Additive; L1 stays Stable (C9). Distilled from an adoption pass over an external agent-orchestration client whose architectural lint rules document their own unreachable cases and deliberately accepted false positives. |
 | 1.0.0 | 2026-08-05 | Core Team | Initial spec — invariant tripwires as the enforcement half the rule-producing layers never supplied: a mechanically checkable rule carries a mechanical check, because a rule enforced by review or documentation is enforced by *memory*, the mechanism whose failure created the rule (TW-1); the tripwire is authored in the same change that earns the rule, when the offending shape, the reason, and the alternative are all still precise (TW-2); one tripwire per rule, named for the rule, so a failure reads as a rule violation rather than a failed check (TW-3); the failure names rule, site, reason, and sanctioned alternative, since a check that teaches nothing is suppressed rather than satisfied (TW-4); targeted and cheap rather than a general style rule, because precision is where its authority comes from (TW-5); structural checks and behavioral tests are distinct kinds and both required, since a system can pass every behavior test while violating every structural rule — the behavior is still correct *today* (TW-6); exemptions explicit, narrow, and reasoned inside the tripwire, never by widening the pattern (TW-7); a rule that stops holding is retired with its tripwire rather than quietly weakened, the worst state being a rule that looks enforced while matching nothing (TW-8); the enforcement inventory is legible, the uncovered set being the honest measure of how much governance runs on memory (TW-9); and the gate is on the **delta**, never the accumulated state, since a tripwire that fails on pre-existing debt is disabled and protects nothing (TW-10). Nodus projection needs no new primitive — the validate-before-run stage hosts authored-workflow tripwires, and the canonical-form guarantee gives them a reformat-proof structural target rather than a surface-text pattern. Concept-only. |

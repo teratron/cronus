@@ -1,6 +1,6 @@
 # Crash Recovery & State Snapshots
 
-**Version:** 1.0.1
+**Version:** 1.1.0
 **Status:** Stable
 **Layer:** concept
 
@@ -60,6 +60,8 @@ Rules every Layer 2 implementation MUST NOT violate. They are technology-neutral
 - **CR-8 (Secrets never roll back):** snapshots exclude the secret store (consistent with STO-6/SEC-1), and recovery never reverts secrets to an earlier version — a revoked or rotated credential MUST NOT be resurrected by a state rollback. The secret store is protected by the CR-3 write discipline alone.
 
 - **CR-9 (Recovery is itself crash-safe):** the recovery protocol is non-destructive (the damaged live state is preserved before any restore overwrites it), idempotent (a crash *during* recovery re-enters recovery cleanly on the next startup), logged (HEAL-5), and bounded (repeated recovery failures escalate rather than loop). Quarantined copies fall under the same bounded retention policy as snapshots (CR-5) — preserved long enough for inspection, never an unbounded disk liability.
+
+- **CR-10 (A held resource is reclaimed only from a *provably* dead holder, and an unreadable holder record is corruption rather than a race):** `[ADDED v1.1.0]` where an exclusive hold — a lock, a claim, a marker — outlives the process that took it, the hold is broken **only** on positive evidence that its holder no longer exists: the recorded holder identity is absent, or a recorded identity fingerprint that survives process-identifier reuse no longer matches. A holder that is merely unresponsive, suspended, or whose liveness cannot be determined is **never** broken — the contender waits and retries, because breaking a live holder is unrecoverable while waiting is merely slow. A bare private token cannot supply this evidence: it proves the record is not the contender's own, not that the identifier still names the same process, so the fingerprint is part of the record. Two structural rules make the evidence trustworthy. The hold is published **atomically and fully populated** — its complete record written before it becomes visible — so there is no interval in which a hold exists half-written, and an unreadable hold record is therefore genuine corruption handled on its own terms rather than a race to be waited out. And release is **owner-checked**: a holder relinquishes the hold only while the record still names it, so a hold reacquired by someone else after a mistaken reclamation is never deleted from under them.
 
 > L2 specs cannot reach RFC status until all invariants here are addressed in their "Invariant Compliance" section.
 
@@ -161,6 +163,7 @@ Automatic recovery needs no command. The snapshot artifact gets a first-class ve
 
 | Version | Date | Change |
 | --- | --- | --- |
+| 1.1.0 | 2026-08-20 | Core Team | Amendment — CR-10: an exclusive hold outliving its holder is reclaimed only on positive evidence of death (holder identity absent, or a reuse-resistant identity fingerprint no longer matching); a holder that is unresponsive, suspended, or of undeterminable liveness is never broken, because breaking a live holder is unrecoverable while waiting is merely slow. A bare private token cannot supply that evidence — it proves the record is not the contender's own, not that the identifier still names the same process — so the fingerprint is part of the record. Two structural supports: the hold is published atomically **and fully populated**, so no interval exists in which it is half-written and an unreadable hold record is therefore genuine corruption rather than a race to wait out; and release is owner-checked, so a hold reacquired after a mistaken reclamation is never deleted from under its new owner. Complements WL-1/WL-2 (which own claim exclusivity and conflict-not-clobber release) by specifying the evidence standard for reclamation. Additive; L1 stays Stable (C9). Distilled from an adoption pass over an external agent-orchestration client whose cross-process credential lock must guarantee at most one process ever spends a single-use secret. |
 | 1.0.0 | 2026-07-02 | Initial concept: crash-safe write discipline, verified single-instant state snapshots (cadence/event/manual), unclean-shutdown detection via run marker, strict recovery ladder (live → snapshots → escalate, never silent-empty), work reconciliation handoff (WL-5/ORC-10), honest recovery reporting, secrets-never-roll-back, recovery itself crash-safe (CR-1…CR-9). |
 
 ## Canonical References
