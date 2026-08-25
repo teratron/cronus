@@ -147,6 +147,7 @@
 - <https://github.com/oraios/serena>
 - <https://github.com/Panniantong/Agent-Reach>
 - <https://github.com/Leonxlnx/unlazy>
+- <https://github.com/chaseai-yt/claudex-loop>
 
 ## UI/UX
 
