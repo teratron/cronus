@@ -4,14 +4,14 @@
 <!-- Maximum 100 lines. Agent updates AFTER each completed action. -->
 
 **Workspace:** main
-**Updated:** 2026-08-20 18:31
+**Updated:** 2026-08-25 07:30
 **Phase:** — (plan complete; no active phase; Backlog empty)
 **Status:** Active
 
 ## Current Position
 
-- **Task:** `/magic.spec main` → Zero-Prompt Handoff `/magic.task main` — **Backlog closed: both remaining RFCs reached Stable; registry now fully saturated (254/254 Stable, 0 RFC, 0 Draft).** `l1-spec-driven-governance` (1.0.0→1.0.1: added its missing mandatory `Document History`, RULES §5) and `l1-dynamic-harness` (0.1.0→1.0.0: corrected a stale §4.7 claim — `PolicyProvider` already graduated LP-3 independently per `l2-nodus-portability.md` v1.7.1, only `StorageProvider` remains single-context; softened an overclaimed `l2-self-improvement.md` DH-8/DH-10 citation) both promoted RFC→Stable via Post-Update Review (spec-critic caught both issues; neither was a rubber-stamp). Both moved from `## Backlog` to Phase 0 in `PLAN.md` as realized concepts — still `concept-only` (no authored `Implements:` L2), so no build phase opened. Zero-Prompt Handoff into `/magic.task main` confirmed: pre-flight `ok:true`, zero warnings, 0 Draft to stabilize, no new buildable phase.
-- **Spec:** INDEX v1.0.169 (254 specs, all Stable) · PLAN v2.61.0 · TASKS v1.43.0 · RULES v1.6.0. Backlog: **0 — empty for the first time in this project's history.**
+- **Task:** `/magic.spec main` → Zero-Prompt Handoff `/magic.task main` — **reference-analysis pass over an external agent completion-discipline toolkit: 3 new concepts + 6 amendments.** New: `l1-fanout-attestation` (FAN-1…11 — concurrency as an attested claim; the **launch barrier** where an episode declares its member set, records a host-issued handle per member and seals *before the first wait*, which the serial launch-wait-launch pattern structurally cannot satisfy; claim explicitly bounded to acceptance ordering, declared sequential fallback where the host cannot fan out); `l1-acceptance-oracle` (AO-1…11 — the criterion that decides *done* is the one artifact nothing checks; forbids an instrument **structurally incapable of failing**, distinct from CMP-4's weaker-but-real proxy rule, enforced by a non-executing falsifiability review at **authoring** time); `l1-consent-binding` (CB-1…11 — consent binds a **resolved invocation**, the approver is shown the resolved form, any bound-element change lapses the grant, with the transitive-input gap **disclosed rather than implied**). Amendments: CMP-8/CMP-9 (a roll-up re-executes rather than inheriting; an explicit handoff never aggregates into a complete parent; evidence names its environment), WL-11 (a blocking guard measures **semantic** progress, never artifact bytes, and carries a bounded per-actor release), nodus NL-24 (attested **realized** execution mode per `~PARALLEL` block), plus link-only refinements to `l1-parallel-staffing`, `l1-action-gating`, `l1-requirement-checklists`, `l1-loop-governance`.
+- **Spec:** INDEX v1.0.177 (271 main specs, all Stable — 0 RFC / 0 Draft) · nodus INDEX v1.0.89 (20 specs) · PLAN v2.61.0 · TASKS v1.43.0 · RULES v1.6.0. Backlog: **0.** All three new concepts are `concept-only` (no authored `Implements:` L2), so no build phase is opened by them.
 - **Next Action:** Run /magic.task main to update the plan
 
 ## Progress

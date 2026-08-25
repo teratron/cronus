@@ -1,6 +1,6 @@
 # Parallel Staffing
 
-**Version:** 1.0.1
+**Version:** 1.0.2
 **Status:** Stable
 **Layer:** concept
 
@@ -24,6 +24,7 @@ This is the horizontal complement to the existing coordination stack: adaptive t
 - [l1-quality-standards.md](l1-quality-standards.md) - The integrated whole — not each partition — is what passes the definition-of-done gates.
 - [l1-order-independent-production.md](l1-order-independent-production.md) - [ADDED v1.0.1] the **production-side** property that makes this spec's fan-in lossless rather than merely orderly: PS-5 isolation prevents siblings from *interfering*, but not from depending on **when** they ran. OIP-1 (a unit is a pure function of its position and the frozen inputs) is what PS-2 decomposition and PS-6 integration silently assume; OIP-4/OIP-5 add the global offset and uniform partitioning the fan-in needs.
 - [l2-agent-session.md](l2-agent-session.md) - Concrete subagent spawn semantics and independent per-instance iteration budgets the width policy composes with.
+- [l1-fanout-attestation.md](l1-fanout-attestation.md) - [ADDED v1.0.2] the launch act of a scale-out: PS-2 disjoint partitions are the ownership precondition of a launch episode, and the barrier is what makes "the partitions ran in parallel" an attested fact rather than a coordinator's belief (FAN-1/FAN-2).
 
 ## 1. Motivation
 
@@ -139,6 +140,7 @@ None substitutes for another: parallel staffing *consumes* the task graph's part
 
 | Version | Date | Change |
 | --- | --- | --- |
+| 1.0.2 | 2026-08-25 | Related Specifications extended with `l1-fanout-attestation` — the orthogonal contract governing the **launch act** of a scale-out. PS decides *what* is split and that every partition is integrated; it is silent on whether the partitions were actually launched together, and a coordinator that launches one instance, waits, then launches the next produces an identical record. PS-2's disjointness is the ownership precondition of a launch episode. Link-only; no invariant changed. |
 | 1.0.1 | 2026-08-05 | Related Specifications extended with `l1-order-independent-production` — the production-side property PS-2/PS-6 assume without stating: isolation stops siblings interfering but not depending on when they ran, and a perfectly staffed set of isolated workers still yields an incoherent artifact if each reads the clock. Link-only; no invariant changed. |
 | 1.0.0 | 2026-07-02 | Initial concept: volume-justified same-specialty scale-out — ephemeral same-role instances under one accountable hired lead, parallelism only via disjoint decomposition (WL-1/WL-9), bounded width (budget + coordination guard), isolated siblings with mediated observable coordination, first-class fan-in with merge + gates, learning consolidated to the employee scope, contained failure with honest salvage, fully attributed (PS-1…PS-9). |
 

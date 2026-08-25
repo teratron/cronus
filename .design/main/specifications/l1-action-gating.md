@@ -1,6 +1,6 @@
 # Action Gating
 
-**Version:** 1.0.2
+**Version:** 1.0.3
 **Status:** Stable
 **Layer:** concept
 
@@ -22,6 +22,7 @@ The load-bearing insight is that **uniform friction is the failure mode in both 
 - [../../nodus/specifications/l1-nodus-portability.md](../../nodus/specifications/l1-nodus-portability.md) — LP-16 effect risk-class declaration is the nodus-workflow realization: an effectful step declares its consequence descriptors so a host graduated gate can tier it.
 - [l1-review-checkpoint.md](l1-review-checkpoint.md) — [ADDED v1.0.1] RC-6 defers to this spec for which terminal/expensive step is checkpointed by default; a review decision (approve/revise/reject) is richer than the permit/deny of an effect gate.
 - [l1-compensation.md](l1-compensation.md) - [ADDED v1.0.2] a compensating action is a first-class effect and passes the same risk-proportional gate as any other (CO-2).
+- [l1-consent-binding.md](l1-consent-binding.md) - [ADDED v1.0.3] the sibling half: AG decides *how much* friction an act deserves, CB decides *what a granted consent covers and when it lapses*. AG-6's scoped, revocable, human-ratified de-escalation rule is the grant CB-1 gives an identity to, and CB-3/CB-11 are what stop it widening by drift.
 
 ## 1. Motivation
 
@@ -116,4 +117,5 @@ The subtle failure this spec guards against is not too little gating — that is
 
 | Version | Date | Author | Notes |
 | --- | --- | --- | --- |
+| 1.0.3 | 2026-08-25 | Core Team | Related Specifications extended with `l1-consent-binding` — the question this spec leaves unasked after assigning a tier: *what was the grant for, and when does it stop applying?* AG-7 records that an act was approved and by whom, but not with enough precision to decide whether the next attempt is the same act. CB gives AG-6 de-escalation rules a bound identity (resolved invocation, not a name or category) and a lapse rule, which matters most precisely where AG-5 correctly minimizes prompts. Link-only; no invariant changed. |
 | 1.0.0 | 2026-07-09 | Core Team | Initial stable spec — action gating: authorization friction proportional to an action's consequence. Friction proportional to consequence, uniform friction forbidden (AG-1); consequence classified by explicit legible axes — reversibility, blast radius, external visibility, value at stake (AG-2); closed ordered tier ladder auto/confirm/approval (AG-3); read-safe frictionless, irreversible always gated, unknown fails to friction (AG-4); friction-fatigue a first-class failure — over-gating is a defect not caution (AG-5); learned scoped revocable human-ratified de-escalation, never self-escalation-bypass, top tier non-de-escalatable (AG-6); every gate decision auditable with tier + axes + approver (AG-7); governable stricter never silently laxer, top-tier floor un-removable (AG-8). Composes l2-tool-security / l1-interception-model / l1-policy-governance / l1-security / l2-orchestration / l2-agent-autonomy. Distilled from an adoption pass over an external business-operations agent-harness reference (three-tier none/confirm/approval execution gates by action risk). |

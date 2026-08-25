@@ -1,6 +1,6 @@
 # Requirement-Quality Checklists
 
-**Version:** 1.0.0
+**Version:** 1.0.1
 **Status:** Stable
 **Layer:** concept
 
@@ -25,6 +25,7 @@ This is the third, distinct member of the quality family, and it must not be con
 - [l1-task-graph-model.md](l1-task-graph-model.md) — planning consumes a spec only after its checklist gaps are resolved.
 - [l1-operational-ledger.md](l1-operational-ledger.md) — stable-id, append-only discipline (OL-2) shared by checklist items (RQ-5).
 - [l1-facilitation.md](l1-facilitation.md) — the interactive clarification that resolves an item's gap reuses the elicitation surface.
+- [l1-acceptance-oracle.md](l1-acceptance-oracle.md) — [ADDED v1.0.1] the adjacent, non-overlapping layer: RQ audits the *statement of need* (are the requirements complete, clear, measurable?), AO audits the *instrument that measures it* (can the criterion that judges the work actually fail?). Same falsifiability instinct, different subject.
 
 ## 1. Motivation
 
@@ -178,4 +179,5 @@ These are adoption *candidates* recorded at concept level; the concrete language
 
 | Version | Date | Author | Notes |
 | --- | --- | --- | --- |
+| 1.0.1 | 2026-08-25 | Core Team | Related Specifications extended with `l1-acceptance-oracle` — the adjacent layer sharing this spec's falsifiability instinct but pointed at a different subject: RQ asks whether the *requirements* are well written, AO asks whether the *criteria that judge the work* can fail. Neither subsumes the other; a perfectly specified requirement can be gated by an instrument incapable of failing. Link-only; no invariant changed. |
 | 1.0.0 | 2026-06-25 | Core Team | Initial spec — RQ-1…RQ-8; requirements-quality checklists as "unit tests for the spec": test-requirements-not-implementation boundary, generated domain-tailored items, falsifiable dimension-tagged anchored/gap-marked items, stable-id append-only, pre-planning gate; placement in the quality family; ideas-to-adopt + nodus-relevance mapping (mined from an external spec-driven-development toolkit) |
