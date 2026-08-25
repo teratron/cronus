@@ -1,6 +1,6 @@
 # References
 
-## Agents
+## Agents/Harness
 
 - <https://github.com/anthropics/claude-code>
 - <https://github.com/google-gemini/gemini-cli>
@@ -50,6 +50,19 @@
 - <https://github.com/affaan-m/ECC>
 - <https://github.com/SeloraHomes/ha-selora-ai>
 - <https://github.com/traycerai/traycer>
+- <https://gitverse.ru/gigachain/gigachain>
+- <https://github.com/harness/harness>
+- <https://github.com/china-qijizhifeng/agentic-harness-engineering>
+- <https://github.com/atanasovmi/Meta-Harness>
+- <https://github.com/bzantium/meta-harness>
+- <https://github.com/stanford-iris-lab/meta-harness>
+- <https://github.com/howdymary/hermes-agent-metaharness>
+- <https://github.com/omnigent-ai/omnigent>
+- <https://github.com/ruvnet/ruflo>
+- <https://github.com/ruvnet/agent-harness-generator>
+- <https://github.com/tinyhumansai/tinyagents>
+- <https://github.com/ShunsukeHayashi/gws-harness>
+- <https://github.com/deepseek-ai/deepseek-harness>
 
 ## Spec-Driven Development
 
@@ -133,22 +146,7 @@
 - <https://github.com/modem-dev/hunk>
 - <https://github.com/oraios/serena>
 - <https://github.com/Panniantong/Agent-Reach>
-
-## Harness
-
-- <https://gitverse.ru/gigachain/gigachain>
-- <https://github.com/harness/harness>
-- <https://github.com/china-qijizhifeng/agentic-harness-engineering>
-- <https://github.com/atanasovmi/Meta-Harness>
-- <https://github.com/bzantium/meta-harness>
-- <https://github.com/stanford-iris-lab/meta-harness>
-- <https://github.com/howdymary/hermes-agent-metaharness>
-- <https://github.com/omnigent-ai/omnigent>
-- <https://github.com/ruvnet/ruflo>
-- <https://github.com/ruvnet/agent-harness-generator>
-- <https://github.com/tinyhumansai/tinyagents>
-- <https://github.com/ShunsukeHayashi/gws-harness>
-- <https://github.com/deepseek-ai/deepseek-harness>
+- <https://github.com/Leonxlnx/unlazy>
 
 ## UI/UX
 
