@@ -1,6 +1,6 @@
 # Task Graph Model
 
-**Version:** 1.0.0
+**Version:** 1.1.0
 **Status:** Stable
 **Layer:** concept
 
@@ -149,6 +149,20 @@ Layer 2 realizations and concrete subsystems MUST NOT violate these.
   coordinator generates no implementation; the executor holds no plan state. This keeps plan
   logic inspectable and lets the executor be any capable agent.
 - **TG-14 Guarded autonomous delivery.** An autonomous run is fenced by hard guardrails:
+
+- **TG-15 Absent its source artifact, generation is refused, never improvised.** [ADDED v1.1.0]
+  TG-1 requires an explicit requirements artifact. Where one does not exist, the correct outcome is
+  a **refusal naming what is missing**, not a graph generated from a synthesized substitute. The
+  failure this closes is quiet: a planner asked for a plan will produce one, filling the absent
+  requirement with plausible scope, and the result is **indistinguishable in form** from a graph
+  generated from a real artifact — same units, same dependency structure, same authority — while
+  every unit below the invented part carries invented scope. Two consequences. A requirements
+  artifact that exists but is **substantially unsettled** — open questions that decide the shape of
+  the work, not detail to be filled during execution — is treated as absent for this rule, because
+  generating from it produces the same guessing with better cover. And the refusal **names the phase
+  that produces the missing input** rather than terminating: the work is not blocked, it is upstream
+  (`l1-exploratory-planning`). TG-1 states where a graph comes from; this states what happens when
+  that source is not there, which is the case that actually occurs.
   work proceeds on an **isolated branch**, never the mainline; a unit is committed only
   after its verification passes (green-gated); a bounded retry budget precedes a
   **pause-with-actionable-state** rather than an open-ended loop; every step appends to a
@@ -385,3 +399,4 @@ are named by structural idea, not by product.
 | Version | Date | Change |
 | --- | --- | --- |
 | 1.0.0 | 2026-06-25 | Initial model: requirement-to-graph decomposition algebra, complexity-gated breakdown, dependency DAG with deterministic next-selection, isolated planning contexts, append-only journal, drift-driven re-planning, and the coordinator/executor work-unit protocol for guarded autonomous delivery (TG-1…TG-14). |
+| 1.1.0 | 2026-08-26 | Core Team | Amended — TG-15: absent its source artifact, generation is **refused, never improvised**. TG-1 states where a graph comes from and was silent on the case that actually occurs — no requirements artifact exists. A planner asked for a plan produces one anyway, filling the absent requirement with plausible scope, and the result is **indistinguishable in form** from a real graph while every unit below the invented part carries invented scope. An artifact that exists but is **substantially unsettled** counts as absent, since generating from it produces the same guessing with better cover; and the refusal **names the upstream phase** (`l1-exploratory-planning`) rather than terminating, because the work is not blocked, it is upstream. |

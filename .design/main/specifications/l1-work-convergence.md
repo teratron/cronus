@@ -1,6 +1,6 @@
 # Work Convergence
 
-**Version:** 1.1.0
+**Version:** 1.2.0
 **Status:** Stable
 **Layer:** concept
 
@@ -49,6 +49,8 @@ Rules every Layer 2 implementation MUST NOT violate:
 - **CONV-6 (Automation converges through board events and actions):** automation-pipeline participation is board-relative — board-observing triggers (`kanban_event`) and board-mutating actions are **drive**-relation, and any new work an automation spawns **materializes** as a card. An automation MUST NOT maintain a shadow work queue parallel to the board.
 - **CONV-7 (Convergence is traceable and office-managed):** every convergence event records its originating stream, actor, time, and reason so the board stays legible (composing KAN-7), and convergence never shifts board management onto the client (reaffirming KAN-2, OFF-5). An untraceable convergence, or one that requires the client to route it, is a violation.
 - **CONV-8 (Aggregate views project from boards, never replace them):** any higher-level or cross-office activity view is a read-only projection *of* office boards, not an independent source of truth (composing GO-4). The per-office board is ground truth; building-level visibility rolls up from it and never becomes a competing off-board record.
+
+- **CONV-9 (A decision-shaped unit converges like any other; it is not a second queue):** [ADDED v1.2.0] work whose product is a **decision** rather than a deliverable — a question whose resolution unblocks planning — converges on the same board, under the same rules, as every other stream. CONV-3's *one kind of work unit* is honoured **by construction**: a decision unit is a card whose completion criterion is a **recorded answer**, never a parallel representation with its own lifecycle, its own states, or its own private queue. Two rules keep this from becoming a loophole. It declares its relation from the **same closed set** (CONV-2), so an exploratory effort is exactly as visible as an executing one and *what is this office doing* is answered identically whether the office is deciding or building. And a decision unit **may not carry a deliverable as its product**: a unit that produced one has changed kind, and the board shows the change rather than absorbing it silently. The failure this closes is a planning phase run off-board on the grounds that it is "not work yet" — which is the shadow work CONV-1 forbids, wearing a phase name.
 
 > L2 specs cannot reach RFC status until all invariants here are addressed in their "Invariant Compliance" section.
 
@@ -122,3 +124,4 @@ CONV-3 and CONV-6 together forbid the most common way convergence erodes in prac
 | `[SCHED]` | `.design/main/specifications/l1-scheduler-model.md` | Time-driven streams; pulse/`wake` (SCH-4) reconciled as the *drive* relation |
 | `[AUTOMATION]` | `.design/main/specifications/l1-automation-pipeline.md` | `kanban_event` triggers and board-mutating actions (drive); spawned work materializes |
 | `[LIVENESS]` | `.design/main/specifications/l1-work-liveness.md` | WL-3 affirmative liveness — why the board holds no silently-dead work |
+| 1.2.0 | 2026-08-26 | Core Team | Amended — CONV-9: a **decision-shaped unit** converges like any other and is not a second queue. Work whose product is a decision rather than a deliverable lands on the same board under the same rules, honouring CONV-3's *one kind of work unit* **by construction** — a card whose completion criterion is a recorded answer, not a parallel representation with its own lifecycle. It declares its relation from the same closed CONV-2 set, so an exploratory effort is as visible as an executing one; and it **may not carry a deliverable as its product** — a unit that produced one has changed kind, and the board shows the change. Closes the loophole of a planning phase run off-board because it is "not work yet", which is CONV-1's shadow work wearing a phase name. |
