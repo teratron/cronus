@@ -1,6 +1,6 @@
 # Negative Specification
 
-**Version:** 1.0.0
+**Version:** 1.1.0
 **Status:** Stable
 **Layer:** concept
 
@@ -147,6 +147,19 @@ Rules every Layer 2 implementation MUST NOT violate:
   the completion discipline already forbid elsewhere.
 
 - **NEG-10 Firing rate is measured, and both extremes are informative**: how often each
+
+- **NEG-11 The positive target is the primary form; a bare prohibition is the fallback**:
+  [ADDED v1.1.0] NEG-5 requires an exclusion to name its alternative wherever one exists.
+  The mechanism makes that an **ordering**, not a courtesy. An exclusion placed in front of
+  a generator puts the excluded behaviour **into** the generator's context, where it becomes
+  *more* available rather than less, with the negation acting as a weak modifier over a
+  strongly activated concept. So where an alternative exists, the exclusion is **rendered to
+  the generator as the positive target**, and the prohibition rides along as its
+  justification — never the reverse. A bare "do not X" is admissible only where no positive
+  form can carry the constraint (a hard guardrail), and even then it is paired with whatever
+  positive companion can be found. The **checker** side (NEG-9) is untouched: it still matches
+  the excluded signal directly, because detection and steering have opposite requirements and
+  only steering pays the availability cost.
   exclusion fires is counted. One that **never** fires is either fully internalized or dead
   weight, and only the record distinguishes them; one that fires **constantly** means the
   **positive** specification is missing something the negative is compensating for — the
@@ -298,3 +311,4 @@ No new language primitive is required:
 | Version | Date | Author | Notes |
 | --- | --- | --- | --- |
 | 1.0.0 | 2026-08-05 | Core Team | Initial spec — negative specification as the named shared shape behind four locally-invented instances (a corrected assumption promoted to an anti-pattern, generic-default tells blocked at a craft bar, a forbidden construct under a source tripwire, a banned register in generated prose): an exclusion is a first-class artifact with identity, rationale, origin, and an affirmation date rather than a footnote or a conversation (NEG-1); positive and negative are independent and neither implies the other, so a system modelling only the target passes every check while producing exactly what the principal asked to avoid (NEG-2); three origins with different conflict authority — principal-declared, derived, built-in (NEG-3); the exclusion reaches the **generator before production**, with review enforcement the second line and never the only one, since a negative caught after the fact costs a rewrite while the same constraint in context costs tokens (NEG-4); the alternative is named wherever one exists, because a bare prohibition moves the generator to the next-most-default option (NEG-5); bounded, dated, revisited, since an unbounded avoid-list is unsatisfiable and then ignored wholesale (NEG-6); an explicit principal request outranks an exclusion with the conflict surfaced once, an exclusion being no veto over its author (NEG-7); a violation names the matched signal and its origin, not an opinion in a finding's clothes (NEG-8); the checkable subset checked and the taste remainder named advisory with the boundary stated (NEG-9); and firing rate measured, where never-fires and always-fires are both actionable — the latter indicting the *positive* spec (NEG-10). Nodus projection needs no new primitive — the validated config surface carries the set, the validation stage hosts the checkable subset, cache-stable composition places it in the byte-stable prefix, and an externally-sourced avoid-list carries provenance like any other content. Concept-only. |
+| 1.1.0 | 2026-08-26 | Core Team | Amended — NEG-11: the **positive target is the primary form** an exclusion takes when it reaches a generator, and a bare prohibition is the fallback. Steering by prohibition places the excluded behaviour into the generator's context, where it becomes *more* available, the negation being a weak modifier over a strongly activated concept; so NEG-5's "name the alternative" is hardened into an ordering — render the exclusion as its positive target with the prohibition as justification, and reserve the bare ban for hard guardrails no positive form can carry. The checker side (NEG-9) is explicitly unaffected: detection and steering have opposite requirements, and only steering pays the availability cost. Distilled from an adoption pass over an external engineering-skills reference. |
