@@ -35,7 +35,7 @@ cronus-model-local = { path = "crates/model-local" }
 cronus-activation-os = { path = "crates/activation-os" }
 nodus = { path = "crates/nodus" }
 aes-gcm = "0.11.1"
-argon2 = "0.5.3"
+argon2 = "0.6.0"
 bcrypt = "0.19.3"
 blake3 = "1.8.7"
 chrono = "0.4.45"
