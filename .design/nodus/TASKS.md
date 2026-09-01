@@ -1,8 +1,8 @@
 # Master Task Index (Registry)
 
-**Version:** 2.32.0
-**Generated:** 2026-08-12
-**Based on:** .design/nodus/PLAN.md v1.39.0
+**Version:** 2.35.0
+**Generated:** 2026-09-01
+**Based on:** .design/nodus/PLAN.md v1.42.0
 **Based on RULES:** .design/RULES.md v1.6.0
 **Execution Mode:** Sequential
 **Status:** Active
@@ -17,6 +17,7 @@ Tactical registry of all phases. Atomic checklists live in `tasks/phase-{N}.md`.
 | --- | --- | --- |
 | [Phase 1](archives/tasks/phase-1.md) | Spec Completeness & Vocabulary Alignment | `Done (Archived)` |
 | [Phase 2](archives/tasks/phase-2.md) | Library Hardening: fixture corpus, NL-8/NL-10 enforcement, RUN vocabulary, extraction audit | `Done (Archived)` |
+| [Phase 30](archives/tasks/phase-30.md) | DG-11 Authoring Advisories (l2-nodus-dialog §4.8): `W016` — a dialog positioned earlier than its own dependencies require (three-clause predicate over `DIALOG_COMMANDS`, LP-16's `+reversible`/`+external` modifiers and the dialog's `pipeline_target`, block-scoped across every nesting construct); `W017` — an `ASK`/`CONFIRM` argument that is a bare `$var` written by a `GEN`/`ANALYZE` step, i.e. a produced artifact travelling in the prompt instead of a reference. Advisory only (`Severity::Warning`; no AST, grammar, parser, transpiler or executor change; DG-4/DG-9 untouched). Two decisions pre-made: `MODEL_COMMANDS`/`DIALOG_COMMANDS` widened to `pub(crate)` rather than relocated, and a plan-time correction to §4.8.3 — the trigger is a whole-arg `$var` reference, not a string interpolation the validator has no scanner for → 6 tasks / 4 tracks (A, B, C, T); five of the eight assertions pin deliberate non-firings, including the soundness-over-recall trade on undeclared steps | `Done (Archived)` |
 
 ## Active Phases (continued)
 

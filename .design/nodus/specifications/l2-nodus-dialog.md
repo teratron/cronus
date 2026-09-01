@@ -1,6 +1,6 @@
 # Nodus Human-in-the-Loop Dialog Implementation (Rust)
 
-**Version:** 1.1.1
+**Version:** 1.2.1
 **Status:** Stable
 **Layer:** implementation
 **Implements:** l1-nodus-dialog.md
@@ -18,9 +18,9 @@ the runtime taxonomy; this spec specifies their emission.
 
 ## Related Specifications
 
-- [l1-nodus-dialog.md](l1-nodus-dialog.md) — the dialog contract this implements (DG-1…DG-10)
+- [l1-nodus-dialog.md](l1-nodus-dialog.md) — the dialog contract this implements (DG-1…DG-11)
 - [l2-nodus-runtime.md](l2-nodus-runtime.md) — runtime crate extended here: `vocab` (commands, `Status`), `executor`, the `run_with_*` family
-- [l2-nodus-portability.md](l2-nodus-portability.md) — LP-2 extension-point pattern + the LP-8 `ExtensionRole` taxonomy this adds `Dialog` to
+- [l2-nodus-portability.md](l2-nodus-portability.md) — LP-2 extension-point pattern + the LP-8 `ExtensionRole` taxonomy this adds `Dialog` to; [ADDED v1.2.0] §4.10's LP-16 `+reversible`/`+external` declaration surface is what makes §4.8's placement advisory decidable
 - [l2-nodus-errors.md](l2-nodus-errors.md) — owns the `DIALOG_TIMEOUT`/`DIALOG_REJECTED`/`PAUSED` codes and their severity/category
 - [l2-nodus-observability.md](l2-nodus-observability.md) — [ADDED v1.1.0] owns `EventAnnotations`, the HO-9/11/16/17 carrier §4.7 extends with a fifth field for DG-9's provenance signal
 
@@ -56,6 +56,7 @@ for the case a host must handle out-of-band.
 | DG-8 Capability declaration | `ExtensionRole::Dialog` is added to the manifest taxonomy; `CapabilityManifest::from_workflow` requires it for any `ASK`/`CONFIRM` whose step lacks a `+default`, so a host with no dialog backend is rejected fail-fast. |
 | DG-9 Memoizable approval [ADDED v1.1.0] | **Implemented [v1.1.1] — Phase 28.** `+remember` needs no new grammar (§2's existing `+modifier` pass-through already carries it to `DialogProvider::ask`/`confirm`, unread by nodus, exactly like every other undeclared modifier). Nodus's own obligation — a distinct trace provenance on a memoized resolution — realizes as a new `DialogOutcome::Remembered(Value)` variant (§4.7), bound identically to `Answer` but tagged `DialogProvenance::Remembered` on the step's `StepEnd` annotations, vs. `Answered` for the ordinary path. The host's own `ask`/`confirm` implementation performs the entire recall / governance / fit-check pseudocode of L1 §4.6 internally (it already receives the raw `+remember` modifier and returns whichever outcome applies) — no new `DialogProvider` trait method needed. 467 tests pass (was 462, +5). |
 | DG-10 Promotable remembered decision [ADDED v1.1.0] | **Realized for free by DG-9 — no separate mechanism [confirmed, Phase 28].** L1 §4.7's `recurrence`/`consider_promotion` pseudocode is entirely host-side: a host's `DialogProvider` already owns the durable store behind DG-9 (it is the one that decided to return `Remembered`), so it already knows a dialog identity's occasion count without nodus reporting anything further. DG-9's per-event `DialogProvenance::Remembered` tag *is* the recurrence signal DG-10 builds on — the same "rides an existing signal, no enumerated list" shape this session's NL-9 `@err:` dispatch and LP-17 `SETTLEMENT_UNACCOUNTED` also use. No code exists for DG-10 specifically, by design — nothing to implement. |
+| DG-11 Latest-reversible placement & decision-ready payload [ADDED v1.2.0] | **Advisory — specified in §4.8.** The first dialog invariant that constrains *authoring* rather than runtime behaviour, and its L1 says so: both properties are ones a validator MAY advise on, and neither touches the `Paused`/resume contract (DG-4) or memoization (DG-9). Realized as two `Severity::Warning` validator advisories over data the validator already collects — `W016` for a dialog placed earlier than its own dependencies require, `W017` for a prompt that inlines a produced artifact instead of referring to it. Neither blocks a run; the brief-quality half of the payload rule is declared out of core scope (§4.8.3), because judging prose is a model act and this crate is model-free. |
 
 ## 4. Detailed Design
 
@@ -214,6 +215,136 @@ matching the enum exhaustively without a wildcard arm — acceptable pre-1.0 (th
 realistic shape for a closed 5-variant outcome taxonomy that must distinguish
 *why* a dialog resolved without inventing a second orthogonal signal.
 
+### 4.8 Latest-reversible placement & decision-ready payload (DG-11) [ADDED v1.2.0]
+
+DG-11 differs in kind from DG-1…DG-10: it constrains how an author *positions and
+composes* a dialog, not what the runtime does when one executes. Its L1 text settles the
+realization question directly — both properties are ones "a validator MAY advise on", and
+neither alters the `Paused`/resume contract (DG-4) or the memoization semantics (DG-9). So
+this section specifies **validator advisories**: never errors, never runtime checks, and
+never an automatic reordering of the author's steps. A run that ignores both advisories is
+a conforming run.
+
+#### 4.8.1 Why the validator can decide this at all
+
+The placement rule needs three facts about a step, and the crate already produces all
+three — this is why DG-11 is realizable now rather than after some future mechanism.
+
+1. **Is this step a dialog?** `DIALOG_COMMANDS` (`portability.rs`) is the closed set
+   `["ASK", "CONFIRM"]` — the same set `EffectClass::Deferred` already classifies on.
+2. **Is a following step safe to run before the question?** LP-16's declaration surface
+   (`l2-nodus-portability.md` §4.10) carries `+reversible` and `+external` as ordinary
+   `CommandCall.modifiers`, parsed today with no new grammar. A step declaring
+   `+external=true` or `+reversible=false` is exactly the boundary DG-11 says a dialog
+   must never move past.
+3. **Does a following step depend on the answer?** `collect_vars_stmt` already walks every
+   statement's variable reads and writes for `E004`/`E014`. The dialog's pipeline target
+   (`→ $answer`) is a write; the first later step that reads it closes the movable window,
+   which is DG-11's second bound — deferring a question past the work it gates does not
+   defer it, it answers it by assumption.
+
+No new AST node, no new grammar, no new provider call, and no runtime data: the advisory is
+computable at validation time, which NL-4 requires it to be.
+
+#### 4.8.2 `W016` — dialog asked earlier than its own dependencies require
+
+Emitted at `Severity::Warning` on a dialog step `D` when **all** of the following hold:
+
+```plaintext
+(a) D.command ∈ DIALOG_COMMANDS
+(b) ∃ S after D in the same block, where
+       S.command ∉ DIALOG_COMMANDS
+       S declares +reversible=true
+       S does not declare +external=true
+(c) no step in (D, S] reads D's pipeline target variable
+```
+
+The message names the **last** such `S` — the step `D` could be moved past — and states the
+reason in the author's terms: the human is being asked before work the run would have
+settled on its own. `W016` never blocks a run.
+
+**Condition (b) requires a positive declaration, and that is the design decision of this
+section.** The alternative — firing on any following step that has *not* declared itself
+irreversible — would give far higher recall and would be wrong in exactly the case DG-11
+treats as the hard bound. LP-16's descriptors are *omitted, never defaulted* (§4.10.2 of
+`l2-nodus-portability.md`): an absent `+reversible` means **not declared**, not "reversible".
+An advisory that can recommend moving a confirmation past an irreversible effect is worse
+than one that stays quiet, so recall is deliberately traded for soundness. The consequence is
+a proportionate one: `W016`'s reach grows with LP-16 adoption, and declaring risk classes buys
+placement advice — the two invariants compose rather than merely coexist.
+
+The fixed-control-point case DG-11 explicitly excludes needs no special handling: a dialog
+whose position is *not* the author's choice is one whose following step reads its answer, and
+condition (c) already excludes it.
+
+Two boundary cases the predicate must not leave to the reader. **A dialog with no pipeline
+target** — a bare `CONFIRM` used as a gate, whose only effects are the pause and the
+`+strict` rejection path — has an empty dependency set, so condition (c) holds for every
+following step and placement is bounded by (b) alone. That is the intended reading: a gate
+with no binding constrains nothing downstream, so it is the case where late placement helps
+most, not a case to exempt. **The two clauses of (b) are not redundant**: a step may declare
+`+reversible=true` *and* `+external=true` — an outward effect that can afterwards be
+retracted, such as a message that can be recalled — and DG-11 bounds placement at
+irreversible **or** outward, so an outward step stops the dialog moving past it even when it
+is reversible.
+
+#### 4.8.3 Payload — the checkable half, and the half that is not core's
+
+DG-11's payload rule has two parts, and honesty about which one a validator can hold is the
+substance here.
+
+**Not core-checkable, declared so explicitly.** Whether a prompt is a *decision-ready brief*
+— naming what the run produced, what the decision turns on, and what is being asked — is a
+judgement about prose. A validator that scored prose would be a model, and this crate is
+model-free by LP-1 with a deterministic `StubProvider` built-in. Recording this as out of
+scope is preferable to leaving it implicitly unimplemented: the obligation stays with the
+author, where DG-11 put it.
+
+**Checkable: the reference-not-inlined half — realized against the whole-argument reference
+model nodus actually has, not an interpolation scanner [CORRECTED at implementation].**
+`W017`, `Severity::Warning`, fires when an `ASK`/`CONFIRM` argument is a bare `$var` —
+nodus has no string-interpolation scanner; every variable reference the validator recognizes
+elsewhere (`collect_vars_stmt`'s own `arg.starts_with('$')` test) is a whole positional
+argument token, and this is the same model — whose root was written by a command in
+`MODEL_COMMANDS` (`GEN` / `ANALYZE`) anywhere in the file: the dialog is inlining a produced
+artifact into the prompt rather than referring to it, which is precisely what DG-11 says a
+brief must not do. The producer is established by a **dedicated single-pass walker**
+(`w017_collect_producers`), not the `collect_vars_stmt` walk §4.8.1 relies on for `W016`:
+that function tracks *declared*/*used* variable-root sets for `E004`/`E014` and has no notion
+of *which* command produced a target, so a purpose-built pass records `target-root →
+producing command name` instead — no value is inspected either way, and the check remains a
+pure validation-time property (NL-4). The message names the variable and the producing
+**command** (e.g. "an earlier `GEN` step"), not a step number — `wf.steps` order is
+irrelevant to this check, since a variable used before its producer is already a separate
+`E014` finding.
+
+Deliberately **not** a size heuristic: a length threshold would need the value, which the
+validator cannot have (validation precedes execution, NL-4), and measuring the source text
+instead measures the wrong thing — a short interpolation of a large artifact is the case
+DG-11 is about.
+
+**Code allocation.** `W001`…`W015` are in use in `validator.rs`; `W016` and `W017` occur
+nowhere in the crate and are free.
+
+#### 4.8.4 What this section does not settle
+
+- **No runtime enforcement of either property.** DG-4's `Paused`/resume contract and DG-9's
+  memoization are untouched, exactly as the L1 requires; nothing here changes what a run does.
+- **`W016` sees one block at a time — precisely the sequence-bearing containers, not every
+  block-shaped construct [CORRECTED at implementation].** A dialog inside `?IF`/`?ELIF`/
+  `?ELSE` or `~FOR`/`~UNTIL` is scoped to its own body, and movement across that boundary is
+  deliberately not advised: moving a dialog out of a conditional changes *whether* it is
+  asked, not only when — a different decision from the one DG-11 governs, and not one a
+  validator should nudge. `~PARALLEL` branches are walked for scopes nested further inside
+  them but are never paired against each other: branches run **concurrently**, so there is no
+  "runs before it" relation between siblings for (b) to test. `?SWITCH` arms/default and
+  `~MAP`'s command are a single `CommandCall`, not a sequence — a dialog can appear only as a
+  whole arm's or map's action, which by construction has no following sibling to advise
+  moving past, so it can never contribute a `W016` finding regardless of block type.
+- **`W016`'s recall is bounded by LP-16 adoption, on purpose** (§4.8.2).
+- **The brief's quality stays with the author** (§4.8.3), and no future core mechanism is
+  implied by leaving it there.
+
 ## 5. Drawbacks & Alternatives
 
 - **Mid-run coroutine suspension** (capture/restore the executor stack): rejected — it rewrites the run-to-completion model for every workflow to serve a minority of dialog steps. The `Status::Paused` + resume-descriptor signal achieves durable hand-off without that cost.
@@ -245,5 +376,7 @@ realistic shape for a closed 5-variant outcome taxonomy that must distinguish
 | Version | Date | Author | Notes |
 | --- | --- | --- | --- |
 | 1.1.1 | 2026-08-01 | Core Team | **Implemented the DG-9/DG-10 seam designed in v1.1.0 — Phase 28.** `DialogOutcome::Remembered(Value)` + `DialogProvenance{Answered,Remembered}` (`observability.rs`, beside `EventAnnotations`) + the `dialog_provenance` field landed exactly as designed; `handle_dialog`'s single `outcome` match now also computes the provenance for the one `StepEnd` emit, no second emit call. **Confirmed rather than assumed**: `dialog_provenance` is the first `EventAnnotations` field the crate's own dispatch logic populates directly (every sibling field has no in-crate writer at all) — `EventAnnotations`'s own doc comment updated to say so; recorded in §4.7 rather than silently adjusted. DG-10 needed zero code, confirming the v1.1.0 prediction. **One real test-writing finding**: asserting "no dialog provenance on rejection" against `DEFERRED_WF` (which declares `@err: ESCALATE(human)`) initially expected one `StepEnd`, but `DIALOG_REJECTED` is `Signal`-free so NL-9 dispatch fires automatically — two `StepEnd` events land (the rejected `ASK`, then the dispatched `ESCALATE`), both correctly carrying no provenance; the test was corrected, not the code. §3's DG-9/DG-10 rows updated to Implemented. 467 tests pass (was 462, +5: 1 unit test in `observability.rs`, 4 integration tests in `tests/portability.rs`); clippy/fmt clean; `Cargo.toml`/`Cargo.lock` diff empty (LP-1 preserved); no `unwrap`/`panic!`/`expect` added to any production path. |
+| 1.2.1 | 2026-09-01 | Core Team | Implementation-time reconciliation of §4.8.3/§4.8.4 to the as-built `crates/nodus` mechanism, landed alongside Phase 30. §4.8.3: `W017`'s trigger is the whole-argument `$var` reference model nodus actually has, not a string-interpolation scan (the crate has no interpolation scanner), and the producer lookup is a **dedicated** single-pass walker (`w017_collect_producers`, recording `target-root → producing command name`) rather than a reuse of `collect_vars_stmt`, which tracks declared/used sets only and has no producer-identity concept. §4.8.4: named precisely which constructs `W016` treats as their own scope — `?IF`/`?ELIF`/`?ELSE` and `~FOR`/`~UNTIL` bodies — and added the two cases the original text omitted: `~PARALLEL` branches are walked for nested scopes but never paired against each other (concurrent, not sequential — no "runs before it" relation for clause (b)), and `?SWITCH` arms/`~MAP`'s command are a single `CommandCall` with no internal sequence, so a dialog appearing as a whole arm's or map's action can never contribute a finding. No behavioural change — `W016`/`W017` ship exactly as designed; this row narrows how the design is described to match what was built. |
+| 1.2.0 | 2026-09-01 | Core Team | Closes the DG-11 invariant-traceability gap found at the v1.40.0 nodus replan. New §4.8 realizes DG-11 as two validator advisories rather than runtime behaviour, following its L1's own "a validator MAY advise on" framing: `W016` for a dialog positioned earlier than its own dependencies require, and `W017` for a prompt that inlines a `GEN`/`ANALYZE`-produced artifact instead of referring to it. Decidable today because all three facts it needs already exist — `DIALOG_COMMANDS`, LP-16's `+reversible`/`+external` modifiers (§4.10 of `l2-nodus-portability`), and `collect_vars_stmt`'s read/write walk — so no new AST, grammar, provider call or runtime data is introduced. The section's load-bearing decision is that `W016` requires a **positive** `+reversible=true` declaration on the following step: LP-16 descriptors are omitted rather than defaulted, so firing on undeclared steps would advise moving a confirmation past a possibly irreversible effect — recall traded for soundness, with reach growing as LP-16 is adopted. The brief-quality half of the payload rule is declared **out of core scope** (judging prose is a model act; the crate is model-free per LP-1) rather than left silently unimplemented. `Paused`/resume (DG-4) and memoization (DG-9) untouched. |
 | 1.1.0 | 2026-07-31 | Core Team | Closes the DG-9/DG-10 invariant-traceability gap flagged at the v1.29.0 nodus replan. New §4.7 designs both: DG-9's `+remember` marker needs no grammar change (modifiers are already unconstrained free-form pass-through to `DialogProvider::ask`/`confirm`); its one real nodus-side obligation — a distinct trace provenance on a memoized resolution — realizes as a new `DialogOutcome::Remembered(Value)` variant bound through `Answer`'s exact path, plus a new `dialog_provenance: Option<DialogProvenance>` field on the shared `EventAnnotations` carrier (the HO-8/9/10/11/13/16/17 closed-taxonomy-via-optional-field precedent, not a new event type). No new `DialogProvider` trait method: `ask`/`confirm` already receive the raw `modifiers` slice, so a host's own recall/governance/fit-check logic (L1 §4.6's pseudocode) lives entirely inside its existing method body. **DG-10 found to need no separate mechanism at all** — its recurrence/promotion pseudocode is 100% host-side, operating on the host's own durable store plus the DG-9 provenance tag nodus already emits, the same "rides an existing signal, no enumerated list" shape this session's NL-9 dispatch and LP-17 `SETTLEMENT_UNACCOUNTED` also use. §3 gains both compliance rows; §5 gains three rejected alternatives (a second trait method, a dedicated event type, a nodus-side recurrence counter) each traced to an existing precedent. Design only — nothing landed in `crates/nodus` this pass. |
 | 1.0.0 | 2026-06-27 | Core Team | Initial spec — Rust realization of the dialog contract: `ASK`/`CONFIRM` vocabulary, `Status::Paused` + `ResumeDescriptor`, `DialogProvider` + `DefaultDialogProvider` (synchronous default-or-pause), `ExtensionRole::Dialog` manifest binding, executor dispatch, `run_with_dialog` combinators; DG-1…DG-8 compliance table. |

@@ -4,7 +4,7 @@
 //! of [`Diagnostic`]s. Rules are grouped by severity:
 //!
 //! - **Error** (E001–E017): block execution when found.
-//! - **Warning** (W001–W014): workflow runs but has unsafe or incomplete patterns.
+//! - **Warning** (W001–W017): workflow runs but has unsafe or incomplete patterns.
 //! - **Info** (I001–I006): style suggestions.
 //!
 //! AST nodes carry no source positions in this iteration; diagnostics therefore
@@ -15,6 +15,7 @@ use crate::ast::{
     Conditional, ConfigDecl, FieldConstraint, ForLoop, ParallelBlock, Stmt, UntilLoop, WorkflowFile,
 };
 use crate::executor::Value;
+use crate::portability::{DIALOG_COMMANDS, MODEL_COMMANDS};
 use crate::vocab;
 
 // ─── Diagnostic types ─────────────────────────────────────────────────────────
@@ -103,6 +104,8 @@ impl Validator {
         d.extend(Self::w015_test_pair_separator(ast, filename));
         d.extend(Self::w011_known_vocabulary(ast, filename));
         d.extend(Self::w014_switch_has_arms(ast, filename));
+        d.extend(Self::w016_dialog_placement(ast, filename));
+        d.extend(Self::w017_dialog_payload_inlining(ast, filename));
 
         // Info
         d.extend(Self::i001_step_comments(ast, filename));
@@ -419,6 +422,60 @@ impl Validator {
             }
             for sub in &step.sub_steps {
                 find_empty_switches_stmt(sub, &mut diags, filename);
+            }
+        }
+        diags
+    }
+
+    /// DG-11 (`l2-nodus-dialog.md` §4.8.2) — advise moving a dialog past a
+    /// step that does not need to precede it, so the human is asked once,
+    /// late, with the material assembled.
+    ///
+    /// Each `?IF`/`~FOR`/`~UNTIL` body and each `~PARALLEL` branch is its own
+    /// **scope**: a candidate step is never proposed from outside the block a
+    /// dialog lives in, because moving a dialog across a block boundary
+    /// changes *whether* it runs, not only when (§4.8.4). `~PARALLEL`
+    /// branches run concurrently, so they are still walked for nested scopes
+    /// but never paired against each other as before/after candidates — there
+    /// is no "before" between siblings that do not run in sequence.
+    fn w016_dialog_placement(wf: &WorkflowFile, filename: &str) -> Vec<Diagnostic> {
+        let mut diags = Vec::new();
+        let root_scope: Vec<&Stmt> = wf
+            .steps
+            .iter()
+            .flat_map(|step| step.body.iter().chain(step.sub_steps.iter()))
+            .collect();
+        w016_scan_scope(&root_scope, &mut diags, filename);
+        for node in &root_scope {
+            w016_recurse_stmt(node, &mut diags, filename);
+        }
+        diags
+    }
+
+    /// DG-11 (`l2-nodus-dialog.md` §4.8.3) — advise against a dialog prompt
+    /// that carries a produced artifact rather than a reference to it. Fires
+    /// on a bare `$var` argument to `ASK`/`CONFIRM` whose producing command is
+    /// model-backed (`GEN`/`ANALYZE`) — the whole-argument reference model
+    /// nodus actually has; the crate has no string-interpolation scanner.
+    fn w017_dialog_payload_inlining(wf: &WorkflowFile, filename: &str) -> Vec<Diagnostic> {
+        let mut producers: std::collections::HashMap<String, String> =
+            std::collections::HashMap::new();
+        for step in &wf.steps {
+            if let Some(body) = &step.body {
+                w017_collect_producers(body, &mut producers);
+            }
+            for sub in &step.sub_steps {
+                w017_collect_producers(sub, &mut producers);
+            }
+        }
+
+        let mut diags = Vec::new();
+        for step in &wf.steps {
+            if let Some(body) = &step.body {
+                w017_scan_stmt(body, &producers, &mut diags, filename);
+            }
+            for sub in &step.sub_steps {
+                w017_scan_stmt(sub, &producers, &mut diags, filename);
             }
         }
         diags
@@ -1148,6 +1205,252 @@ fn find_empty_switches_stmt(node: &Stmt, diags: &mut Vec<Diagnostic>, filename: 
             }
         }
         Stmt::Map(_) | Stmt::Command(_) | Stmt::VarRef(_) | Stmt::Comment(_) => {}
+    }
+}
+
+/// W016 (§4.8.2): scan one flat sequence for a dialog `D` followed, within
+/// this same sequence, by the *last* qualifying step `S` it could be moved
+/// past. `S` must be an ordinary command (not itself a dialog) declaring
+/// `+reversible=true` and not declaring `+external=true` (clause b); nothing
+/// between `D` and `S` — `S` included — may read `D`'s pipeline target
+/// (clause c). A dialog with no pipeline target has an empty dependency set,
+/// so clause (c) never stops the scan for it (§4.8.2's boundary case).
+fn w016_scan_scope(nodes: &[&Stmt], diags: &mut Vec<Diagnostic>, filename: &str) {
+    for (i, node) in nodes.iter().enumerate() {
+        let Stmt::Command(dialog) = node else {
+            continue;
+        };
+        if !DIALOG_COMMANDS.contains(&dialog.name.as_str()) {
+            continue;
+        }
+        let target_root = dialog
+            .pipeline_target
+            .as_ref()
+            .map(|t| t.split('.').next().unwrap_or(t).to_string());
+
+        let mut best: Option<&CommandCall> = None;
+        for later in &nodes[i + 1..] {
+            if let Some(root) = &target_root {
+                let mut declared = std::collections::HashSet::new();
+                let mut used = std::collections::HashSet::new();
+                collect_vars_stmt(later, &mut declared, &mut used);
+                if used.contains(root) {
+                    // Clause (c): the movable window closes here — this node
+                    // depends on the answer, so nothing at or after it can be S.
+                    break;
+                }
+            }
+            if let Stmt::Command(candidate) = later {
+                let is_dialog = DIALOG_COMMANDS.contains(&candidate.name.as_str());
+                let reversible = candidate
+                    .modifiers
+                    .iter()
+                    .any(|(k, v)| k == "+reversible" && v == "true");
+                let external = candidate
+                    .modifiers
+                    .iter()
+                    .any(|(k, v)| k == "+external" && v == "true");
+                if !is_dialog && reversible && !external {
+                    best = Some(candidate);
+                }
+            }
+        }
+
+        if let Some(s) = best {
+            diags.push(Diagnostic::new(
+                Severity::Warning,
+                "W016",
+                format!(
+                    "{} could be asked later — {} declares '+reversible=true' and runs before it, \
+                     with nothing in between reading its answer.",
+                    dialog.name, s.name
+                ),
+                filename,
+            ));
+        }
+    }
+}
+
+/// Recurse into every nested sequential scope to run [`w016_scan_scope`]
+/// independently within it (§4.8.4: a dialog is scoped to its own block).
+/// `?SWITCH` arms and `~MAP`'s command are a single [`CommandCall`], not a
+/// sequence, so they hold no scope of their own; `~PARALLEL` branches run
+/// concurrently and are walked for further nesting but never scanned as a
+/// before/after sequence against each other.
+fn w016_recurse_stmt(node: &Stmt, diags: &mut Vec<Diagnostic>, filename: &str) {
+    match node {
+        Stmt::Conditional(cond) => w016_recurse_conditional(cond, diags, filename),
+        Stmt::ForLoop(fl) => {
+            let scope: Vec<&Stmt> = fl.body.iter().collect();
+            w016_scan_scope(&scope, diags, filename);
+            for child in &scope {
+                w016_recurse_stmt(child, diags, filename);
+            }
+        }
+        Stmt::UntilLoop(ul) => {
+            let scope: Vec<&Stmt> = ul.body.iter().collect();
+            w016_scan_scope(&scope, diags, filename);
+            for child in &scope {
+                w016_recurse_stmt(child, diags, filename);
+            }
+        }
+        Stmt::Parallel(pb) => {
+            for branch in &pb.branches {
+                w016_recurse_stmt(branch, diags, filename);
+            }
+        }
+        Stmt::Switch(_) | Stmt::Map(_) | Stmt::Command(_) | Stmt::VarRef(_) | Stmt::Comment(_) => {}
+    }
+}
+
+fn w016_recurse_conditional(cond: &Conditional, diags: &mut Vec<Diagnostic>, filename: &str) {
+    let scope: Vec<&Stmt> = cond.body.iter().collect();
+    w016_scan_scope(&scope, diags, filename);
+    for child in &scope {
+        w016_recurse_stmt(child, diags, filename);
+    }
+    for br in &cond.elif_branches {
+        w016_recurse_conditional(br, diags, filename);
+    }
+    if let Some(else_br) = &cond.else_branch {
+        w016_recurse_conditional(else_br, diags, filename);
+    }
+}
+
+/// W017 (§4.8.3) pass 1: record, for every pipeline target declared anywhere
+/// in the file, the name of the command that produced it. Ordering does not
+/// matter here — a variable used before any declaration is already a
+/// separate `E014` error — so this is a plain unordered recursive walk,
+/// mirroring `collect_vars_stmt`'s traversal shape but recording producer
+/// identity instead of a declared/used set.
+fn w017_collect_producers(node: &Stmt, producers: &mut std::collections::HashMap<String, String>) {
+    let mut record = |target: &Option<String>, name: &str| {
+        if let Some(target) = target {
+            let root = target.split('.').next().unwrap_or(target).to_string();
+            producers.entry(root).or_insert_with(|| name.to_string());
+        }
+    };
+    match node {
+        Stmt::Command(cmd) => record(&cmd.pipeline_target, &cmd.name),
+        Stmt::Conditional(cond) => w017_collect_producers_conditional(cond, producers),
+        Stmt::ForLoop(fl) => {
+            for child in &fl.body {
+                w017_collect_producers(child, producers);
+            }
+        }
+        Stmt::UntilLoop(ul) => {
+            for child in &ul.body {
+                w017_collect_producers(child, producers);
+            }
+        }
+        Stmt::Parallel(pb) => {
+            for child in &pb.branches {
+                w017_collect_producers(child, producers);
+            }
+        }
+        Stmt::Switch(sw) => {
+            for (_, action) in &sw.arms {
+                record(&action.pipeline_target, &action.name);
+            }
+            if let Some(default) = &sw.default {
+                record(&default.pipeline_target, &default.name);
+            }
+        }
+        Stmt::Map(mb) => record(&mb.target, &mb.command.name),
+        Stmt::VarRef(_) | Stmt::Comment(_) => {}
+    }
+}
+
+fn w017_collect_producers_conditional(
+    cond: &Conditional,
+    producers: &mut std::collections::HashMap<String, String>,
+) {
+    if let Some(action) = &cond.action
+        && let Some(target) = &action.pipeline_target
+    {
+        let root = target.split('.').next().unwrap_or(target).to_string();
+        producers.entry(root).or_insert_with(|| action.name.clone());
+    }
+    for child in &cond.body {
+        w017_collect_producers(child, producers);
+    }
+    for br in &cond.elif_branches {
+        w017_collect_producers_conditional(br, producers);
+    }
+    if let Some(else_br) = &cond.else_branch {
+        w017_collect_producers_conditional(else_br, producers);
+    }
+}
+
+/// W017 pass 2: fire on an `ASK`/`CONFIRM` whose argument is a bare `$var`
+/// (the whole-argument reference nodus's `Value` model actually supports —
+/// there is no string-interpolation scanner) produced by a model-backed
+/// command (`GEN`/`ANALYZE`).
+fn w017_scan_stmt(
+    node: &Stmt,
+    producers: &std::collections::HashMap<String, String>,
+    diags: &mut Vec<Diagnostic>,
+    filename: &str,
+) {
+    match node {
+        Stmt::Command(cmd) => {
+            if DIALOG_COMMANDS.contains(&cmd.name.as_str()) {
+                for arg in &cmd.args {
+                    if !arg.starts_with('$') {
+                        continue;
+                    }
+                    let root = arg.split('.').next().unwrap_or(arg);
+                    if let Some(producer) = producers.get(root)
+                        && MODEL_COMMANDS.contains(&producer.as_str())
+                    {
+                        diags.push(Diagnostic::new(
+                            Severity::Warning,
+                            "W017",
+                            format!(
+                                "{}({arg}) inlines an artifact produced by an earlier {producer} \
+                                 step — pass a reference and let the artifact stay authoritative.",
+                                cmd.name
+                            ),
+                            filename,
+                        ));
+                    }
+                }
+            }
+        }
+        Stmt::Conditional(cond) => w017_scan_conditional(cond, producers, diags, filename),
+        Stmt::ForLoop(fl) => {
+            for child in &fl.body {
+                w017_scan_stmt(child, producers, diags, filename);
+            }
+        }
+        Stmt::UntilLoop(ul) => {
+            for child in &ul.body {
+                w017_scan_stmt(child, producers, diags, filename);
+            }
+        }
+        Stmt::Parallel(pb) => {
+            for child in &pb.branches {
+                w017_scan_stmt(child, producers, diags, filename);
+            }
+        }
+        Stmt::Switch(_) | Stmt::Map(_) | Stmt::VarRef(_) | Stmt::Comment(_) => {}
+    }
+}
+
+fn w017_scan_conditional(
+    cond: &Conditional,
+    producers: &std::collections::HashMap<String, String>,
+    diags: &mut Vec<Diagnostic>,
+    filename: &str,
+) {
+    for child in &cond.body {
+        w017_scan_stmt(child, producers, diags, filename);
+    }
+    for br in &cond.elif_branches {
+        w017_scan_conditional(br, producers, diags, filename);
+    }
+    if let Some(else_br) = &cond.else_branch {
+        w017_scan_conditional(else_br, producers, diags, filename);
     }
 }
 
@@ -2840,6 +3143,241 @@ mod tests {
         assert!(
             !diags.iter().any(|d| d.code == "E019"),
             "a top-level $restart request must not be rejected; got: {diags:?}"
+        );
+    }
+
+    // ─── W016 / W017 (DG-11, l2-nodus-dialog.md §4.8) ─────────────────────────
+
+    use crate::ast::RuntimeBlock;
+
+    /// A plain command step: `NAME(args) [+modifiers] [→ target]`.
+    fn cmd_step(
+        number: u32,
+        name: &str,
+        args: &[&str],
+        modifiers: &[(&str, &str)],
+        target: Option<&str>,
+    ) -> Step {
+        Step {
+            number,
+            body: Some(Stmt::Command(CommandCall {
+                name: name.to_string(),
+                args: args.iter().map(|s| s.to_string()).collect(),
+                modifiers: modifiers
+                    .iter()
+                    .map(|(k, v)| (k.to_string(), v.to_string()))
+                    .collect(),
+                pipeline_target: target.map(str::to_string),
+                ..Default::default()
+            })),
+            ..Default::default()
+        }
+    }
+
+    fn wf_with_steps(steps: Vec<Step>) -> WorkflowFile {
+        WorkflowFile {
+            runtime: Some(RuntimeBlock {
+                core: "schema.nodus".to_string(),
+                ..Default::default()
+            }),
+            steps,
+            ..Default::default()
+        }
+    }
+
+    #[test]
+    fn w016_fires_when_dialog_precedes_declared_reversible_step() {
+        let wf = wf_with_steps(vec![
+            cmd_step(1, "ASK", &["ok?"], &[], Some("$a")),
+            cmd_step(2, "LOG", &["x"], &[("+reversible", "true")], None),
+        ]);
+        let diags = Validator::validate(&wf, "");
+        assert!(
+            diags.iter().any(|d| d.code == "W016"),
+            "expected W016; got: {diags:?}"
+        );
+    }
+
+    #[test]
+    fn w016_absent_when_following_step_declares_external_true() {
+        let wf = wf_with_steps(vec![
+            cmd_step(1, "ASK", &["ok?"], &[], Some("$a")),
+            cmd_step(
+                2,
+                "NOTIFY",
+                &["x"],
+                &[("+reversible", "true"), ("+external", "true")],
+                None,
+            ),
+        ]);
+        let diags = Validator::validate(&wf, "");
+        assert!(
+            !diags.iter().any(|d| d.code == "W016"),
+            "an outward effect must bound placement even when reversible; got: {diags:?}"
+        );
+    }
+
+    #[test]
+    fn w016_absent_when_intervening_step_reads_dialog_target() {
+        let wf = wf_with_steps(vec![
+            cmd_step(1, "ASK", &["ok?"], &[], Some("$a")),
+            cmd_step(2, "LOG", &["$a"], &[], None),
+            cmd_step(3, "NOTIFY", &["x"], &[("+reversible", "true")], None),
+        ]);
+        let diags = Validator::validate(&wf, "");
+        assert!(
+            !diags.iter().any(|d| d.code == "W016"),
+            "a step reading the answer closes the movable window (clause c); got: {diags:?}"
+        );
+    }
+
+    #[test]
+    fn w016_absent_when_following_step_declares_nothing() {
+        // Soundness over recall (§4.8.2): an undeclared step is never treated
+        // as reversible, even though it might be. LP-16 descriptors are
+        // omitted, not defaulted — firing here would risk advising a dialog
+        // past a step that turns out to be irreversible.
+        let wf = wf_with_steps(vec![
+            cmd_step(1, "ASK", &["ok?"], &[], Some("$a")),
+            cmd_step(2, "LOG", &["x"], &[], None),
+        ]);
+        let diags = Validator::validate(&wf, "");
+        assert!(
+            !diags.iter().any(|d| d.code == "W016"),
+            "an undeclared following step must never be treated as reversible; got: {diags:?}"
+        );
+    }
+
+    #[test]
+    fn w016_fires_for_dialog_with_no_pipeline_target() {
+        // §4.8.2's boundary case: a bare gate with no binding has an empty
+        // dependency set, so clause (c) never stops the scan.
+        let wf = wf_with_steps(vec![
+            cmd_step(1, "CONFIRM", &["proceed?"], &[], None),
+            cmd_step(2, "LOG", &["x"], &[("+reversible", "true")], None),
+        ]);
+        let diags = Validator::validate(&wf, "");
+        assert!(
+            diags.iter().any(|d| d.code == "W016"),
+            "a target-less dialog still bounds placement by (b) alone; got: {diags:?}"
+        );
+    }
+
+    #[test]
+    fn w016_scoped_to_same_block_fires_when_reversible_step_inside_same_if_body() {
+        let dialog = Stmt::Command(CommandCall {
+            name: "ASK".to_string(),
+            args: vec!["ok?".to_string()],
+            pipeline_target: Some("$a".to_string()),
+            ..Default::default()
+        });
+        let reversible = Stmt::Command(CommandCall {
+            name: "LOG".to_string(),
+            args: vec!["x".to_string()],
+            modifiers: vec![("+reversible".to_string(), "true".to_string())],
+            ..Default::default()
+        });
+        let wf = wf_with_steps(vec![Step {
+            number: 1,
+            body: Some(Stmt::Conditional(Conditional {
+                condition: "$x".to_string(),
+                body: vec![dialog, reversible],
+                ..Default::default()
+            })),
+            ..Default::default()
+        }]);
+        let diags = Validator::validate(&wf, "");
+        assert!(
+            diags.iter().any(|d| d.code == "W016"),
+            "a reversible sibling inside the same block must still be advised; got: {diags:?}"
+        );
+    }
+
+    #[test]
+    fn w016_scoped_to_same_block_absent_when_reversible_step_is_after_the_block() {
+        // §4.8.4: moving a dialog out of a conditional changes *whether* it
+        // is asked, not only when — a candidate outside the dialog's own
+        // block must never be proposed.
+        let dialog = Stmt::Command(CommandCall {
+            name: "ASK".to_string(),
+            args: vec!["ok?".to_string()],
+            pipeline_target: Some("$a".to_string()),
+            ..Default::default()
+        });
+        let wf = wf_with_steps(vec![
+            Step {
+                number: 1,
+                body: Some(Stmt::Conditional(Conditional {
+                    condition: "$x".to_string(),
+                    body: vec![dialog],
+                    ..Default::default()
+                })),
+                ..Default::default()
+            },
+            cmd_step(2, "LOG", &["x"], &[("+reversible", "true")], None),
+        ]);
+        let diags = Validator::validate(&wf, "");
+        assert!(
+            !diags.iter().any(|d| d.code == "W016"),
+            "a step outside the dialog's own block must never be proposed; got: {diags:?}"
+        );
+    }
+
+    #[test]
+    fn w017_fires_when_prompt_carries_a_gen_produced_artifact() {
+        let wf = wf_with_steps(vec![
+            cmd_step(1, "GEN", &["draft"], &[], Some("$d")),
+            cmd_step(2, "ASK", &["approve?", "$d"], &[], Some("$ok")),
+        ]);
+        let diags = Validator::validate(&wf, "");
+        assert!(
+            diags.iter().any(|d| d.code == "W017"),
+            "expected W017 for a GEN-produced artifact inlined into ASK; got: {diags:?}"
+        );
+    }
+
+    #[test]
+    fn w017_fires_when_prompt_carries_an_analyze_produced_artifact() {
+        let wf = wf_with_steps(vec![
+            cmd_step(1, "ANALYZE", &["input"], &[], Some("$summary")),
+            cmd_step(2, "CONFIRM", &["ok?", "$summary"], &[], Some("$ok")),
+        ]);
+        let diags = Validator::validate(&wf, "");
+        assert!(
+            diags.iter().any(|d| d.code == "W017"),
+            "expected W017 for an ANALYZE-produced artifact inlined into CONFIRM; got: {diags:?}"
+        );
+    }
+
+    #[test]
+    fn w017_absent_when_variable_has_no_producer() {
+        // Not produced by any command in this file (e.g. an `@in` field, or
+        // an undeclared reference already caught by E014) — `producers`
+        // holds no entry for it, so W017 cannot fire regardless of source.
+        let wf = wf_with_steps(vec![cmd_step(
+            1,
+            "ASK",
+            &["ok?", "$in.topic"],
+            &[],
+            Some("$ok"),
+        )]);
+        let diags = Validator::validate(&wf, "");
+        assert!(
+            !diags.iter().any(|d| d.code == "W017"),
+            "a variable with no producer in this file must never fire; got: {diags:?}"
+        );
+    }
+
+    #[test]
+    fn w017_absent_when_prompt_argument_is_a_string_literal() {
+        let wf = wf_with_steps(vec![
+            cmd_step(1, "GEN", &["draft"], &[], Some("$d")),
+            cmd_step(2, "ASK", &["approve this draft?"], &[], Some("$ok")),
+        ]);
+        let diags = Validator::validate(&wf, "");
+        assert!(
+            !diags.iter().any(|d| d.code == "W017"),
+            "a string-literal prompt carries no variable reference to flag; got: {diags:?}"
         );
     }
 }

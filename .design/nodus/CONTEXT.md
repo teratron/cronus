@@ -1,6 +1,6 @@
 # Project Context
 
-**Generated:** 2026-08-12
+**Generated:** 2026-09-01
 
 ## Active Technologies
 
@@ -31,11 +31,10 @@
 │   ├── TODO.md
 │   ├── UX-UI - разбор 3 кейсов.md
 │   ├── UX-дизайн - 6 психологических принципов.md
-│   ├── desktop.drawio.svg
 │   ├── heartbeat.md
 │   ├── project-names.md
 │   ├── references.md
-│   ├── release.drawio.svg
+│   ├── reverse-derivation-mechanism.md
 │   ├── technology-stack-research.md
 │   └── ui-ux.md
 ├── .env.example
@@ -48,6 +47,7 @@
 ├── .qwen/
 ├── .release/
 │   ├── program/
+│   ├── project/
 │   └── state/
 ├── AGENTS.md
 ├── CHANGELOG.md
@@ -86,14 +86,6 @@
 
 ## Recent Changes
 
-- T-27T01: Added `SETTLE_WF` fixture, `CapturingSettlementRail`, and 6 integration tests in `tests/portability.rs` (settle-and-bind, gate-denial short-circuit before the rail, rail-returns-`None` unaccounted, both denial paths reaching NL-9 dispatch, positional `context.args` verbatim, byte-for-byte regression for `SETTLE`-free workflows) plus a manifest-derivation unit test in `portability.rs`. **Found and fixed one wrong assumption empirically**: the first fixture draft used a non-reserved `@out: $receipt` pipeline target and asserted `Some(Value::Null)` on denial/unaccounted; only reserved variables (`out`/`error`/`meta`) are pre-seeded, so a custom name starts absent from `vars` — fixed by using the reserved `$out` binding. Reconciled `l2-nodus-settlement.md` 1.0.0 → 1.0.1 and `l2-nodus-portability.md` 1.7.0 → 1.7.1 (§3.1 LP-17 row → Implemented, three of twelve LP-9…LP-20 items now done); `INDEX.md` rows + top-level version synced. `cargo test -p nodus` — 462 passed (was 452; +10), 0 failed; clippy `-D warnings` clean; fmt clean after one auto-fix (import line wrap); no `.unwrap()`/`panic!()`/`unreachable!()`/`.expect(` outside `#[cfg(test)]`; `git diff --stat` on `Cargo.toml`/`Cargo.lock` empty (LP-1 preserved)
-
-## Phase 28 — Memoizable & Promotable Approval (l1-nodus-dialog §3/DG-9,DG-10 · l2-nodus-dialog §4.7) (2026-08-01)
-
-- T-28A01: `DialogOutcome` gained `Remembered(Value)` in `executor.rs`; `observability.rs` gained `pub enum DialogProvenance { Answered, Remembered }` beside `EventAnnotations`, plus a fifth field `dialog_provenance: Option<DialogProvenance>` — the struct's doc comment updated to note this is the first field the crate's own dispatch logic populates directly, not a host-supplied one; re-exported from `lib.rs`
-- T-28C01: `handle_dialog`'s `match outcome { .. }` now returns `(signal, dialog_provenance)` — `Remembered(value)` gained its own arm identical to `Answer`'s (`ctx.log_step`/`ctx.set_var`), both now also return their respective provenance, `Pause`/`Timeout`/`Rejected` return `None`; the single `StepEnd` emit's `annotations` changed from `EventAnnotations::default()` to `EventAnnotations { dialog_provenance, ..Default::default() }` — one emit call, unchanged
-- T-28T01: Added `DialogRemembers`, `RecordingAudit`, `step_end_provenance` helper, and 4 integration tests in `tests/portability.rs` plus a unit test in `observability.rs`. **Found and fixed one wrong assumption empirically**: asserting no-provenance-on-rejection against `DEFERRED_WF` (declares `@err: ESCALATE(human)`) initially expected one `StepEnd`; `DIALOG_REJECTED` is `Signal`-free so NL-9 dispatch fires automatically, landing two `StepEnd` events (the rejected `ASK`, then the dispatched `ESCALATE`), both correctly provenance-free — the test was corrected. Reconciled `l2-nodus-dialog.md` 1.1.0 → 1.1.1 (§3 DG-9/DG-10 rows → Implemented; §4.7 gains a confirmation note that `dialog_provenance` is the first crate-populated `EventAnnotations` field). `INDEX.md` row + top-level version synced. `cargo test -p nodus` — 467 passed (was 462; +5), 0 failed; clippy `-D warnings` clean; fmt clean; no `.unwrap()`/`panic!()`/`unreachable!()`/`.expect(` outside `#[cfg(test)]`; `git diff --stat` on `Cargo.toml`/`Cargo.lock` empty (LP-1 preserved)
-
 ## Phase 29 — Declared Budget Measure (l1-nodus-environment §3/NE-14 · l2-nodus-environment §4.4.1) (2026-08-01)
 
 - T-29A01: `EnvironmentProfile` and `CandidateResult` (`environment.rs`) each gained `token_measure: Option<String>`; `EnvironmentProfile::empty()` and `EnvRunResult::candidate()` updated (`candidate()` gained a fourth parameter, an LP-6 pre-1.0 signature change); fixed 5 call sites across `environment.rs`'s own tests and `tests/environment.rs`
@@ -102,3 +94,10 @@
 
 **All three phases planned in the `/magic.task nodus` cycle (27, 28, 29) are now Done.**
 
+## Phase 30 — DG-11 Authoring Advisories (l1-nodus-dialog §3/DG-11 · l2-nodus-dialog §4.8) (2026-09-01)
+
+- T-30A01: `MODEL_COMMANDS`/`DIALOG_COMMANDS` widened `const` → `pub(crate) const` in `portability.rs`; `validator.rs` gained `use crate::portability::{DIALOG_COMMANDS, MODEL_COMMANDS};` and `w016_dialog_placement`, which flattens `wf.steps` into one root scope and calls `w016_scan_scope`. **Grounding correction**: `CommandCall.modifiers` keys carry the surface `+` (matched `"+reversible"`/`"+external"` verbatim, per the LP-11/LP-16 call site at `executor.rs:1608-1613`), not the bare name a derived-`context`-map test had suggested.
+- T-30A02: `w016_scan_scope` (pairing within one flat sequence: a dialog `D`'s last qualifying `S`, stopping at the first node reading `D`'s target) + `w016_recurse_stmt`/`w016_recurse_conditional` (independent recursion into `Conditional`/`ForLoop`/`UntilLoop` bodies; `Parallel` branches walked for nesting but never paired, since they run concurrently). **Correction**: `?SWITCH` arms/`~MAP`'s command are a single `CommandCall`, not a sequence — no recursion target, unlike the plan's assumption.
+- T-30B01: `w017_dialog_payload_inlining` + four free functions (`w017_collect_producers`/`_conditional`, `w017_scan_stmt`/`_conditional`) — a **dedicated** `target-root → producing command name` map (not a reuse of `collect_vars_stmt`, which tracks declared/used sets only), firing on a bare `$var` `ASK`/`CONFIRM` argument whose producer is in `MODEL_COMMANDS`.
+- T-30C01: `l2-nodus-dialog.md` 1.2.0 → 1.2.1 — §4.8.3 corrected to the whole-arg reference model (nodus has no interpolation scanner) and the dedicated-walker mechanism; §4.8.4's scope-list bullet corrected to name exactly `?IF`/`?ELIF`/`?ELSE`/`~FOR`/`~UNTIL` plus the `~PARALLEL`/`?SWITCH`/`~MAP` exclusions found at T-30A02. `INDEX.md` row + top-level version synced (1.0.92 → 1.0.93).
+- T-30T01/T-30T02: Added 11 unit tests in `validator.rs` (7 `W016` + 4 `W017`, built via direct `WorkflowFile`/`Step`/`Stmt` struct literals for precise nested-block control) plus two small helpers (`cmd_step`, `wf_with_steps`). Ran the full `tests/fixtures/` corpus (14 files) through a scratch example, deleted after use: zero fixtures newly emit either code — checked by hand why (an `@in`-sourced argument with no producer; a branch-action `ASK` that is never a candidate by construction). `cargo test -p nodus` — 482 passed (was 471; +11), 0 failed; clippy `-D warnings` clean; fmt clean; no `.unwrap()`/`panic!()`/`unreachable!()`/`.expect(` outside `#[cfg(test)]`; `git diff --stat` on `Cargo.toml`/`Cargo.lock` empty (LP-1 preserved)

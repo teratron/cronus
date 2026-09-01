@@ -206,11 +206,19 @@ impl ConfigProvider for DefaultConfigProvider {
 /// Model-backed commands — those the executor dispatches to its
 /// [`crate::executor::ModelProvider`]. A workflow invoking any of them requires
 /// the [`ExtensionRole::Model`] role from its host.
-const MODEL_COMMANDS: &[&str] = &["GEN", "ANALYZE"];
+///
+/// `pub(crate)`: read directly by `validator.rs`'s DG-11 authoring advisories
+/// (`l2-nodus-dialog.md` §4.8) — a produced-artifact reference (`W017`) needs
+/// the same model-command classification this module already owns.
+pub(crate) const MODEL_COMMANDS: &[&str] = &["GEN", "ANALYZE"];
 
 /// Dialog commands — those the executor dispatches to its [`crate::executor::DialogProvider`].
 /// A workflow invoking one without a `+default` requires the [`ExtensionRole::Dialog`] role.
-const DIALOG_COMMANDS: &[&str] = &["ASK", "CONFIRM"];
+///
+/// `pub(crate)`: read directly by `validator.rs`'s DG-11 authoring advisories
+/// (`l2-nodus-dialog.md` §4.8) — placement (`W016`) and payload (`W017`) both
+/// need the same dialog-command classification this module already owns.
+pub(crate) const DIALOG_COMMANDS: &[&str] = &["ASK", "CONFIRM"];
 
 /// Settlement commands — those the executor dispatches to its
 /// [`crate::executor::SettlementRail`]. A workflow invoking one always
