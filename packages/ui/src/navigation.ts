@@ -118,11 +118,6 @@ export function isUnloadable(floor: Floor, activeFloorId: string): boolean {
 /** The two settings tiers (NV-4). */
 export type SettingsTier = "global" | "local";
 
-export const SETTINGS_TIERS: readonly SettingsTier[] = Object.freeze([
-  "global",
-  "local",
-]);
-
 /** Resolve which tier owns a setting key (NV-4). Global affects the whole app;
  * local travels with the active office. */
 export function settingsTier(key: string): SettingsTier {

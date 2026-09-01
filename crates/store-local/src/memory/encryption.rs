@@ -4,7 +4,7 @@ use aes_gcm::{
     Aes256Gcm, Key, Nonce,
     aead::{Aead, Generate, KeyInit},
 };
-use argon2::{Argon2, PasswordHasher, password_hash::SaltString};
+use argon2::{Argon2, PasswordHasher};
 
 // ── EncryptError ──────────────────────────────────────────────────────────────
 
@@ -64,11 +64,9 @@ impl Drop for MemoryKey {
 ///
 /// The salt must be stored alongside the database (never inside encrypted rows).
 pub fn derive_key(passphrase: &str, salt: &[u8; 16]) -> EncryptResult<MemoryKey> {
-    let salt_str = SaltString::encode_b64(salt).map_err(|e| EncryptError::Kdf(e.to_string()))?;
-
     let argon2 = Argon2::default();
     let hash = argon2
-        .hash_password(passphrase.as_bytes(), &salt_str)
+        .hash_password_with_salt(passphrase.as_bytes(), salt)
         .map_err(|e| EncryptError::Kdf(e.to_string()))?;
 
     // Extract the raw hash bytes (first KEY_LEN bytes of the output hash)

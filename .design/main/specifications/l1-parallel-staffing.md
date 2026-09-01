@@ -1,6 +1,6 @@
 # Parallel Staffing
 
-**Version:** 1.0.2
+**Version:** 1.1.0
 **Status:** Stable
 **Layer:** concept
 
@@ -60,6 +60,8 @@ Rules every Layer 2 implementation MUST NOT violate. They are technology-neutral
 - **PS-8 (Failure containment and honest salvage):** a failed or stalled instance is contained at its delegation boundary (ORC-11): its partition re-enters the pool through the explicit stranded-work path (reap, then reassign — consistent with WL-5, never a silent second execution), other partitions continue undisturbed, and partial output from the failed instance is salvaged only through the merge discipline — never silently absorbed.
 
 - **PS-9 (Observable, attributed width):** the scaling decision, each live instance, its partition, and its per-instance cost are observable in the office's live projection and event record (ORC-12) and attributed in the work's history — the client can always see that N workers exist, why, and what each contributed.
+
+- **PS-10 (The execution tier is assigned per instance by partition class, never inherited from the coordinator):** [ADDED v1.1.0] each ephemeral instance's **execution tier** — model class, reasoning depth, effort setting — is chosen from **what its own partition actually demands**, and is stated in the scaling decision alongside the width. Inheriting the coordinator's tier is the default that fan-out makes expensive: the coordinator's tier is chosen for the hardest thing *it* does, inheritance multiplies that per-unit rate by the width, and the widest fans are characteristically the **shallowest** work — gathering, scanning, summarizing, extracting — where the coordinator's tier buys nothing. The rule is symmetric and neither direction is a saving: a partition that genuinely needs the higher tier gets it, and dropping the whole fan to the cheapest tier to make the bill look better is a quality decision disguised as an economy. What is forbidden is the tier being decided by **where the instance was spawned from** rather than by what it was spawned to do. (The related but distinct move — running rival attempts at a reduced fidelity to *select* cheaply and then produce once at full fidelity — is CE-10 and belongs to the contest, not to this fan-out.)
 
 > L2 specs cannot reach RFC status until all invariants here are addressed in their "Invariant Compliance" section.
 
@@ -140,6 +142,7 @@ None substitutes for another: parallel staffing *consumes* the task graph's part
 
 | Version | Date | Change |
 | --- | --- | --- |
+| 1.1.0 | 2026-09-01 | Amended — PS-10: an ephemeral instance's **execution tier** (model class, reasoning depth, effort) is assigned from what its own partition demands and stated with the width, never inherited from the coordinator. Inheritance is the expensive default fan-out creates: the coordinator's tier is set for the hardest thing it does, fan-out multiplies that per-unit rate by the width, and the widest fans are characteristically the shallowest work. Symmetric — a partition needing the higher tier gets it, and flattening the whole fan to the cheapest tier is a quality decision disguised as an economy; what is forbidden is the tier following **where an instance was spawned from** instead of what it was spawned to do. Demarcated against CE-10 proxy-fidelity selection. Mined from an external cross-model plan-hardening skill collection. |
 | 1.0.2 | 2026-08-25 | Related Specifications extended with `l1-fanout-attestation` — the orthogonal contract governing the **launch act** of a scale-out. PS decides *what* is split and that every partition is integrated; it is silent on whether the partitions were actually launched together, and a coordinator that launches one instance, waits, then launches the next produces an identical record. PS-2's disjointness is the ownership precondition of a launch episode. Link-only; no invariant changed. |
 | 1.0.1 | 2026-08-05 | Related Specifications extended with `l1-order-independent-production` — the production-side property PS-2/PS-6 assume without stating: isolation stops siblings interfering but not depending on when they ran, and a perfectly staffed set of isolated workers still yields an incoherent artifact if each reads the clock. Link-only; no invariant changed. |
 | 1.0.0 | 2026-07-02 | Initial concept: volume-justified same-specialty scale-out — ephemeral same-role instances under one accountable hired lead, parallelism only via disjoint decomposition (WL-1/WL-9), bounded width (budget + coordination guard), isolated siblings with mediated observable coordination, first-class fan-in with merge + gates, learning consolidated to the employee scope, contained failure with honest salvage, fully attributed (PS-1…PS-9). |
