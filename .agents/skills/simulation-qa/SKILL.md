@@ -1,7 +1,7 @@
 ---
 name: simulation-qa
-description: Use when a built product of any kind — website, web app, REST/GraphQL API, CLI, TUI, desktop app, mobile app, game, embedded UI, or library — needs an exhaustive behavioural simulation that exercises every surface, control, input, and role from anonymous visitor up to full-rights administrator, reconciles observed behaviour against the specification and the design reference, load-tests each feature to its breaking point, and turns every bug, gap, security weakness, and piece of technical debt into a written fix specification rather than a silent patch.
-argument-hint: "<target> [note] — target to simulate (URL, local path, command name, or \"the running app\"), plus an optional free-text note: comments and context, links or paths to the specification / design file / tickets / reference material, a focus area, a scope limit, or the authorization statement for load and destructive testing"
+description: Use when a built product of any kind — website, web app, REST/GraphQL API, CLI, TUI, desktop app, mobile app, game, embedded UI, or library — needs an exhaustive behavioural simulation that exercises every surface, control, input, and role from anonymous visitor up to full-rights administrator, reconciles observed behaviour against the specification and the design reference, load-tests each feature to its breaking point, and turns every bug, gap, security weakness, and piece of technical debt into a written fix specification rather than a silent patch, closing with a prioritised remediation plan of every possible edit for the user to approve. Defaults to the current project when no target is given.
+argument-hint: "[target] [note] — target to simulate (URL, local path, command name, or \"the running app\"); defaults to the current project when omitted. Plus an optional free-text note: comments and context, links or paths to the specification / design file / tickets / reference material, a focus area, a scope limit, or the authorization statement for load and destructive testing"
 ---
 
 # Simulation QA
@@ -25,20 +25,22 @@ The word *simulation* is literal here: every action is a deliberate, recorded in
 **Not for:**
 
 - Unit or integration testing of individual functions — that is implementation-level testing, written in code, not a simulation pass.
-- Fixing the defects this pass finds — that is a separate step, done only when the user explicitly requests it after reading the report.
+- Fixing the defects this pass finds — that is a separate step, done only when the user explicitly requests it after reading the report and the §11 remediation plan.
 - Design critique when there is no built product to drive.
 - Any run against production or a shared environment without written authorization (see **Safety**).
 
 ## Invocation
 
 ```
-simulation-qa <target> [note]
+simulation-qa [target] [note]
 ```
 
 | Argument | Handling |
 | --- | --- |
-| `<target>` | The thing to drive: a URL, a local project path, an executable/command name, or "the running app". If omitted, stop and ask — do not guess a target. |
+| `[target]` | The thing to drive: a URL, a local project path, an executable/command name, or "the running app". **Optional — it defaults to the current project**: the repository this skill is installed in, or the project rooted at the session's working directory. Resolve the default silently and name it in the report's Scope section; do not ask for a target that is already obvious from where the skill is running. Ask only when the default cannot be resolved — no project root, several unrelated products in one tree with nothing to choose between them, or a `[note]` that points somewhere else. An explicit target always wins over the default. |
 | `[note]` | Optional free-text operator input — any of: plain comments and context; links or paths to the specification, design file, tickets, or other reference material (these feed §1.3); a focus area ("only the checkout flow"); a scope limit; the authorization statement for load and destructive testing (§0, §8). Echo it verbatim at the top of the report (§10). It steers emphasis and supplies inputs only — it never waives a **Safety** rule or the "specify, don't fix" principle, and never widens scope beyond the authorization it carries. |
+
+**Defaulting to the current project changes what the target is, never what is permitted.** The resolved default is still an authorized non-production instance only if it genuinely is one — a local development checkout normally qualifies, a working copy configured against production data or a shared staging URL does not. Destructive and load steps stay gated on the `[note]` authorization statement exactly as they are for an explicit target (§0, §8).
 
 If the target cannot be reached, built, or started, stop and report the exact command and error rather than simulating against assumed behaviour.
 
@@ -68,6 +70,8 @@ If the target cannot be reached, built, or started, stop and report the exact co
 | 8 | Load Benchmarks | Per-feature load to saturation; many concurrent users; latency percentiles, throughput, error rate, bottleneck |
 | 9 | Fix Specifications | Turn every material finding into a written spec: problem, evidence, impact, proposed fix, alternative, risk |
 | 10 | Report | Coverage matrix, findings by severity, the three-way diff, load results, and what was not covered |
+| 11 | Remediation Plan | Mandatory: fold every finding into one ordered, complete plan of possible edits, grouped into shippable tranches, and put it to the user as the next step |
+| — | Completion Checklist | The agent's own end-of-pass self-check that §0–§11 were actually done, not assumed |
 
 ## 0. Pass Rules
 
@@ -76,6 +80,8 @@ If the target cannot be reached, built, or started, stop and report the exact co
 - Destructive and load steps stay gated until `[note]` carries an authorization statement.
 - Every material finding leaves this pass as a written specification (§9), never as an edit to the product. A **material finding** is anything a user would act on: every functional or security defect, plus any other finding rated severity `low` or above in §7. Cosmetic points below that bar go in a report appendix, not a spec.
 - The report (§10) is mandatory, including an explicit list of what was not covered.
+- The remediation plan (§11) is mandatory too, and it is the pass's closing move: a full simulation always ends by putting an ordered plan of every possible edit to the user. Proposing the plan is not the same as applying it — Safety 4 still holds until they say go.
+- Before declaring the pass finished, the agent works through the **Completion Checklist** at the end of this document and reports honestly on any item it could not tick.
 
 ## 1. Framing: Product Type, Target, Inputs, Tools
 
@@ -231,6 +237,39 @@ One consolidated report:
 7. **Load results** — per-feature baseline, breaking point, bottleneck; or the reason load testing did not run.
 8. **Not covered** — every surface, role, and gated step left unexercised, and why. This section is mandatory and must be honest; silent gaps are worse than declared ones.
 
+## 11. Remediation Plan
+
+**Mandatory, and it is how the pass ends.** §9 produces one specification per finding; §10 reports what the pass saw. Neither answers the question the user actually has next — *so what do we do, in what order?* §11 answers it: one consolidated, ordered plan covering **every possible edit** the pass surfaced, offered to the user as the explicit next step.
+
+**Completeness is the point.** Every finding from §4, §5, §7 and §8 gets an entry — the material ones that became §9 specs, the cosmetic ones that went to the report appendix, the "improvement observed" items that need a spec update rather than a code change, and the open questions that need a product decision instead of a patch. Nothing is silently filtered out because it looked small or awkward. Anything you decide should *not* be done goes in the plan too, in the **Deliberately not proposed** bucket, each with a one-line reason — a reader must never have to wonder whether you missed it or dismissed it.
+
+**One entry per edit:**
+
+| Field | Content |
+| --- | --- |
+| ID | Stable handle used everywhere else in the plan and in conversation afterwards |
+| Title | The change, in one line, in the imperative |
+| Closes | The finding(s) and §9 spec(s) it resolves |
+| Type | fix · security · performance · debt · incompleteness · accessibility · improvement · spec-update · decision-needed |
+| Severity | Inherited from the finding it closes; the highest one when it closes several |
+| Touches | Files, modules, or subsystems the edit lands in — enough to see the blast radius and where two entries collide |
+| Effort | Rough size (trivial · small · medium · large), so the user can triage without reading the diff |
+| Risk | What could break, and whether the change is reversible |
+| Depends on | Other entry IDs that must land first, if any |
+| Verified by | The test, command, or observation that proves it worked — a new failing test first, wherever the project's own conventions ask for one |
+
+**Order and group them.** Rank by severity first, then by dependency order, then by blast radius (isolated edits before ones that touch shared surfaces). Then group into **tranches that can ship independently**, each with a one-line statement of what shipping that tranche buys:
+
+- **Tranche 0 — stop the bleeding.** Blockers, security weaknesses, data-loss paths. Anything a user hits today.
+- **Tranche 1 — conformance.** Spec divergences, missing features, design-fidelity misses, broken states.
+- **Tranche 2 — hardening and cost.** Performance budgets, load-test findings, accessibility, error handling.
+- **Tranche 3 — debt and polish.** Kludges, dead weight, hardcoded values, deprecations, cosmetics.
+- **Deferred / needs a decision.** Entries that cannot proceed without a product call, an external dependency, or an authorization the pass did not have — each naming what specifically unblocks it.
+
+**Route it where the project already plans.** If the project has a planning or issue system, express the plan in that system's own format and vocabulary, exactly as §9 does for specs. If it has none, the plan lives in the report.
+
+**Then put it to the user, and stop.** Close the pass by asking which of the plan they want executed — everything, one tranche, a named set of IDs, or nothing for now. **Proposing is not applying:** Safety 4 holds until they answer, and a plan is never a licence to start editing. If the answer is "do it", that execution is a separate piece of work that follows the project's own quality gates, not a continuation of the simulation.
+
 ## Tooling Map
 
 Match the driver and helper skills/MCP to the product class. Examples, not an exhaustive list:
@@ -260,3 +299,45 @@ Always prefer a skill or MCP that already exists for the specific action over im
 | Stopping at the first failure | Capture the repro, mark downstream items blocked, continue (§6) |
 | A report that only lists what passed | The "Not covered" section is mandatory and must be complete (§10) |
 | Using real credentials or real user data for the admin role | Test accounts and synthetic fixtures only (Safety 2) |
+| Asking which target to test when the skill is running inside the project | `[target]` defaults to the current project; resolve it and name it in the report's Scope section (Invocation) |
+| Treating the default target as pre-authorized for destructive or load steps | Defaulting changes the target, never the permissions — the `[note]` authorization statement is still required (Invocation, §0, §8) |
+| Ending the pass at the report | The remediation plan (§11) is mandatory and is the closing move; a report with no plan leaves the user to triage alone |
+| A plan that lists only the serious findings | Every finding gets an entry, including cosmetic ones and the ones you decided against — those go in "Deliberately not proposed" with a reason (§11) |
+| Starting to apply the plan because it was well received | Proposing is not applying; wait for an explicit "do it" and treat execution as separate work (§11, Safety 4) |
+| Declaring the pass complete from memory | Work the Completion Checklist item by item and report what could not be ticked |
+
+## Completion Checklist
+
+The agent's own end-of-pass self-check — not a deliverable for the user, and not optional. Work it item by item before saying the pass is finished. **An item you cannot tick is reported, never quietly dropped:** say which one, why, and what it would take to close it. A checklist ticked from memory is worth nothing — each item names something you can actually point at.
+
+**Scope and safety**
+
+- [ ] Target resolved and named — the explicit `[target]`, or the current-project default, stated in the report's Scope section.
+- [ ] Target confirmed to be an authorized non-production instance before any write action.
+- [ ] `[note]` echoed verbatim at the top of the report; its focus areas and scope limits actually honoured.
+- [ ] All test data synthetic, all elevated access through test accounts; no real credentials or customer records touched.
+- [ ] Destructive and load steps either carried an authorization statement or are marked `NOT RUN — needs authorization`.
+- [ ] No product code, configuration, or data edited during the pass.
+
+**Preparation (§1–§3)**
+
+- [ ] Product class(es) classified; the driving tools chosen from the Tooling Map and recorded per piece of evidence.
+- [ ] Reference inputs gathered — specification, design reference, existing tests, fixtures — with every absent one named as absent.
+- [ ] Role ladder enumerated end to end, each rung's "must not" cases written down as negative tests.
+- [ ] Action plan written as an ordered checklist covering every surface × control × input class × state transition × role, adversarial cases included, with the cut line recorded if the budget forced one.
+
+**Execution (§4–§8)**
+
+- [ ] Three-way reconcile done, every discrepancy classified into exactly one class — improvements not mislabelled as defects.
+- [ ] Presentation fidelity checked across every state, not just the main screens: errors, empties, loading, breakpoints, modes.
+- [ ] The §3 checklist walked by driving the product, not by reading source; every item carries expected / actual / evidence / verdict.
+- [ ] Failures captured with a minimal reproduction and the pass continued; downstream items marked blocked.
+- [ ] Defect and debt sweep run alongside execution across all ten categories in §7.
+- [ ] Load benchmarks run with real numbers and stated parameters, or explicitly skipped with the reason.
+
+**Deliverables (§9–§11)**
+
+- [ ] Every material finding turned into a written fix specification with all six fields, routed into the project's own spec/issue system where one exists.
+- [ ] Report complete, including a coverage matrix and an honest, exhaustive "Not covered" section.
+- [ ] Remediation plan produced: every finding has an entry, entries are ordered and grouped into tranches, and anything not proposed sits in "Deliberately not proposed" with its reason.
+- [ ] The plan put to the user as an explicit choice — everything, one tranche, named IDs, or nothing — and **no edit applied** without their answer.
