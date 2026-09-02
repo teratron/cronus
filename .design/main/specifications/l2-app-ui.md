@@ -1,6 +1,6 @@
 # Application UI/UX Frontend (Desktop / Web / Mobile)
 
-**Version:** 1.3.1
+**Version:** 1.4.0
 **Status:** Stable
 **Layer:** implementation
 **Implements:** l1-architecture.md
@@ -16,7 +16,9 @@ Architectural layer 4: the **full graphical application** — the premium UI/UX 
 - [l2-technology-stack.md](l2-technology-stack.md) - Frontend + shell technology choices.
 - [l2-cli.md](l2-cli.md) - Sibling frontend (parity).
 - [l2-tui.md](l2-tui.md) - Sibling frontend (parity).
-- [l1-design-identity.md](l1-design-identity.md) - Design-identity catalog; the built-in themes (§4.5) are its built-in layer, user/imported identities its user layer (DI-2, DI-8).
+- [l1-design-identity.md](l1-design-identity.md) - Design-identity catalog; the built-in **colour schemes** (§4.5) are its built-in layer, user/imported identities its user layer (DI-2, DI-8).
+- [l2-design-system.md](l2-design-system.md) - The concrete token-contract realization behind §4.5 theming: the Tailwind v4 `@theme` token set, the scheme manifest + token schema, and the two-axis (mode × scheme) resolver.
+- [l2-navigation.md](l2-navigation.md) - Renders the four-layer navigation; owns the concrete surface catalog and order (its §4.3) that §4.1 groups thematically.
 
 ## 1. Motivation
 
@@ -49,13 +51,19 @@ Non-technical clients ("the client who brings ideas") need a graphical, low-fric
 
 ### 4.1 Surfaces
 
-| Surface | Content |
+The concrete subsystem catalog and its order are owned by [l2-navigation.md](l2-navigation.md) §4.3 (`SIDEBAR_PRIMARY` + `SIDEBAR_UTILITY`, per NV-1). This table groups the surfaces thematically for orientation only — it is not the ordering authority.
+
+| Group | Surfaces |
 | --- | --- |
-| Office | Visual schema of agents/departments and their tasks (the "interactive office") |
-| Kanban board | `triage → todo → ready → running → blocked → done → archive` + custom boards |
-| Chat / briefings | Conversation with the manager/orchestrator; office/department sync briefings |
-| Editor | Rich-text notes/plans (Lexical) |
-| Dashboard | Status, progress, schedules, memory views |
+| Overview | Dashboard (Agent Statistics, Token Usage) |
+| Conversation | Chat, Inbox (Messages, Poll/Clarify), Channels (gateway + per-channel detail) |
+| Work | Kanban (`triage → todo → ready → running → blocked → review → done` + custom boards), Automation (visual pipeline canvas) |
+| Office | Office (agent graph + floor projection), Employees (staffed roster), Sessions |
+| Operate | Schedule (Cron + Pulse/Heartbeat), Memory, Security, Providers/ACP |
+| Reference | Wiki, Editor (rich-text notes/plans, Lexical) |
+| Config | Settings (two-tier: in-place Local + full-screen Global overlay) |
+
+Each surface renders only when bound to a shipped core capability (INV-9); until then it is an explicit placeholder, never fabricated data.
 
 ### 4.2 Shell ↔ core bridge
 
@@ -83,15 +91,19 @@ To mitigate App Store Guideline 4.2 ("repackaged website") risk for a WebView ap
 
 ### 4.5 Theming
 
-The app ships three themes: **system** (default — follows the OS appearance), **light**, and **dark**, built on Tailwind v4 design tokens. The choice persists in `app.json` (`theme`) and applies across all surfaces. Switching is instant and never alters behavior (cosmetic only).
+Theming has **two orthogonal axes**. The active look is `(mode) × (scheme)`; changing either is instant and never alters behavior (cosmetic only, DI-2). Both persist in `app.json` and apply across all surfaces.
 
-| Theme | Behavior |
+**Axis 1 — mode** (`theme`): which light/dark rendering is shown.
+
+| Mode | Behavior |
 | --- | --- |
 | system | follow OS light/dark preference (default) |
 | light | force light |
 | dark | force dark |
 
-**User-defined and imported identities.** The three built-in themes are the *built-in layer* of the design-identity catalog ([l1-design-identity.md](l1-design-identity.md) DI-2): the app resolves the active look through that catalog, so user-defined and imported visual identities (project and personal layers, DI-8) extend theming beyond system/light/dark without a code change. Switching any identity stays instant and cosmetic-only (DI-2), exactly as theme switching is today; imported identities carry provenance + an integrity witness verified before activation (DI-4). This resolves the prior open question of whether to support custom themes: they are the catalog's user layer, not a bespoke second theming path.
+**Axis 2 — colour scheme** (`colorScheme`): which named visual language renders. A scheme is a design identity — a full token package (colour roles, typography, spacing, radius, motion) that declares a light and a dark variant; the mode axis picks the variant. The app ships one built-in scheme (`default`, authored dark-first from the reference desktop identity, with a derived light variant); more built-in schemes may follow. The default `{ theme: "system", colorScheme: "default" }` reproduces today's behavior.
+
+**Built-in schemes are the catalog's built-in layer.** The app resolves `(mode, scheme)` through the design-identity catalog ([l1-design-identity.md](l1-design-identity.md) DI-2), so user-defined and imported identities (project and personal layers, DI-8) extend the scheme axis without a code change. Switching any scheme stays instant and cosmetic-only (DI-2); imported schemes carry provenance + an integrity witness verified before activation (DI-4). This resolves the prior open question of whether to support custom themes: they are the scheme axis's user layer, not a bespoke second theming path. The concrete token contract, scheme package shape, and the `(mode × scheme)` resolver are specified in [l2-design-system.md](l2-design-system.md).
 
 ### 4.6 Localization (i18n)
 
@@ -438,3 +450,11 @@ For servers that require OAuth (`SSETransport`, `StreamableHTTP`):
 | `[ARCH]` | `.design/main/specifications/l1-architecture.md` | Invariants (esp. INV-4 hub-and-spoke) |
 | `[CORE]` | `.design/main/specifications/l2-core-library.md` | The contract the app binds to |
 | `[STACK]` | `.design/main/specifications/l2-technology-stack.md` | Frontend/shell technology + WebView floor |
+| `[NAV]` | `.design/main/specifications/l2-navigation.md` | The concrete surface catalog/order + shell chrome |
+| `[DESIGN-SYS]` | `.design/main/specifications/l2-design-system.md` | Token contract + (mode × scheme) resolver behind §4.5 |
+
+## Document History
+
+| Version | Date | Change |
+| --- | --- | --- |
+| 1.4.0 | 2026-09-02 | §4.5 Theming split into two orthogonal axes — **mode** (`system`/`light`/`dark`) × **colour scheme** (a named design-identity token package); one built-in scheme ships (`default`, dark-first), more added as data; the resolver + token contract move to the new `l2-design-system`. §4.1 Surfaces regrouped and deferred to `l2-navigation` §4.3 as the ordering authority; INV-9 placeholder rule restated. Related Specs + Canonical References extended with `l2-design-system` and `l2-navigation`. Document History section introduced with this entry (versions ≤1.3.1 summarised in the `INDEX.md` row). |

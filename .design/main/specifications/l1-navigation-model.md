@@ -1,6 +1,6 @@
 # Navigation Model
 
-**Version:** 1.2.0
+**Version:** 1.3.0
 **Status:** Stable
 **Layer:** concept
 
@@ -10,8 +10,8 @@ The navigation model defines the application as a **strictly nested "building/co
 
 - **L0 — Building** (the corporation frame): the application-global chrome and command groups (File / Edit / View / Help, Providers/ACP, Process Monitor) that act on the whole application.
 - **L1 — Floors** (horizontal tab bar): each tab is a floor = one workspace (office/project). The first floor is a pinned, non-closable **home** workspace; further floors are added on demand.
-- **L2 — Subsystems** (per-floor vertical sidebar): the function-labelled tabs (Chat, Inbox, Schedule, Kanban, Memory, Office, Wiki, …) that expose the active floor's capabilities.
-- **L3+ — Mechanisms** (recursive sub-navigation): a subsystem that needs internal structure grows its own nested sub-tabs or sub-menu (e.g. Schedule → Cron/Pulse; Inbox → Messages/Poll-Clarify).
+- **L2 — Subsystems** (per-floor vertical sidebar): the function-labelled tabs (Dashboard, Chat, Sessions, Inbox, Office, Kanban, Memory, Wiki, …) that expose the active floor's capabilities, with a visually-separated utility group (Channels, Security, Providers/ACP, Settings) pinned to the sidebar foot.
+- **L3+ — Mechanisms** (recursive sub-navigation): a subsystem that needs internal structure grows its own nested sub-tabs or sub-menu (e.g. Schedule → Cron/Pulse; Inbox → Messages/Poll-Clarify; Dashboard → Agent Statistics/Token Usage).
 
 Every primary capability is reachable through this containment tree; no capability is buried more than one navigation step deep within its layer. The model also defines the two-tier settings hierarchy (global application settings vs per-floor local settings) and the IDE integration entry point accessible from a floor's tab.
 
@@ -52,7 +52,7 @@ A multi-subsystem application with 10+ distinct capabilities needs a consistent,
 - **NV-4 Two-tier settings**: the Settings tab exposes global settings (affect the whole application) and local settings (affect only the active office). Both tiers are reachable from the same tab; they are visually separated with a clear tier label.
 - **NV-5 IDE integration**: every office exposes an "Open in IDE" action reachable from its tab's settings dropdown. The action shell-spawns the user's configured editor against the office's workspace root path.
 - **NV-6 Strict layer nesting (parent-child containment)**: navigation is a strict containment tree of four layers — **Building** (L0, application frame) ⊃ **Floor** (L1, one workspace/office per horizontal tab) ⊃ **Subsystem** (L2, one sidebar surface) ⊃ **Mechanism** (L3+, a subsystem's own sub-navigation). Each inner layer is a child scoped to exactly one instance of its parent and inherits that parent's scope; a surface addresses only its own subtree and never reaches into a sibling's interior. Opening or focusing a child never detaches it from its parent context, and scope always narrows downward, never sideways.
-- **NV-7 Building frame & application menu (L0)**: the outermost layer is the building frame carrying the application-global command groups **File / Edit / View / Help**, plus building-wide facilities **Providers/ACP** (model-provider and agent-client-protocol connections) and **Process Monitor**. These act on the whole application (all floors) and are the only navigation not scoped to a single floor. The concrete contents of each menu group are settled at the UX stage. <!-- TBD: final per-menu item lists for File/Edit/View/Help and which building-wide facilities beyond Providers/ACP + Process Monitor live at L0 -->
+- **NV-7 Building frame & application menu (L0)**: the outermost layer is the building frame carrying the application-global command groups **File / Edit / View / Help** (concrete item lists fixed in §4.6), plus building-wide facilities that act on the whole application (all floors) and are the only navigation not scoped to a single floor: **Providers/ACP** (model-provider and agent-client-protocol connections), **Process Monitor**, a toggleable **project file tree** dock on the trailing edge, and a **command palette** (a delegated selection surface over offices, subsystems, settings, and actions). New building-wide facilities are added additively without disturbing this set.
 - **NV-8 Floor = disk-bound workspace tab**: each horizontal tab is a floor representing exactly one workspace (office); the floor↔workspace binding is 1:1. A **project** floor binds to a folder on disk at creation and the binding is stable for the floor's life. A floor is created by any of three equivalent affordances: the **File** menu ("New / Add project"), the **"+" / Add** control on the tab bar, or **drag-and-drop** of a project folder onto the tab bar (which creates a workspace bound to the dropped folder). (Consistent with WSL-3/WSL-4/WSL-7; the tab bar surfaces entry points, lifecycle is owned by workspace-lifecycle.)
 - **NV-9 Default pinned home floor**: the first floor is **pinned, non-closable, and loaded on application start**. It is the single permanent **home** workspace (WSL-1) — the personal organizer / life-planner — and is **not** bound to an external disk project: its files live in the managed mutable **state tier** (per l1-storage-model), not a user project folder. It hosts the building-level boss (the building's steward / default manager, WSL-2) with cross-workspace oversight. Every other floor follows it in the tab order and is user-closable.
 - **NV-10 Recursive sub-navigation (L3+)**: a subsystem that has internal structure grows its own **nested sub-navigation** — a horizontal sub-tab strip or a sub-menu — that is itself a child layer scoped to that subsystem and obeys NV-6 recursively. A subsystem with no internal structure has no L3 layer; navigation depth is added only where the capability earns it, never uniformly.
@@ -67,39 +67,51 @@ Navigation is a strict containment tree. Each layer hosts the next and narrows s
 graph TD
     B["L0 · Building frame<br/>File · Edit · View · Help · Providers/ACP · Process Monitor"]
     B --> F["L1 · Floor tab bar<br/>pinned Home floor + project floors · + / drag-and-drop to add"]
-    F --> S["L2 · Subsystem sidebar<br/>Chat · Inbox · Schedule · Kanban · Memory · Office · Wiki · …"]
-    S --> M["L3+ · Mechanism sub-navigation<br/>e.g. Schedule → Cron/Pulse · Inbox → Messages/Poll-Clarify"]
+    F --> S["L2 · Subsystem sidebar<br/>Dashboard · Chat · Sessions · Inbox · Office · Kanban · Memory · Wiki · … + foot: Channels · Security · Providers/ACP · Settings"]
+    S --> M["L3+ · Mechanism sub-navigation<br/>e.g. Schedule → Cron/Pulse · Inbox → Messages/Poll-Clarify · Dashboard → Agent Statistics/Token Usage"]
 ```
 
 | Layer | Surface | Scope | Owns |
 | --- | --- | --- | --- |
-| L0 Building | Application menu / frame chrome | Whole application | File/Edit/View/Help, Providers/ACP, Process Monitor (NV-7) |
+| L0 Building | Application menu / frame chrome | Whole application | File/Edit/View/Help, Providers/ACP, Process Monitor, project file-tree dock, command palette (NV-7) |
 | L1 Floor | Horizontal tab bar | One workspace (office) per tab | Floor switching + creation affordances; pinned Home floor (NV-8, NV-9) |
 | L2 Subsystem | Vertical sidebar of the active floor | One subsystem surface within that floor | The canonical sidebar catalog (§4.1, NV-1) |
 | L3+ Mechanism | Sub-tabs / sub-menu within a subsystem | One mechanism within that subsystem | Recursive sub-navigation, added only where earned (NV-10) |
 
-**Building layer (L0).** The building frame is the corporation shell. It carries the application-global command groups — **File**, **Edit**, **View**, **Help** — and building-wide facilities that are not tied to any one floor: **Providers/ACP** (managing model-provider connections and agent-client-protocol links) and **Process Monitor** (the application's own read-only OS-process view, per l1-process-monitor). These are the only navigation controls that act across all floors at once. Their concrete per-menu contents are a UX-stage concern (NV-7 TBD).
+**Building layer (L0).** The building frame is the corporation shell. It carries the application-global command groups — **File**, **Edit**, **View**, **Help** (item lists in §4.6) — and building-wide facilities that are not tied to any one floor: **Providers/ACP** (managing model-provider connections and agent-client-protocol links), **Process Monitor** (the application's own read-only OS-process view, per l1-process-monitor), a toggleable **project file-tree dock** on the trailing edge, and a **command palette** that jumps to any office, subsystem, setting, or action. These are the only navigation controls that act across all floors at once.
 
 ### 4.1 Sidebar Tab Catalog
 
-Fixed order; badge shows live pending-item count where applicable.
+The sidebar has two runs in one fixed order (NV-1): a **primary run** of function tabs, then a visually-separated **utility group** pinned to the sidebar foot. Badge shows a live pending-item count where applicable. A user or office may pin extra shortcut tabs above the primary run; the two canonical runs stay intact and in order below.
+
+**Primary run**
 
 | # | Tab | Subsystem | Badge |
 | --- | --- | --- | --- |
-| 1 | Chat | Conversation with the active office orchestrator | Unread messages |
-| 2 | Notifications / Inbox | Incoming events: messages, alerts, approval requests | Unread count |
-| 3 | Channels | Persistent topic threads; deliberation logs; inter-role communication | Active threads |
-| 4 | Sessions | Current and historical agent sessions | Running sessions |
-| 5 | Schedule | Recurring jobs, one-shot schedules, cron entries | Jobs due today |
-| 6 | Pulse | Heartbeat activity: background routine and inner-monologue log | Active pulses |
-| 7 | Memory | Office memory store: facts, skills, knowledge items | — |
-| 8 | Office | Automation canvas + agent interaction graph | — |
-| 9 | Kanban | Work board: triage → todo → ready → running → blocked → done | Active + blocked cards |
-| 10 | Security | Sandbox policies, secret vault status, audit log | Policy alerts |
+| 1 | Dashboard | Live read-only statistics for the active floor (Agent Statistics, Token Usage) | — |
+| 2 | Chat | Conversation with the active office orchestrator | Unread messages |
+| 3 | Sessions | Current and historical agent sessions | Running sessions |
+| 4 | Inbox | Incoming events: messages, alerts, approval & clarification requests | Unread count |
+| 5 | Office | Agent interaction graph + spatial floor projection of the active office | — |
+| 6 | Employees | The active office's staffed roster: identity, workspace, model assignment | Staffed count |
+| 7 | Schedule | Recurring jobs, one-shot schedules, and heartbeat/pulse activity | Jobs due today |
+| 8 | Kanban | Work board: triage → todo → ready → running → blocked → review → done | Active + blocked cards |
+| 9 | Automation | Visual pipeline canvas: trigger → filter → transform → action flows | — |
+| 10 | Memory | Office memory store: facts, skills, knowledge items | — |
 | 11 | Wiki | Client-facing living project documentation: overview, areas, decisions, how-to, changelog (read-only, office-maintained) | Updated since last visit |
-| 12 | Settings | Two-tier configuration: global + per-office | — |
 
-**Candidate additions (UX-stage, additive under NV-1).** The following subsystems are recognized capabilities not yet placed in the canonical order above; they extend the set additively (as the Wiki tab did in v1.1.0) once the UX pass fixes their position. The canonical set (NV-1) stays intact and the newcomers slot in without reordering the existing members. <!-- TBD: final position/order and whether any fold into an existing tab as an L3 mechanism rather than a new L2 tab -->
+**Utility group (sidebar foot, visually separated)**
+
+| # | Tab | Subsystem | Badge |
+| --- | --- | --- | --- |
+| U1 | Channels | Connected messaging/protocol gateways (Slack, Telegram, MCP, webhook, …) and their status | Connected count |
+| U2 | Security | Sandbox policies, secret vault status, audit log | Policy alerts |
+| U3 | Providers / ACP | Model-provider and agent-client-protocol connections for the active floor (the L0 facility's per-floor view, NV-7) | Live providers |
+| U4 | Settings | Two-tier configuration: global + per-office | — |
+
+**Changes from the v1.2.0 catalog.** The primary run is reordered and extended: **Dashboard**, **Employees**, and **Automation** are added as first-class subsystems (Automation split out of the old combined "Office" entry, which now names only the agent graph + floor projection); the standalone **Pulse** tab folds into **Schedule** as an L3 facet (§4.5); **Channels**, **Security**, **Providers/ACP**, and **Settings** move into the foot utility group. The reorder is a spec-authoritative catalog revision — NV-1's "no reorder at the application level" continues to bind end-users and offices at runtime.
+
+**Candidate additions (UX-stage, additive under NV-1).** Recognized capabilities not yet placed; they extend the set additively once a later UX pass fixes their position, without reordering the two canonical runs.
 
 | Candidate | Subsystem | Note |
 | --- | --- | --- |
@@ -176,9 +188,37 @@ L2 Subsystem: Inbox / Notifications
                                  the client to decide or disambiguate (see intent-resolution)
 ```
 
-- **Schedule → { Cron, Pulse }.** Cron holds recurring and one-shot entries; Pulse is the heartbeat/inner-monologue stream. <!-- TBD: whether Pulse stays a top-level sidebar tab (#6) or folds under Schedule as an L3 sub-tab — settled at the UX stage; both readings satisfy NV-10 -->
+- **Schedule → { Cron, Pulse }.** Cron holds recurring and one-shot schedule entries (list + calendar views); Pulse is the heartbeat configuration plus the background-routine / inner-monologue activity stream. The former standalone Pulse tab folds here (v1.3.0).
 - **Inbox → { Messages/Logs, Poll/Clarify }.** The "Poll/Clarify" facet is where the office surfaces its questions to the client (decision requests, disambiguation) as distinct from ordinary notifications — the navigational home of the ask-when-blocking interactions (l1-intent-resolution IR-2).
-- **General rule.** Any subsystem MAY declare an L3 layer; one with a single flat surface declares none. Depth is earned per-subsystem, never imposed uniformly (NV-10). The exhaustive mapping of which subsystems carry sub-navigation, and their facet lists, is deferred to the UX design pass. <!-- TBD: per-subsystem L3 facet catalog -->
+- **Dashboard → { Agent Statistics, Token Usage }.** Agent Statistics is the message/session/token/call trend view; Token Usage is model-spend detail (by model, by date).
+
+**Per-subsystem L3 facet catalog (v1.3.0).** Resolving the prior TBD. A subsystem not listed here is flat (no L3 layer).
+
+| Subsystem | L3 facets |
+| --- | --- |
+| Dashboard | Agent Statistics · Token Usage |
+| Inbox | Messages/Logs · Poll/Clarify |
+| Schedule | Cron · Pulse |
+| Office | Home overview · Project floor/graph (mode toggle when the active floor is the pinned home) |
+| Kanban | one facet per board (board switcher) |
+| Automation | one facet per flow (flow switcher) |
+| Channels | one facet per connected channel (channel detail) |
+| Settings | Global · This workspace (the NV-4 two tiers rendered as the L3 layer) |
+
+- **General rule.** Any subsystem MAY declare an L3 layer; one with a single flat surface declares none. Depth is earned per-subsystem, never imposed uniformly (NV-10). New facets extend a subsystem's list additively without disturbing the others.
+
+### 4.6 L0 Application Menu — Command Groups (v1.3.0)
+
+Resolving the prior NV-7 TBD. The four command groups act on the whole application; each leaf is a named action (l1-application-shell AS-6), so the palette and any keybinding reach the same command. A leaf renders only when bound to a shipped capability (INV-9) — an unbound leaf is hidden, never a dead item.
+
+| Group | Leaves |
+| --- | --- |
+| **File** | Open File… · New / Add Project… · Settings… · — · Close Window · Exit |
+| **Edit** | Undo · Redo · — · Cut · Copy · Paste · Select All · — · Find · Find Next · Find Previous |
+| **View** | Reload · — · Actual Size · Zoom In · Zoom Out · — · Copy URL |
+| **Help** | Open Documentation · Check for Updates… · — · Troubleshooting ▸ (Show Logs in Explorer · Clear Cache and Restart · Reset App Data) · — · Get Support · About… |
+
+`—` marks a separator. "New / Add Project…" is one of the three equivalent floor-creation affordances (NV-8). "Settings…" opens the full-screen global settings surface (the global tier of NV-4). Leaf lists extend additively; a later platform may render the groups natively (menu bar) or in-window (the burger control) — that choice is an L2 concern.
 
 ## 5. Implementation Notes
 
@@ -211,3 +251,4 @@ L2 Subsystem: Inbox / Notifications
 | 1.0.0 | 2026-06-24 | Core Team | Initial spec — NV-1…NV-5, 11-tab catalog, office tab bar, two-tier settings, IDE integration |
 | 1.1.0 | 2026-06-26 | Core Team | Added the Wiki tab (now #11, Settings → #12) — client-facing living project documentation surface (see l1-project-wiki.md). Additive extension of the canonical set; NV-1 unchanged. |
 | 1.2.0 | 2026-07-02 | Core Team | Added the four-layer nested "building/corporation" model (§4.0) and invariants NV-6…NV-10: strict parent-child layer containment (NV-6), the L0 Building frame + application menu incl. Providers/ACP + Process Monitor (NV-7), floor = disk-bound workspace tab with File-menu / "+" / drag-and-drop creation affordances (NV-8), the pinned non-closable default home floor backed by the state tier (NV-9), and recursive per-subsystem L3+ sub-navigation with Schedule→Cron/Pulse and Inbox→Messages/Poll-Clarify examples (NV-10). Additive: NV-1…NV-5 and the canonical sidebar order unchanged; new subsystem candidates (Discover/Graph/Process Monitor) and per-menu/per-subsystem leaf placement carried as UX-stage TBD markers. |
+| 1.3.0 | 2026-09-02 | Core Team | UX-stage resolution of the carried TBDs, from an approved desktop mockup. §4.1 sidebar catalog revised: primary run reordered and extended to Dashboard, Chat, Sessions, Inbox, Office, Employees, Schedule, Kanban, Automation, Memory, Wiki (Automation split from the old combined "Office" entry; Dashboard and Employees added as first-class subsystems); a foot **utility group** (Channels, Security, Providers/ACP, Settings) introduced; the standalone Pulse tab folds into Schedule as an L3 facet. §4.5 gains the per-subsystem L3 facet catalog (Dashboard, Inbox, Schedule, Office, Kanban, Automation, Channels, Settings). New §4.6 fixes the L0 File/Edit/View/Help leaf lists. NV-7 extended: the L0 frame also carries a project file-tree dock and a command palette as building-wide facilities. Invariants NV-1…NV-10 unchanged in wording; NV-1's runtime "no reorder" continues to bind end-users. |

@@ -1,6 +1,6 @@
 # Design Identity
 
-**Version:** 1.0.1
+**Version:** 1.0.2
 **Status:** Stable
 **Layer:** concept
 
@@ -33,7 +33,8 @@ craft layer those compose with.
 ## Related Specifications
 
 - [l1-generative-surface.md](l1-generative-surface.md) — Agent-rendered interactive surfaces (GS-1…GS-8); a surface renders *under the active identity* and is held to the craft bar (DI-3, DI-5, DI-8), while staying a sandboxed, portable, projection-not-source artifact.
-- [l2-app-ui.md](l2-app-ui.md) — The host application's theming; its built-in themes are the identity catalog's built-in layer, and user-defined/imported identities are the user layer (resolves the app-UI custom-theme question — DI-2, DI-8).
+- [l2-app-ui.md](l2-app-ui.md) — The host application's theming; its built-in **colour schemes** are the identity catalog's built-in layer, and user-defined/imported identities are the user layer (resolves the app-UI custom-theme question — DI-2, DI-8). §4.5 there frames theming as two orthogonal axes: OS-appearance **mode** (light/dark/system) × identity **scheme**.
+- [l2-design-system.md](l2-design-system.md) — The Layer 2 realization of DI-1/DI-3 for the desktop/web frontend: the concrete token schema, the scheme package manifest, the craft lint that enforces the token contract, and the `(mode × scheme)` resolver.
 - [l1-quality-standards.md](l1-quality-standards.md) — Code definition-of-done gates (QLY-*); the craft bar (DI-5) is the *aesthetic* complement over user-facing visual output, not a duplicate of the code gates.
 - [l1-output-contracts.md](l1-output-contracts.md) — Structural bounds/validation of a bounded output; craft conformance is the aesthetic layer above structural validity.
 - [l1-facilitation.md](l1-facilitation.md) — FC-1 layered data-driven catalog pattern (built-in < project < personal, id-stable override) reused for both identities and craft rules (DI-2, DI-7).
@@ -198,6 +199,12 @@ Identities layer built-in < project < personal with id-stable override (DI-2); e
 active per rendering scope. The same active identity drives both the office's own UI theming and
 the agent's generated surfaces (DI-8), so a surface never looks foreign to the app hosting it.
 
+[ADDED v1.0.2] The host application UI realizes this catalog as one of two orthogonal theming
+axes — an identity is a **colour scheme**, and an OS-appearance **mode** (light/dark/system)
+selects which variant of that scheme's tokens renders. Both axes switch instant + cosmetic-only
+(DI-2); mode is not itself an identity. The concrete `(mode × scheme)` resolver and token schema
+are the Layer 2 realization ([l2-design-system.md](l2-design-system.md)).
+
 ### 4.3 Import provenance and fidelity
 
 An identity acquired from outside the built-in set records how it arrived and how faithfully it
@@ -342,5 +349,6 @@ lifecycle), it graduates via a spec amendment then — not speculatively now.
 
 | Version | Date | Change |
 | --- | --- | --- |
+| 1.0.2 | 2026-09-02 | Related Specifications extended with `l2-design-system` (the Layer 2 realization of DI-1/DI-3); `l2-app-ui` entry and §4.2 clarified that the host UI realizes the catalog as the **colour-scheme** axis, orthogonal to an OS-appearance **mode** axis (light/dark/system) that selects a scheme's variant. Clarification + link only; no invariant changed. |
 | 1.0.1 | 2026-08-05 | Related Specifications extended with `l1-negative-specification` (DI-6 default tells generalized as the built-in negative layer; a project avoid-list is DI-7's user layer; DI-5's auto-vs-advisory boundary generalized as NEG-9) and `l1-adjustment-vocabulary` (client steering within the acceptable region, with the craft bar as the floor). Link-only; no invariant changed. |
 | 1.0.0 | 2026-07-09 | Initial model: design identity — a named, layered, schema-validated visual-language catalog as data (DI-1) with one-active-per-scope cosmetic-only switching (DI-2), token contract as the single visual source of truth (DI-3), provenance-tagged + fidelity-declared (verbatim/normalized/hybrid) attested import (DI-4); a tiered craft-conformance bar with a named auto-vs-advisory boundary (DI-5), distinctiveness-over-default rejecting generic template output (DI-6), data-driven extensible craft rules (DI-7), uniform application across office UI and agent-generated surfaces resolving the app-UI custom-theme question (DI-8), and local-first secret-safe non-authoritative assets (DI-9); ideas-to-adopt mapping (mined from a studied open-source design-agent platform's design-system-as-data catalog + anti-default craft rubric) + nodus-relevance disposition (Reuse behind the LP-4 schema-provider / LP-13 import seams, no new nodus invariant). |
