@@ -1,6 +1,6 @@
 # Nodus Environment and Evaluation Implementation (Rust)
 
-**Version:** 1.1.1
+**Version:** 1.3.0
 **Status:** Stable
 **Layer:** implementation
 **Implements:** l1-nodus-environment.md
@@ -14,7 +14,7 @@ Concrete Rust realization of the Environment/Evaluation contract in `crates/nodu
 - [l1-nodus-environment.md](l1-nodus-environment.md) — the contract this implements (NE-1…NE-14).
 - [l2-nodus-runtime.md](l2-nodus-runtime.md) — runtime crate extended here: `executor` (provider seam), the `run_with_*` family, `RunResult`.
 - [l2-nodus-portability.md](l2-nodus-portability.md) — the LP-8 `ExtensionRole`/`CapabilityManifest`/`HostCapabilities` taxonomy this adds `Environment` to; [ADDED v1.1.0] NE-14's fail-fast shape is LP-8 kinship (a missing measure is a missing capability) without being a new `ExtensionRole` — the check is profile-shaped, not role-shaped.
-- [l2-nodus-observability.md](l2-nodus-observability.md) — the `AuditProvider`/`ExecutionEvent`/`FieldDescriptor`/`RunManifest` the trajectory projects onto (NE-3).
+- [l2-nodus-observability.md](l2-nodus-observability.md) — the `AuditProvider`/`ExecutionEvent`/`FieldDescriptor`/`RunManifest` the trajectory projects onto (NE-3); [ADDED v1.2.0] also owns `ReproRecipe.workflow_digest`, whose `digest_ast` computation `CandidateResult.workflow_digest` now reuses (§4.4) rather than the two fields disagreeing under one name.
 - [l2-nodus-dialog.md](l2-nodus-dialog.md) — the sibling extension role whose `step`-suspend shape a `step` reuses (a machine turn vs. a human turn).
 - [l2-nodus-errors.md](l2-nodus-errors.md) — [ADDED v1.1.0] owns `NODUS:ENV_MEASURE_UNKNOWN` (NE-14), registered beside `CAPABILITY_UNMET` in the same pre-run rejection family.
 - [../../main/specifications/l1-tokenization-boundary.md](../../main/specifications/l1-tokenization-boundary.md) — [ADDED v1.1.0] TB-6/TB-7, the measurement contract NE-14 realizes: the measure is the receiving model's own encoder, and an unidentifiable encoder fails loudly rather than defaulting.
@@ -46,7 +46,7 @@ Concrete Rust realization of the Environment/Evaluation contract in `crates/nodu
 | NE-9 Host-supplied metric neutrality | `evaluate` delegates scoring to the host `EnvironmentProvider`; `StubEnvironment` (and any host supplying no scorer) returns `Reward { score: None, metadata: {} }` and the run stays valid. |
 | NE-10 Capability-declared, fail-fast | `CapabilityManifest::from_workflow` adds `ExtensionRole::Environment` when a workflow declares an environment need; `validate_manifest` rejects fail-fast (reusing `NODUS:CAPABILITY_UNMET`) if the active host omits it. `HostCapabilities::builtin()` **provides** `Environment` via `StubEnvironment` — a deliberate contrast with `Dialog` (whose default resolver is incomplete): the stub is a complete trivial world, so a manifest-declaring workflow stays runnable in-process; a host constructed without `Environment` triggers the fail-fast. |
 | NE-11 Declared grading mode | `GradingMode { Automated, Judge, Hybrid }` is declared on the task/profile (not per run). `evaluate` applies the mode: `Automated` runs a deterministic checker; `Judge` scores via a function-scoped auxiliary model over a published rubric; `Hybrid` runs the checker as a floor first and takes `min(checker, judge)` so a judge may lower but never rescue a checker-failed run. |
-| NE-12 Archivable candidate result | `EnvRunResult::candidate()` yields `CandidateResult { workflow_digest, reward, trajectory, budget }` — a content-addressable tuple. `workflow_digest` is a std-library stable digest over the canonical workflow source (deterministic, zero-dep); a host wanting a cryptographic content-address computes it over the exposed source (LP-2). The candidate space/mutation/search/frontier stay host-side; the crate holds no optimizer. |
+| NE-12 Archivable candidate result | `EnvRunResult::candidate()` yields `CandidateResult { workflow_digest, reward, trajectory, budget }` — a content-addressable tuple. `workflow_digest` is a std-library stable digest over the **parsed AST** of the workflow the host supplies as `workflow_source` [IMPLEMENTED v1.2.0, Phase 32 — was the raw source string], falling back to the raw-text hash only if the source fails to parse; a host wanting a cryptographic content-address computes it over the exposed source (LP-2). The candidate space/mutation/search/frontier stay host-side; the crate holds no optimizer. |
 | NE-13 Budget-normalized graded runs | `EnvironmentProfile::budget: Option<Budget>` (`wall_clock_ms`/`max_steps`/`max_tokens`, any subset). `run_with_environment` halts the run uniformly when any declared limit is reached; a budget halt is a **normal outcome** (`Status::Partial`, not an error) with `budget_halted: true` recorded, and `evaluate` runs over what was achieved. The budget is part of the profile identity and copied into `CandidateResult.budget`; the workflow cannot read, extend, or evade it (enforced by the run loop, LP-10 kinship). Steps/tokens are deterministic; wall-clock is host-measured and recorded. A profile with no budget behaves as today. |
 | NE-14 Declared budget measure [ADDED v1.1.0] | **Implemented [v1.1.1] — Phase 29.** `EnvironmentProfile::token_measure: Option<String>` — the identity of the host encoder `max_tokens` is denominated in (§4.4). `run_with_environment_impl` validates the profile immediately after `env.profile()` (both public entry points share this one function): a `budget.max_tokens.is_some()` with `token_measure.is_none()` is a fail-fast `NODUS:ENV_MEASURE_UNKNOWN`, returned as an ordinary `Ok(EnvRunResult{result: RunResult{status: Failed, ..}, ..})` mirroring `capability_rejection`'s exact shape (**not** a `Diagnostic` — that channel is parse/validate-only) — never a mid-run failure, never a silent default encoder. `token_measure` is opaque to the crate (LP-2 — no tokenizer/counting rule in core) and is copied into `CandidateResult` alongside `budget` (NE-12), so a host optimizer partitions its frontier by `(profile, budget, measure)`. A profile with a wall-clock/step-only budget (no `max_tokens`) carries no measure and is unaffected. 471 tests pass (was 467, +4). |
 
@@ -142,7 +142,7 @@ pub struct EnvironmentProfile { pub labels: BTreeMap<String,String>,  // NE-6 or
                                 pub budget: Option<Budget>,
                                 pub token_measure: Option<String> }   // NE-14, opaque encoder identity
 
-pub struct CandidateResult { pub workflow_digest: String,        // NE-12 content address (std digest)
+pub struct CandidateResult { pub workflow_digest: String,        // NE-12 content address (AST digest — [CORRECTED v1.2.0])
                              pub reward: Reward,
                              pub trajectory_ref: RunId,
                              pub budget: Option<Budget>,          // rewards under different budgets not comparable
@@ -150,6 +150,41 @@ pub struct CandidateResult { pub workflow_digest: String,        // NE-12 conten
 ```
 
 `grade` composes the modes with the hybrid floor: `Hybrid` runs the deterministic checker first and returns it on failure (a judge cannot rescue), else takes `min(checker, judge)`.
+
+**`workflow_digest` unified onto AST identity [CORRECTED v1.2.0].** `candidate()` computed
+this by hashing `workflow_source` byte-for-byte (`digest_source`) — a *different* notion of
+identity than `l2-nodus-observability.md` §4.7's `ReproRecipe.workflow_digest`, which hashes
+the parsed AST (`digest_ast`) so that two sources differing only in whitespace or comments —
+neither of which affects execution — share a digest. Both fields carry the identical name
+`workflow_digest` and `l2-nodus-observability.md` §4.7's own inline comment had cited this
+field as its precedent, as if the two agreed; they did not, for any workflow with a cosmetic
+edit between two archived candidates. NE-12's own purpose is comparing *evaluation
+candidates* — grouping runs of "the same workflow" for reward/regression tracking — which is
+exactly the reproducibility grain `digest_ast`'s own reasoning already states is correct, so
+`candidate()` now parses `workflow_source` and hashes the AST via the identical
+`crate::executor::digest_ast` function `ReproRecipe` uses (widened to `pub(crate)`, not
+duplicated). **Signature unchanged** (`workflow_source: &str`, not `&WorkflowFile`) — the
+host already has the raw source at hand (it is what it ran) and rarely holds onto the parsed
+AST, which the crate does not return from any `run*` entry point; re-parsing inside a
+once-per-archival call is cheap and adds no dependency. **Fallback, not a hard error**: if
+`workflow_source` fails to parse (the host passed something that was not actually the source
+it ran, or a corrupted string), `candidate()` falls back to the old `digest_source` byte hash
+rather than panicking or changing `candidate()`'s infallible return type — `CandidateResult`
+is still produced, just under the coarser byte-identity notion for that one call, since a
+digest computed on *something* remains more useful than no digest at all. This is the
+resolution of `l2-nodus-portability.md` §3.2's "pre-existing finding" note; that note is
+updated to point here rather than restating the divergence.
+
+**Implemented [Phase 32], no divergence from the design above.** `digest_ast` widened to
+`pub(crate)` in `executor.rs`; `candidate()` matches on `crate::parser::Parser::parse` and
+calls `crate::executor::digest_ast(&ast)` on success, `digest_source` on failure, exactly as
+designed. `candidate_digest_agrees_with_repro_recipe_digest` (`tests/environment.rs`, a
+capturing `AuditProvider` mirroring Phase 31's `ManifestCapture`) proves `CandidateResult`
+and `ReproRecipe` agree on the same run's digest; `candidate_digest_falls_back_to_source_hash_when_unparseable`
+(`environment.rs`'s own `#[cfg(test)]`) pins the fallback value explicitly — the pre-existing
+unparseable-input test never asserted on the digest at all. 486 tests pass (was 484, +2);
+clippy/fmt clean; `Cargo.toml`/`Cargo.lock` diff empty (LP-1 preserved); no
+`unwrap`/`panic!`/`expect` added to any production path.
 
 ### 4.4.1 Measure validation (NE-14) [ADDED v1.1.0, CORRECTED v1.1.1]
 
@@ -233,6 +268,8 @@ Order that minimizes rework (follows the L1 §5 sequence): (1) `EnvironmentProvi
 
 | Version | Date | Author | Notes |
 | --- | --- | --- | --- |
+| 1.3.0 | 2026-09-02 | Core Team | **Phase 32 — NE-12 digest unification implemented exactly per v1.2.0's design, no scope correction.** `digest_ast` widened to `pub(crate)` (`executor.rs`); `candidate()` matches `Parser::parse(workflow_source)` — `Ok(ast)` hashes `digest_ast(&ast)`, `Err(_)` falls back to `digest_source`. `candidate_digest_agrees_with_repro_recipe_digest` (`tests/environment.rs`, a capturing `AuditProvider` mirroring Phase 31's `ManifestCapture`) proves `CandidateResult.workflow_digest` and `ReproRecipe.workflow_digest` agree for the same run — the assertion that makes the unification real, not assumed; `candidate_digest_falls_back_to_source_hash_when_unparseable` (`environment.rs`) pins the fallback value explicitly, closing the gap the prior row noted (the old unparseable-input test asserted nothing about the digest). 486 tests pass (was 484, +2); clippy/fmt clean; `Cargo.toml`/`Cargo.lock` diff empty (LP-1 preserved); no `unwrap`/`panic!`/`expect` added to any production path. |
+| 1.2.0 | 2026-09-02 | Core Team | **NE-12's `workflow_digest` unified onto AST identity, resolving `l2-nodus-portability.md` §3.2's "pre-existing finding."** `CandidateResult.workflow_digest` (via `digest_source`, raw-text hash) and `l2-nodus-observability.md`'s `ReproRecipe.workflow_digest` (via `digest_ast`, AST hash) answered a different question under the identical field name; `l2-nodus-observability.md` §4.7's own comment had cited this field as the same precedent, which it was not. `candidate()`'s signature is unchanged (`workflow_source: &str`) — it now parses the source and hashes the AST via `crate::executor::digest_ast` (widened to `pub(crate)`, reused not duplicated), falling back to the prior `digest_source` byte hash only if the given source fails to parse (an honest degrade, not a panic or a signature change). §4.4's `[REFERENCE]` block and the NE-12 row updated. No behavioural change for any currently-passing test — `candidate_digest_deterministic_and_content_addressed`/`candidate_carries_token_measure` (`tests/environment.rs`) exercise valid, parseable sources throughout; the single unparseable-input case (`environment.rs`'s own `#[cfg(test)]`) exercises exactly the fallback path and asserts nothing about the digest's value. |
 | 1.1.1 | 2026-08-01 | Core Team | **Implemented the NE-14 seam designed in v1.1.0 — Phase 29, with a real mechanism correction found at plan time and applied here.** `EnvironmentProfile.token_measure`/`CandidateResult.token_measure` landed as designed. **§4.4.1 corrected**: v1.1.0 claimed the rejection used the LP-8 `Diagnostic` channel and ran "before `env.open`" — neither held against the real code (`workflows.rs`'s single shared `run_with_environment_impl`, confirmed both public entry points delegate to it, resolving the plan-time question of whether they had separate bodies). The actual mechanism mirrors the adjacent, already-shipped `ExtensionRole::Environment` rejection exactly: `Ok(EnvRunResult{result: RunResult{status: Failed, errors: [RuntimeError{ENV_MEASURE_UNKNOWN, ..}]}, ..})` via a new `env_measure_rejection` helper (sibling to `capability_rejection`), inserted immediately after `env.profile()` (the only source of the fields being checked) and before `execute_for_environment` — `env.open`/`env.reset` have already run by that point for the frozen-boundary shape, but no *workflow* step has, satisfying "never mid-run"; `guard`'s `Drop` still releases correctly (NE-7 unaffected). This correction was found and recorded honestly at the `/magic.task` planning stage (not silently implemented against the wrong text, the Phase-18 `$restart` precedent) and applied here once the mechanism landed. 471 tests pass (was 467, +4: `max_tokens_with_no_measure_rejects_before_workflow_runs` proving `env.open`/`reset` ran but no workflow step or `evaluate` did, `max_tokens_with_measure_runs_normally`, `no_max_tokens_budget_is_unaffected_by_ne14`, `candidate_carries_token_measure`); clippy/fmt clean; `Cargo.toml`/`Cargo.lock` diff empty (LP-1 preserved); no `unwrap`/`panic!`/`expect` added to any production path. §3's NE-14 row updated to Implemented. |
 | 1.1.0 | 2026-07-31 | Core Team | Closes the NE-14 invariant-traceability gap flagged at the v1.29.0 nodus replan (declared budget measure, added to `l1-nodus-environment` v1.4.0, had never gained a §3 row). New `EnvironmentProfile.token_measure: Option<String>` (§4.4) records the opaque host-encoder identity a `max_tokens` budget is denominated in — LP-2, no tokenizer/counting rule in core. New §4.4.1 designs the fail-fast check: `run_with_environment` validates the profile immediately after `env.profile()` and before `env.open`, rejecting `budget.max_tokens.is_some() && token_measure.is_none()` as a pre-run `NODUS:ENV_MEASURE_UNKNOWN` `Diagnostic` through the same channel LP-8's `validate_manifest` already uses — no `Instance` opens for a rejected profile. Deliberately **not** a new `ExtensionRole`: the condition is profile-shaped (does this specific budget have an identified measure), not role-shaped (does the host provide a measure capability in general) — a role would let the exact silent-substitution failure NE-14 forbids hide behind a satisfied capability check. `CandidateResult` gains `token_measure` alongside `budget` so a host optimizer partitions its frontier by `(profile, budget, measure)` per NE-14's own comparability rule. New error code `NODUS:ENV_MEASURE_UNKNOWN` (`Error`, `Control` — the `CAPABILITY_UNMET` precedent, both pre-run structural rejections) registers in `l2-nodus-errors.md`. §3 gains the NE-14 row; §5 gains two rejected alternatives (a new `ExtensionRole`, a default-encoder fallback). Design only — nothing landed in `crates/nodus` this pass. |
 | 1.0.0 | 2026-07-10 | Core Team | Initial spec — Rust realization of the Environment/Evaluation contract: `EnvironmentProvider` trait + built-in deterministic `StubEnvironment`, closed `open/reset/step/evaluate/release` lifecycle, typed `Reward` carried in `EnvRunResult` (never in `vars`), `Trajectory` as a read-side projection via optional `EnvInteraction` side-band descriptors on existing events (no new `ExecutionEvent` variant, HO-6 preserved), `ExtensionRole::Environment` manifest binding with `builtin()` providing it via the stub (contrast with `Dialog`), `run_with_environment` frozen-boundary combinator, closed `GradingMode` (automated/judge/hybrid floor), `EnvironmentProfile` budget (NE-13, budget-halt = normal `Status::Partial`), and `CandidateResult` content-addressable tuple (NE-12, std-digest, crypto host-supplied). NE-1…NE-13 compliance table. Adds one extension role, no new command/status/error category. |

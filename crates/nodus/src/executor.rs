@@ -147,6 +147,14 @@ pub struct ResumeDescriptor {
     pub vars: HashMap<String, Value>,
     /// Index of the step that suspended.
     pub step_index: u32,
+    /// Content identity of the pinned definition (LP-22(c)) — the same
+    /// `digest_ast` computation [`ReproRecipe::workflow_digest`](crate::observability::ReproRecipe::workflow_digest)
+    /// already performs. A host persisting and re-resolving workflow
+    /// definitions by name compares this against a fresh digest of whatever
+    /// source it is about to resume with; a mismatch means the definition
+    /// changed since suspension. The core has no resume-time call site of
+    /// its own to check this — enforcement is necessarily host-side (LP-2).
+    pub workflow_digest: String,
 }
 
 /// The structured output of a workflow execution.
@@ -436,7 +444,12 @@ impl ExecutionContext {
 /// versions/platforms). Two sources differing only in whitespace/comments
 /// parse to the same AST and therefore share a digest — the correct notion of
 /// "same workflow" for reproducibility, since neither affects execution.
-fn digest_ast(ast: &WorkflowFile) -> String {
+///
+/// `pub(crate)`: reused directly by `environment.rs`'s `EnvRunResult::candidate()`
+/// (NE-12) so `CandidateResult.workflow_digest` and `ReproRecipe.workflow_digest`
+/// agree on the same notion of identity, rather than each hashing something
+/// different under the identical field name.
+pub(crate) fn digest_ast(ast: &WorkflowFile) -> String {
     use std::hash::{Hash, Hasher};
     let mut hasher = std::collections::hash_map::DefaultHasher::new();
     format!("{ast:?}").hash(&mut hasher);
@@ -1003,6 +1016,7 @@ impl Executor {
                 workflow: workflow_id.clone(),
                 vars: ctx.variables.clone(),
                 step_index: ctx.paused_at.unwrap_or(0),
+                workflow_digest: digest_ast(ast),
             })
         } else {
             None
@@ -2191,6 +2205,32 @@ mod tests {
 
             assert_eq!(result.status, Status::Ok);
             assert!(matches!(&result.out, Value::Text(s) if s.contains("hello")));
+        }
+
+        #[test]
+        fn resume_descriptor_workflow_digest_matches_digest_ast() {
+            // LP-22(c): the pinned-generation digest a paused run hands to its
+            // host must be the same `digest_ast` computation the run's own
+            // `ReproRecipe.workflow_digest` uses — proven directly here against
+            // the exact `ast` this test parses, no audit indirection needed.
+            let source = "\
+§wf:resume_digest_test v1.0
+@steps:
+  1. ASK(question) → $answer
+";
+            let ast = Parser::parse(source).expect("parse");
+            let result = Executor::with_stub().execute(&ast, None);
+
+            assert_eq!(
+                result.status,
+                Status::Paused,
+                "an unresolved ASK with no +default must pause; errors: {:?}",
+                result.errors
+            );
+            let resume = result
+                .resume
+                .expect("a paused run carries a resume descriptor");
+            assert_eq!(resume.workflow_digest, digest_ast(&ast));
         }
 
         #[test]

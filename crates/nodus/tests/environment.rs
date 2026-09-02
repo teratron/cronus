@@ -15,6 +15,7 @@ use nodus::environment::{
 use nodus::executor::Status;
 use nodus::portability::{ExtensionRole, HostCapabilities};
 use nodus::workflows;
+use nodus::{AuditProvider, ExecutionEvent, RunManifest};
 use std::cell::RefCell;
 use std::rc::Rc;
 use std::sync::{Arc, Mutex};
@@ -374,6 +375,64 @@ fn candidate_digest_deterministic_and_content_addressed() {
     assert_ne!(
         c1.workflow_digest, c3.workflow_digest,
         "a changed workflow source must change the digest"
+    );
+}
+
+/// Captures the `RunManifest` `run_complete` delivers — the same shape as
+/// `tests/dialog.rs`'s `ManifestCapture` (Phase 31 precedent), trimmed to
+/// just the manifest.
+#[derive(Clone)]
+struct ManifestCapture {
+    manifests: Arc<Mutex<Vec<RunManifest>>>,
+}
+
+impl ManifestCapture {
+    fn new() -> Self {
+        ManifestCapture {
+            manifests: Arc::new(Mutex::new(Vec::new())),
+        }
+    }
+}
+
+impl AuditProvider for ManifestCapture {
+    fn record_event(&self, _event: ExecutionEvent) {}
+
+    fn run_complete(&self, manifest: RunManifest) {
+        self.manifests.lock().unwrap().push(manifest);
+    }
+}
+
+#[test]
+fn candidate_digest_agrees_with_repro_recipe_digest() {
+    // NE-12/HO-20 unification: CandidateResult.workflow_digest and
+    // ReproRecipe.workflow_digest are built from two independent call sites
+    // (environment.rs vs. executor.rs) and never cross-checked in production
+    // code — this is the test that makes "they agree" a proven fact rather
+    // than an assumption from both reusing digest_ast.
+    let env = StubEnvironment;
+    let host = HostCapabilities::builtin();
+    let capture = ManifestCapture::new();
+    let result = workflows::run_with_environment_and_audit(
+        ENV_WF,
+        "env_test.nodus",
+        None,
+        &env,
+        &host,
+        &"__stub__".to_string(),
+        1,
+        capture.clone(),
+        "run-ne12",
+        "2026-01-01T00:00:00Z",
+    )
+    .expect("run");
+
+    let candidate = result.candidate(ENV_WF, "run-ne12", None, None);
+
+    let manifests = capture.manifests.lock().unwrap();
+    assert_eq!(manifests.len(), 1, "run_complete must fire exactly once");
+    assert_eq!(
+        candidate.workflow_digest, manifests[0].repro.workflow_digest,
+        "CandidateResult and ReproRecipe must agree on the pinned generation"
     );
 }
 

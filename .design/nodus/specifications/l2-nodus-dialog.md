@@ -1,6 +1,6 @@
 # Nodus Human-in-the-Loop Dialog Implementation (Rust)
 
-**Version:** 1.2.1
+**Version:** 1.4.0
 **Status:** Stable
 **Layer:** implementation
 **Implements:** l1-nodus-dialog.md
@@ -20,9 +20,9 @@ the runtime taxonomy; this spec specifies their emission.
 
 - [l1-nodus-dialog.md](l1-nodus-dialog.md) — the dialog contract this implements (DG-1…DG-11)
 - [l2-nodus-runtime.md](l2-nodus-runtime.md) — runtime crate extended here: `vocab` (commands, `Status`), `executor`, the `run_with_*` family
-- [l2-nodus-portability.md](l2-nodus-portability.md) — LP-2 extension-point pattern + the LP-8 `ExtensionRole` taxonomy this adds `Dialog` to; [ADDED v1.2.0] §4.10's LP-16 `+reversible`/`+external` declaration surface is what makes §4.8's placement advisory decidable
+- [l2-nodus-portability.md](l2-nodus-portability.md) — LP-2 extension-point pattern + the LP-8 `ExtensionRole` taxonomy this adds `Dialog` to; [ADDED v1.2.0] §4.10's LP-16 `+reversible`/`+external` declaration surface is what makes §4.8's placement advisory decidable; [ADDED v1.3.0] §3.2 tracks LP-22(c) — designed here in §4.3 as `ResumeDescriptor.workflow_digest` — as this document only records the realization verdict, not the field shape
 - [l2-nodus-errors.md](l2-nodus-errors.md) — owns the `DIALOG_TIMEOUT`/`DIALOG_REJECTED`/`PAUSED` codes and their severity/category
-- [l2-nodus-observability.md](l2-nodus-observability.md) — [ADDED v1.1.0] owns `EventAnnotations`, the HO-9/11/16/17 carrier §4.7 extends with a fifth field for DG-9's provenance signal
+- [l2-nodus-observability.md](l2-nodus-observability.md) — [ADDED v1.1.0] owns `EventAnnotations`, the HO-9/11/16/17 carrier §4.7 extends with a fifth field for DG-9's provenance signal; [ADDED v1.3.0] also owns `ReproRecipe.workflow_digest`, whose exact `digest_ast` computation §4.3's new `ResumeDescriptor.workflow_digest` (LP-22(c)) reuses rather than defining a second one
 
 ## 1. Motivation
 
@@ -49,7 +49,7 @@ for the case a host must handle out-of-band.
 | DG-1 Host neutrality | The backend is a `DialogProvider` trait; the executor never names a UI. Built-in `DefaultDialogProvider` ships; interactive backends live outside the crate (LP-2). |
 | DG-2 Blocking progression | The executor resolves a dialog step before advancing: it calls the provider, and on no resolution returns `Status::Paused` without running later steps. |
 | DG-3 Typed binding | `ASK` coerces the answer to its `+type` (str/bool/confirm/choice/multi_choice) into a `Value`, then binds it to the pipeline target; a `+validate` failure re-prompts or routes per the validator. |
-| DG-4 Suspend/resume | An unresolved blocking dialog and `!PAUSE` set `Status::Paused` and produce a `ResumeDescriptor` (workflow id + var snapshot + step index); re-invocation with the answer continues deterministically. |
+| DG-4 Suspend/resume | An unresolved blocking dialog and `!PAUSE` set `Status::Paused` and produce a `ResumeDescriptor` (workflow id + var snapshot + step index + generation digest, §4.3). "Resumption" is host re-invocation of `run`/`run_with_dialog` **from the top** with the same `source`/`input`, not a crate-side continuation from the snapshot — `paused_at`/the descriptor are never read back by any nodus function (verified against every `run`/`run_with_*` signature). It "continues from the suspension point" (L1) by **deterministic replay**: NL-6/HO-4 guarantee the prior trajectory re-derives identically, and a `DialogProvider` recognizing the already-answered prompt/action signature returns `DialogOutcome::Remembered` (DG-9 §4.7) instead of pausing again — behaviourally equivalent to continuation, without a continuation mechanism existing. **Caveat already tracked, not new**: replay is sound only when the pre-suspension segment is `Determinism::Deterministic` (`l2-nodus-observability.md` §4.7); a run whose prior steps included `GEN`/`ANALYZE` is `ContainsModelCalls`-flagged, and replaying it may not reproduce the same trajectory the pause recorded — an existing reproducibility limitation, not one this correction introduces. |
 | DG-5 Typed failures | `+timeout` → `NODUS:DIALOG_TIMEOUT`; `+strict` `CONFIRM` rejection → `NODUS:DIALOG_REJECTED`; both are `RuntimeError`s routed to `@err:`. |
 | DG-6 Default-on-absence | `DefaultDialogProvider` resolves a dialog with a `+default` and otherwise signals pause; it never blocks (a non-interactive run completes or pauses, never hangs). |
 | DG-7 Trace data-safety | Dialog events reuse `observability::FieldDescriptor` (type + length), never raw answer text. |
@@ -105,15 +105,74 @@ use.
 ```text
 [REFERENCE]
 pub struct ResumeDescriptor {
-    pub workflow: String,                 // "wf:<name>"
+    pub workflow: String,                 // "wf:<name>", a display label — never a resolution key (LP-22(c))
     pub vars: HashMap<String, Value>,     // environment snapshot at suspension
     pub step_index: u32,                  // suspended step
+    pub workflow_digest: String,          // content identity of the pinned definition — LP-22(c) [IMPLEMENTED v1.4.0]
 }
 ```
 
 `RunResult` carries `Option<ResumeDescriptor>`, populated only when
-`status == Paused`. The runtime defines the descriptor; the host persists and
-re-supplies it (LP-1). The descriptor never includes raw prompt text (DG-7).
+`status == Paused`. The runtime defines the descriptor; the host persists it for
+its own bookkeeping (LP-1) — **no nodus function accepts a `ResumeDescriptor` as
+input** (verified: `run`/`run_with_*` take only `source`/`filename`/`input` plus
+one provider parameter each; `paused_at` is written at suspension and never read
+back). "Resume" is therefore not a continuation the crate performs — it is the
+host calling `run`/`run_with_dialog` **again from the top**, with a
+`DialogProvider` whose `ask`/`confirm` recognizes the already-answered dialog by
+its prompt/action signature and returns `DialogOutcome::Remembered` (DG-9 §4.7)
+instead of pausing a second time. `vars`/`step_index` are diagnostic snapshots
+for that bookkeeping (audit, UI, "what was this run waiting on"), not inputs to
+a re-entry API that does not exist. See §3's DG-4 row for why this satisfies the
+L1's "resumption continues from the suspension point" without literal
+continuation. The descriptor never includes raw prompt text (DG-7).
+
+**`workflow_digest` (LP-22(c)) [IMPLEMENTED v1.4.0].** `l1-nodus-portability.md` LP-22(c)
+requires a resume descriptor to name the **pinned generation**, not the
+launch-time name — and `workflow: String` is exactly a launch-time name
+(`"wf:<name>"`, the `§wf:` header's declared identifier), which is the one thing
+LP-22(c) says must not be used alone. Because resume is host-orchestrated
+re-invocation (§4.3 above) rather than a crate-internal continuation, the core
+has no call site at which to *enforce* generation pinning — the obligation is
+necessarily discharged as **declared, verifiable data**: `workflow_digest` is
+the exact `digest_ast(ast)` already computed for `ReproRecipe.workflow_digest`
+(`l2-nodus-observability.md` §4.7, `crate::observability::ReproRecipe`) — no new
+hashing scheme, the same `std`-only `DefaultHasher` over `format!("{ast:?}")`,
+zero-dep (LP-1). A host that persists workflow definitions by name and
+re-resolves them at resume time compares the descriptor's `workflow_digest`
+against a fresh digest of whatever source it is about to resume with; a
+mismatch means the definition changed since suspension and resuming would
+violate LP-22(c) — the host's decision what to do about that (refuse, warn,
+proceed anyway) is out of core scope (LP-2), matching every other host-enforced
+seam in this document. **Content identity, not byte identity**: reusing
+`digest_ast` (hashes the parsed AST) rather than `l2-nodus-environment.md`'s
+sibling `digest_source` (hashes the raw source string, `CandidateResult.workflow_digest`)
+is deliberate — a purely cosmetic edit (reformatting, a comment change) does not
+change what the run *is* for pinning purposes, and `ReproRecipe` already
+establishes AST-level identity as this crate's reproducibility grain. **A
+pre-existing naming collision worth flagging, not fixed here**: two fields
+already share the name `workflow_digest` (`ReproRecipe` here, `CandidateResult`
+in `l2-nodus-environment.md`) computed by two *different* functions — `digest_ast`
+vs. `digest_source` — so a `ReproRecipe.workflow_digest` and a
+`CandidateResult.workflow_digest` for the byte-identical file are not guaranteed
+equal, and `l2-nodus-observability.md` §4.7's own inline comment ("the NE-12
+precedent") reads as if they were. This third `workflow_digest` deliberately
+follows the `digest_ast` precedent rather than adding a third computation; the
+two-function inconsistency is a separate, pre-existing finding recorded in
+`l2-nodus-portability.md` §3.2.
+
+**Implemented [Phase 31].** Field added at `ResumeDescriptor`'s one construction
+site (`executor.rs`), populated by the identical `digest_ast(ast)` call
+`ReproRecipe`'s own construction makes a few lines below it. A unit test
+(`executor.rs`) asserts the descriptor's digest equals `digest_ast(&ast)` for
+the exact `ast` it parsed; an integration test (`tests/dialog.rs`, a capturing
+`AuditProvider`) asserts it agrees with the independently-built
+`ReproRecipe.workflow_digest` surfaced through `run_complete` for the same
+paused run — the two construction sites are never compared to each other in
+production code, so this is the assertion that makes the pinning claim
+meaningful rather than coincidental. 484 tests pass (was 482, +2); clippy/fmt
+clean; `Cargo.toml`/`Cargo.lock` diff empty (LP-1 preserved); no
+`unwrap`/`panic!`/`expect` added to any production path.
 
 ### 4.4 Executor wiring
 
@@ -376,6 +435,8 @@ nowhere in the crate and are free.
 | Version | Date | Author | Notes |
 | --- | --- | --- | --- |
 | 1.1.1 | 2026-08-01 | Core Team | **Implemented the DG-9/DG-10 seam designed in v1.1.0 — Phase 28.** `DialogOutcome::Remembered(Value)` + `DialogProvenance{Answered,Remembered}` (`observability.rs`, beside `EventAnnotations`) + the `dialog_provenance` field landed exactly as designed; `handle_dialog`'s single `outcome` match now also computes the provenance for the one `StepEnd` emit, no second emit call. **Confirmed rather than assumed**: `dialog_provenance` is the first `EventAnnotations` field the crate's own dispatch logic populates directly (every sibling field has no in-crate writer at all) — `EventAnnotations`'s own doc comment updated to say so; recorded in §4.7 rather than silently adjusted. DG-10 needed zero code, confirming the v1.1.0 prediction. **One real test-writing finding**: asserting "no dialog provenance on rejection" against `DEFERRED_WF` (which declares `@err: ESCALATE(human)`) initially expected one `StepEnd`, but `DIALOG_REJECTED` is `Signal`-free so NL-9 dispatch fires automatically — two `StepEnd` events land (the rejected `ASK`, then the dispatched `ESCALATE`), both correctly carrying no provenance; the test was corrected, not the code. §3's DG-9/DG-10 rows updated to Implemented. 467 tests pass (was 462, +5: 1 unit test in `observability.rs`, 4 integration tests in `tests/portability.rs`); clippy/fmt clean; `Cargo.toml`/`Cargo.lock` diff empty (LP-1 preserved); no `unwrap`/`panic!`/`expect` added to any production path. |
+| 1.4.0 | 2026-09-02 | Core Team | **Phase 31 — LP-22(c) implemented exactly per v1.3.0's design, no scope correction.** `ResumeDescriptor.workflow_digest: String` added at the struct's one construction site, populated by `digest_ast(ast)` — the identical call `ReproRecipe`'s own construction makes a few lines below it in `executor.rs`. Unit test (`executor.rs`) confirms the descriptor's digest equals `digest_ast(&ast)` for the parsed workflow; integration test (`tests/dialog.rs`, a capturing `AuditProvider`) confirms it agrees with the independently-built `ReproRecipe.workflow_digest` surfaced through `run_complete` for the same paused run — the assertion that makes the pinning claim real rather than coincidental, since the two construction sites are never cross-checked in production code. 484 tests pass (was 482, +2); clippy/fmt clean; `Cargo.toml`/`Cargo.lock` diff empty (LP-1 preserved); no `unwrap`/`panic!`/`expect` added to any production path. LP-22 overall stays **Partially realized** — (a)/(b) unaffected by closing (c). |
+| 1.3.0 | 2026-09-02 | Core Team | Designs LP-22(c) (`l1-nodus-portability.md`) on `ResumeDescriptor`, the struct this spec owns: a `workflow_digest: String` field, computed by the same `digest_ast` function `l2-nodus-observability.md`'s `ReproRecipe.workflow_digest` already uses (`std`-only `DefaultHasher`, zero-dep), so a host can detect whether the definition it is about to resume differs from the one pinned at suspension. Corrects two overclaims found while grounding the design against source, both traced to the same misreading — that a "resume" API exists for the descriptor to feed: §4.3 said the host "re-supplies" the descriptor (to what? — verified against every `run`/`run_with_*` signature and `paused_at`'s read sites: nothing accepts one), and §3's DG-4 row said re-invocation "continues deterministically" as if from a snapshot. Both now state the real mechanism — resume is the host calling `run`/`run_with_dialog` again **from the top**, replaying the deterministic prefix (NL-6/HO-4) until `DialogProvider` recognizes the already-answered prompt via DG-9 memoization — which satisfies the L1's "continues from the suspension point" by replay rather than literal continuation, with the `Determinism::ContainsModelCalls` caveat (`l2-nodus-observability.md` §4.7) cited as the reason replay is not sound across a `GEN`/`ANALYZE`-containing prefix. Flags, without fixing, a **pre-existing** naming collision: `ReproRecipe.workflow_digest` (`digest_ast`, AST-level) and `l2-nodus-environment.md`'s `CandidateResult.workflow_digest` (`digest_source`, raw-text-level) are two different computations sharing one field name — `l2-nodus-observability.md` §4.7's own comment treats them as the same precedent, which they are not. Deliberately follows `digest_ast` here (content identity, not byte identity — a cosmetic edit should not read as a different generation). No code changed — this is spec-level design, decomposable by `/magic.task`. |
 | 1.2.1 | 2026-09-01 | Core Team | Implementation-time reconciliation of §4.8.3/§4.8.4 to the as-built `crates/nodus` mechanism, landed alongside Phase 30. §4.8.3: `W017`'s trigger is the whole-argument `$var` reference model nodus actually has, not a string-interpolation scan (the crate has no interpolation scanner), and the producer lookup is a **dedicated** single-pass walker (`w017_collect_producers`, recording `target-root → producing command name`) rather than a reuse of `collect_vars_stmt`, which tracks declared/used sets only and has no producer-identity concept. §4.8.4: named precisely which constructs `W016` treats as their own scope — `?IF`/`?ELIF`/`?ELSE` and `~FOR`/`~UNTIL` bodies — and added the two cases the original text omitted: `~PARALLEL` branches are walked for nested scopes but never paired against each other (concurrent, not sequential — no "runs before it" relation for clause (b)), and `?SWITCH` arms/`~MAP`'s command are a single `CommandCall` with no internal sequence, so a dialog appearing as a whole arm's or map's action can never contribute a finding. No behavioural change — `W016`/`W017` ship exactly as designed; this row narrows how the design is described to match what was built. |
 | 1.2.0 | 2026-09-01 | Core Team | Closes the DG-11 invariant-traceability gap found at the v1.40.0 nodus replan. New §4.8 realizes DG-11 as two validator advisories rather than runtime behaviour, following its L1's own "a validator MAY advise on" framing: `W016` for a dialog positioned earlier than its own dependencies require, and `W017` for a prompt that inlines a `GEN`/`ANALYZE`-produced artifact instead of referring to it. Decidable today because all three facts it needs already exist — `DIALOG_COMMANDS`, LP-16's `+reversible`/`+external` modifiers (§4.10 of `l2-nodus-portability`), and `collect_vars_stmt`'s read/write walk — so no new AST, grammar, provider call or runtime data is introduced. The section's load-bearing decision is that `W016` requires a **positive** `+reversible=true` declaration on the following step: LP-16 descriptors are omitted rather than defaulted, so firing on undeclared steps would advise moving a confirmation past a possibly irreversible effect — recall traded for soundness, with reach growing as LP-16 is adopted. The brief-quality half of the payload rule is declared **out of core scope** (judging prose is a model act; the crate is model-free per LP-1) rather than left silently unimplemented. `Paused`/resume (DG-4) and memoization (DG-9) untouched. |
 | 1.1.0 | 2026-07-31 | Core Team | Closes the DG-9/DG-10 invariant-traceability gap flagged at the v1.29.0 nodus replan. New §4.7 designs both: DG-9's `+remember` marker needs no grammar change (modifiers are already unconstrained free-form pass-through to `DialogProvider::ask`/`confirm`); its one real nodus-side obligation — a distinct trace provenance on a memoized resolution — realizes as a new `DialogOutcome::Remembered(Value)` variant bound through `Answer`'s exact path, plus a new `dialog_provenance: Option<DialogProvenance>` field on the shared `EventAnnotations` carrier (the HO-8/9/10/11/13/16/17 closed-taxonomy-via-optional-field precedent, not a new event type). No new `DialogProvider` trait method: `ask`/`confirm` already receive the raw `modifiers` slice, so a host's own recall/governance/fit-check logic (L1 §4.6's pseudocode) lives entirely inside its existing method body. **DG-10 found to need no separate mechanism at all** — its recurrence/promotion pseudocode is 100% host-side, operating on the host's own durable store plus the DG-9 provenance tag nodus already emits, the same "rides an existing signal, no enumerated list" shape this session's NL-9 dispatch and LP-17 `SETTLEMENT_UNACCOUNTED` also use. §3 gains both compliance rows; §5 gains three rejected alternatives (a second trait method, a dedicated event type, a nodus-side recurrence counter) each traced to an existing precedent. Design only — nothing landed in `crates/nodus` this pass. |

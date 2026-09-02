@@ -185,3 +185,5 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Updated 15 specifications (main)
 - Updated 3 specifications (nodus)
 - Completed task (nodus)
+- Updated 4 specifications (nodus)
+- Completed 2 tasks (nodus)

@@ -370,9 +370,15 @@ pub struct EnvRunResult {
 
 impl EnvRunResult {
     /// Build an archivable candidate tuple (NE-12). `workflow_source` is the
-    /// raw source hashed for `workflow_digest`; `run_id` is the caller's own
-    /// tracking identifier; `budget` should be the profile's declared budget
-    /// (or `None`) so different-budget results are never silently compared.
+    /// source the caller ran, hashed for `workflow_digest` at the AST level —
+    /// the same `digest_ast` computation `ReproRecipe.workflow_digest`
+    /// (`l2-nodus-observability.md` §4.7) uses, so a `CandidateResult` and a
+    /// `RunManifest` for the same run agree on the pinned generation. Falls
+    /// back to the raw-text `digest_source` hash only if `workflow_source`
+    /// fails to parse (the caller passed something other than what it ran) —
+    /// an honest degrade, not a panic; `run_id` is the caller's own tracking
+    /// identifier; `budget` should be the profile's declared budget (or
+    /// `None`) so different-budget results are never silently compared.
     pub fn candidate(
         &self,
         workflow_source: &str,
@@ -380,8 +386,12 @@ impl EnvRunResult {
         budget: Option<Budget>,
         token_measure: Option<String>,
     ) -> CandidateResult {
+        let workflow_digest = match crate::parser::Parser::parse(workflow_source) {
+            Ok(ast) => crate::executor::digest_ast(&ast),
+            Err(_) => digest_source(workflow_source),
+        };
         CandidateResult {
-            workflow_digest: digest_source(workflow_source),
+            workflow_digest,
             reward: self.reward.clone(),
             trajectory_ref: run_id.to_string(),
             budget,
@@ -596,5 +606,36 @@ mod tests {
         assert_eq!(candidate.trajectory_ref, "run-42");
         assert_eq!(candidate.budget, budget);
         assert_eq!(candidate.reward, reward(1.0));
+    }
+
+    #[test]
+    fn candidate_digest_falls_back_to_source_hash_when_unparseable() {
+        // NE-12/HO-20 unification: candidate() prefers digest_ast, but an
+        // unparseable workflow_source (the caller passed something other than
+        // what it actually ran) must degrade to the old digest_source hash
+        // rather than panicking or silently producing an empty/placeholder
+        // digest. Pin the fallback value explicitly — the pre-unification
+        // tests exercised this path but never asserted on the digest itself.
+        let result = EnvRunResult {
+            result: RunResult {
+                workflow: "wf:x".to_string(),
+                status: crate::executor::Status::Ok,
+                out: Value::Null,
+                log: Vec::new(),
+                errors: Vec::new(),
+                flags: Vec::new(),
+                vars: std::collections::HashMap::new(),
+                resume: None,
+            },
+            reward: reward(1.0),
+            budget_halted: false,
+        };
+        let not_a_workflow = "this is not valid nodus source";
+        let candidate = result.candidate(not_a_workflow, "run-fallback", None, None);
+        assert_eq!(
+            candidate.workflow_digest,
+            digest_source(not_a_workflow),
+            "an unparseable source must fall back to the raw-text digest"
+        );
     }
 }

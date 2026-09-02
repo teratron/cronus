@@ -5,11 +5,13 @@
 //! capability-manifest derivation of the `Dialog` role.
 
 use nodus::{
+    AuditProvider, DefaultDialogProvider, ExecutionEvent, RunManifest,
     executor::{DialogOutcome, DialogProvider, Status, Value},
     parser::Parser,
     portability::{CapabilityManifest, ExtensionRole},
     workflows,
 };
+use std::sync::{Arc, Mutex};
 
 // A dialog whose ASK carries a `+default` — resolved by the built-in provider.
 const ASK_DEFAULT_WF: &str = r#"§wf:ask_default v1.0
@@ -172,5 +174,62 @@ fn manifest_omits_dialog_role_with_default() {
     assert!(
         !manifest.roles().contains(&ExtensionRole::Dialog),
         "a defaulted dialog is host-free and needs no Dialog role: {manifest:?}"
+    );
+}
+
+// ─── LP-22(c): pinned-generation digest ──────────────────────────────────────
+
+/// Captures the `RunManifest` `run_complete` delivers — the `RecordingProvider`
+/// shape from `tests/observability.rs`, trimmed to just the manifest.
+#[derive(Clone)]
+struct ManifestCapture {
+    manifests: Arc<Mutex<Vec<RunManifest>>>,
+}
+
+impl ManifestCapture {
+    fn new() -> Self {
+        ManifestCapture {
+            manifests: Arc::new(Mutex::new(Vec::new())),
+        }
+    }
+}
+
+impl AuditProvider for ManifestCapture {
+    fn record_event(&self, _event: ExecutionEvent) {}
+
+    fn run_complete(&self, manifest: RunManifest) {
+        self.manifests.lock().unwrap().push(manifest);
+    }
+}
+
+#[test]
+fn resume_descriptor_digest_agrees_with_repro_recipe_digest() {
+    // Both digests are built a few lines apart in `executor.rs`'s same
+    // function, from the same `ast`, but by two independent construction
+    // sites — `ResumeDescriptor` and `ReproRecipe` are never compared to each
+    // other in production code. Proving they agree here is what makes the
+    // LP-22(c) pinning claim meaningful rather than coincidental.
+    let capture = ManifestCapture::new();
+    let result = workflows::run_with_dialog_and_audit(
+        ASK_PAUSE_WF,
+        "ask_pause.nodus",
+        None,
+        DefaultDialogProvider,
+        capture.clone(),
+        "run-lp22c",
+        "2026-01-01T00:00:00Z",
+    )
+    .expect("the run returns a result");
+
+    assert_eq!(result.status, Status::Paused, "errors: {:?}", result.errors);
+    let resume = result
+        .resume
+        .expect("a paused run carries a resume descriptor");
+
+    let manifests = capture.manifests.lock().unwrap();
+    assert_eq!(manifests.len(), 1, "run_complete must fire exactly once");
+    assert_eq!(
+        resume.workflow_digest, manifests[0].repro.workflow_digest,
+        "ResumeDescriptor and ReproRecipe must agree on the pinned generation"
     );
 }
