@@ -1,8 +1,8 @@
 # Implementation Plan
 
-**Version:** 2.64.0
+**Version:** 2.65.0
 **Generated:** 2026-09-03
-**Based on:** .design/main/INDEX.md v1.0.184
+**Based on:** .design/main/INDEX.md v1.0.185
 **Status:** Active
 
 ## Overview
@@ -17,6 +17,8 @@ Implementation plan for Cronus from the project registry (209 registered specs: 
 - **Hardening** = operational productionization — Phase 9.
 
 Execution mode: **Parallel** (C3); tracks grouped by file independence. Critical path runs through `crates/core` and the `crates/nodus` runtime it depends on.
+
+*Revision v2.65.0 — opened Phase 26 (Application Shell Runtime), 11 tasks / 5 tracks (A one root · B state substrate · C dispatch · D seam & persistence · T validation), after the `/magic.spec amend l2-application-shell` (1.0.1) precondition and the user's GUI-track go. `**Based on:**` INDEX v1.0.184 → v1.0.185.*
 
 *Revision v2.64.0 — registry sync only (`**Based on:**` INDEX v1.0.183 -> v1.0.184). Absorbs one new Stable L2, `l2-application-shell`, as **Phase 26 — Held**: the spec has a home in the plan (C6, no orphan) and the phase is deliberately not opened. Two gates are recorded on it — one mechanical (Phase 25 must land first; the spec is written against the tier layout that phase creates) and one that is not the agent's to lift (the standing external-design-track hold on `packages/ui` / `apps/desktop` feature work). No task workbook is written for a held phase. No other plan content changed.*
 
@@ -617,28 +619,30 @@ Execution mode: **Parallel** (C3); tracks grouped by file independence. Critical
 
 - [x] **UI Module Topology** ([l2-ui-module-topology.md](specifications/l2-ui-module-topology.md)) [L2] — `Implements: l1-architecture.md` — NEW. The TypeScript twin of `l2-crate-topology`, facing a language with no compile-time module boundary inside a package. Four tiers over `packages/ui/src` — composition root (`index.ts`, `App.tsx`, `styles.css`) → shell (`shell/`) → surfaces (`surfaces/`) → shared (`shared/`) — with UMT-1…UMT-7: total one-way tier order with no lateral surface-to-surface edge, a published surface API narrower than its file set, imports terminating at the tier declaration, grouping by surface with a folder-minting threshold (a surface earns a folder at its second private module, never for size), the shared tier a strict leaf, a single IPC seam (`shared/bridge.ts` alone performs invocation), and total zone coverage. Two concrete violations the partition resolves: `surfaces.tsx` fuses catalog data with the `Workbench` composer and imports two sibling surfaces (split — catalog to shared, composer to shell); `styles.css` must stay at `src/` because `package.json` exports it by that path. Enforced by boundary zones + direction rules + a forbidden-call rule in `.fallowrc.json`, resolving the standing preset-versus-custom-zones question in `l2-quality-pipeline` §4.1 against the bundled `feature-sliced` preset (its domain-logic layers contradict INV-2). → **9 tasks / 4 tracks** (A partition · B boundary gate · C documentation + containment cleanup · T validation).
 
-## Phase 26 — Application Shell Runtime (`packages/ui` + `apps/desktop`) — **Held**
+## Phase 26 — Application Shell Runtime (`packages/ui` + `apps/desktop`) — **Todo**
 
-*Realizes the runtime contracts AS-1…AS-13 through the new `l2-application-shell`, authored by the v1.0.184 `/magic.spec` pass. Recorded here so a Stable spec has a home in the plan (C6, no orphan) — **not opened**. Two gates stand between this entry and a `Todo` row, and only one of them clears itself.*
+*Realizes the runtime contracts AS-1…AS-13 through `l2-application-shell` (1.0.1). Opened by the v2.65.0 `/magic.task` sync after all three gates cleared. A multi-layer runtime build in the span of Phase 13 — it is **feature work**, and the GUI-track hold that kept it `Held` was lifted by the user this session ("я в этой сессии портировал дизайн" + "запускай").*
 
-> **Gate 1 — structural precondition (mechanical).** Every path in the spec is written against the four-tier `packages/ui/src` layout that **Phase 25** creates (`l2-application-shell` §5, note 1). Realizing it first would place the new modules in today's flat arrangement and then move them, doubling the change. Phase 25 is `Todo` at 0/9 tasks; this gate clears when that phase completes.
+> **All gates cleared.**
 >
-> **Gate 2 — the standing GUI-track hold (not the agent's to lift).** Unlike Phase 25 — structural hygiene that adds no surface, control, or capability — this phase **is feature work**: rebindable context-scoped shortcuts, persisted-and-restored layout, and live core projections replacing placeholders. The v2.62.0 Risks note names this exact failure mode: *"a later `/magic.task` reading Phase 24 as 'GUI is fully open' and pulling unrelated frontend scope"*, and states that scope beyond Phase 24's slice needs its own `/magic.spec` -> `/magic.task`. The `/magic.spec` half is now done; the design-track signal is not. Authoring a spec by autonomous DA-3 selection is the agent deciding what to specify — it is not the user opening the track.
+> - **Gate 1 — Phase 25 first (mechanical).** Done. The four-tier `packages/ui/src` layout every path in the spec assumes now exists.
+> - **Gate 2 — the GUI-track hold.** Lifted by the user this session. It was never the agent's to lift; the design was ported through Claude Design and the user said run.
+> - **Precondition — §4.3 admission rule.** `l2-application-shell` 1.0.0 → 1.0.1 (`/magic.spec amend`, same session): the rule made *"the capability the command-line verb reaches"* the necessary condition for a new seam method, but §4.5's settings-store-backed layout record has no CLI verb and no other binder while still being required by the same spec. Reconciled — admissibility is now *the bound capability exists in the core **or the host** and is not frontend-only*, with two named classes; the host-owned-facility class makes §4.5's layout record admissible. Track D no longer inherits a rule that blocks its own requirement.
 >
-> **Not decomposed, on purpose.** No `tasks/phase-26.md` is written while the phase is held. A task workbook for work the design track may reshape is optimism cost, and a full atomic checklist reads as sanctioned scope regardless of the label above it. The track outline below preserves the shape of the decomposition; the checklist is generated when the phase opens.
+> **Already done outside this phase (this session).** `apps/desktop/src/main.tsx` mounts `BuildingShell` as a prototype (Home-only floor, local theme state, every surface an INV-9 placeholder); `packages/ui/src/styles.css` gained `@source "./"` (Tailwind v4 skips `node_modules`, so the symlinked package's classes went unscanned — an unstyled white screen); `.fallowrc.jsonc` coverage scoped to `packages/ui`; `public/assets/cronus-icon.png` added. Those made the design *visible*; this phase makes it a *runtime*.
 >
-> **Planning-time finding — surfaced, not hidden.** The spec's §4.3 capability-admission rule (*a bridge method may be added only when it binds a core capability already bound by another frontend*) is stated **narrower than the principle it serves** — that the seam cannot grow a frontend-only feature. Checked during this pass rather than assumed: `crates/cli` has no `config`/`settings` command group, and the desktop's own settings (`theme`, `color_scheme`, shortcuts) live host-side in the Tauri backend with no other frontend binding them. §4.5's layout record therefore needs a read that the rule's letter forbids while its purpose permits — configuration written by the Rust side is not a frontend-only capability. Reconciling the rule's *test* to its *principle* is a `/magic.spec amend l2-application-shell` edit, deliberately outside this entry. **The phase must not open with this contradiction unresolved**, or its first executor inherits a rule that blocks a requirement of the same spec.
+> **Interpretation points the executor resolves (Decision Review, not pre-settled).** (1) "The `Workbench` composer becomes the office surface" (§4.1) is mechanically ambiguous — delete it (its nav strip is superseded by the sidebar) or mount it via the router for `active === "office"`; reading (a) is the smaller change and matches "stops being a rival root". (2) The store primitive shape — one generic `Store<S>` module vs. `useSyncExternalStore` per domain — under §6's no-library constraint.
 
 - [ ] **Application Shell Runtime** ([l2-application-shell.md](specifications/l2-application-shell.md)) [L2] — `Implements: l1-application-shell.md` — NEW, Stable, **held**. The React 19 + Tauri v2 realization of the reactive frontend runtime: the four contracts no other frontend L2 claims (state/reactivity, action/dispatch, workbench composition + restoration, async ownership). Settles the **two-composition-root fork** present in the source today — `packages/ui` exports both the workbench the desktop app mounts and a shell frame that is built, tested, and rendered by nothing — by making one the root and remounting the other as the `office` surface behind the router. Introduces three state domains split by *who owns the truth* (view / projection / session) in hand-rolled subscribable stores, with a four-state projection snapshot (*unrequested / pending / loaded / unavailable-with-reason*) so "no offices" is never confusable with "could not ask" (INV-9); a capability-admission rule over the single IPC seam (INV-3); focus-derived context-stack keymap dispatch with three-layer binding merge; and a versioned layout record that restores field-wise and can never block startup (INV-5). States honestly where the stack lacks the L1's mechanism (AS-2 handles, AS-11 executors) rather than renaming React primitives to make the compliance table read uniformly.
 
-**Track outline** *(indicative shape, not a commitment — regenerated when the phase opens)*
+**Tracks** *(decomposed into 11 tasks in `tasks/phase-26.md`)*
 
 | Track | Scope | Gated by |
 | --- | --- | --- |
 | **A — root collapse** | One application root; the earlier composer remounts as the `office` surface behind the router; the public API declares exactly one root (R-1/R-2/R-3) | Phase 25 |
 | **B — state substrate** | The store primitive + selector subscription; the view domain replacing component-local frame state; the projection and session domains with the four-state snapshot | A |
 | **C — dispatch** | Action registry hardening (mandatory label, `when` predicate); context stack + pure keymap resolver (prefix / precedence / fall-through); three-layer binding merge with origin reporting | A |
-| **D — seam & persistence** | Event direction + channel liveness on the single seam; the admission pass naming what stays an INV-9 placeholder; the versioned layout record | B; **blocked on the §4.3 finding above** |
+| **D — seam & persistence** | Event direction + channel liveness on the single seam; the admission pass naming what stays an INV-9 placeholder; the versioned layout record + host settings IPC | B (unblocked — §4.3 amended to 1.0.1) |
 | **T — validation** | The spec's §5 verification table turned into named tests, one per contract | B, C, D |
 
 ## Backlog

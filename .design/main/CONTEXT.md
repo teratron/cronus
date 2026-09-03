@@ -38,6 +38,8 @@
 │   ├── technology-stack-research.md
 │   └── ui-ux.md
 ├── .env.example
+├── .fallowrc.jsonc
+├── .gitattributes
 ├── .github/
 │   ├── dependabot.yml
 │   └── workflows/

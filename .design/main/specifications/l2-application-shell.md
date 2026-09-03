@@ -1,6 +1,6 @@
 # Application Shell Runtime (React 19 · Tauri v2)
 
-**Version:** 1.0.0
+**Version:** 1.0.1
 **Status:** Stable
 **Layer:** implementation
 **Implements:** l1-application-shell.md
@@ -206,13 +206,32 @@ createCoreClient(invoke, listen) -> CoreClient   // both host functions injected
 ```
 
 **Admission rule (INV-3 + INV-9).** A method may be added to the seam only when
-it binds a core capability that already exists and is already bound by another
-frontend — the same capability the corresponding command-line verb reaches. Until
-that capability exists, the surface that would consume it renders an explicit
-placeholder. The rule has one purpose: it makes the seam incapable of growing a
-frontend-only feature, which is how presentation-only erodes in practice — not by
-someone writing domain logic in TypeScript, but by adding one bridge method that
-has no counterpart anywhere else.
+it binds a capability that **already exists in the core or the host** and is
+**not frontend-only** — something another actor could exercise if it had reason
+to, whether or not one does today. The rule has a single purpose: to make the
+seam incapable of growing a frontend-only feature, which is how presentation-only
+erodes in practice — not by someone writing domain logic in TypeScript, but by
+adding one bridge method that exists only to serve the UI and has no counterpart
+anywhere. Until an admissible capability exists, the surface that would consume
+it renders an explicit placeholder.
+
+Two admissible classes, and the test is *not frontend-only*, not *has a CLI
+verb*:
+
+- **A core capability another surface binds.** A capability the CLI or TUI
+  already reaches is the clearest case — parity (INV-3) makes the counterpart
+  visible. This is a *sufficient* signal of admissibility, never the necessary
+  condition.
+- **A host-owned facility.** The shell's own durable state — the layout record
+  and the theming axes (§4.5) — is written by the host's settings store. No
+  command-line verb reaches it and no other frontend binds it, yet it is not a
+  feature the frontend invented: it is configuration the host owns, and reading
+  or writing it through one seam method is marshalling, not logic. A method that
+  binds host configuration is admissible on that basis alone.
+
+What stays excluded is a seam method with no counterpart in *either* class — no
+core capability, no host facility, no other binder. That is the erosion the rule
+exists to stop.
 
 Consequently the shell ships partly bound, and says so. A projection with no
 capability behind it is *unavailable with a reason*, never an empty list styled
@@ -380,11 +399,13 @@ that can fail, in the discipline of
 | §4.2 four-state projection | *unrequested*, *pending*, *loaded-empty*, and *unavailable* are separately observable; a test that cannot distinguish loaded-empty from unavailable is the regression this row exists to catch |
 | §4.3 channel liveness | a channel that fails to open, and one closed after opening, both move dependent projections to *unavailable* |
 
-Two things this list deliberately does not claim to check: whether a bridge
-method's core capability genuinely exists elsewhere (the §4.3 admission rule is a
-review obligation, since a method's *counterpart* is not visible from this
-package), and whether a given piece of state belongs in the view domain or the
-projection domain. Both are judgment, and naming them as such is the point.
+Two things this list deliberately does not claim to check: whether a proposed
+bridge method meets the §4.3 admission rule — that it binds a core capability
+another surface exercises, or a host-owned facility, and is not a feature the
+frontend invented — since neither the counterpart nor the facility is visible
+from this package; and whether a given piece of state belongs in the view domain
+or the projection domain. Both are judgment, and naming them as such is the
+point.
 
 ## 6. Drawbacks & Alternatives
 
@@ -424,3 +445,4 @@ projection domain. Both are judgment, and naming them as such is the point.
 | Version | Date | Change |
 | --- | --- | --- |
 | 1.0.0 | 2026-09-03 | Initial implementation spec — the L2 realization `l1-application-shell` had never received. One composition root (§4.1), projection/view/session stores over a scoped external-store subscription (§4.2), the single seam's event direction plus the capability-admission rule (§4.3), namespaced actions with context-stack keymap resolution and three-layer merge (§4.4), the workbench vocabulary and versioned layout record (§4.5), delegated selection surfaces (§4.6), cancellation-owned async (§4.7), and a verification table naming one failable check per contract plus the two obligations that stay judgment (§5). Maps AS-1…AS-13, stating explicitly where the stack lacks the L1's mechanism (AS-2, AS-11) and how the intent is met instead. Post-Update Review added §4.3 channel liveness (a dead push edge moves dependent projections to *unavailable* rather than leaving stale values on screen) and the §5 verification table. |
+| 1.0.1 | 2026-09-03 | §4.3 admission rule reconciled to the principle it states. The old text made *"the capability the corresponding command-line verb reaches"* the necessary condition for adding a seam method; the stated purpose was only *"incapable of growing a frontend-only feature"*. §4.5's layout record and the theming axes are written by the host settings store — reached by no CLI verb and no other frontend, yet not a frontend invention — so the old letter forbade what §4.5 requires. Now: admissibility = the bound capability exists in the core **or the host** and is **not frontend-only**; two admissible classes named (a core capability another surface binds; a host-owned facility), CLI/TUI parity demoted from necessary condition to sufficient signal. No new requirement — a self-contradiction repaired. |
