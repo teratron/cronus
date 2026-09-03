@@ -63,6 +63,7 @@
 - <https://github.com/tinyhumansai/tinyagents>
 - <https://github.com/ShunsukeHayashi/gws-harness>
 - <https://github.com/deepseek-ai/deepseek-harness>
+- <https://github.com/omacom/omarchy>
 
 ## Spec-Driven Development
 
@@ -148,6 +149,7 @@
 - <https://github.com/Panniantong/Agent-Reach>
 - <https://github.com/Leonxlnx/unlazy>
 - <https://github.com/chaseai-yt/claudex-loop>
+- <https://github.com/calesthio/OpenMontag>
 
 ## UI/UX
 
