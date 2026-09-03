@@ -1,6 +1,6 @@
 # Source Layout (Monorepo)
 
-**Version:** 1.2.2
+**Version:** 1.3.0
 **Status:** Stable
 **Layer:** implementation
 **Implements:** l1-architecture.md
@@ -18,6 +18,7 @@ The development-time organization of the Cronus repository: a polyglot monorepo 
 - [l2-workflow-runtime.md](l2-workflow-runtime.md) - The workflow runtime is an external crate the core depends on.
 - [l2-filesystem-layout.md](l2-filesystem-layout.md) - The complementary user-install layout.
 - [l2-crate-topology.md](l2-crate-topology.md) - How `crates/core` is partitioned into crates; resolves the §4.4 granularity question.
+- [l2-ui-module-topology.md](l2-ui-module-topology.md) - The same delegation for the frontend package: how `packages/ui` is partitioned into modules and which may import which (§4.6).
 
 ## 1. Motivation
 
@@ -95,6 +96,14 @@ Measurement showed domain-to-domain coupling is already near zero, so splitting 
 
 `crates/core` therefore becomes a facade over `crates/{contract,domain,store-local,auth-local}`. The directory tree in §4.1 and the dependency graph in §4.2 describe the layout **before** that migration; see the topology spec for the target state and its ordered migration steps.
 
+### 4.6 Frontend package decomposition [ADDED v1.3.0]
+
+§4.1 and §4.2 stop at the workspace member: they name `packages/ui` and fix its dependency direction relative to `apps/desktop` and the core, but say nothing about the package's internals. That is deliberate and symmetrical with §4.5 — this spec settles *which members exist and how they depend on each other*, and delegates each member's internal decomposition to a spec of its own.
+
+For the frontend package the delegate is **[l2-ui-module-topology.md](l2-ui-module-topology.md)**. It establishes a four-tier model inside `packages/ui/src` (composition root → shell → surfaces → shared) with one-way imports, a declared public API per surface, grouping by surface rather than by file kind, and a single seam to the core.
+
+The two delegations answer the same question in two languages with different starting positions. Rust receives module boundaries from the crate graph, so `l2-crate-topology` decides *where to cut* and the compiler enforces the result. TypeScript has no compile-time module boundary within a package, so `l2-ui-module-topology` must also specify *what enforces the cut* — delegating that in turn to the structural gate in [l2-quality-pipeline.md](l2-quality-pipeline.md) §4.1.
+
 ## 5. Drawbacks & Alternatives
 
 - **Root-level crates/apps/packages vs everything under src/:** root-level is the polyglot-monorepo norm and keeps Rust/JS workspaces clean; chosen over a single `src/`.
@@ -109,6 +118,7 @@ Measurement showed domain-to-domain coupling is already near zero, so splitting 
 | `[STACK]` | `.design/main/specifications/l2-technology-stack.md` | Monorepo tooling + Rust workspace |
 | `[USER-LAYOUT]` | `.design/main/specifications/l2-filesystem-layout.md` | Complementary user-install layout |
 | `[TOPOLOGY]` | `.design/main/specifications/l2-crate-topology.md` | The crate decomposition of `crates/core` |
+| `[UI-TOPOLOGY]` | `.design/main/specifications/l2-ui-module-topology.md` | The module decomposition of `packages/ui` |
 
 ## Document History
 
@@ -118,3 +128,4 @@ Measurement showed domain-to-domain coupling is already near zero, so splitting 
 | 1.2.0 | 2026-07-10 | `RFC → Stable`. The amendment rule's pending-review condition is satisfied: `l2-crate-topology` passed Post-Update Review and reached Stable in the same pass, so the delegated §4.5 decision is now backed by a Stable target. No content change; status advance only. |
 | 1.2.1 | 2026-07-29 | Completeness fix: added an INV-8 row to the §3 table — the `crates/` workspace layout structurally realizes the modular monolith (one deployable, no per-service manifest/orchestration file; crate boundaries are compile-time seams per `l2-crate-topology`). INV-8 entered `l1-architecture` after this table (INV-1…INV-4) was written. INV-9 (surface honesty) and INV-10 (inward-seam representation isolation) are behavioral/data invariants realized by the frontends and the core, not properties of a directory layout, and are noted as such in the INV-8 row rather than added as thin rows — consistent with the table's existing scope to the structural invariants the layout embodies. No new requirement; stays Stable. |
 | 1.2.2 | 2026-07-29 | Completeness fix (strict gate): filled the §3 Invariant-Compliance table to a full INV-1…INV-10 against `l1-architecture`. Added honest, layout-specific rows for INV-5/INV-6/INV-7 (behavioral/runtime invariants realized in the user/install layout, the core contract, and the adapters — the tree's only bearings being crate-housing, build-subset workspace members, and `.gitignore` secret hygiene) and INV-9/INV-10 (surface honesty is a frontend property; representation isolation is a code property of the crates, though this layout is its precondition by keeping adapter crates separate from the domain crate). Trimmed the redundant 9/10 note from the INV-8 row now that both have explicit rows. No new requirement or design; stays Stable. |
+| 1.3.0 | 2026-09-03 | Added §4.6 delegating the internal decomposition of `packages/ui` to the new `l2-ui-module-topology.md`, symmetrically with §4.5's delegation of `crates/core` to `l2-crate-topology.md`. Records why the two delegations differ in kind: Rust receives module boundaries from the crate graph so the crate spec need only decide where to cut, while TypeScript has no compile-time module boundary within a package, so the UI spec must also name what enforces the cut. Added the Related-Specifications entry and the `[UI-TOPOLOGY]` canonical reference. Status went `Stable → RFC` under the amendment rule for the minor bump and returned to `Stable` in the same pass once Post-Update Review passed; §4.1/§4.2 are unchanged and still describe the pre-migration member layout. |

@@ -1,6 +1,6 @@
 # Application UI/UX Frontend (Desktop / Web / Mobile)
 
-**Version:** 1.4.0
+**Version:** 1.4.1
 **Status:** Stable
 **Layer:** implementation
 **Implements:** l1-architecture.md
@@ -19,6 +19,7 @@ Architectural layer 4: the **full graphical application** — the premium UI/UX 
 - [l1-design-identity.md](l1-design-identity.md) - Design-identity catalog; the built-in **colour schemes** (§4.5) are its built-in layer, user/imported identities its user layer (DI-2, DI-8).
 - [l2-design-system.md](l2-design-system.md) - The concrete token-contract realization behind §4.5 theming: the Tailwind v4 `@theme` token set, the scheme manifest + token schema, and the two-axis (mode × scheme) resolver.
 - [l2-navigation.md](l2-navigation.md) - Renders the four-layer navigation; owns the concrete surface catalog and order (its §4.3) that §4.1 groups thematically.
+- [l2-ui-module-topology.md](l2-ui-module-topology.md) - How the `packages/ui` source is partitioned and which module may import which; the §4.1 surfaces are its surface tier, and its single-seam rule keeps §4.2's bridge the only site performing core calls.
 
 ## 1. Motivation
 
@@ -458,3 +459,4 @@ For servers that require OAuth (`SSETransport`, `StreamableHTTP`):
 | Version | Date | Change |
 | --- | --- | --- |
 | 1.4.0 | 2026-09-02 | §4.5 Theming split into two orthogonal axes — **mode** (`system`/`light`/`dark`) × **colour scheme** (a named design-identity token package); one built-in scheme ships (`default`, dark-first), more added as data; the resolver + token contract move to the new `l2-design-system`. §4.1 Surfaces regrouped and deferred to `l2-navigation` §4.3 as the ordering authority; INV-9 placeholder rule restated. Related Specs + Canonical References extended with `l2-design-system` and `l2-navigation`. Document History section introduced with this entry (versions ≤1.3.1 summarised in the `INDEX.md` row). |
+| 1.4.1 | 2026-09-03 | Cross-link only: added `l2-ui-module-topology.md` to Related Specifications — the source-partition spec for `packages/ui`, whose surface tier is populated by the §4.1 surfaces and whose single-seam rule keeps the §4.2 shell-core bridge the sole site performing core calls. No design or requirement change; stays Stable. |

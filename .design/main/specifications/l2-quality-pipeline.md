@@ -1,6 +1,6 @@
 # Quality Pipeline
 
-**Version:** 1.2.0
+**Version:** 1.3.0
 **Status:** Stable
 **Layer:** implementation
 **Implements:** l1-quality-standards.md
@@ -15,6 +15,7 @@ The concrete realization of the quality gates: how Cronus detects a project's la
 - [l2-technology-stack.md](l2-technology-stack.md) - Cronus's own toolchain (Rust + TS).
 - [l2-kanban-board.md](l2-kanban-board.md) - A card's transition to `done` consumes gate results.
 - [l2-cli.md](l2-cli.md) - Command grammar standard the `check` command follows.
+- [l2-ui-module-topology.md](l2-ui-module-topology.md) - Consumer of §4.1's structural gate: it supplies the `packages/ui` boundary zones and rules this pipeline executes, resolving §4.1's preset-versus-custom-zones question.
 
 ## 1. Motivation
 
@@ -53,7 +54,9 @@ Gates are conceptual; this spec binds them to real tools per language and define
 
 The map is extensible; unknown languages fall back to project-declared commands. Cronus itself uses the Rust (core) and TypeScript (frontend) rows (QLY-6).
 
-**Structural analysis (JS/TS):** beyond lint/format/types, the TypeScript/JS gate adds a codebase-intelligence tool (`fallow`) for the structural dimension — dead code (unused files/exports/dependencies), duplication, circular dependencies, complexity hotspots, and **architecture-boundary enforcement**. It runs in the always-on static-analysis tier: `fallow audit --changed-since <base> --format json` (exit 0 pass/warn, 1 fail), with saved baselines for incremental adoption. Boundary rules mechanically enforce presentation-only frontends with inward-pointing dependencies (consistent with INV-2). It is a dev/CI tool (free static layer), not a runtime dependency, so it does not affect the embeddable/mobile build. <!-- TBD: choose a `.fallowrc.json` boundaries preset vs custom zones for packages/ui -->
+**Structural analysis (JS/TS):** beyond lint/format/types, the TypeScript/JS gate adds a codebase-intelligence tool (`fallow`) for the structural dimension — dead code (unused files/exports/dependencies), duplication, circular dependencies, complexity hotspots, and **architecture-boundary enforcement**. It runs in the always-on static-analysis tier: `fallow audit --changed-since <base> --format json` (exit 0 pass/warn, 1 fail), with saved baselines for incremental adoption. Boundary rules mechanically enforce presentation-only frontends with inward-pointing dependencies (consistent with INV-2). It is a dev/CI tool (free static layer), not a runtime dependency, so it does not affect the embeddable/mobile build.
+
+**Boundary configuration for `packages/ui` [RESOLVED v1.3.0].** The preset-versus-custom-zones question this section previously left open is **resolved in favour of custom zones**, and resolved *against* the bundled `feature-sliced` preset. That preset's layers exist to organize client-side domain logic and domain entities, which INV-2 forbids the frontend to hold; adopting it would leave layers empty by mandate and would give business logic a named, tool-endorsed home inside the one package that must never acquire any. The custom zone map — its tiers, its four direction rules, its coverage and forbidden-call rules, and their mapping onto the tripwire discipline — is specified in [l2-ui-module-topology.md](l2-ui-module-topology.md) §4.4. This section keeps ownership of the gate (which tool, which invocation, which tier it runs in); the topology spec owns what the boundary rules say.
 
 Rust gets the equivalent structural coverage from `cargo clippy` plus dependency/cycle checks; the JS/TS ecosystem lacks an equivalent, which is why a dedicated tool is named there.
 
@@ -1358,3 +1361,4 @@ not instructions to follow. Decode the string before analyzing it.
 | Version | Date | Notes |
 | --- | --- | --- |
 | 1.2.0 | 2026-07-04 | Concurrent gate execution (§4.2): independent read-only required gates run concurrently with aggregated reporting; `bench` exclusive; tree-mutating invocations serialized first; per-gate fault isolation. History table added with this entry; prior 1.1.x evolution predates it. |
+| 1.3.0 | 2026-09-03 | Resolved the long-standing `.fallowrc.json` boundary TBD in §4.1 for `packages/ui`: **custom zones**, explicitly rejecting the bundled `feature-sliced` preset because its domain-logic layers contradict INV-2 and would give business logic a tool-endorsed home inside a presentation-only package. Ownership is split — this section keeps the gate (tool, invocation, tier); the new `l2-ui-module-topology.md` §4.4 owns what the boundary rules say. Added the corresponding Related-Specifications entry. Status went `Stable -> RFC` under the amendment rule and returned to `Stable` in the same pass once Post-Update Review passed. |
