@@ -19,7 +19,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Changed (crates/nodus)
 
-- Closed the NL-6 dual-representation round-trip guarantee (compact → human → compact must be AST-equal) across the **whole** `WorkflowFile`, not just `.steps` — control-flow statements, `@test:` blocks, macros, and human-mode all now round-trip losslessly (Phases 17, 20, 21, 22)
+- Closed the NL-6 dual-representation round-trip guarantee (compact → human → compact must be AST-equal) across the **whole** `WorkflowFile`, not just `.steps` — control-flow statements, `@test:` blocks, macros, and human-mode all now round-trip losslessly
 - The nodus portability contract now tracks realization status for all twelve LP-9…LP-20 invariants added since the original compliance table; three are now implemented (LP-11, LP-16, LP-17)
 - Test count: 204 (v0.2.0) → **471** over the release cycle
 - All 20 nodus workspace specs remain `Stable`
@@ -187,3 +187,4 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Completed task (nodus)
 - Updated 4 specifications (nodus)
 - Completed 2 tasks (nodus)
+- Completed 2 tasks (main)
