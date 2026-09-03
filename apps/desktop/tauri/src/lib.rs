@@ -20,28 +20,32 @@ pub fn run() {
     tauri::Builder::default()
         .manage(bridge::core_bridge())
         .setup(|app| {
-            // Settings load is fail-soft: a broken file must not stop the
-            // shell — fall back to defaults and report on stderr.
-            let loaded = app
+            // Settings load is fail-soft: a broken file (or no config dir) must
+            // not stop the shell — fall back to defaults and report on stderr.
+            // The resolved path is kept so IPC writes persist to the same file.
+            let path = app
                 .path()
                 .app_config_dir()
-                .map_err(|e| e.to_string())
-                .and_then(|dir| {
-                    settings::load_or_create(&dir.join("settings.json")).map_err(|e| e.to_string())
-                });
-            let settings = match loaded {
-                Ok(settings) => settings,
-                Err(reason) => {
+                .map(|dir| dir.join("settings.json"));
+            let settings = match &path {
+                Ok(file) => settings::load_or_create(file).unwrap_or_else(|reason| {
                     eprintln!("settings: falling back to defaults ({reason})");
+                    settings::Settings::default()
+                }),
+                Err(reason) => {
+                    eprintln!("settings: no config dir ({reason})");
                     settings::Settings::default()
                 }
             };
-            app.manage(settings);
+            let store_path = path.unwrap_or_else(|_| std::path::PathBuf::from("settings.json"));
+            app.manage(settings::SettingsStore::new(store_path, settings));
             Ok(())
         })
         .invoke_handler(tauri::generate_handler![
             bridge::capability_version,
-            bridge::capability_status
+            bridge::capability_status,
+            bridge::capability_settings_get,
+            bridge::capability_settings_set
         ])
         .run(tauri::generate_context!())
         .expect("error while running the Cronus desktop application");

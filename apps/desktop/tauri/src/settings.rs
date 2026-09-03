@@ -10,8 +10,9 @@
 use std::collections::BTreeMap;
 use std::fs;
 use std::io;
-use std::path::Path;
+use std::path::{Path, PathBuf};
 use std::sync::atomic::{AtomicU8, Ordering};
+use std::sync::{Mutex, MutexGuard};
 
 use serde::{Deserialize, Deserializer, Serialize};
 
@@ -156,6 +157,18 @@ pub struct Settings {
     #[serde(default = "default_shortcuts")]
     pub shortcuts: BTreeMap<String, String>,
 
+    /// Persisted workbench layout. Opaque here: the frontend owns the
+    /// `LayoutRecord` schema and its field-wise restore; the host only stores
+    /// and returns the blob. Absent on an older file — restored to defaults
+    /// there, never a failed startup.
+    #[serde(default)]
+    pub layout: serde_json::Value,
+
+    /// User keymap overrides: action id -> chord string (an empty string
+    /// disables the binding). The frontend merges this as the top layer.
+    #[serde(default)]
+    pub keymap_user: BTreeMap<String, String>,
+
     /// Unknown fields from newer versions, preserved verbatim.
     #[serde(flatten)]
     pub extra: serde_json::Map<String, serde_json::Value>,
@@ -169,8 +182,86 @@ impl Default for Settings {
             theme: default_theme(),
             color_scheme: default_color_scheme(),
             shortcuts: default_shortcuts(),
+            layout: serde_json::Value::Null,
+            keymap_user: BTreeMap::new(),
             extra: serde_json::Map::new(),
         }
+    }
+}
+
+/// The shell-facing slice of settings, marshalled over IPC. Host-window
+/// concerns (log level, overlay dock, OS shortcuts) are not exposed here — the
+/// bridge is presentation-only.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct ShellSettings {
+    pub theme: String,
+    pub color_scheme: String,
+    pub layout: serde_json::Value,
+    pub keymap_user: BTreeMap<String, String>,
+}
+
+/// A partial update from the shell. Only `Some` fields are written, so the
+/// frontend can persist one axis (a layout change, a rebind) without echoing
+/// the rest.
+#[derive(Debug, Clone, Default, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct ShellSettingsPatch {
+    pub theme: Option<String>,
+    pub color_scheme: Option<String>,
+    pub layout: Option<serde_json::Value>,
+    pub keymap_user: Option<BTreeMap<String, String>>,
+}
+
+/// Live settings plus the file they persist to. Managed as Tauri state so the
+/// IPC bridge can read and write the shell-facing slice under a lock.
+pub struct SettingsStore {
+    path: PathBuf,
+    current: Mutex<Settings>,
+}
+
+impl SettingsStore {
+    /// Wrap already-loaded settings and the path future writes go to.
+    pub fn new(path: PathBuf, initial: Settings) -> Self {
+        Self {
+            path,
+            current: Mutex::new(initial),
+        }
+    }
+
+    fn lock(&self) -> MutexGuard<'_, Settings> {
+        self.current
+            .lock()
+            .unwrap_or_else(|poisoned| poisoned.into_inner())
+    }
+
+    /// Snapshot the shell-facing slice.
+    pub fn shell_settings(&self) -> ShellSettings {
+        let settings = self.lock();
+        ShellSettings {
+            theme: settings.theme.clone(),
+            color_scheme: settings.color_scheme.clone(),
+            layout: settings.layout.clone(),
+            keymap_user: settings.keymap_user.clone(),
+        }
+    }
+
+    /// Apply a partial update and persist it atomically.
+    pub fn update_shell(&self, patch: ShellSettingsPatch) -> io::Result<()> {
+        let mut settings = self.lock();
+        if let Some(theme) = patch.theme {
+            settings.theme = theme;
+        }
+        if let Some(color_scheme) = patch.color_scheme {
+            settings.color_scheme = color_scheme;
+        }
+        if let Some(layout) = patch.layout {
+            settings.layout = layout;
+        }
+        if let Some(keymap_user) = patch.keymap_user {
+            settings.keymap_user = keymap_user;
+        }
+        save(&self.path, &settings)
     }
 }
 
@@ -414,6 +505,92 @@ mod tests {
         settings.log_level = LogLevel::Error;
         save(&path, &settings).expect("save again");
         assert_eq!(hot_log_level(), LogLevel::Error);
+        cleanup(&path);
+    }
+
+    #[test]
+    fn older_file_without_layout_or_keymap_user_deserializes_with_defaults() {
+        let _hot = hot_lock();
+        let path = temp_settings_path("layout-defaults");
+        cleanup(&path);
+        if let Some(parent) = path.parent() {
+            fs::create_dir_all(parent).expect("mkdir");
+        }
+        fs::write(&path, r#"{ "log_level": "info", "theme": "dark" }"#).expect("write older file");
+
+        let settings = load_or_create(&path).expect("load older file");
+        assert_eq!(
+            settings.layout,
+            serde_json::Value::Null,
+            "absent layout -> Null"
+        );
+        assert!(
+            settings.keymap_user.is_empty(),
+            "absent keymap_user -> empty"
+        );
+        cleanup(&path);
+    }
+
+    #[test]
+    fn settings_store_get_returns_the_persisted_shell_slice() {
+        let _hot = hot_lock();
+        let path = temp_settings_path("store-get");
+        cleanup(&path);
+
+        let settings = Settings {
+            theme: "light".into(),
+            color_scheme: "midnight".into(),
+            layout: serde_json::json!({ "version": 1, "activeSubsystem": "kanban" }),
+            keymap_user: BTreeMap::from([("view.command-palette".into(), "Ctrl+P".into())]),
+            ..Settings::default()
+        };
+        save(&path, &settings).expect("save");
+
+        let store = SettingsStore::new(path.clone(), load_or_create(&path).expect("reload"));
+        let shell = store.shell_settings();
+        assert_eq!(shell.theme, "light");
+        assert_eq!(shell.color_scheme, "midnight");
+        assert_eq!(shell.layout["activeSubsystem"], "kanban");
+        assert_eq!(
+            shell
+                .keymap_user
+                .get("view.command-palette")
+                .map(String::as_str),
+            Some("Ctrl+P")
+        );
+        cleanup(&path);
+    }
+
+    #[test]
+    fn settings_store_set_round_trips_a_partial_update() {
+        let _hot = hot_lock();
+        let path = temp_settings_path("store-set");
+        cleanup(&path);
+
+        let store = SettingsStore::new(path.clone(), {
+            let base = Settings::default();
+            save(&path, &base).expect("seed");
+            base
+        });
+
+        // A layout-only patch must not disturb the theming axes.
+        store
+            .update_shell(ShellSettingsPatch {
+                layout: Some(serde_json::json!({ "version": 1, "sidebarVisible": false })),
+                ..ShellSettingsPatch::default()
+            })
+            .expect("update");
+
+        let reloaded = load_or_create(&path).expect("reload after set");
+        assert_eq!(reloaded.layout["sidebarVisible"], false);
+        assert_eq!(
+            reloaded.theme, "system",
+            "theming axis untouched by a layout patch"
+        );
+
+        // A second store over the same file sees the persisted layout.
+        let store2 = SettingsStore::new(path.clone(), reloaded);
+        assert_eq!(store2.shell_settings().layout["sidebarVisible"], false);
         cleanup(&path);
     }
 }

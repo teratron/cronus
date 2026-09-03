@@ -8,6 +8,8 @@
 
 use cronus_core::{Capabilities, Engine};
 
+use crate::settings::{SettingsStore, ShellSettings, ShellSettingsPatch};
+
 /// Bridge over a core handle plus the secret values to mask in any output
 /// that crosses the IPC boundary.
 pub struct Bridge<C: Capabilities> {
@@ -58,6 +60,23 @@ pub fn capability_version(bridge: tauri::State<'_, CoreBridge>) -> String {
 #[tauri::command]
 pub fn capability_status(bridge: tauri::State<'_, CoreBridge>) -> String {
     bridge.status()
+}
+
+/// IPC: `capability_settings_get` — the shell-facing settings slice (theme,
+/// colour scheme, the opaque layout blob, the user keymap layer). Host-owned
+/// configuration: marshalling, not logic (admission rule, host-owned facility).
+#[tauri::command]
+pub fn capability_settings_get(store: tauri::State<'_, SettingsStore>) -> ShellSettings {
+    store.shell_settings()
+}
+
+/// IPC: `capability_settings_set` — apply a partial update and persist it.
+#[tauri::command]
+pub fn capability_settings_set(
+    store: tauri::State<'_, SettingsStore>,
+    patch: ShellSettingsPatch,
+) -> Result<(), String> {
+    store.update_shell(patch).map_err(|e| e.to_string())
 }
 
 #[cfg(test)]

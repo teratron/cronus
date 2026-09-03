@@ -2,10 +2,10 @@ import { describe, expect, it } from "vitest";
 import * as ui from "./index";
 
 // The package's public value surface, frozen. A deliberate public-API change
-// updates this list in the same commit; anything else is a regression.
-// Phase 26 T-26A01 dropped `App`, `Workbench`, `SURFACES` (46 -> 43): the two
-// retired composer roots and the Phase-8 surface catalog they alone used —
-// R-1, exactly one exported application root (`BuildingShell`).
+// updates this list in the same commit; anything else is a regression. The list
+// was trimmed from 46 to 43 when the two earlier composer roots and the surface
+// catalog they alone fed were retired, leaving exactly one exported application
+// root (`BuildingShell`).
 const PUBLIC_API = [
   "BuildingFrame",
   "BuildingShell",
@@ -55,5 +55,12 @@ const PUBLIC_API = [
 describe("public API freeze", () => {
   it("exports exactly the frozen symbol set", () => {
     expect(Object.keys(ui).sort()).toEqual(PUBLIC_API);
+  });
+
+  it("declares exactly one application root (R-1)", () => {
+    const roots = Object.keys(ui).filter((name) => /^(App|Workbench|BuildingShell)$/.test(name));
+    expect(roots).toEqual([
+      "BuildingShell",
+    ]);
   });
 });

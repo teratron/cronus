@@ -15,7 +15,16 @@
 
 import { useMemo, useState } from "react";
 import { type Locale, translator } from "../shared/i18n";
+import {
+  type BindingLayer,
+  type ContextStack,
+  eventToKeystroke,
+  mergeKeymap,
+  resolve,
+} from "../shared/keymap";
 import type { SidebarTab } from "../shared/navigation";
+import type { Projection } from "../shared/projection";
+import { useStore } from "../shared/store";
 import { surfaceAttributes, type Theme } from "../shared/theme";
 import type { DashboardProjection, OfficeProjection } from "../surfaces";
 import { type ActionRegistry, createActionRegistry, type ShellAction } from "./actions";
@@ -23,11 +32,46 @@ import { BuildingFrame } from "./building-frame";
 import { CommandPalette } from "./command-palette";
 import { type FloorTab, FloorTabBar } from "./floor-tab-bar";
 import { GlobalSettingsOverlay } from "./global-settings-overlay";
+import { restoreLayout } from "./layout-record";
 import { MechanismNav } from "./mechanism-nav";
-import type { MenuGroupId } from "./menu";
 import { type FileNode, RightDock } from "./right-dock";
 import { SubsystemSidebar } from "./subsystem-sidebar";
 import { SurfaceRouter } from "./surface-router";
+import { createViewStore, INITIAL_VIEW_STATE } from "./view-store";
+
+/**
+ * The shell's context stack. The frame owns one context today — a populated
+ * subset of the workspace / dock / panel vocabulary, declared as such; a real
+ * focus path is future work. Actions and bindings resolve against this.
+ */
+const CONTEXT_STACK: ContextStack = [
+  {
+    id: "workspace",
+    contexts: [
+      "workspace",
+    ],
+  },
+];
+
+/**
+ * The base binding layer. The palette shortcut lives here as a real binding
+ * resolved through the keymap, not a hard-coded key comparison. Platform and
+ * user layers merge over this; the user layer's persistence is the host's.
+ */
+const BASE_LAYER: BindingLayer = {
+  name: "base",
+  bindings: [
+    {
+      actionId: "view.command-palette",
+      sequence: [
+        "Ctrl+Shift+J",
+      ],
+    },
+  ],
+};
+const KEYMAP = mergeKeymap([
+  BASE_LAYER,
+]);
 
 export interface BuildingShellProps {
   // theming (mode × scheme)
@@ -60,9 +104,11 @@ export interface BuildingShellProps {
     name: string;
     hint?: string;
   }[];
-  // surfaces
-  office?: OfficeProjection;
-  dashboard?: DashboardProjection;
+  // surfaces (four-state projections; absent reads as unrequested)
+  office?: Projection<OfficeProjection>;
+  dashboard?: Projection<DashboardProjection>;
+  /** A persisted layout record (AS-12). Restored field-wise; absent = defaults. */
+  initialLayout?: unknown;
   locale?: Locale;
 }
 
@@ -89,25 +135,46 @@ export function BuildingShell({
   recentOffices = [],
   office,
   dashboard,
+  initialLayout,
   locale = "en",
 }: BuildingShellProps) {
   const msg = translator(locale);
   const surface = surfaceAttributes(theme, colorScheme, systemPrefersDark);
 
-  // view state only
-  const [openGroup, setOpenGroup] = useState<MenuGroupId | null>(null);
-  const [sidebarOpen, setSidebarOpen] = useState(true);
-  const [rightDockOpen, setRightDockOpen] = useState(false);
-  const [paletteOpen, setPaletteOpen] = useState(false);
-  const [settingsOpen, setSettingsOpen] = useState(false);
-  const [activeFacet, setActiveFacet] = useState<string | undefined>(undefined);
+  // The view domain (AS-1): one store per shell mount, read through selectors so
+  // two regions needing the same fact take it from here, not a local copy.
+  // Seeded field-wise from the persisted layout record (AS-12) — absent or
+  // unreadable falls back to the documented initial state.
+  const [view] = useState(() => {
+    const restored = restoreLayout(initialLayout);
+    return createViewStore({
+      ...INITIAL_VIEW_STATE,
+      sidebarOpen: restored.sidebarVisible,
+      rightDockOpen: restored.rightDockVisible,
+      activeFacet: restored.activeFacet,
+    });
+  });
+  const openGroup = useStore(view, (s) => s.openGroup);
+  const sidebarOpen = useStore(view, (s) => s.sidebarOpen);
+  const rightDockOpen = useStore(view, (s) => s.rightDockOpen);
+  const paletteOpen = useStore(view, (s) => s.paletteOpen);
+  const settingsOpen = useStore(view, (s) => s.settingsOpen);
+  const activeFacet = useStore(view, (s) => s.activeFacet);
+
+  // The pending multi-keystroke prefix, held between key events (AS-7). Empty
+  // until a binding sequence is partially matched.
+  const [pendingKeys, setPendingKeys] = useState<readonly string[]>([]);
 
   const registry: ActionRegistry = useMemo(() => {
     const openSettings: ShellAction = {
       id: "file.settings",
       labelKey: "menu.file.settings",
       binding: "Ctrl ,",
-      run: () => setSettingsOpen(true),
+      run: () =>
+        view.dispatch({
+          type: "setSettingsOpen",
+          open: true,
+        }),
     };
     const newProject: ShellAction = {
       id: "file.new-project",
@@ -123,14 +190,28 @@ export function BuildingShell({
   }, [
     actions,
     onCreateFloor,
+    view,
   ]);
 
-  const paletteActions = registry.bound().map((a) => ({
+  const paletteActions = registry.live(CONTEXT_STACK).map((a) => ({
     id: a.id,
     label: msg(a.labelKey),
     binding: a.binding,
     run: a.run,
   }));
+
+  // Map a resolved binding's action id to the shell's own view intent, else the
+  // registered command. `view.command-palette` is view state, not a capability.
+  const runBinding = (actionId: string) => {
+    if (actionId === "view.command-palette") {
+      view.dispatch({
+        type: "setPaletteOpen",
+        open: true,
+      });
+      return;
+    }
+    registry.get(actionId)?.run();
+  };
 
   return (
     // biome-ignore lint/a11y/noStaticElementInteractions: shell-level shortcut listener; the palette is also reachable from the sidebar search button
@@ -140,18 +221,41 @@ export function BuildingShell({
       data-scheme={surface["data-scheme"]}
       className={`relative flex h-screen flex-col bg-surface-0 text-text-primary ${surface.className}`}
       onKeyDown={(e) => {
-        if (e.ctrlKey && e.shiftKey && (e.key === "J" || e.key === "j")) {
+        const outcome = resolve(eventToKeystroke(e), CONTEXT_STACK, KEYMAP, pendingKeys);
+        if (outcome.kind === "pending") {
           e.preventDefault();
-          setPaletteOpen(true);
+          setPendingKeys(outcome.prefix);
+          return;
         }
+        if (pendingKeys.length > 0) {
+          setPendingKeys([]);
+        }
+        if (outcome.kind === "action") {
+          e.preventDefault();
+          runBinding(outcome.binding.actionId);
+        }
+        // unbound: fall through — never preventDefault, or text input breaks
       }}
     >
       <BuildingFrame
         actions={registry}
         openGroup={openGroup}
-        onOpenGroup={setOpenGroup}
-        onToggleSidebar={() => setSidebarOpen((v) => !v)}
-        onToggleRightDock={() => setRightDockOpen((v) => !v)}
+        onOpenGroup={(group) =>
+          view.dispatch({
+            type: "openGroup",
+            group,
+          })
+        }
+        onToggleSidebar={() =>
+          view.dispatch({
+            type: "toggleSidebar",
+          })
+        }
+        onToggleRightDock={() =>
+          view.dispatch({
+            type: "toggleRightDock",
+          })
+        }
         locale={locale}
       />
 
@@ -169,14 +273,22 @@ export function BuildingShell({
           <SubsystemSidebar
             active={activeSubsystem}
             onSelect={(tab) => {
-              setActiveFacet(undefined);
+              view.dispatch({
+                type: "setFacet",
+                facet: undefined,
+              });
               onSelectSubsystem?.(tab);
             }}
             pinned={pinned}
             badges={badges}
             floorName={floorName}
             floorSlug={floorSlug}
-            onOpenSearch={() => setPaletteOpen(true)}
+            onOpenSearch={() =>
+              view.dispatch({
+                type: "setPaletteOpen",
+                open: true,
+              })
+            }
             locale={locale}
           />
         ) : null}
@@ -190,7 +302,12 @@ export function BuildingShell({
             <MechanismNav
               subsystem={activeSubsystem}
               activeFacet={activeFacet}
-              onSelectFacet={setActiveFacet}
+              onSelectFacet={(facet) =>
+                view.dispatch({
+                  type: "setFacet",
+                  facet,
+                })
+              }
               locale={locale}
             />
           </div>
@@ -207,19 +324,36 @@ export function BuildingShell({
 
       <CommandPalette
         open={paletteOpen}
-        onClose={() => setPaletteOpen(false)}
+        onClose={() =>
+          view.dispatch({
+            type: "setPaletteOpen",
+            open: false,
+          })
+        }
         recentOffices={recentOffices}
         onGoToOffice={(id) => {
           onSelectFloor?.(id);
-          setPaletteOpen(false);
+          view.dispatch({
+            type: "setPaletteOpen",
+            open: false,
+          });
         }}
         onGoToSubsystem={(tab) => {
           onSelectSubsystem?.(tab);
-          setPaletteOpen(false);
+          view.dispatch({
+            type: "setPaletteOpen",
+            open: false,
+          });
         }}
         onOpenSettings={() => {
-          setSettingsOpen(true);
-          setPaletteOpen(false);
+          view.dispatch({
+            type: "setSettingsOpen",
+            open: true,
+          });
+          view.dispatch({
+            type: "setPaletteOpen",
+            open: false,
+          });
         }}
         actions={paletteActions}
         locale={locale}
@@ -227,7 +361,12 @@ export function BuildingShell({
 
       <GlobalSettingsOverlay
         open={settingsOpen}
-        onClose={() => setSettingsOpen(false)}
+        onClose={() =>
+          view.dispatch({
+            type: "setSettingsOpen",
+            open: false,
+          })
+        }
         theme={theme}
         onThemeChange={onThemeChange}
         colorScheme={colorScheme}

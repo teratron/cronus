@@ -2,16 +2,27 @@ import {
   BuildingShell,
   createCoreClient,
   type FloorTab,
+  type ListenFn,
   schemeCatalog,
   type Theme,
 } from "@cronus/ui";
 import "@cronus/ui/styles.css";
 import { invoke } from "@tauri-apps/api/core";
+import { listen } from "@tauri-apps/api/event";
 import { StrictMode, useEffect, useState } from "react";
 import { createRoot } from "react-dom/client";
 
-// The UI package stays shell-agnostic; the desktop shell injects Tauri's invoke.
-const core = createCoreClient(invoke);
+// The UI package stays shell-agnostic; the desktop shell injects Tauri's invoke
+// and event listener. `listen` is adapted to the bridge's ListenFn shape
+// (channel + payload-only handler -> Promise<unlisten>).
+const tauriListen: ListenFn = <T,>(channel: string, handler: (event: { payload: T }) => void) =>
+  listen<T>(channel, (event) =>
+    handler({
+      payload: event.payload,
+    }),
+  );
+
+const core = createCoreClient(invoke, tauriListen);
 
 // The registered colour schemes, mapped to the picker's shape.
 const SCHEMES = schemeCatalog().map((m) => ({
@@ -29,19 +40,29 @@ const HOME: FloorTab = {
   state: "idle",
 };
 
-function Root() {
-  // View state the shell does not own itself: the two theming axes. These will
-  // move to core-persisted settings once an IPC command exposes them.
-  const [theme, setTheme] = useState<Theme>("system");
-  const [colorScheme, setColorScheme] = useState("default");
+interface Restored {
+  theme: Theme;
+  colorScheme: string;
+  layout: unknown;
+}
+
+const FALLBACK: Restored = {
+  theme: "system",
+  colorScheme: "default",
+  layout: null,
+};
+
+function Shell({ theme: t0, colorScheme: c0, layout }: Restored) {
+  const [theme, setTheme] = useState<Theme>(t0);
+  const [colorScheme, setColorScheme] = useState(c0);
   const [systemPrefersDark] = useState(
     () =>
       typeof window !== "undefined" && window.matchMedia("(prefers-color-scheme: dark)").matches,
   );
 
   useEffect(() => {
-    // The bridge is live; nothing consumes it yet. Surface it in the console so
-    // the wiring is verifiable without a fake status bar.
+    // The bridge is live; surface the core status in the console so the wiring
+    // is verifiable without a fake status bar.
     core
       .status()
       .then((s) => console.info("[cronus] core:", s))
@@ -53,16 +74,63 @@ function Root() {
       theme={theme}
       colorScheme={colorScheme}
       systemPrefersDark={systemPrefersDark}
-      onThemeChange={setTheme}
-      onColorSchemeChange={setColorScheme}
+      onThemeChange={(next) => {
+        setTheme(next);
+        void core.settings.set({
+          theme: next,
+        });
+      }}
+      onColorSchemeChange={(next) => {
+        setColorScheme(next);
+        void core.settings.set({
+          colorScheme: next,
+        });
+      }}
       schemes={SCHEMES}
       floors={[
         HOME,
       ]}
       activeFloorId="home"
+      initialLayout={layout}
       locale="en"
     />
   );
+}
+
+function Root() {
+  // Read the persisted shell settings once before mounting, so the theming axes
+  // and the layout record are applied at first paint (AS-12). A read failure is
+  // not fatal — the shell mounts on defaults.
+  const [restored, setRestored] = useState<Restored | null>(null);
+
+  useEffect(() => {
+    let alive = true;
+    core.settings
+      .get()
+      .then((s) => {
+        if (alive) {
+          setRestored({
+            theme: s.theme as Theme,
+            colorScheme: s.colorScheme,
+            layout: s.layout,
+          });
+        }
+      })
+      .catch(() => {
+        if (alive) {
+          setRestored(FALLBACK);
+        }
+      });
+    return () => {
+      alive = false;
+    };
+  }, []);
+
+  // Brief: the WebView paints its own background until settings resolve.
+  if (!restored) {
+    return null;
+  }
+  return <Shell {...restored} />;
 }
 
 const container = document.getElementById("root");

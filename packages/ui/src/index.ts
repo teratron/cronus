@@ -1,4 +1,4 @@
-export type { CoreClient, InvokeFn } from "./shared/bridge";
+export type { ChannelEvent, CoreClient, InvokeFn, ListenFn } from "./shared/bridge";
 export { createCoreClient } from "./shared/bridge";
 export type { Locale, MessageKey } from "./shared/i18n";
 export { DEFAULT_LOCALE, t, translator } from "./shared/i18n";
