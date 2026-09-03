@@ -1,7 +1,6 @@
 import { render, screen } from "@testing-library/react";
 import { describe, expect, it } from "vitest";
 import { DashboardPanel, type DashboardProjection } from "./dashboard";
-import { Workbench } from "./surfaces";
 
 const projection: DashboardProjection = {
   offices: [
@@ -61,10 +60,5 @@ describe("DashboardPanel", () => {
       />,
     );
     expect(screen.queryByTestId("dashboard-building")).not.toBeInTheDocument();
-  });
-
-  it("the dashboard surface hosts the panel when a projection is supplied", () => {
-    render(<Workbench active="dashboard" dashboard={projection} />);
-    expect(screen.getByTestId("dashboard")).toBeInTheDocument();
   });
 });

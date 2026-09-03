@@ -1,20 +1,5 @@
 export type { AppProps } from "./App";
 export { App } from "./App";
-export type {
-  BuildingStats,
-  DashboardProjection,
-  DashboardProps,
-  OfficeStats,
-} from "./dashboard";
-export { DashboardPanel } from "./dashboard";
-export type {
-  OfficeAgent,
-  OfficeProjection,
-  OfficeRenderMode,
-  OfficeTask,
-  OfficeViewProps,
-} from "./office-view";
-export { OfficeViewPanel } from "./office-view";
 export type { CoreClient, InvokeFn } from "./shared/bridge";
 export { createCoreClient } from "./shared/bridge";
 export type { Locale, MessageKey } from "./shared/i18n";
@@ -41,6 +26,7 @@ export {
   settingsTier,
   shouldLoad,
 } from "./shared/navigation";
+export { SURFACES, type SurfaceId } from "./shared/surface-catalog";
 export type {
   ResolvedSurface,
   ResolvedTheme,
@@ -58,5 +44,15 @@ export {
 } from "./shared/theme";
 export { CANONICAL_TOKENS, type TokenName } from "./shared/tokens";
 export * from "./shell";
-export type { SurfaceId, WorkbenchProps } from "./surfaces";
-export { SURFACES, Workbench } from "./surfaces";
+export type {
+  BuildingStats,
+  DashboardProjection,
+  DashboardProps,
+  OfficeAgent,
+  OfficeProjection,
+  OfficeRenderMode,
+  OfficeStats,
+  OfficeTask,
+  OfficeViewProps,
+} from "./surfaces";
+export { DashboardPanel, OfficeViewPanel } from "./surfaces";

@@ -9,8 +9,9 @@
 
 import { useState } from "react";
 import type { Locale } from "./shared/i18n";
+import type { SurfaceId } from "./shared/surface-catalog";
 import type { Theme } from "./shared/theme";
-import { type SurfaceId, Workbench } from "./surfaces";
+import { Workbench } from "./shell/workbench";
 
 export interface AppProps {
   /** Core status line, supplied by the shell bridge. */

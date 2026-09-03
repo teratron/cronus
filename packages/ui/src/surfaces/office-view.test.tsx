@@ -1,7 +1,6 @@
 import { fireEvent, render, screen } from "@testing-library/react";
 import { describe, expect, it, vi } from "vitest";
 import { type OfficeProjection, OfficeViewPanel } from "./office-view";
-import { Workbench } from "./surfaces";
 
 const projection: OfficeProjection = {
   agents: [
@@ -87,10 +86,5 @@ describe("OfficeViewPanel", () => {
       />,
     );
     expect(screen.getByTestId("office-empty")).toBeInTheDocument();
-  });
-
-  it("the office surface hosts the panel when a projection is supplied", () => {
-    render(<Workbench active="office" office={projection} officeMode="graph" />);
-    expect(screen.getByTestId("office-graph")).toBeInTheDocument();
   });
 });

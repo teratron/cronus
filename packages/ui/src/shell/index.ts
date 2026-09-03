@@ -1,4 +1,4 @@
-/** The Phase 24 application shell frame — L0…L3 chrome + overlays, presentation only. */
+/** The application shell frame — L0…L3 chrome, overlays, and composers; presentation only. */
 
 export {
   type ActionRegistry,
@@ -39,3 +39,4 @@ export {
   SurfaceRouter,
   type SurfaceRouterProps,
 } from "./surface-router";
+export { Workbench, type WorkbenchProps } from "./workbench";

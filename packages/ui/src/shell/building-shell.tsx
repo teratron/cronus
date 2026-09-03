@@ -14,11 +14,10 @@
  */
 
 import { useMemo, useState } from "react";
-import type { DashboardProjection } from "../dashboard";
-import type { OfficeProjection } from "../office-view";
 import { type Locale, translator } from "../shared/i18n";
 import type { SidebarTab } from "../shared/navigation";
 import { surfaceAttributes, type Theme } from "../shared/theme";
+import type { DashboardProjection, OfficeProjection } from "../surfaces";
 import { type ActionRegistry, createActionRegistry, type ShellAction } from "./actions";
 import { BuildingFrame } from "./building-frame";
 import { CommandPalette } from "./command-palette";

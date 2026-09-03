@@ -1,6 +1,6 @@
 import { render, screen } from "@testing-library/react";
 import { describe, expect, it } from "vitest";
-import { Workbench } from "./surfaces";
+import { Workbench } from "./workbench";
 
 describe("store compliance", () => {
   it("render-from-state: the same state renders the same output", () => {

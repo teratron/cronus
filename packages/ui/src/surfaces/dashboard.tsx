@@ -6,7 +6,7 @@
  * whatever it is given and never derives authoritative numbers itself.
  */
 
-import { type Locale, translator } from "./shared/i18n";
+import { type Locale, translator } from "../shared/i18n";
 
 /** Statistics for one office, as projected by the core. */
 export interface OfficeStats {

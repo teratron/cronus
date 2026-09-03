@@ -1,36 +1,26 @@
 /**
- * Surface shell: the five app surfaces rendered from injected state.
+ * Workbench — the original surface composer.
  *
- * Presentation only — the workbench renders whatever state it is given and
- * forwards surface selection as an intent callback; it never mutates domain
- * state. Panels are placeholders until their views land (office view,
- * dashboard); each already renders purely from its projection props.
+ * Presentation only: renders whatever state it is given and forwards surface
+ * selection as an intent callback; it never mutates domain state. It is a
+ * composer (a nav strip plus a routed surface panel), so it lives in the shell
+ * tier — it is allowed to know surfaces, and a surface must never know it.
+ *
+ * `BuildingShell` is its successor. This composer stays until the desktop entry
+ * point adopts that shell (a UI-to-core integration step); it is kept and
+ * relocated here rather than retired.
  */
 
-import { DashboardPanel, type DashboardProjection } from "./dashboard";
-import { type OfficeProjection, type OfficeRenderMode, OfficeViewPanel } from "./office-view";
-import type { MessageKey } from "./shared/i18n";
-import { type Locale, translator } from "./shared/i18n";
-import { resolveTheme, type Theme, themeAttributes } from "./shared/theme";
-
-/** The five surfaces of the graphical shell. */
-export type SurfaceId = "office" | "board" | "chat" | "editor" | "dashboard";
-
-export const SURFACES: SurfaceId[] = [
-  "office",
-  "board",
-  "chat",
-  "editor",
-  "dashboard",
-];
-
-const SURFACE_LABEL: Record<SurfaceId, MessageKey> = {
-  office: "surface.office",
-  board: "surface.board",
-  chat: "surface.chat",
-  editor: "surface.editor",
-  dashboard: "surface.dashboard",
-};
+import { type Locale, translator } from "../shared/i18n";
+import { SURFACE_LABEL, SURFACES, type SurfaceId } from "../shared/surface-catalog";
+import { resolveTheme, type Theme, themeAttributes } from "../shared/theme";
+import {
+  DashboardPanel,
+  type DashboardProjection,
+  type OfficeProjection,
+  type OfficeRenderMode,
+  OfficeViewPanel,
+} from "../surfaces";
 
 export interface WorkbenchProps {
   /** Active surface — owned by the caller (render-from-state). */

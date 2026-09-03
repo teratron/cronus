@@ -1,11 +1,12 @@
 import { fireEvent, render, screen } from "@testing-library/react";
 import { describe, expect, it, vi } from "vitest";
-import { App } from "./App";
-import { t } from "./shared/i18n";
-import { resolveTheme, themeAttributes } from "./shared/theme";
-import { SURFACES, Workbench } from "./surfaces";
+import { t } from "../shared/i18n";
+import { SURFACES } from "../shared/surface-catalog";
+import { resolveTheme, themeAttributes } from "../shared/theme";
+import type { DashboardProjection, OfficeProjection } from "../surfaces";
+import { Workbench } from "./workbench";
 
-describe("surfaces (render-from-state)", () => {
+describe("workbench (render-from-state)", () => {
   it("renders the active surface from injected state without mutating it", () => {
     const onSelect = vi.fn();
     render(<Workbench active="dashboard" onSelect={onSelect} status="ready" />);
@@ -25,12 +26,56 @@ describe("surfaces (render-from-state)", () => {
       expect(screen.getByTestId(`nav-${surface}`)).toBeInTheDocument();
     }
   });
+});
 
-  it("App owns surface selection as view state", () => {
-    render(<App status="ok" />);
-    expect(screen.getByTestId("surface-office")).toBeInTheDocument();
-    fireEvent.click(screen.getByTestId("nav-board"));
-    expect(screen.getByTestId("surface-board")).toBeInTheDocument();
+describe("workbench surface hosting", () => {
+  const dashboard: DashboardProjection = {
+    offices: [
+      {
+        id: "acme",
+        name: "Acme Project",
+        activeAgents: 2,
+        cardsByState: {
+          running: 1,
+          blocked: 2,
+          done: 7,
+        },
+      },
+    ],
+    building: {
+      offices: 3,
+      activeAgents: 5,
+      totalCards: 42,
+    },
+  };
+
+  const office: OfficeProjection = {
+    agents: [
+      {
+        id: "mgr",
+        name: "Manager",
+        role: "orchestrator",
+        active: true,
+        room: "hq",
+      },
+    ],
+    tasks: [
+      {
+        id: "t1",
+        title: "Migrate endpoints",
+        assignee: "mgr",
+      },
+    ],
+  };
+
+  it("the dashboard surface hosts the panel when a projection is supplied", () => {
+    render(<Workbench active="dashboard" dashboard={dashboard} />);
+    expect(screen.getByTestId("dashboard")).toBeInTheDocument();
+  });
+
+  it("the office surface hosts the panel when a projection is supplied", () => {
+    render(<Workbench active="office" office={office} officeMode="graph" />);
+    expect(screen.getByTestId("office-graph")).toBeInTheDocument();
   });
 });
 
