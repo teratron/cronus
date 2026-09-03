@@ -39,4 +39,3 @@ export {
   SurfaceRouter,
   type SurfaceRouterProps,
 } from "./surface-router";
-export { Workbench, type WorkbenchProps } from "./workbench";

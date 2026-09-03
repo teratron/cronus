@@ -11,6 +11,5 @@ export * from "./bridge";
 export * from "./canvas";
 export * from "./i18n";
 export * from "./navigation";
-export * from "./surface-catalog";
 export * from "./theme";
 export * from "./tokens";

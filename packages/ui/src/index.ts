@@ -1,5 +1,3 @@
-export type { AppProps } from "./App";
-export { App } from "./App";
 export type { CoreClient, InvokeFn } from "./shared/bridge";
 export { createCoreClient } from "./shared/bridge";
 export type { Locale, MessageKey } from "./shared/i18n";
@@ -26,7 +24,6 @@ export {
   settingsTier,
   shouldLoad,
 } from "./shared/navigation";
-export { SURFACES, type SurfaceId } from "./shared/surface-catalog";
 export type {
   ResolvedSurface,
   ResolvedTheme,

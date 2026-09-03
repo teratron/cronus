@@ -1,11 +1,12 @@
 import { describe, expect, it } from "vitest";
 import * as ui from "./index";
 
-// The package's public value surface, frozen. The four-tier relocation must not
-// add, drop, or rename a single export — this list is the neutrality proof.
-// A deliberate public-API change updates this list in the same commit.
+// The package's public value surface, frozen. A deliberate public-API change
+// updates this list in the same commit; anything else is a regression.
+// Phase 26 T-26A01 dropped `App`, `Workbench`, `SURFACES` (46 -> 43): the two
+// retired composer roots and the Phase-8 surface catalog they alone used —
+// R-1, exactly one exported application root (`BuildingShell`).
 const PUBLIC_API = [
-  "App",
   "BuildingFrame",
   "BuildingShell",
   "CANONICAL_TOKENS",
@@ -24,12 +25,10 @@ const PUBLIC_API = [
   "SIDEBAR_PRIMARY",
   "SIDEBAR_TABS",
   "SIDEBAR_UTILITY",
-  "SURFACES",
   "SelectionSurface",
   "SubsystemSidebar",
   "SurfacePlaceholder",
   "SurfaceRouter",
-  "Workbench",
   "commandPaletteDelegate",
   "composeSidebar",
   "createActionRegistry",
