@@ -1,7 +1,7 @@
 import { fireEvent, render, screen } from "@testing-library/react";
 import { describe, expect, it, vi } from "vitest";
-import { t } from "../i18n";
-import { SIDEBAR_PRIMARY, SIDEBAR_UTILITY } from "../navigation";
+import { t } from "../shared/i18n";
+import { SIDEBAR_PRIMARY, SIDEBAR_UTILITY } from "../shared/navigation";
 import { BuildingShell } from "./building-shell";
 import type { FloorTab } from "./floor-tab-bar";
 

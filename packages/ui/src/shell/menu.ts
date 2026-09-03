@@ -7,7 +7,7 @@
  * is dropped by {@link visibleMenu} (INV-9) — never rendered as a dead item.
  */
 
-import type { MessageKey } from "../i18n";
+import type { MessageKey } from "../shared/i18n";
 import type { ActionRegistry } from "./actions";
 
 export type MenuGroupId = "file" | "edit" | "view" | "help";

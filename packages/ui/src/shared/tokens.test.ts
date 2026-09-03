@@ -1,16 +1,18 @@
 import { readFileSync } from "node:fs";
-import { join } from "node:path";
-import process from "node:process";
+import { dirname, join } from "node:path";
+import { fileURLToPath } from "node:url";
 import { describe, expect, it } from "vitest";
 import { CANONICAL_TOKENS } from "./tokens";
 
-// vitest runs with cwd = packages/ui (the `test` script + CI both invoke it there).
-const src = join(process.cwd(), "src");
-const read = (rel: string) => readFileSync(join(src, rel), "utf8");
+// Resolve against this test's own location (the shared tier), not cwd: the token
+// files are tier-local, while styles.css stays at the composition root one level up.
+const here = dirname(fileURLToPath(import.meta.url));
+const readTier = (rel: string) => readFileSync(join(here, rel), "utf8");
+const readRoot = (rel: string) => readFileSync(join(here, "..", rel), "utf8");
 
 describe("design token contract (DI-3)", () => {
   it("the safe fallback set defines every canonical token", () => {
-    const css = read("tokens.css");
+    const css = readTier("tokens.css");
     for (const token of CANONICAL_TOKENS) {
       expect(css).toContain(`${token}:`);
     }
@@ -39,7 +41,7 @@ describe("design token contract (DI-3)", () => {
       "schemes/default/tokens.light.css",
       "schemes/default/tokens.dark.css",
     ]) {
-      const css = read(file);
+      const css = readTier(file);
       for (const token of themed) {
         expect(css, `${file} is missing ${token}`).toContain(`${token}:`);
       }
@@ -47,7 +49,7 @@ describe("design token contract (DI-3)", () => {
   });
 
   it("the @theme block maps a Tailwind utility for every canonical colour token", () => {
-    const css = read("tokens.css");
+    const css = readTier("tokens.css");
     const colourTokens = CANONICAL_TOKENS.filter(
       (t) =>
         t.startsWith("--surface") ||
@@ -69,10 +71,10 @@ describe("design token contract (DI-3)", () => {
   });
 
   it("styles.css wires the token layer and the default scheme", () => {
-    const css = read("styles.css");
+    const css = readRoot("styles.css");
     expect(css).toContain('@import "tailwindcss"');
-    expect(css).toContain('@import "./tokens.css"');
-    expect(css).toContain('@import "./schemes/default/tokens.light.css"');
-    expect(css).toContain('@import "./schemes/default/tokens.dark.css"');
+    expect(css).toContain('@import "./shared/tokens.css"');
+    expect(css).toContain('@import "./shared/schemes/default/tokens.light.css"');
+    expect(css).toContain('@import "./shared/schemes/default/tokens.dark.css"');
   });
 });

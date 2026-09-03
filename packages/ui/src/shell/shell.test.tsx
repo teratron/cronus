@@ -1,6 +1,6 @@
 import { fireEvent, render, screen } from "@testing-library/react";
 import { describe, expect, it, vi } from "vitest";
-import { SIDEBAR_PRIMARY, SIDEBAR_UTILITY } from "../navigation";
+import { SIDEBAR_PRIMARY, SIDEBAR_UTILITY } from "../shared/navigation";
 import { createActionRegistry } from "./actions";
 import { BuildingFrame } from "./building-frame";
 import { type FloorTab, FloorTabBar } from "./floor-tab-bar";

@@ -8,10 +8,10 @@
  */
 
 import { DashboardPanel, type DashboardProjection } from "./dashboard";
-import type { MessageKey } from "./i18n";
-import { type Locale, translator } from "./i18n";
 import { type OfficeProjection, type OfficeRenderMode, OfficeViewPanel } from "./office-view";
-import { resolveTheme, type Theme, themeAttributes } from "./theme";
+import type { MessageKey } from "./shared/i18n";
+import { type Locale, translator } from "./shared/i18n";
+import { resolveTheme, type Theme, themeAttributes } from "./shared/theme";
 
 /** The five surfaces of the graphical shell. */
 export type SurfaceId = "office" | "board" | "chat" | "editor" | "dashboard";

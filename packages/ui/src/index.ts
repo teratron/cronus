@@ -1,7 +1,5 @@
 export type { AppProps } from "./App";
 export { App } from "./App";
-export type { CoreClient, InvokeFn } from "./bridge";
-export { createCoreClient } from "./bridge";
 export type {
   BuildingStats,
   DashboardProjection,
@@ -9,15 +7,25 @@ export type {
   OfficeStats,
 } from "./dashboard";
 export { DashboardPanel } from "./dashboard";
-export type { Locale, MessageKey } from "./i18n";
-export { DEFAULT_LOCALE, t, translator } from "./i18n";
+export type {
+  OfficeAgent,
+  OfficeProjection,
+  OfficeRenderMode,
+  OfficeTask,
+  OfficeViewProps,
+} from "./office-view";
+export { OfficeViewPanel } from "./office-view";
+export type { CoreClient, InvokeFn } from "./shared/bridge";
+export { createCoreClient } from "./shared/bridge";
+export type { Locale, MessageKey } from "./shared/i18n";
+export { DEFAULT_LOCALE, t, translator } from "./shared/i18n";
 export type {
   Floor,
   FloorKind,
   NavLayer,
   SettingsTier,
   SidebarTab,
-} from "./navigation";
+} from "./shared/navigation";
 export {
   composeSidebar,
   hasMechanismNav,
@@ -32,24 +40,13 @@ export {
   SIDEBAR_UTILITY,
   settingsTier,
   shouldLoad,
-} from "./navigation";
-export type {
-  OfficeAgent,
-  OfficeProjection,
-  OfficeRenderMode,
-  OfficeTask,
-  OfficeViewProps,
-} from "./office-view";
-export { OfficeViewPanel } from "./office-view";
-export * from "./shell";
-export type { SurfaceId, WorkbenchProps } from "./surfaces";
-export { SURFACES, Workbench } from "./surfaces";
+} from "./shared/navigation";
 export type {
   ResolvedSurface,
   ResolvedTheme,
   SchemeManifest,
   Theme,
-} from "./theme";
+} from "./shared/theme";
 export {
   DEFAULT_SCHEME_ID,
   registerScheme,
@@ -58,5 +55,8 @@ export {
   schemeCatalog,
   surfaceAttributes,
   themeAttributes,
-} from "./theme";
-export { CANONICAL_TOKENS, type TokenName } from "./tokens";
+} from "./shared/theme";
+export { CANONICAL_TOKENS, type TokenName } from "./shared/tokens";
+export * from "./shell";
+export type { SurfaceId, WorkbenchProps } from "./surfaces";
+export { SURFACES, Workbench } from "./surfaces";

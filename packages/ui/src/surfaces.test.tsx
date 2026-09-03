@@ -1,9 +1,9 @@
 import { fireEvent, render, screen } from "@testing-library/react";
 import { describe, expect, it, vi } from "vitest";
 import { App } from "./App";
-import { t } from "./i18n";
+import { t } from "./shared/i18n";
+import { resolveTheme, themeAttributes } from "./shared/theme";
 import { SURFACES, Workbench } from "./surfaces";
-import { resolveTheme, themeAttributes } from "./theme";
 
 describe("surfaces (render-from-state)", () => {
   it("renders the active surface from injected state without mutating it", () => {

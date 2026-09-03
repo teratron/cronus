@@ -8,8 +8,8 @@
  * badge counts come from injected per-subsystem signals.
  */
 
-import { type Locale, type MessageKey, translator } from "../i18n";
-import { composeSidebar, type SidebarTab } from "../navigation";
+import { type Locale, type MessageKey, translator } from "../shared/i18n";
+import { composeSidebar, type SidebarTab } from "../shared/navigation";
 
 const TAB_LABEL: Record<SidebarTab, MessageKey> = {
   dashboard: "nav.dashboard",

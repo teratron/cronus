@@ -1,11 +1,11 @@
 @import "tailwindcss";
 
 /* Design-token contract: the `@theme` map + the minimal safe fallback set. */
-@import "./tokens.css";
+@import "./shared/tokens.css";
 
 /* Built-in colour schemes (the catalog's built-in layer). Each supplies a
    per-mode block keyed on `[data-scheme][data-theme]`, imported after the
    fallback so an active scheme wins. Add a built-in scheme by dropping its
    token files here; project / personal schemes load at runtime. */
-@import "./schemes/default/tokens.light.css";
-@import "./schemes/default/tokens.dark.css";
+@import "./shared/schemes/default/tokens.light.css";
+@import "./shared/schemes/default/tokens.dark.css";

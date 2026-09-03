@@ -8,7 +8,7 @@
  * removed by `visibleMenu` (INV-9), so nothing here renders a dead control.
  */
 
-import { type Locale, translator } from "../i18n";
+import { type Locale, translator } from "../shared/i18n";
 import type { ActionRegistry } from "./actions";
 import { type MenuGroupId, visibleMenu } from "./menu";
 

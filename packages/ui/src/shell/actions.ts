@@ -10,7 +10,7 @@
  * model when a surface needs it.
  */
 
-import type { MessageKey } from "../i18n";
+import type { MessageKey } from "../shared/i18n";
 
 /** One registered command. */
 export interface ShellAction {

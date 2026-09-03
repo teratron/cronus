@@ -11,9 +11,9 @@
 
 import type { JSX } from "react";
 import { DashboardPanel, type DashboardProjection } from "../dashboard";
-import { type Locale, translator } from "../i18n";
-import type { SidebarTab } from "../navigation";
 import { type OfficeProjection, OfficeViewPanel } from "../office-view";
+import { type Locale, translator } from "../shared/i18n";
+import type { SidebarTab } from "../shared/navigation";
 
 export interface SurfaceRouterProps {
   active: SidebarTab;

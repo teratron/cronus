@@ -16,9 +16,9 @@ import {
   SIDEBAR_PRIMARY,
   SIDEBAR_TABS,
   SIDEBAR_UTILITY,
-} from "../navigation";
-import { resolveScheme, surfaceAttributes } from "../theme";
-import { CANONICAL_TOKENS } from "../tokens";
+} from "../shared/navigation";
+import { resolveScheme, surfaceAttributes } from "../shared/theme";
+import { CANONICAL_TOKENS } from "../shared/tokens";
 import { createActionRegistry } from "./actions";
 import { BuildingShell } from "./building-shell";
 import type { FloorTab } from "./floor-tab-bar";

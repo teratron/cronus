@@ -7,8 +7,8 @@
  * addresses a sibling's facets.
  */
 
-import type { Locale } from "../i18n";
-import { L3_FACETS, type SidebarTab } from "../navigation";
+import type { Locale } from "../shared/i18n";
+import { L3_FACETS, type SidebarTab } from "../shared/navigation";
 
 export interface MechanismNavProps {
   subsystem: SidebarTab;

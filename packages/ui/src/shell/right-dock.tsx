@@ -8,7 +8,7 @@
  */
 
 import { useState } from "react";
-import { type Locale, translator } from "../i18n";
+import { type Locale, translator } from "../shared/i18n";
 
 export interface FileNode {
   name: string;

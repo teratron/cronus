@@ -12,8 +12,8 @@
  */
 
 import { useState } from "react";
-import { type Locale, type MessageKey, translator } from "../i18n";
-import { SIDEBAR_TABS, type SidebarTab } from "../navigation";
+import { type Locale, type MessageKey, translator } from "../shared/i18n";
+import { SIDEBAR_TABS, type SidebarTab } from "../shared/navigation";
 
 /** One selectable row. */
 export interface SelectionItem {

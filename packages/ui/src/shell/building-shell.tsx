@@ -15,10 +15,10 @@
 
 import { useMemo, useState } from "react";
 import type { DashboardProjection } from "../dashboard";
-import { type Locale, translator } from "../i18n";
-import type { SidebarTab } from "../navigation";
 import type { OfficeProjection } from "../office-view";
-import { surfaceAttributes, type Theme } from "../theme";
+import { type Locale, translator } from "../shared/i18n";
+import type { SidebarTab } from "../shared/navigation";
+import { surfaceAttributes, type Theme } from "../shared/theme";
 import { type ActionRegistry, createActionRegistry, type ShellAction } from "./actions";
 import { BuildingFrame } from "./building-frame";
 import { CommandPalette } from "./command-palette";

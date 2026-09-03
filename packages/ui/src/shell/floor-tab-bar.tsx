@@ -8,8 +8,8 @@
  * this component never polls.
  */
 
-import { type Locale, translator } from "../i18n";
-import type { FloorKind } from "../navigation";
+import { type Locale, translator } from "../shared/i18n";
+import type { FloorKind } from "../shared/navigation";
 
 /** Live office lifecycle state, mirrored from the core taxonomy. */
 export type OfficeState = "active" | "idle" | "paused" | "hibernating" | "error" | "offline";

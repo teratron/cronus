@@ -9,8 +9,8 @@
  * The Appearance section hosts the two theming-axis pickers (mode × scheme).
  */
 
-import { type Locale, translator } from "../i18n";
-import type { Theme } from "../theme";
+import { type Locale, translator } from "../shared/i18n";
+import type { Theme } from "../shared/theme";
 
 export interface GlobalSettingsOverlayProps {
   open: boolean;

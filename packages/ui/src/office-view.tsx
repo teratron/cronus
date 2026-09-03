@@ -7,7 +7,7 @@
  * caller, like every other piece of view state.
  */
 
-import { type Locale, translator } from "./i18n";
+import { type Locale, translator } from "./shared/i18n";
 
 /** One agent node of the office projection. */
 export interface OfficeAgent {
