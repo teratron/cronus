@@ -101,3 +101,4 @@
 - T-23D01: deferred-action lifecycle — `defer`/`resolve_deferred`; a detached action registers `Pending{action_id}` with no tag at dispatch, and mints only on correlated completion with the real observed result
 - T-23T01: `crates/core/tests/tool_receipts_invariants.rs` — 11 tests, one per TR-1…TR-9 through the real facade export chain, plus 2 leak-path tests (redacted `Debug`, receipt token survives `redact::redact`)
 - Verify: `cargo test --workspace` green across 3 consecutive full runs (75 `test result: ok` blocks each, 0 failed); `cargo clippy --workspace --all-targets -- -D warnings` clean; `cargo fmt --all -- --check` clean
+

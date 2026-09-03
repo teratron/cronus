@@ -57,7 +57,7 @@ The rule text governs and this phase plans on it, because the same spec **requir
 
 ## Atomic Checklist
 
-- [ ] [T-25A01] Mint the `shared/` leaf tier
+- [x] [T-25A01] Mint the `shared/` leaf tier
 - [ ] [T-25A02] Split `surfaces.tsx`; mint the `surfaces/` tier
 - [ ] [T-25A03] Repoint `shell/` and the composition root; freeze the public API
 - [ ] [T-25B01] Declare zones and the four direction rules (coverage off)
@@ -72,7 +72,7 @@ The rule text governs and this phase plans on it, because the same spec **requir
 ### [T-25A01] Mint the `shared/` leaf tier
 
 - **Spec:** l2-ui-module-topology.md §4.2, §4.3 · UMT-5
-- **Status:** Todo
+- **Status:** Done
 - **Assignment:** Agent
 - **Verify:** `pnpm -C packages/ui test` (94 tests, unchanged count) · `pnpm -C packages/ui exec tsc --noEmit` · `pnpm exec biome check packages/ui` · `node packages/ui/scripts/craft-lint.mjs`
 - **Handoff:** T-25A02 (the surfaces tier repoints onto the new `shared/` paths)
@@ -81,6 +81,15 @@ The rule text governs and this phase plans on it, because the same spec **requir
   **`styles.css` stays at `src/styles.css`** — `package.json` declares `"./styles.css": "./src/styles.css"` and `apps/desktop/src/main.tsx` imports `@cronus/ui/styles.css`. Moving it silently breaks the only consumer. Its three `@import` lines repoint to `./shared/tokens.css` and `./shared/schemes/default/tokens.{light,dark}.css`.
 
   `theme.ts`'s `./schemes/default/manifest.json` import becomes a within-tier path. Co-located tests (`theme.test.ts`, `tokens.test.ts`, `navigation.test.ts`, `canvas.test.ts`, `bridge.test.tsx`) move with their modules — the grouping rule, and the test-zoning rule depends on it.
+
+- **Changes:** `packages/ui/src/shared/` minted; 13 modules relocated as pure renames (R100) — `bridge.ts`, `canvas.ts`, `i18n.ts`, `navigation.ts`, `theme.ts`, `tokens.ts`, `tokens.css`, `schemes/`, and the co-located `.test` files. `shared/index.ts` added: a 6-line `export *` barrel (`bridge`, `canvas`, `i18n`, `navigation`, `theme`, `tokens`) — the tier declaration. `bridge.test.tsx` `./App` → `../App`. `tokens.test.ts` reworked to resolve token files against its own location (tier-local) and `styles.css` against the composition root one level up. `styles.css` kept at `src/` (only consumer imports it by that path); its three `@import` lines repointed to `./shared/...`. 15 importers repointed (`src/index.ts`, `App.tsx`, `dashboard.tsx`, `office-view.tsx`, `surfaces.tsx`, `surfaces.test.tsx`, all 13 `shell/*` files) — deep `./shared/<mod>` paths, not the barrel (the shell→barrel collapse is T-25A03's). `organizeImports` re-sorted the import blocks of 6 files whose new `./shared/*` specifiers changed sort order (re-export order; no runtime effect).
+- **[DR]** Added a repo-root `.gitattributes` (`* text=auto eol=lf`) and normalized the working tree to LF. *Criterion:* every Phase 25 task's `Verify` runs `biome check`, which was failing on all 49 `packages/ui` files — this host checks out with CRLF (`core.autocrlf=true`) and the repo had no `.gitattributes`; biome's formatter is LF-only. Every committed blob was already LF (`git ls-files --eol` → 0 `i/crlf`), so this changes no stored content — it makes the checkout match what is stored. Without it the phase cannot satisfy its own gate. *(Override: revert `.gitattributes` and run the gate under Git Bash, which checks out LF.)*
+- **Evidence:**
+  - `command: pnpm -C packages/ui exec vitest run` · `exit_code: 0` · `key_findings: 15 files, 94 passed (unchanged from the pre-move baseline)`
+  - `command: pnpm -C packages/ui exec tsc --noEmit` · `exit_code: 0`
+  - `command: pnpm exec biome check packages/ui` · `exit_code: 0` · `key_findings: 49 files checked, 0 errors (53 before the .gitattributes fix — all CRLF format noise)`
+  - `command: node packages/ui/scripts/craft-lint.mjs` · `exit_code: 0` · `key_findings: clean; EXEMPT regexes still match the relocated tokens.css / schemes/`
+  - `command: git diff -M --name-status` · `key_findings: 13× R100 pure renames + 1× R097 (bridge.test.tsx) + import-repoint edits only; no behavioural change`
 
 ### [T-25A02] Split `surfaces.tsx`; mint the `surfaces/` tier
 

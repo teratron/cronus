@@ -1,6 +1,6 @@
 # Application Shell
 
-**Version:** 1.0.0
+**Version:** 1.0.1
 **Status:** Stable
 **Layer:** concept
 
@@ -29,6 +29,7 @@ contract, the action/dispatch contract, and the workbench-composition contract.
 
 ## Related Specifications
 
+- [l2-application-shell.md](l2-application-shell.md) - **Implementation.** The React 19 + Tauri v2 realization of AS-1…AS-13: composition root, projection stores, the single core seam, action/keymap dispatch, workbench vocabulary and layout persistence.
 - [l1-architecture.md](l1-architecture.md) - Layered core + frontends and hub-and-spoke topology; this model details the *frontend runtime* shape that sits above the core.
 - [l1-navigation-model.md](l1-navigation-model.md) - The concrete tab/sidebar catalog and settings hierarchy; the navigation surfaces this shell *hosts and lays out*.
 - [l1-extensions.md](l1-extensions.md) - Skills/MCP/plugins lifecycle; panels, actions, and pickers are the shell-side extension points (AS-9/AS-6/AS-10).
@@ -338,3 +339,4 @@ are named by structural idea, not by product.
 | Version | Date | Change |
 | --- | --- | --- |
 | 1.0.0 | 2026-06-25 | Initial model: single-authority reactive entity-state runtime (notify/observe + typed events/subscriptions, weak-handle cycle-breaking), declarative render-from-state, named-action command system with context-predicate keymap dispatch over a focus tree, dockable workbench composition (workspace/center-panes/edge-docks/panels/modals) with persisted per-window layout, delegated selection surfaces, structured cancellation-on-drop async, and platform-behind-one-context testability (AS-1…AS-13). |
+| 1.0.1 | 2026-09-03 | Related Specifications now links the implementation spec `l2-application-shell.md`; the L2 realization this model had never received. Link-only patch — no invariant, constraint, or design change. |
