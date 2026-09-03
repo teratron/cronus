@@ -11,7 +11,7 @@ catalog:
   typescript: ^7.0.2
   vite: ^8.2.2
   "@types/react": ^19.2.18
-  "@types/react-dom": ^19.2.6
+  "@types/react-dom": ^19.2.7
   "@vitejs/plugin-react": ^6.1.1
 
 minimumReleaseAgeExclude:
@@ -26,13 +26,13 @@ minimumReleaseAgeExclude:
   - '@fallow-cli/win32-x64-msvc@3.20.0 || 3.22.0'
   - fallow@3.20.0 || 3.22.0
   - '@vitest/expect@4.1.11'
-  - '@vitest/mocker@4.1.11'
+  - '@vitest/mocker@4.1.11 || 5.0.0'
   - '@vitest/pretty-format@4.1.11'
   - '@vitest/runner@4.1.11'
   - '@vitest/snapshot@4.1.11'
-  - '@vitest/spy@4.1.11'
+  - '@vitest/spy@4.1.11 || 5.0.0'
   - '@vitest/utils@4.1.11'
-  - vitest@4.1.11
+  - vitest@4.1.11 || 5.0.0
   - "@typescript/typescript-aix-ppc64@7.0.2"
   - "@typescript/typescript-darwin-arm64@7.0.2"
   - "@typescript/typescript-darwin-x64@7.0.2"
@@ -85,6 +85,6 @@ minimumReleaseAgeExclude:
   - '@types/node@26.4.0 || 26.4.1'
   - fallow-type-aware@3.20.0 || 3.22.0
   - jsdom@30.0.1
-  - '@types/react-dom@19.2.4 || 19.2.6'
+  - '@types/react-dom@19.2.4 || 19.2.6 || 19.2.7'
   - '@types/react@19.2.18'
   - '@testing-library/react@16.3.3'
