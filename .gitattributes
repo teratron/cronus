@@ -1,0 +1,16 @@
+# Normalize line endings: every text file is stored and checked out with LF,
+# regardless of a contributor's core.autocrlf setting. Without this, a Windows
+# checkout with autocrlf=true materializes CRLF and biome's formatter (LF-only)
+# reports every file as unformatted.
+* text=auto eol=lf
+
+# Explicit binaries — never touch these.
+*.png binary
+*.jpg binary
+*.jpeg binary
+*.gif binary
+*.ico binary
+*.webp binary
+*.woff binary
+*.woff2 binary
+*.pdf binary
