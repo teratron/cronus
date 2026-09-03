@@ -36,17 +36,24 @@
     ],
     // Every source file under packages/ui/src carries a tier. A co-located test
     // inherits the tier of the module it sits with (option (a) — the shape the
-    // spec's prose already describes). The only files with no tier are the
-    // package's own build and test tooling, enumerated here one entry at a
-    // time so a new tooling file is a deliberate addition, never an unnoticed
-    // gap.
+    // spec's prose already describes).
+    //
+    // requireAllFiles is a project-wide check, but this tier map only governs
+    // packages/ui/src. allowUnmatched therefore holds two groups: the four
+    // packages/ui build/test tooling files, enumerated one at a time so a new
+    // one is a deliberate addition; and the trees outside packages/ui that
+    // this config makes no claim about — the desktop shell and the repo-root
+    // scripts — swept broadly, because their structure is not this map's
+    // concern.
     "coverage": {
       "requireAllFiles": true,
       "allowUnmatched": [
         "packages/ui/vite.config.ts",
         "packages/ui/vitest.setup.ts",
         "packages/ui/scripts/craft-lint.mjs",
-        "packages/ui/scripts/craft-lint.test.ts"
+        "packages/ui/scripts/craft-lint.test.ts",
+        "apps/**",
+        "scripts/**"
       ]
     },
     // The seam to the core is single: only the shared-tier bridge module runs
