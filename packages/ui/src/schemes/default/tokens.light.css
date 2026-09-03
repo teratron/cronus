@@ -1,0 +1,37 @@
+/*
+ * `default` colour scheme — light variant. Derived from the dark authoring:
+ * the same accent + semantic hues, inverted surface/text ramps. Selected when
+ * the resolved mode is `light`.
+ */
+
+:root[data-scheme="default"][data-theme="light"] {
+  --surface-0: #ffffff;
+  --surface-1: #f6f6f6;
+  --surface-2: #efefef;
+  --surface-3: #e6e6e6;
+
+  --text-primary: #171717;
+  --text-secondary: #5b5b5b;
+  --text-muted: #8b8b8b;
+  --text-inverse: #fafafa;
+
+  --border-subtle: rgba(0, 0, 0, 0.08);
+  --border-strong: rgba(0, 0, 0, 0.16);
+  --focus-ring: #1f7ae0;
+
+  --accent: #1a1a1a;
+  --accent-hover: #000000;
+  --accent-contrast: #fafafa;
+
+  --success: #15803d;
+  --success-subtle: rgba(21, 128, 61, 0.12);
+  --warning: #a16207;
+  --warning-subtle: rgba(161, 98, 7, 0.12);
+  --danger: #dc2626;
+  --danger-subtle: rgba(220, 38, 38, 0.1);
+  --info: #1f7ae0;
+  --info-subtle: rgba(31, 122, 224, 0.1);
+
+  --shadow-panel: 0 1px 2px rgba(0, 0, 0, 0.08);
+  --shadow-overlay: 0 24px 70px rgba(0, 0, 0, 0.18);
+}

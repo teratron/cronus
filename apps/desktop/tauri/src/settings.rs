@@ -102,6 +102,17 @@ fn default_overlay_position() -> OverlayPosition {
     }
 }
 
+fn default_theme() -> String {
+    // OS-appearance axis: system follows the OS, light / dark force a variant.
+    "system".to_string()
+}
+
+fn default_color_scheme() -> String {
+    // Visual-language axis: a named design-identity token package. `default` is
+    // the built-in scheme every install ships and every fallback lands on.
+    "default".to_string()
+}
+
 fn default_shortcuts() -> BTreeMap<String, String> {
     BTreeMap::from([
         (
@@ -129,6 +140,17 @@ pub struct Settings {
     #[serde(default = "default_overlay_position")]
     pub overlay_position: OverlayPosition,
 
+    /// Theming axis 1 — OS-appearance mode: `system` | `light` | `dark`.
+    /// Cosmetic-only; the frontend resolver maps it against the OS preference.
+    #[serde(default = "default_theme")]
+    pub theme: String,
+
+    /// Theming axis 2 — active colour scheme (a named design identity). The
+    /// frontend resolves `(theme × color_scheme)` into the surface token set;
+    /// an unknown id falls back to `default` there.
+    #[serde(default = "default_color_scheme")]
+    pub color_scheme: String,
+
     /// Named shortcut bindings; additive migration inserts newly shipped
     /// names and never touches an existing (possibly user-edited) binding.
     #[serde(default = "default_shortcuts")]
@@ -144,6 +166,8 @@ impl Default for Settings {
         Self {
             log_level: default_log_level(),
             overlay_position: default_overlay_position(),
+            theme: default_theme(),
+            color_scheme: default_color_scheme(),
             shortcuts: default_shortcuts(),
             extra: serde_json::Map::new(),
         }
@@ -269,6 +293,41 @@ mod tests {
 
         let loaded = load_or_create(&path).expect("reload");
         assert_eq!(loaded, settings);
+        cleanup(&path);
+    }
+
+    #[test]
+    fn older_file_without_theming_fields_deserializes_with_defaults_filled() {
+        let _hot = hot_lock();
+        let path = temp_settings_path("theming-defaults");
+        cleanup(&path);
+        if let Some(parent) = path.parent() {
+            fs::create_dir_all(parent).expect("mkdir");
+        }
+        // A file predating the two theming axes — neither key present.
+        fs::write(&path, r#"{ "log_level": "info" }"#).expect("write older file");
+
+        let settings = load_or_create(&path).expect("load older file");
+        assert_eq!(settings.theme, "system");
+        assert_eq!(settings.color_scheme, "default");
+        cleanup(&path);
+    }
+
+    #[test]
+    fn theming_axes_round_trip() {
+        let _hot = hot_lock();
+        let path = temp_settings_path("theming-roundtrip");
+        cleanup(&path);
+
+        let settings = Settings {
+            theme: "dark".to_string(),
+            color_scheme: "midnight".to_string(),
+            ..Settings::default()
+        };
+        save(&path, &settings).expect("save");
+        let loaded = load_or_create(&path).expect("reload");
+        assert_eq!(loaded.theme, "dark");
+        assert_eq!(loaded.color_scheme, "midnight");
         cleanup(&path);
     }
 

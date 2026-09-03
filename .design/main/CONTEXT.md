@@ -1,6 +1,6 @@
 # Project Context
 
-**Generated:** 2026-08-13
+**Generated:** 2026-09-03
 
 ## Active Technologies
 
@@ -31,11 +31,10 @@
 │   ├── TODO.md
 │   ├── UX-UI - разбор 3 кейсов.md
 │   ├── UX-дизайн - 6 психологических принципов.md
-│   ├── desktop.drawio.svg
 │   ├── heartbeat.md
 │   ├── project-names.md
 │   ├── references.md
-│   ├── release.drawio.svg
+│   ├── reverse-derivation-mechanism.md
 │   ├── technology-stack-research.md
 │   └── ui-ux.md
 ├── .env.example
@@ -45,9 +44,9 @@
 ├── .gitignore
 ├── .magic/
 ├── .markdownlint.json
-├── .qwen/
 ├── .release/
 │   ├── program/
+│   ├── project/
 │   └── state/
 ├── AGENTS.md
 ├── CHANGELOG.md

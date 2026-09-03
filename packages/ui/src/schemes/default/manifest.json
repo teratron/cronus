@@ -1,0 +1,14 @@
+{
+  "id": "default",
+  "name": "Cronus",
+  "category": "Brand",
+  "provenance": {
+    "kind": "bundled",
+    "reference": "cronus-building-mockup"
+  },
+  "fidelity": "hybrid",
+  "files": {
+    "light": "tokens.light.css",
+    "dark": "tokens.dark.css"
+  }
+}

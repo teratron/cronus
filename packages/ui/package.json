@@ -10,7 +10,8 @@
   },
   "scripts": {
     "build": "tsc --noEmit && vite build",
-    "test": "vitest run"
+    "test": "vitest run",
+    "lint:craft": "node scripts/craft-lint.mjs"
   },
   "peerDependencies": {
     "react": "catalog:",

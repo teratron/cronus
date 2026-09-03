@@ -2,12 +2,16 @@ import { describe, expect, it } from "vitest";
 import {
   composeSidebar,
   type Floor,
+  hasMechanismNav,
   isCanonicalOrder,
   isChildLayer,
   isClosable,
   isUnloadable,
+  L3_FACETS,
   NAV_LAYERS,
+  SIDEBAR_PRIMARY,
   SIDEBAR_TABS,
+  SIDEBAR_UTILITY,
   settingsTier,
   shouldLoad,
 } from "./navigation";
@@ -29,9 +33,19 @@ const projectFloor: Floor = {
 };
 
 describe("navigation model", () => {
-  it("exposes the canonical sidebar order and rejects reordering (NV-1)", () => {
-    expect(SIDEBAR_TABS[0]).toBe("chat");
-    expect(SIDEBAR_TABS[SIDEBAR_TABS.length - 1]).toBe("settings");
+  it("exposes the canonical two-run sidebar order and rejects reordering (NV-1)", () => {
+    expect(SIDEBAR_PRIMARY[0]).toBe("dashboard");
+    expect(SIDEBAR_PRIMARY[SIDEBAR_PRIMARY.length - 1]).toBe("wiki");
+    expect(SIDEBAR_UTILITY).toEqual([
+      "channels",
+      "security",
+      "providers",
+      "settings",
+    ]);
+    expect(SIDEBAR_TABS).toEqual([
+      ...SIDEBAR_PRIMARY,
+      ...SIDEBAR_UTILITY,
+    ]);
     expect(isCanonicalOrder(SIDEBAR_TABS)).toBe(true);
     const reordered = [
       ...SIDEBAR_TABS,
@@ -39,8 +53,10 @@ describe("navigation model", () => {
     expect(isCanonicalOrder(reordered)).toBe(false);
   });
 
-  it("keeps the canonical set intact below pinned shortcuts (NV-1)", () => {
-    const { pinned, canonical } = composeSidebar([
+  it("freezes both runs — pins cannot mutate them (NV-1)", () => {
+    expect(Object.isFrozen(SIDEBAR_PRIMARY)).toBe(true);
+    expect(Object.isFrozen(SIDEBAR_UTILITY)).toBe(true);
+    const { pinned, primary, utility } = composeSidebar([
       "kanban",
       "memory",
     ]);
@@ -48,7 +64,32 @@ describe("navigation model", () => {
       "kanban",
       "memory",
     ]);
-    expect(isCanonicalOrder(canonical)).toBe(true);
+    expect(primary).toBe(SIDEBAR_PRIMARY);
+    expect(utility).toBe(SIDEBAR_UTILITY);
+    expect(
+      isCanonicalOrder([
+        ...primary,
+        ...utility,
+      ]),
+    ).toBe(true);
+  });
+
+  it("resolves the per-subsystem L3 facet catalog (NV-10)", () => {
+    expect(L3_FACETS.schedule).toEqual([
+      "cron",
+      "pulse",
+    ]);
+    expect(L3_FACETS.inbox).toEqual([
+      "messages",
+      "poll-clarify",
+    ]);
+    expect(L3_FACETS.dashboard).toEqual([
+      "agent-statistics",
+      "token-usage",
+    ]);
+    expect(hasMechanismNav("schedule")).toBe(true);
+    expect(hasMechanismNav("memory")).toBe(false);
+    expect(hasMechanismNav("chat")).toBe(false);
   });
 
   it("enforces strict four-layer nesting (NV-6)", () => {
@@ -60,7 +101,6 @@ describe("navigation model", () => {
     ]);
     expect(isChildLayer("building", "floor")).toBe(true);
     expect(isChildLayer("floor", "subsystem")).toBe(true);
-    // Non-adjacent or reversed layers are not parent-child.
     expect(isChildLayer("building", "subsystem")).toBe(false);
     expect(isChildLayer("subsystem", "floor")).toBe(false);
   });
@@ -68,23 +108,23 @@ describe("navigation model", () => {
   it("pins the home floor as non-closable and always loaded (NV-9)", () => {
     expect(isClosable(homeFloor)).toBe(false);
     expect(isClosable(projectFloor)).toBe(true);
-    expect(shouldLoad(homeFloor, "proj-1")).toBe(true); // always, even inactive
+    expect(shouldLoad(homeFloor, "proj-1")).toBe(true);
   });
 
   it("lazy-loads project floors only when active or running (NV-2)", () => {
-    expect(shouldLoad(projectFloor, "home")).toBe(false); // inactive, idle
-    expect(shouldLoad(projectFloor, "proj-1")).toBe(true); // active
+    expect(shouldLoad(projectFloor, "home")).toBe(false);
+    expect(shouldLoad(projectFloor, "proj-1")).toBe(true);
     const running = {
       ...projectFloor,
       hasRunningTask: true,
     };
-    expect(shouldLoad(running, "home")).toBe(true); // running task monitored
+    expect(shouldLoad(running, "home")).toBe(true);
   });
 
   it("marks inactive idle project floors unloadable but never home (NV-2/NV-9)", () => {
     expect(isUnloadable(projectFloor, "home")).toBe(true);
-    expect(isUnloadable(projectFloor, "proj-1")).toBe(false); // active
-    expect(isUnloadable(homeFloor, "proj-1")).toBe(false); // home never unloads
+    expect(isUnloadable(projectFloor, "proj-1")).toBe(false);
+    expect(isUnloadable(homeFloor, "proj-1")).toBe(false);
   });
 
   it("routes settings keys to the correct tier (NV-4)", () => {

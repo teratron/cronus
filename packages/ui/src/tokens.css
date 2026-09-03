@@ -1,0 +1,143 @@
+/*
+ * Design-token contract for the Cronus shell.
+ *
+ * Two parts:
+ *   1. A bare `:root` block — the built-in **safe** token set. Deliberately
+ *      generic (grayscale neutrals, muted semantics): it is not any scheme, it
+ *      is what renders a legible surface before a scheme's per-mode block
+ *      applies, or if the `default` scheme is unresolvable (corrupt install).
+ *      A scheme's own palette is authored in its files, never here.
+ *   2. An `@theme` block mapping the canonical tokens onto Tailwind v4 utilities,
+ *      so a component writes `bg-surface-1` / `text-text-secondary` / `rounded-md`
+ *      and never a literal value.
+ *
+ * Per-mode, per-scheme values live in `schemes/<id>/tokens.{light,dark}.css`
+ * (selector `:root[data-scheme="<id>"][data-theme="<mode>"]`), imported after
+ * this file so a scheme overrides the safe fallback.
+ */
+
+:root {
+  /* colour · surface — neutral gray ramp, not a branded palette */
+  --surface-0: #111111;
+  --surface-1: #1a1a1a;
+  --surface-2: #242424;
+  --surface-3: #2e2e2e;
+  /* colour · text */
+  --text-primary: #f2f2f2;
+  --text-secondary: #a8a8a8;
+  --text-muted: #707070;
+  --text-inverse: #111111;
+  /* colour · line */
+  --border-subtle: rgba(255, 255, 255, 0.08);
+  --border-strong: rgba(255, 255, 255, 0.16);
+  --focus-ring: #5a9bd8;
+  /* colour · accent */
+  --accent: #dcdcdc;
+  --accent-hover: #f0f0f0;
+  --accent-contrast: #1a1a1a;
+  /* colour · semantic — desaturated, scheme-independent */
+  --success: #7fb98a;
+  --success-subtle: rgba(127, 185, 138, 0.12);
+  --warning: #c9a86a;
+  --warning-subtle: rgba(201, 168, 106, 0.12);
+  --danger: #cf7476;
+  --danger-subtle: rgba(207, 116, 118, 0.12);
+  --info: #6a9bc9;
+  --info-subtle: rgba(106, 155, 201, 0.12);
+  /* typography */
+  --font-sans: "Geist", -apple-system, "Segoe UI", sans-serif;
+  --font-mono: ui-monospace, "SF Mono", "Cascadia Code", monospace;
+  --text-xs: 0.6875rem;
+  --text-sm: 0.78125rem;
+  --text-base: 0.8125rem;
+  --text-lg: 0.9375rem;
+  --text-xl: 1.0625rem;
+  --text-2xl: 1.4375rem;
+  --weight-regular: 400;
+  --weight-medium: 500;
+  --weight-semibold: 600;
+  --leading-tight: 1.25;
+  --leading-normal: 1.5;
+  --leading-relaxed: 1.65;
+  /* spacing · 4px base */
+  --space-1: 0.25rem;
+  --space-2: 0.5rem;
+  --space-3: 0.75rem;
+  --space-4: 1rem;
+  --space-5: 1.25rem;
+  --space-6: 1.5rem;
+  --space-8: 2rem;
+  /* radius */
+  --radius-sm: 5px;
+  --radius-md: 7px;
+  --radius-lg: 11px;
+  --radius-pill: 9999px;
+  /* motion */
+  --duration-fast: 120ms;
+  --duration-base: 180ms;
+  --duration-slow: 320ms;
+  --ease-standard: cubic-bezier(0.2, 0, 0, 1);
+  --ease-emphasized: cubic-bezier(0.3, 0, 0, 1);
+  /* elevation */
+  --shadow-panel: 0 1px 2px rgba(0, 0, 0, 0.3);
+  --shadow-overlay: 0 24px 70px rgba(0, 0, 0, 0.6);
+}
+
+@theme {
+  --color-surface-0: var(--surface-0);
+  --color-surface-1: var(--surface-1);
+  --color-surface-2: var(--surface-2);
+  --color-surface-3: var(--surface-3);
+  --color-text-primary: var(--text-primary);
+  --color-text-secondary: var(--text-secondary);
+  --color-text-muted: var(--text-muted);
+  --color-text-inverse: var(--text-inverse);
+  --color-border-subtle: var(--border-subtle);
+  --color-border-strong: var(--border-strong);
+  --color-focus-ring: var(--focus-ring);
+  --color-accent: var(--accent);
+  --color-accent-hover: var(--accent-hover);
+  --color-accent-contrast: var(--accent-contrast);
+  --color-success: var(--success);
+  --color-success-subtle: var(--success-subtle);
+  --color-warning: var(--warning);
+  --color-warning-subtle: var(--warning-subtle);
+  --color-danger: var(--danger);
+  --color-danger-subtle: var(--danger-subtle);
+  --color-info: var(--info);
+  --color-info-subtle: var(--info-subtle);
+
+  --font-sans: var(--font-sans);
+  --font-mono: var(--font-mono);
+
+  --text-xs: var(--text-xs);
+  --text-sm: var(--text-sm);
+  --text-base: var(--text-base);
+  --text-lg: var(--text-lg);
+  --text-xl: var(--text-xl);
+  --text-2xl: var(--text-2xl);
+
+  --font-weight-regular: var(--weight-regular);
+  --font-weight-medium: var(--weight-medium);
+  --font-weight-semibold: var(--weight-semibold);
+
+  --leading-tight: var(--leading-tight);
+  --leading-normal: var(--leading-normal);
+  --leading-relaxed: var(--leading-relaxed);
+
+  --spacing-1: var(--space-1);
+  --spacing-2: var(--space-2);
+  --spacing-3: var(--space-3);
+  --spacing-4: var(--space-4);
+  --spacing-5: var(--space-5);
+  --spacing-6: var(--space-6);
+  --spacing-8: var(--space-8);
+
+  --radius-sm: var(--radius-sm);
+  --radius-md: var(--radius-md);
+  --radius-lg: var(--radius-lg);
+  --radius-pill: var(--radius-pill);
+
+  --shadow-panel: var(--shadow-panel);
+  --shadow-overlay: var(--shadow-overlay);
+}
