@@ -1,0 +1,64 @@
+{
+  "$schema": "./node_modules/fallow/schema.json",
+
+  // Architecture boundary for packages/ui. TypeScript has no compile-time
+  // module boundary inside a package, so the four tiers of the frontend are
+  // enforced here instead: a module may import only from a tier below it.
+  //
+  //   composition root  ->  shell  ->  surfaces  ->  shared (leaf)
+  //
+  // Custom zones, not a bundled preset: the "feature-sliced" preset organizes
+  // client-side domain logic, which this package must never hold, so two of its
+  // zones would always be empty.
+  "boundaries": {
+    "zones": [
+      // The package entry point, the top-level application component, and the
+      // stylesheet the package exports alongside them.
+      { "name": "root", "patterns": ["packages/ui/src/index.ts", "packages/ui/src/index.test.ts", "packages/ui/src/App.tsx", "packages/ui/src/App.test.tsx", "packages/ui/src/styles.css"] },
+      // The application frame: building frame, tabs, sidebar, docks, overlays,
+      // command palette, surface router, and the original workbench composer.
+      { "name": "shell", "patterns": ["packages/ui/src/shell/**"] },
+      // Renderable destinations. A surface knows only the shared tier.
+      { "name": "surfaces", "patterns": ["packages/ui/src/surfaces/**"] },
+      // Leaf modules: the core bridge client, theme and token resolution,
+      // scheme manifests, localization, the navigation and surface catalogs,
+      // geometry helpers.
+      { "name": "shared", "patterns": ["packages/ui/src/shared/**"] }
+    ],
+    "rules": [
+      // Direction is one-way and total. The root may reach surfaces directly
+      // (surfaces sits below it) because the package's public API re-exports
+      // the surface panels and that re-export must survive the partition.
+      { "from": "root", "allow": ["shell", "surfaces", "shared"] },
+      { "from": "shell", "allow": ["surfaces", "shared"] },
+      { "from": "surfaces", "allow": ["shared"] },
+      { "from": "shared", "allow": ["shared"] }
+    ],
+    // Every source file under packages/ui/src carries a tier. A co-located test
+    // inherits the tier of the module it sits with (option (a) — the shape the
+    // spec's prose already describes). The only files with no tier are the
+    // package's own build and test tooling, enumerated here one entry at a
+    // time so a new tooling file is a deliberate addition, never an unnoticed
+    // gap.
+    "coverage": {
+      "requireAllFiles": true,
+      "allowUnmatched": [
+        "packages/ui/vite.config.ts",
+        "packages/ui/vitest.setup.ts",
+        "packages/ui/scripts/craft-lint.mjs",
+        "packages/ui/scripts/craft-lint.test.ts"
+      ]
+    },
+    // The seam to the core is single: only the shared-tier bridge module runs
+    // IPC invocation. Any other tier that calls the injected host `invoke`
+    // (or imports one) is reaching past the bridge. One rule per non-shared
+    // tier so a failure names the tier that broke it.
+    "calls": {
+      "forbidden": [
+        { "from": "root", "callee": ["invoke", "@tauri-apps/api/core.invoke", "@tauri-apps/api.invoke"] },
+        { "from": "shell", "callee": ["invoke", "@tauri-apps/api/core.invoke", "@tauri-apps/api.invoke"] },
+        { "from": "surfaces", "callee": ["invoke", "@tauri-apps/api/core.invoke", "@tauri-apps/api.invoke"] }
+      ]
+    }
+  }
+}
