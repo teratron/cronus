@@ -9,3 +9,11 @@
    token files here; project / personal schemes load at runtime. */
 @import "./shared/schemes/default/tokens.light.css";
 @import "./shared/schemes/default/tokens.dark.css";
+
+/* Scan this package's own source for utility classes. Tailwind's automatic
+   content detection skips node_modules, and a consuming app (the desktop
+   shell) reaches these components only through a workspace symlink there — so
+   without this the app bundles a stylesheet with no utilities and renders
+   unstyled. Path is relative to this file, so it holds wherever the
+   stylesheet is imported from. */
+@source "./";
