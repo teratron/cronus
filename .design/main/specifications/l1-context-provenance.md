@@ -1,6 +1,6 @@
 # Context Provenance & Trusted Composition
 
-**Version:** 1.1.1
+**Version:** 1.2.0
 **Status:** Stable
 **Layer:** concept
 
@@ -149,6 +149,22 @@ Rules every Layer 2 implementation MUST NOT violate:
   `l1-tokenization-boundary` TB-4/TB-5; a realization that relies solely on textual
   delimiting where a control alphabet exists does not satisfy CP-2.
 
+- **CP-10 Reader-facing provenance — foreign text is quoted or replaced, never paraphrased into the product's voice**: [ADDED v1.2.0]
+  CP-7 makes the boundary rule govern *every model-facing surface*; the human-facing
+  surface is the dual and needs its own rule. When text authored elsewhere — a remote
+  manifest, an upstream notice, a third-party description, a fetched summary — is to be
+  shown to a person, it either travels **quoted and attributed to its source**, or it is
+  **replaced by a fixed, locally-authored statement plus a pointer to the original**. It is
+  never **summarized, translated, or paraphrased into the product's own voice**: doing so
+  makes the product the *author* of a claim it did not verify, and strips the reader of the
+  only cue that would have told them to apply a different standard of belief. The
+  substitution is not cosmetic — a paraphrase is indistinguishable from the product's own
+  wording, so a remote party gains a channel that speaks with the product's authority, which
+  is the human-facing form of exactly the injection CP-2 neutralizes on the model side. Where
+  a locally-authored replacement is used, it says only what the local system knows to be true
+  (that something exists, its version, where to read it) and the reader reaches the foreign
+  content by following the pointer, in a context where its origin is unambiguous.
+
 > L2 specs cannot reach RFC status until all invariants here are addressed in their "Invariant Compliance" section.
 
 ## 4. Detailed Design
@@ -258,5 +274,6 @@ channel in the first place.
 
 | Version | Date | Author | Notes |
 | --- | --- | --- | --- |
+| 1.2.0 | 2026-09-04 | Core Team | Added CP-10 — reader-facing provenance: foreign text is quoted or replaced, never paraphrased into the product's voice. CP-1…CP-9 govern the model-facing composition boundary (CP-7: *every model-facing surface*), leaving the human-facing dual unstated. Text authored elsewhere — a remote manifest, an upstream notice, a fetched summary — now either travels quoted and attributed, or is replaced by a fixed locally-authored statement plus a pointer to the original; it is never summarized, translated, or paraphrased into the product's own wording, because a paraphrase makes the product the author of a claim it did not verify and removes the reader's only cue to apply a different standard of belief. The substitution is not cosmetic: a paraphrase is indistinguishable from the product's own voice, so a remote party gains a channel speaking with the product's authority — the human-facing form of exactly the injection CP-2 neutralizes on the model side. A local replacement states only what the local system knows (that something exists, its version, where to read it). From an external artifact-generation skill whose update notifier shows a fixed local sentence plus a release-notes link and explicitly forbids quoting, summarizing, or translating the remote manifest's own summary. |
 | 1.1.0 | 2026-07-10 | Core Team | Added CP-9 control-channel unforgeability at the encoding boundary — where the receiving model distinguishes a control sub-alphabet (frame/turn/role/channel/stop markers), neutralization is enforced at the point a fragment enters that alphabet and not only by escaping its text: an untrusted fragment can never emit a control symbol by construction of the encoder rather than by a sanitizer applied after it, and content that merely resembles one is refused by default and thereafter either encoded inertly or minted per an explicit auditable per-surface disposition (CP-3 kinship), never silently promoted nor silently inerted. This is the structural floor beneath CP-6: a delimiter built from ordinary content is a string an adversary must fail to forge, whereas an unreachable sub-alphabet removes the forgery capability; CP-6 remains the defense-in-depth layer for flat prompt surfaces with no control alphabet, where it is the only structure available. §4.2 extended — the realization table gains the alphabet-level row and is reordered by guarantee strength. Governed by the new l1-tokenization-boundary TB-4/TB-5. Additive: no existing invariant weakened. |
 | 1.0.0 | 2026-07-02 | Core Team | Initial spec — content provenance & trusted composition: per-fragment provenance with unknown=untrusted (CP-1); untrusted-by-default neutralization at the composition boundary (CP-2); explicit auditable per-fragment trust elevation (CP-3); sticky monotonic provenance, trusted+untrusted=untrusted (CP-4); structural neutralization primary, detection complementary (CP-5); delimiter integrity, content can't escape its quarantine (CP-6); every model-facing surface guarded not only a wrapper (CP-7); trust decisions observable for attribution/regression (CP-8). Elevates the scattered l2-tool-security spotlighting + classifier into one L1 contract they realize; composes with l1-security / l1-claim-verification / l1-memory-model / l1-workflow-language; nodus realization = l1-nodus-language NL-11. |
