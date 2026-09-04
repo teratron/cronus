@@ -35,7 +35,8 @@ import { GlobalSettingsOverlay } from "./global-settings-overlay";
 import { restoreLayout } from "./layout-record";
 import { MechanismNav } from "./mechanism-nav";
 import { type FileNode, RightDock } from "./right-dock";
-import { SubsystemSidebar } from "./subsystem-sidebar";
+import { type BudgetMeter, StatusBar } from "./status-bar";
+import { type RunControlState, SubsystemSidebar } from "./subsystem-sidebar";
 import { SurfaceRouter } from "./surface-router";
 import { createViewStore, INITIAL_VIEW_STATE } from "./view-store";
 
@@ -96,6 +97,23 @@ export interface BuildingShellProps {
   badges?: Partial<Record<SidebarTab, number>>;
   floorName?: string;
   floorSlug?: string;
+  /** Initials on the sidebar's manager avatar; derived from the name when absent. */
+  floorInitials?: string;
+  /** Counts that are a tally of what exists, not an alert (muted, no pill). */
+  tallies?: Partial<Record<SidebarTab, string | number>>;
+  /** Tabs carrying an unread marker with no number. */
+  markers?: readonly SidebarTab[];
+  /** Project run state, shown in the sidebar control and the status bar. */
+  runState?: RunControlState;
+  onRun?: (next: RunControlState) => void;
+  /** Status-bar readouts. Each renders only when supplied — never a guess. */
+  sessionBudget?: BudgetMeter;
+  weeklyBudget?: BudgetMeter;
+  gatesGreen?: boolean;
+  memoryLabel?: string;
+  onOpenProcessMonitor?: () => void;
+  /** Secondary line beside the surface title in the content header. */
+  surfaceSubtitle?: string;
   // L0 facilities
   actions?: readonly ShellAction[];
   fileTree?: readonly FileNode[];
@@ -130,6 +148,17 @@ export function BuildingShell({
   badges = {},
   floorName,
   floorSlug,
+  floorInitials,
+  tallies = {},
+  markers = [],
+  runState = "stopped",
+  onRun,
+  sessionBudget,
+  weeklyBudget,
+  gatesGreen,
+  memoryLabel,
+  onOpenProcessMonitor,
+  surfaceSubtitle,
   actions = [],
   fileTree = [],
   recentOffices = [],
@@ -256,6 +285,8 @@ export function BuildingShell({
             type: "toggleRightDock",
           })
         }
+        sidebarOpen={sidebarOpen}
+        rightDockOpen={rightDockOpen}
         locale={locale}
       />
 
@@ -281,23 +312,37 @@ export function BuildingShell({
             }}
             pinned={pinned}
             badges={badges}
+            tallies={tallies}
+            markers={markers}
             floorName={floorName}
             floorSlug={floorSlug}
+            floorInitials={floorInitials}
             onOpenSearch={() =>
               view.dispatch({
                 type: "setPaletteOpen",
                 open: true,
               })
             }
+            onOpenSettings={() =>
+              view.dispatch({
+                type: "setSettingsOpen",
+                open: true,
+              })
+            }
+            runState={runState}
+            onRun={onRun}
             locale={locale}
           />
         ) : null}
 
         <div className="flex min-w-0 flex-1 flex-col">
-          <div className="flex h-13.25 flex-none items-center gap-2.5 border-b border-border-subtle px-4">
-            <span className="text-sm font-semibold text-text-primary">
+          <div className="flex h-13.25 flex-none items-center gap-2.5 border-border-subtle border-b px-4">
+            <span className="font-semibold text-lg text-text-primary">
               {msg(`nav.${activeSubsystem}` as const)}
             </span>
+            {surfaceSubtitle ? (
+              <span className="text-sm text-text-muted">{surfaceSubtitle}</span>
+            ) : null}
             <div className="flex-1" />
             <MechanismNav
               subsystem={activeSubsystem}
@@ -321,6 +366,17 @@ export function BuildingShell({
 
         <RightDock open={rightDockOpen} floorName={floorName} tree={fileTree} locale={locale} />
       </div>
+
+      <StatusBar
+        floorName={floorName}
+        runState={runState}
+        session={sessionBudget}
+        weekly={weeklyBudget}
+        gatesGreen={gatesGreen}
+        memoryLabel={memoryLabel}
+        onOpenProcessMonitor={onOpenProcessMonitor}
+        locale={locale}
+      />
 
       <CommandPalette
         open={paletteOpen}

@@ -29,6 +29,7 @@ export {
 export { MechanismNav, type MechanismNavProps } from "./mechanism-nav";
 export { MENU, type MenuGroup, type MenuGroupId, visibleMenu } from "./menu";
 export { type FileNode, RightDock, type RightDockProps } from "./right-dock";
+export { type BudgetMeter, StatusBar, type StatusBarProps } from "./status-bar";
 export {
   type RunControlState,
   SubsystemSidebar,

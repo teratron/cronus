@@ -18,10 +18,17 @@ export const CANONICAL_TOKENS = [
   "--surface-1",
   "--surface-2",
   "--surface-3",
+  "--surface-4",
+  "--surface-5",
+  // colour · surface interaction levels (planes, not opacity tricks)
+  "--surface-hover",
+  "--surface-active",
   // colour · text
   "--text-primary",
+  "--text-strong",
   "--text-secondary",
   "--text-muted",
+  "--text-disabled",
   "--text-inverse",
   // colour · line
   "--border-subtle",
@@ -38,15 +45,26 @@ export const CANONICAL_TOKENS = [
   "--warning-subtle",
   "--danger",
   "--danger-subtle",
+  "--danger-strong",
   "--info",
   "--info-subtle",
+  // colour · state — a lifecycle dot that is neither ok nor an error
+  "--state-dormant",
+  // colour · chart series — positional, a categorical palette
+  "--chart-1",
+  "--chart-2",
+  "--chart-3",
+  "--chart-4",
+  "--chart-5",
   // typography · family
   "--font-sans",
   "--font-mono",
   // typography · size scale
+  "--text-2xs",
   "--text-xs",
   "--text-sm",
   "--text-base",
+  "--text-md",
   "--text-lg",
   "--text-xl",
   "--text-2xl",
@@ -79,6 +97,7 @@ export const CANONICAL_TOKENS = [
   "--ease-emphasized",
   // elevation
   "--shadow-panel",
+  "--shadow-menu",
   "--shadow-overlay",
 ] as const;
 

@@ -17,3 +17,64 @@
    unstyled. Path is relative to this file, so it holds wherever the
    stylesheet is imported from. */
 @source "./";
+
+/* The shell's typeface. Shipped with the package and resolved relative to this
+   file, so the consuming app's bundler emits it — no CDN, no network at run
+   time. One variable file covers the whole 100–900 range. */
+@font-face {
+  font-family: "Geist";
+  src: url("./assets/Geist-Variable.woff2") format("woff2");
+  font-weight: 100 900;
+  font-style: normal;
+  font-display: swap;
+}
+
+/* Application ground. The shell is a fixed-viewport desktop surface: the frame
+   owns its own scroll regions, so the document itself never scrolls. */
+html,
+body,
+#root {
+  height: 100%;
+}
+
+body {
+  margin: 0;
+  background: var(--surface-0);
+  color: var(--text-primary);
+  font-family: var(--font-sans);
+  font-size: var(--text-base);
+  overflow: hidden;
+  -webkit-font-smoothing: antialiased;
+}
+
+/* Scrollbars read as part of the chrome, not the OS. */
+::-webkit-scrollbar {
+  width: 10px;
+  height: 10px;
+}
+
+::-webkit-scrollbar-thumb {
+  background: var(--border-strong);
+  border-radius: var(--radius-sm);
+  border: 2px solid var(--surface-0);
+}
+
+::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+input::placeholder,
+textarea::placeholder {
+  color: var(--text-muted);
+}
+
+/* A live indicator breathes; a finished one does not. */
+@keyframes pulse-dot {
+  0%,
+  100% {
+    opacity: 1;
+  }
+  50% {
+    opacity: 0.35;
+  }
+}

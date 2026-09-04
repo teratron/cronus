@@ -5,7 +5,7 @@ import * as ui from "./index";
 // updates this list in the same commit; anything else is a regression. The list
 // was trimmed from 46 to 43 when the two earlier composer roots and the surface
 // catalog they alone fed were retired, leaving exactly one exported application
-// root (`BuildingShell`).
+// root (`BuildingShell`); the status rail then added `StatusBar` (44).
 const PUBLIC_API = [
   "BuildingFrame",
   "BuildingShell",
@@ -26,6 +26,7 @@ const PUBLIC_API = [
   "SIDEBAR_TABS",
   "SIDEBAR_UTILITY",
   "SelectionSurface",
+  "StatusBar",
   "SubsystemSidebar",
   "SurfacePlaceholder",
   "SurfaceRouter",

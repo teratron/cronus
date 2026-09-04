@@ -18,9 +18,11 @@ describe("design token contract (DI-3)", () => {
     }
   });
 
-  it("the default scheme defines every canonical colour/shadow token in both modes", () => {
-    // Per-mode files carry the scheme-specific values (colour + elevation);
-    // type/spacing/radius/motion are mode-independent and stay in the fallback.
+  it("the default scheme defines every canonical colour token in both modes", () => {
+    // Per-mode files carry the scheme-specific *colour* values;
+    // type/spacing/radius/motion are mode-independent and stay in the fallback,
+    // and elevation is inherited from the fallback (dark-first) unless a mode
+    // lightens it — so only colour tokens are required in every mode file.
     const themed = CANONICAL_TOKENS.filter(
       (t) =>
         t.startsWith("--surface") ||
@@ -34,8 +36,7 @@ describe("design token contract (DI-3)", () => {
         t.startsWith("--success") ||
         t.startsWith("--warning") ||
         t.startsWith("--danger") ||
-        t.startsWith("--info") ||
-        t.startsWith("--shadow"),
+        t.startsWith("--info"),
     );
     for (const file of [
       "schemes/default/tokens.light.css",

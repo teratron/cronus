@@ -43,6 +43,7 @@ export { CANONICAL_TOKENS, type TokenName } from "./shared/tokens";
 export * from "./shell";
 export type {
   BuildingStats,
+  ChartTone,
   DashboardProjection,
   DashboardProps,
   OfficeAgent,
@@ -51,5 +52,8 @@ export type {
   OfficeStats,
   OfficeTask,
   OfficeViewProps,
+  StatCard,
+  TrendPoint,
+  TrendSeries,
 } from "./surfaces";
 export { DashboardPanel, OfficeViewPanel } from "./surfaces";

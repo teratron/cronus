@@ -134,7 +134,9 @@ describe("L1 FloorTabBar (NV-2, NV-3, NV-8, NV-9)", () => {
   it("the status dot reflects the injected OfficeState, not a poll", () => {
     render(<FloorTabBar floors={floors} activeFloorId="p1" />);
     expect(screen.getByTestId("floor-state-p1")).toHaveAttribute("data-state", "active");
-    expect(screen.getByTestId("floor-state-home")).toHaveAttribute("data-state", "idle");
+    // Home is pinned and carries a home glyph, not a lifecycle dot: it is the
+    // building, not an office that can be running or hibernating.
+    expect(screen.queryByTestId("floor-state-home")).toBeNull();
   });
 
   it("the + control and a full-bar drop both request floor creation", () => {
@@ -160,9 +162,12 @@ describe("L2 SubsystemSidebar + expanded catalog (NV-1)", () => {
       expect(screen.getByTestId(`sidebar-${tab}`)).toBeInTheDocument();
     }
     const utility = screen.getByTestId("sidebar-utility");
-    for (const tab of SIDEBAR_UTILITY) {
+    // `settings` is pinned to the footer beside Help — a global entry, not one
+    // of the floor's subsystems — so the foot run holds the rest.
+    for (const tab of SIDEBAR_UTILITY.filter((t) => t !== "settings")) {
       expect(utility).toContainElement(screen.getByTestId(`sidebar-${tab}`));
     }
+    expect(screen.getByTestId("sidebar-settings")).toBeInTheDocument();
     // 11 primary + 4 utility
     expect(SIDEBAR_PRIMARY).toHaveLength(11);
     expect(SIDEBAR_UTILITY).toHaveLength(4);

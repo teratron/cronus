@@ -1,8 +1,9 @@
 import {
   BuildingShell,
   createCoreClient,
-  type FloorTab,
   type ListenFn,
+  type RunControlState,
+  type SidebarTab,
   schemeCatalog,
   type Theme,
 } from "@cronus/ui";
@@ -11,6 +12,17 @@ import { invoke } from "@tauri-apps/api/core";
 import { listen } from "@tauri-apps/api/event";
 import { StrictMode, useEffect, useState } from "react";
 import { createRoot } from "react-dom/client";
+import {
+  previewBadges,
+  previewDashboard,
+  previewFileTree,
+  previewFloors,
+  previewMarkers,
+  previewRecentOffices,
+  previewSessionBudget,
+  previewTallies,
+  previewWeeklyBudget,
+} from "./preview-data";
 
 // The UI package stays shell-agnostic; the desktop shell injects Tauri's invoke
 // and event listener. `listen` is adapted to the bridge's ListenFn shape
@@ -30,16 +42,6 @@ const SCHEMES = schemeCatalog().map((m) => ({
   name: m.name,
 }));
 
-// Until the core exposes a floor/office projection over IPC, the shell is
-// mounted with only the pinned Home floor. Every subsystem surface renders as
-// an explicit placeholder (INV-9) rather than fabricated data.
-const HOME: FloorTab = {
-  id: "home",
-  name: "Home",
-  kind: "home",
-  state: "idle",
-};
-
 interface Restored {
   theme: Theme;
   colorScheme: string;
@@ -55,6 +57,9 @@ const FALLBACK: Restored = {
 function Shell({ theme: t0, colorScheme: c0, layout }: Restored) {
   const [theme, setTheme] = useState<Theme>(t0);
   const [colorScheme, setColorScheme] = useState(c0);
+  const [activeFloorId, setActiveFloorId] = useState("core");
+  const [activeSubsystem, setActiveSubsystem] = useState<SidebarTab>("dashboard");
+  const [runState, setRunState] = useState<RunControlState>("running");
   const [systemPrefersDark] = useState(
     () =>
       typeof window !== "undefined" && window.matchMedia("(prefers-color-scheme: dark)").matches,
@@ -68,6 +73,8 @@ function Shell({ theme: t0, colorScheme: c0, layout }: Restored) {
       .then((s) => console.info("[cronus] core:", s))
       .catch(() => console.info("[cronus] core unavailable"));
   }, []);
+
+  const floor = previewFloors.find((f) => f.id === activeFloorId);
 
   return (
     <BuildingShell
@@ -87,10 +94,30 @@ function Shell({ theme: t0, colorScheme: c0, layout }: Restored) {
         });
       }}
       schemes={SCHEMES}
-      floors={[
-        HOME,
-      ]}
-      activeFloorId="home"
+      floors={previewFloors}
+      activeFloorId={activeFloorId}
+      onSelectFloor={setActiveFloorId}
+      activeSubsystem={activeSubsystem}
+      onSelectSubsystem={setActiveSubsystem}
+      floorName={floor?.name}
+      floorSlug={floor ? `teratron/${floor.name}` : undefined}
+      floorInitials="OS"
+      badges={previewBadges}
+      tallies={previewTallies}
+      markers={previewMarkers}
+      fileTree={previewFileTree}
+      recentOffices={previewRecentOffices}
+      dashboard={{
+        kind: "loaded",
+        data: previewDashboard,
+      }}
+      surfaceSubtitle={floor?.name}
+      runState={runState}
+      onRun={setRunState}
+      sessionBudget={previewSessionBudget}
+      weeklyBudget={previewWeeklyBudget}
+      gatesGreen
+      memoryLabel="645.3 MB"
       initialLayout={layout}
       locale="en"
     />

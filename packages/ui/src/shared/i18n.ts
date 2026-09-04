@@ -15,7 +15,7 @@ export const DEFAULT_LOCALE: Locale = "en";
 export type MessageKey =
   | "app.title"
   | "status.connecting"
-  // Phase 8 workbench surfaces (unchanged)
+  // Workbench surfaces carried over from the first desktop slice
   | "surface.office"
   | "surface.board"
   | "surface.chat"
@@ -23,11 +23,12 @@ export type MessageKey =
   | "surface.dashboard"
   | "surface.empty"
   | "office.empty"
+  | "dashboard.statistics"
   | "dashboard.building"
   | "dashboard.offices"
   | "dashboard.active-agents"
   | "dashboard.cards"
-  // ── Phase 24 shell frame ──
+  // ── Shell frame ──
   // L0 frame chrome
   | "frame.menu"
   | "frame.back"
@@ -120,6 +121,28 @@ export type MessageKey =
   | "settings.mode.dark"
   // surface placeholder (INV-9)
   | "surface.placeholder"
+  | "frame.close-menu"
+  | "floor.actions"
+  | "office.state.active"
+  | "office.state.idle"
+  | "office.state.paused"
+  | "office.state.hibernating"
+  | "office.state.error"
+  | "office.state.offline"
+  | "sidebar.search"
+  | "sidebar.help"
+  | "sidebar.run-control"
+  | "sidebar.run.play"
+  | "sidebar.run.pause"
+  | "sidebar.run.stop"
+  | "status.gates-green"
+  | "status.session-budget"
+  | "status.weekly-budget"
+  | "status.run-state"
+  | "status.memory"
+  | "status.run.running"
+  | "status.run.paused"
+  | "status.run.stopped"
   | "surface.placeholder.hint";
 
 type Catalog = Record<MessageKey, string>;
@@ -134,6 +157,7 @@ const en: Catalog = {
   "surface.dashboard": "Dashboard",
   "surface.empty": "Nothing here yet — the core will fill this surface.",
   "office.empty": "No office staffed yet.",
+  "dashboard.statistics": "Agent Statistics",
   "dashboard.building": "Building overview",
   "dashboard.offices": "Offices",
   "dashboard.active-agents": "Active agents",
@@ -230,6 +254,28 @@ const en: Catalog = {
   "settings.mode.dark": "Dark",
 
   "surface.placeholder": "This surface will be populated by the core.",
+  "frame.close-menu": "Close menu",
+  "floor.actions": "Workspace actions",
+  "office.state.active": "Active",
+  "office.state.idle": "Idle",
+  "office.state.paused": "Paused",
+  "office.state.hibernating": "Hibernating",
+  "office.state.error": "Error",
+  "office.state.offline": "Offline",
+  "sidebar.search": "Search",
+  "sidebar.help": "Help",
+  "sidebar.run-control": "Project run control",
+  "sidebar.run.play": "Run project",
+  "sidebar.run.pause": "Pause project",
+  "sidebar.run.stop": "Stop project",
+  "status.gates-green": "gates green",
+  "status.session-budget": "Session budget",
+  "status.weekly-budget": "Weekly budget",
+  "status.run-state": "Project run state",
+  "status.memory": "Process Monitor",
+  "status.run.running": "Running",
+  "status.run.paused": "Paused",
+  "status.run.stopped": "Stopped",
   "surface.placeholder.hint": "Nothing is shown until a capability is bound.",
 };
 
@@ -245,6 +291,7 @@ const ru: Partial<Catalog> = {
   "surface.dashboard": "Дашборд",
   "surface.empty": "Здесь пока пусто — ядро наполнит эту поверхность.",
   "office.empty": "Офис пока не укомплектован.",
+  "dashboard.statistics": "Статистика агентов",
   "dashboard.building": "Обзор здания",
   "dashboard.offices": "Офисы",
   "dashboard.active-agents": "Активные агенты",
@@ -336,6 +383,28 @@ const ru: Partial<Catalog> = {
   "settings.mode.dark": "Тёмный",
 
   "surface.placeholder": "Эта поверхность будет наполнена ядром.",
+  "frame.close-menu": "Закрыть меню",
+  "floor.actions": "Действия рабочего пространства",
+  "office.state.active": "Активен",
+  "office.state.idle": "Простой",
+  "office.state.paused": "На паузе",
+  "office.state.hibernating": "Спящий",
+  "office.state.error": "Ошибка",
+  "office.state.offline": "Не в сети",
+  "sidebar.search": "Поиск",
+  "sidebar.help": "Справка",
+  "sidebar.run-control": "Управление запуском проекта",
+  "sidebar.run.play": "Запустить проект",
+  "sidebar.run.pause": "Приостановить проект",
+  "sidebar.run.stop": "Остановить проект",
+  "status.gates-green": "проверки зелёные",
+  "status.session-budget": "Бюджет сессии",
+  "status.weekly-budget": "Недельный бюджет",
+  "status.run-state": "Состояние запуска проекта",
+  "status.memory": "Монитор процессов",
+  "status.run.running": "Работает",
+  "status.run.paused": "Пауза",
+  "status.run.stopped": "Остановлен",
   "surface.placeholder.hint": "Ничего не отображается, пока не привязана возможность.",
 };
 

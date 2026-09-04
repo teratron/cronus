@@ -1,25 +1,42 @@
 /*
- * `default` colour scheme — dark variant. Authored from the Cronus Building
- * desktop mockup. Selected when the resolved mode is `dark`.
+ * `default` colour scheme — dark variant. Values transcribed from the
+ * "Cronus Building" desktop design, plane for plane:
+ *
+ *   surface-0  #0a0a0a  content ground, title bar
+ *   surface-1  #0d0d0d  chrome bars — floor tabs, status bar
+ *   surface-2  #111111  subsystem sidebar
+ *   surface-3  #131313  cards, stat tiles, panels
+ *   surface-4  #161616  raised controls — run control, secondary buttons
+ *   surface-5  #1a1a1a  menus, inputs, popovers
+ *
+ * Elevation (`--shadow-*`) is not redeclared here — the safe fallback set is
+ * authored dark-first, so this scheme inherits it; only the light scheme
+ * lightens it. Selected when the resolved mode is `dark`.
  */
 
 :root[data-scheme="default"][data-theme="dark"] {
   --surface-0: #0a0a0a;
-  --surface-1: #131313;
-  --surface-2: #1c1c1c;
-  --surface-3: #232323;
+  --surface-1: #0d0d0d;
+  --surface-2: #111111;
+  --surface-3: #131313;
+  --surface-4: #161616;
+  --surface-5: #1a1a1a;
+  --surface-hover: #1f1f1f;
+  --surface-active: #2a2a2a;
 
   --text-primary: #fafafa;
+  --text-strong: #d4d4d4;
   --text-secondary: #a1a1a1;
   --text-muted: #6b6b6b;
+  --text-disabled: #5b5b5b;
   --text-inverse: #0a0a0a;
 
   --border-subtle: rgba(255, 255, 255, 0.07);
-  --border-strong: rgba(255, 255, 255, 0.14);
+  --border-strong: rgba(255, 255, 255, 0.12);
   --focus-ring: #3794ff;
 
   --accent: #e5e5e5;
-  --accent-hover: #ffffff;
+  --accent-hover: #f5f5f5;
   --accent-contrast: #171717;
 
   --success: #86efac;
@@ -28,9 +45,19 @@
   --warning-subtle: rgba(226, 192, 141, 0.12);
   --danger: #ff6568;
   --danger-subtle: rgba(255, 101, 104, 0.12);
+  --danger-strong: #e81123;
   --info: #3794ff;
   --info-subtle: rgba(55, 148, 255, 0.12);
 
-  --shadow-panel: 0 1px 2px rgba(0, 0, 0, 0.3);
-  --shadow-overlay: 0 24px 70px rgba(0, 0, 0, 0.6);
+  --state-dormant: #5b6b8b;
+
+  --chart-1: #3b82f6;
+  --chart-2: #f97316;
+  --chart-3: #8b5cf6;
+  --chart-4: #10b981;
+  --chart-5: #ff7f16;
+
+  /* Elevation is inherited from the safe fallback `:root`: the built-in
+     shadows are already authored dark-first, so the dark scheme has nothing to
+     override. The light scheme lightens them; that is where they diverge. */
 }

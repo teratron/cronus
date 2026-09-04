@@ -12,7 +12,8 @@
       "!**/node_modules",
       "!**/dist",
       "!**/target",
-      "!apps/desktop/tauri"
+      "!apps/desktop/tauri",
+      "!apps/desktop/public"
     ]
   },
   "formatter": {

@@ -9,9 +9,13 @@
 
 export type {
   BuildingStats,
+  ChartTone,
   DashboardProjection,
   DashboardProps,
   OfficeStats,
+  StatCard,
+  TrendPoint,
+  TrendSeries,
 } from "./dashboard";
 export { DashboardPanel } from "./dashboard";
 export type {

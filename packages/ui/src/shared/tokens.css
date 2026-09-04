@@ -11,6 +11,11 @@
  *      so a component writes `bg-surface-1` / `text-text-secondary` / `rounded-md`
  *      and never a literal value.
  *
+ * The surface ramp is six steps because the shell stacks that many planes:
+ * content ground, chrome bars, sidebar, cards, raised controls, and menus —
+ * plus two interaction levels (hover / active) that are surfaces in their own
+ * right, not opacity tricks.
+ *
  * Per-mode, per-scheme values live in `schemes/<id>/tokens.{light,dark}.css`
  * (selector `:root[data-scheme="<id>"][data-theme="<mode>"]`), imported after
  * this file so a scheme overrides the safe fallback.
@@ -18,14 +23,20 @@
 
 :root {
   /* colour · surface — neutral gray ramp, not a branded palette */
-  --surface-0: #111111;
-  --surface-1: #1a1a1a;
-  --surface-2: #242424;
-  --surface-3: #2e2e2e;
+  --surface-0: #101010;
+  --surface-1: #141414;
+  --surface-2: #181818;
+  --surface-3: #1c1c1c;
+  --surface-4: #212121;
+  --surface-5: #262626;
+  --surface-hover: #2c2c2c;
+  --surface-active: #343434;
   /* colour · text */
   --text-primary: #f2f2f2;
+  --text-strong: #d0d0d0;
   --text-secondary: #a8a8a8;
   --text-muted: #707070;
+  --text-disabled: #565656;
   --text-inverse: #111111;
   /* colour · line */
   --border-subtle: rgba(255, 255, 255, 0.08);
@@ -42,16 +53,27 @@
   --warning-subtle: rgba(201, 168, 106, 0.12);
   --danger: #cf7476;
   --danger-subtle: rgba(207, 116, 118, 0.12);
+  --danger-strong: #b3121f;
   --info: #6a9bc9;
   --info-subtle: rgba(106, 155, 201, 0.12);
+  /* colour · state — a run/lifecycle dot that is neither ok nor an error */
+  --state-dormant: #5b6b8b;
+  /* colour · chart series — positional, not semantic: a categorical palette */
+  --chart-1: #3b82f6;
+  --chart-2: #f97316;
+  --chart-3: #8b5cf6;
+  --chart-4: #10b981;
+  --chart-5: #ff7f16;
   /* typography */
   --font-sans: "Geist", -apple-system, "Segoe UI", sans-serif;
   --font-mono: ui-monospace, "SF Mono", "Cascadia Code", monospace;
+  --text-2xs: 0.625rem;
   --text-xs: 0.6875rem;
-  --text-sm: 0.78125rem;
-  --text-base: 0.8125rem;
-  --text-lg: 0.9375rem;
-  --text-xl: 1.0625rem;
+  --text-sm: 0.75rem;
+  --text-base: 0.78125rem;
+  --text-md: 0.8125rem;
+  --text-lg: 0.84375rem;
+  --text-xl: 0.9375rem;
   --text-2xl: 1.4375rem;
   --weight-regular: 400;
   --weight-medium: 500;
@@ -70,7 +92,7 @@
   /* radius */
   --radius-sm: 5px;
   --radius-md: 7px;
-  --radius-lg: 11px;
+  --radius-lg: 10px;
   --radius-pill: 9999px;
   /* motion */
   --duration-fast: 120ms;
@@ -80,6 +102,7 @@
   --ease-emphasized: cubic-bezier(0.3, 0, 0, 1);
   /* elevation */
   --shadow-panel: 0 1px 2px rgba(0, 0, 0, 0.3);
+  --shadow-menu: 0 12px 32px rgba(0, 0, 0, 0.5);
   --shadow-overlay: 0 24px 70px rgba(0, 0, 0, 0.6);
 }
 
@@ -88,9 +111,15 @@
   --color-surface-1: var(--surface-1);
   --color-surface-2: var(--surface-2);
   --color-surface-3: var(--surface-3);
+  --color-surface-4: var(--surface-4);
+  --color-surface-5: var(--surface-5);
+  --color-surface-hover: var(--surface-hover);
+  --color-surface-active: var(--surface-active);
   --color-text-primary: var(--text-primary);
+  --color-text-strong: var(--text-strong);
   --color-text-secondary: var(--text-secondary);
   --color-text-muted: var(--text-muted);
+  --color-text-disabled: var(--text-disabled);
   --color-text-inverse: var(--text-inverse);
   --color-border-subtle: var(--border-subtle);
   --color-border-strong: var(--border-strong);
@@ -104,15 +133,24 @@
   --color-warning-subtle: var(--warning-subtle);
   --color-danger: var(--danger);
   --color-danger-subtle: var(--danger-subtle);
+  --color-danger-strong: var(--danger-strong);
   --color-info: var(--info);
   --color-info-subtle: var(--info-subtle);
+  --color-state-dormant: var(--state-dormant);
+  --color-chart-1: var(--chart-1);
+  --color-chart-2: var(--chart-2);
+  --color-chart-3: var(--chart-3);
+  --color-chart-4: var(--chart-4);
+  --color-chart-5: var(--chart-5);
 
   --font-sans: var(--font-sans);
   --font-mono: var(--font-mono);
 
+  --text-2xs: var(--text-2xs);
   --text-xs: var(--text-xs);
   --text-sm: var(--text-sm);
   --text-base: var(--text-base);
+  --text-md: var(--text-md);
   --text-lg: var(--text-lg);
   --text-xl: var(--text-xl);
   --text-2xl: var(--text-2xl);
@@ -139,5 +177,6 @@
   --radius-pill: var(--radius-pill);
 
   --shadow-panel: var(--shadow-panel);
+  --shadow-menu: var(--shadow-menu);
   --shadow-overlay: var(--shadow-overlay);
 }
