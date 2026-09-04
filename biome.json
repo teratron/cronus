@@ -13,7 +13,7 @@
       "!**/dist",
       "!**/target",
       "!apps/desktop/tauri",
-      "!apps/desktop/public"
+      "!apps/desktop/public/assets/cronus-icon.png"
     ]
   },
   "formatter": {
@@ -38,5 +38,18 @@
     "parser": {
       "tailwindDirectives": true
     }
-  }
+  },
+  "overrides": [
+    {
+      "includes": [
+        "apps/desktop/public/assets/channels/**"
+      ],
+      "html": {
+        "formatter": {
+          "enabled": true,
+          "selfCloseVoidElements": "always"
+        }
+      }
+    }
+  ]
 }

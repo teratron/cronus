@@ -1,6 +1,6 @@
 # Artifact-Derived Observation
 
-**Version:** 1.0.0
+**Version:** 1.1.0
 **Status:** Stable
 **Layer:** concept
 
@@ -157,6 +157,46 @@ Rules every Layer 2 implementation MUST NOT violate:
   partial coverage and presented as a total is the defining dishonesty of artifact-derived
   observation, and the coverage figure is what makes the number safe to use.
 
+- **ADO-12 A measured figure expires with the window it describes, not on a clock**: [ADDED
+  v1.1.0] where an observation describes a **bounded period** — a quota consumed within an
+  allowance window, a rate over an interval, a count since a reset — its retained value stays
+  valid until **that period ends**, and is invalidated by the period rolling over rather than
+  by an elapsed-time heuristic. A cached figure outlives the probe that produced it; what it
+  must not outlive is the window it is *about*, because once the window has reset the figure
+  describes a period that is over and reports a consumption that is now untouched. Two
+  guards keep this from degrading into data loss. A record whose **window metadata is absent
+  or unparseable is kept, not discarded** — an unreadable boundary is a reason to mark the
+  figure's validity unknown, never a reason to throw away a real measurement. And a
+  **re-measurement interval is a defence against repetition, not against people**: a short
+  reuse window exists to absorb a surface being opened and closed repeatedly, so an explicit
+  request for a fresh figure bypasses it entirely, while an automatic refresh does not.
+  Where a fresh measurement cannot be taken at all, the last figure whose window has not
+  since reset remains the answer of record, carried with the reason the refresh failed
+  (ADO-3's honest-absence discipline at the freshness grain rather than the presence grain).
+
+- **ADO-13 A source that cannot identify events contributes a bound, never a value**: [ADDED
+  v1.1.0] ADO-7 counts one real event once across overlapping sources by **derived event
+  identity**. Some sources carry no identity at all — an aggregate counter, a total with no
+  per-item detail, a summary written by a tool that kept nothing else. Such a source is
+  neither summed into the total (which double-counts every event another source already
+  identified) nor discarded (which deletes real activity nobody else recorded): it is
+  admitted as a **lower bound on the answer**, reported as a bound, and never presented as a
+  measurement. Where two sources overlap in time, what merges is the **set of identified
+  events**, never the counts.
+
+- **ADO-14 An authoritative figure may sit beside a derived one; neither absorbs the other**:
+  [ADDED v1.1.0] ADO-10 makes everything this layer produces **derived**. Where the observed
+  tool's own provider can be asked directly for the same quantity, that answer is
+  **authoritative** and the two live in one record as **separately-labelled figures with
+  their own provenance and their own freshness** — a derived figure never becomes
+  authoritative by agreeing with one, and an authoritative figure is never back-filled from a
+  derived one when it cannot be obtained. Reaching the provider is an **egress act** with the
+  narrowest possible surface: a credential read for it travels nowhere but the request that
+  needs it, and only an explicitly display-safe field of the result may enter the record
+  (composing EA-7 and the confidentiality-flow sink discipline). A provider that cannot be
+  reached leaves the authoritative side **absent and labelled absent** (ADO-3), never
+  substituted.
+
 > L2 specs cannot reach RFC status until all invariants here are addressed in their "Invariant Compliance" section.
 
 ## 4. Detailed Design
@@ -304,3 +344,4 @@ No new language primitive is required; the workflow layer already holds both hal
 | Version | Date | Author | Notes |
 | --- | --- | --- | --- |
 | 1.0.0 | 2026-08-05 | Core Team | Initial spec — artifact-derived observation as the uninstrumented-source sibling of telemetry: how the office learns about a tool it does not control, by reading the durable trail that tool already writes for its own purposes. Out-of-band by construction, never wrapping or proxying, because the guarantee bought is that the observer's failure cannot become the observed tool's failure (ADO-1); the artifact's shape is discovered, never promised, so a mismatch is a typed per-source coverage gap rather than a run-ending error or a silent reinterpretation (ADO-2); absent / unreadable / empty are three different answers and collapsing them yields the characteristic failure — a confident zero read as a fact about the world (ADO-3); one independently-failing adapter per source (ADO-4); discovery declared, never a disk sweep that reads what nobody agreed to expose (ADO-5); adapters loaded only on evidence their tool exists, so breadth is free to the user who has one (ADO-6); one underlying event counted once across overlapping sources via a derived identity, with an unresolvable case disclosed rather than quietly inflated or quietly deleted (ADO-7); incremental by fingerprint with a versioned *interpretation* so a corrected reader cannot leave stale conclusions standing (ADO-8); foreign artifact text treated as untrusted input, since a file on the user's own disk is a location and not a provenance (ADO-9); derived never authoritative, on-device, secret-safe (ADO-10); and coverage traveling with every number, the disclosure that makes a partial figure safe to use (ADO-11). Nodus projection needs no new primitive — reading is a declared host effect, and the existing value-provenance and origin-taint labels already carry *derived* and *untrusted* independently. Concept-only. |
+| 1.1.0 | 2026-09-04 | Core Team | Amended — ADO-12/13/14, from an external agent-usage collector that folds several tools' local artifacts and one provider's own endpoint into a single displayed record. **ADO-12**: a figure describing a bounded period expires when *that period* rolls over, not on an elapsed-time heuristic — a cached percentage outliving its allowance window reports a consumption against a window that has since reset and is now untouched; guarded both ways, since unreadable window metadata marks validity unknown rather than discarding a real measurement, and a short re-measurement interval defends against a surface being opened repeatedly, never against a person explicitly asking for fresh numbers (an explicit request bypasses it, an automatic refresh does not). **ADO-13**: a source carrying no per-event identity (an aggregate counter, a bare total) is neither summed into the answer (double-counting what another source already identified) nor discarded (deleting real activity) — it is admitted as a **lower bound**, reported as a bound; overlapping sources merge their *identified event sets*, never their counts. **ADO-14**: where the observed tool's provider can be asked directly, that answer is authoritative and sits beside the derived one as a separately-labelled figure with its own provenance and freshness — a derived figure never becomes authoritative by agreeing with one, an unreachable provider leaves the authoritative side labelled absent rather than substituted, and the credential read to reach it travels nowhere but that request, with only an explicitly display-safe field entering the record. |

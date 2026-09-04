@@ -150,6 +150,7 @@
 - <https://github.com/Leonxlnx/unlazy>
 - <https://github.com/chaseai-yt/claudex-loop>
 - <https://github.com/calesthio/OpenMontag>
+- <https://github.com/tt-a1i/archify>
 
 ## UI/UX
 
@@ -161,6 +162,7 @@
 - <https://github.com/mantinedev/mantine>
 - <https://github.com/radix-ui/themes>
 - <https://github.com/facebook/astryx>
+- <https://github.com/tt-a1i/archify>
 
 ### Tauri
 
