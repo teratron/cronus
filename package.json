@@ -5,7 +5,7 @@
   "description": "Cronus JS/TS workspace — desktop app (Tauri) and shared UI (React).",
   "packageManager": "pnpm@11.25.0",
   "engines": {
-    "node": ">=22"
+    "node": ">=24"
   },
   "scripts": {
     "build": "pnpm -r build",
