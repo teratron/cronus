@@ -1,6 +1,6 @@
 # Project Context
 
-**Generated:** 2026-09-02
+**Generated:** 2026-09-05
 
 ## Active Technologies
 
@@ -15,6 +15,7 @@
 │   ├── rules/
 │   ├── skills/
 │   └── workflows/
+├── .artifacts/
 ├── .cargo/
 │   └── config.toml
 ├── .claude/
@@ -38,6 +39,8 @@
 │   ├── technology-stack-research.md
 │   └── ui-ux.md
 ├── .env.example
+├── .fallowrc.jsonc
+├── .gitattributes
 ├── .github/
 │   ├── dependabot.yml
 │   └── workflows/
@@ -72,7 +75,8 @@
 │   ├── store-local/
 │   └── tui/
 ├── docs/
-│   └── README.md
+│   ├── README.md
+│   └── building.ru.md
 ├── installer/
 ├── package.json
 ├── packages/
@@ -101,4 +105,3 @@
 - T-32A01: `digest_ast` (`executor.rs`) widened `fn` → `pub(crate) fn`; `EnvRunResult::candidate()` (`environment.rs`) now matches `Parser::parse(workflow_source)` — `Ok(ast)` hashes `digest_ast(&ast)`, `Err(_)` falls back to `digest_source(workflow_source)` exactly as before. Signature unchanged.
 - T-32C01: `l2-nodus-environment.md` 1.2.0 → 1.3.0 (NE-12 row + §4.4 "Implemented [Phase 32]" paragraph) and `l2-nodus-portability.md` 1.11.0 → 1.11.1 (§3.2 cross-reference updated to the implemented version). `INDEX.md` version cells + top-level version synced.
 - T-32T01: Added `candidate_digest_agrees_with_repro_recipe_digest` (integration, `tests/environment.rs`, new `ManifestCapture` `AuditProvider` mirroring Phase 31's `tests/dialog.rs` precedent) — proves `CandidateResult.workflow_digest` and `ReproRecipe.workflow_digest` agree for the same run — and `candidate_digest_falls_back_to_source_hash_when_unparseable` (unit, `environment.rs`), pinning the fallback value the pre-existing unparseable-input test never asserted on. `cargo test -p nodus` — 486 passed (was 484, +2), 0 failed; clippy `-D warnings` clean; fmt clean; no `.unwrap()`/`panic!()`/`unreachable!()`/`.expect(` outside `#[cfg(test)]`; `git diff --stat` on `Cargo.toml`/`Cargo.lock` empty (LP-1 preserved)
-

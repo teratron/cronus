@@ -1,7 +1,7 @@
 # Remote Liveness Verdict
 
-**Version:** 1.0.0
-**Status:** RFC
+**Version:** 1.0.1
+**Status:** Stable
 **Layer:** concept
 
 ## Overview
@@ -63,16 +63,15 @@ Rules every Layer 2 implementation MUST NOT violate. They are technology-neutral
 
 ### 4.1 The verdict machine
 
-```
-                 signal arrives
-                       |
-        was it sourced from the owning host? ── no ──► unverifiable (RLV-2)
-                       | yes
-        does it match the current incarnation? ── no ──► unverifiable (RLV-4)
-                       | yes
-        did every sibling on the channel go quiet at once? ── yes ──► diagnose channel, not entity (RLV-3)
-                       | no
-                 confirmed-gone
+```mermaid
+graph TD
+    S[Signal arrives] --> Q1{"Sourced from the owning host?"}
+    Q1 -- no --> U1["unverifiable (RLV-2)"]
+    Q1 -- yes --> Q2{"Matches the current incarnation?"}
+    Q2 -- no --> U2["unverifiable (RLV-4)"]
+    Q2 -- yes --> Q3{"Every sibling on the channel quiet at once?"}
+    Q3 -- yes --> C["Diagnose the channel, not the entity (RLV-3)"]
+    Q3 -- no --> G["confirmed-gone"]
 ```
 
 A verdict that cannot pass every gate above stays **unverifiable**; nothing is promoted to confirmed-gone by default or by elapsed time alone.
@@ -127,3 +126,4 @@ This spec and WL-8 answer different questions that are easy to conflate because 
 | Version | Date | Author | Notes |
 | --- | --- | --- | --- |
 | 1.0.0 | 2026-09-01 | Core Team | Initial concept — the discipline for classifying a remote entity's existence when the observer's only access is a communication channel that can fail independently of the entity itself. A closed three-state verdict — alive / unverifiable / confirmed-gone — with **unverifiable** structurally distinct and never collapsible into either neighbour (RLV-1); confirmed-gone requires positive evidence sourced from the party that actually holds the resource, so a timeout, closed socket, or local lookup miss is unverifiable by construction regardless of field naming (RLV-2); correlated silence across every entity behind one channel is diagnosed once, at the channel, rather than multiplied into independent per-entity deaths (RLV-3); a termination signal is trusted only when it names the entity's current incarnation, generalizing WL-2's claim-release compare-and-clear from work ownership to liveness verdicts (RLV-4); a returned status is checked against durable state rather than trusted on its own report (RLV-5); artifact evidence is stronger than a liveness signal but proves only the narrower claim it actually names (RLV-6); disconnection is not by default termination, the applicable policy and its schedule are disclosed rather than assumed, and losing the control plane is distinguished from losing the underlying execution (RLV-7); and one physical resource is registered under exactly one liveness identity at a time, since two concurrent registrations split its inventory and produce disagreeing answers that are each locally correct (RLV-8). Distilled from an adoption pass over an external desktop multi-agent orchestrator's SSH/remote-execution documentation. Concept-only. |
+| 1.0.1 | 2026-09-05 | Core Team | Formatting conformance for the RFC→Stable review — no invariant, gate, or gate ordering changed. §4.1's verdict machine was drawn as an ASCII flow diagram inside a plain fenced block; RULES §4 requires `mermaid` for all flow and architecture diagrams and forbids other diagram formats, and 149 specs in the corpus already follow it. Redrawn as `mermaid` with the same four nodes, the same three gates in the same order, and the same two `unverifiable` exits. |

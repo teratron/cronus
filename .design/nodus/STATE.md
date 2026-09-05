@@ -4,15 +4,15 @@
 <!-- Maximum 100 lines. Agent updates AFTER each completed action. -->
 
 **Workspace:** nodus
-**Updated:** 2026-09-02 08:35
-**Phase:** none open — Plan Complete
+**Updated:** 2026-09-05 13:38
+**Phase:** 33 — Exclusive-Binding Duplicate Detection
 **Status:** Active
 
 ## Current Position
 
 - **Task:** `/magic.task nodus` — **sync-only replan; no new phase.** Closed the expected `SYNC_GAP` (PLAN basis v1.0.96 → v1.0.97, from Phase 32's own T-32C01 spec reconciliation — `l2-nodus-environment.md` 1.2.0 → 1.3.0, `l2-nodus-portability.md` 1.11.0 → 1.11.1). Pre-flight showed that single warning plus the standing `DESIGN_DEBT_PENDING` (Backlog: 2 open items, unchanged since v1.45.0). Pre-Planning Stabilization: 0 promoted (nothing to promote — 20 Stable, 0 Draft). No new phase opened: both remaining Backlog entries (LP-21/LP-23/NL-24/NL-25 restated; NL-26 standalone) are unaffected by Phase 32 and remain design-blocked exactly as recorded at v1.45.0.
 - **Spec:** INDEX v1.0.97 / PLAN v1.46.0 / TASKS v2.39.0 — all three in sync, pre-flight clean except the standing `DESIGN_DEBT_PENDING`. RULES v1.6.0 (unchanged, confirmed). 20 nodus specs Stable, 0 Draft, Phase 32 `Done (Archived)`, `tasks/` empty.
-- **Next Action:** Plan complete — run /magic.task nodus to plan new scope
+- **Next Action:** Run /magic.run nodus to execute Phase 33 — 4 tasks / 4 tracks (A config-field duplicates · B macro-name duplicates · C spec reconciliation · T validation), Sequential. Track A closes a real confidentiality path: a §config name declared twice, once secret once not, currently leaks the value through non_secret_fields while is_secret reports it secret.
 
 ## Progress
 

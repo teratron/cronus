@@ -1,7 +1,7 @@
 # Foreign Agent Invocation
 
-**Version:** 1.0.0
-**Status:** RFC
+**Version:** 1.0.1
+**Status:** Stable
 **Layer:** concept
 
 ## Overview
@@ -97,7 +97,7 @@ The operational consequence is that a foreign invocation may never be validated 
 
 ### 4.3 Where the delegation boundary sits
 
-Design does not delegate: an order that cannot be written without making the decisions is a signal to decide them first, with the principal, and only then delegate the execution (FAI-1, FAI-10's floor). Verification does not delegate either: the actor that produced a thing does not certify it, and a foreign delegate certifying its own work is the same self-endorsement in a different vendor's clothes (FAI-9, IR-2).
+Design does not delegate: an order that cannot be written without making the decisions is a signal to decide them first, with the principal, and only then delegate the execution (FAI-1, FAI-10's floor). Verification does not delegate either: the actor that produced a thing does not certify it, and a foreign delegate certifying its own work is the same self-endorsement in a different vendor's clothes (FAI-9, and the producer/grader-independence rule IR-2 of [l1-iterative-refinement.md](l1-iterative-refinement.md)).
 
 What *does* delegate cleanly is bounded execution of a frozen order — a mechanical migration, a refactor with a named shape, a fix with a known reproduction, coverage against an existing surface.
 
@@ -155,9 +155,11 @@ What *does* delegate cleanly is bounded execution of a frozen order — a mechan
 | `[LOCUS]` | `.design/main/specifications/l1-execution-locus.md` | Where a commissioned executor is bound |
 | `[REACH]` | `.design/main/specifications/l1-capability-reachability.md` | REA-11, the per-executor rule FAI-11 rests on |
 | `[LIVENESS]` | `.design/main/specifications/l1-work-liveness.md` | WL-8's watchdog, the backstop FAI-3/FAI-4 keep unused |
+| `[REFINE]` | `.design/main/specifications/l1-iterative-refinement.md` | IR-2 producer/grader independence, the general form of FAI-9's §4.3 reading |
 
 ## Document History
 
 | Version | Date | Author | Notes |
 | --- | --- | --- | --- |
 | 1.0.0 | 2026-09-01 | Core Team | Initial concept — the **commissioned** direction of the foreign-tool relationship, distinct from inbound admission and outbound rendering: this system authors the order, starts a foreign agent runtime, and owns the result. The work order is the entire brief because the delegate holds no shared state (FAI-1); containment posture is asserted per call and never inherited, because an initial launch and a continuation are independent surfaces and a rejected flag falls back to an ambient configuration this system does not own (FAI-2); every idle input channel is closed at launch, since a process waiting on an unterminated input produces no output, no diagnostic and no load (FAI-3); the deadline is drawn from the operation rather than the caller's default, and a trip is a failed run rather than a blind retry (FAI-4); a continuation names its captured session identity and never an implicit most-recent selector, because a wrong-target continuation is indistinguishable from a correct one (FAI-5); the resolved configuration is disclosed before the first billable call, since it is assembled from ambient files the principal may not know they wrote (FAI-6); success is decided by the produced artifact, never by a quiet diagnostic channel or a bare exit (FAI-7); write authority requires a recorded pre-state, because for a black-box actor the diff against a baseline is the only instrument of attribution and the only route to reversal (FAI-8); the delegate's report is a claim and the delegator reads the whole difference and re-executes the checks (FAI-9); delegation is bounded by a floor below which the delegator acts directly and a ceiling above which it takes the work over rather than escalating it (FAI-10); capability is established per executor and in the invocation mode it will actually be used in (FAI-11); out-of-band completion is announced before it is acted on (FAI-12); everything the delegate emits is untrusted data (FAI-13). Concept-only. |
+| 1.0.1 | 2026-09-05 | Core Team | Reference anchoring for the RFC→Stable review — no invariant changed. §4.3's `IR-2` citation was unresolvable: two specs in the corpus define an `IR-` prefix (`l1-intent-resolution`, `l1-iterative-refinement`) and neither appeared in this spec's Related Specifications or Canonical References, so a first-time reader following the citation had a coin-flip between a producer/grader-independence rule and an unrelated rule about when to question the client. The intended target is `l1-iterative-refinement` IR-2 — §4.3 echoes its *self-endorsement* term verbatim — now named inline as a link and added to Canonical References as `[REFINE]`. |

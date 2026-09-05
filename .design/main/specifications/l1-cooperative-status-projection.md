@@ -1,7 +1,7 @@
 # Cooperative Status Projection
 
-**Version:** 1.0.0
-**Status:** RFC
+**Version:** 1.0.1
+**Status:** Stable
 **Layer:** concept
 
 ## Overview
@@ -67,17 +67,16 @@ Rules every Layer 2 implementation MUST NOT violate. They are technology-neutral
 
 ### 4.2 The inference decision, restated
 
-```
-turn goes silent
-       |
-does this vendor's hook contract reliably announce interruption? ── yes ──► trust the silence, no inference
-       | no
-does a known innocent-silence condition apply (child active, background op, ...)? ── yes ──► withhold inference
-       | no
-infer interrupted (ASP-2) — a settled verdict for THIS turn
-       |
-a later signal arrives for the SAME turn ── stale, discard (ASP-3)
-a later signal opens a NEW turn ── accepted, re-open working (ASP-3)
+```mermaid
+graph TD
+    S["Turn goes silent"] --> Q1{"Does this vendor's hook contract reliably announce interruption?"}
+    Q1 -- yes --> T["Trust the silence, no inference"]
+    Q1 -- no --> Q2{"Known innocent-silence condition? (child active, background op, ...)"}
+    Q2 -- yes --> W["Withhold inference"]
+    Q2 -- no --> I["Infer interrupted (ASP-2), a settled verdict for THIS turn"]
+    I --> L{"A later signal arrives"}
+    L -- "same turn" --> DIS["Stale, discard (ASP-3)"]
+    L -- "new turn" --> ACC["Accepted, re-open working (ASP-3)"]
 ```
 
 ### 4.3 Why authority tiering (ASP-4) cannot be collapsed into simple ownership
@@ -128,3 +127,4 @@ A naive model treats "this record names pane X" as sufficient to route to pane X
 | Version | Date | Author | Notes |
 | --- | --- | --- | --- |
 | 1.0.0 | 2026-09-01 | Core Team | Initial concept — normalizing many concurrently-running, vendor-foreign coding-agent CLIs into one closed-vocabulary status feed. Status is read from the vendor's cooperative hook channel, never a title or heuristic, and always resolves to a small closed vendor-neutral set (ASP-1); a missing-transition inference fallback is declared per (vendor, transition) pair, never applied universally, and withheld where a known innocent-silence condition explains the gap (ASP-2); a settled or inferred verdict is generation-fenced — only a signal correlated to the current turn may supersede it, a delayed same-turn signal never does — generalizing RLV-4/WL-2's incarnation-matching to a status verdict (ASP-3); addressing identity is authorized by a verified live transfer, never by mere registration or persisted-record possession, composing CB-3's grant-lapse-on-change rule (ASP-4); persisted status is validated on load through a version/age/per-entry-isolation ladder with an unconfirmed-until-reconfirmed default that is itself never persisted (ASP-5); and a local ingest channel's own protective bound never inflates its own external-anomaly count (ASP-6). Distilled from an adoption pass over an external desktop multi-agent orchestrator's per-vendor agent-status hook normalization layer. Concept-only. |
+| 1.0.1 | 2026-09-05 | Core Team | Formatting conformance for the RFC→Stable review — no invariant or decision branch changed. §4.2's inference decision was drawn as an ASCII flow diagram inside a plain fenced block; RULES §4 requires `mermaid` for all flow and architecture diagrams. Redrawn as `mermaid` with the same two withholding gates, the same inference step, and the same same-turn / new-turn split on the later signal. |
