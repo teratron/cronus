@@ -1,0 +1,222 @@
+# Invocable Registry & Dispatch Contract
+
+**Version:** 1.0.0
+**Status:** Stable
+**Layer:** implementation
+**Implements:** l1-surface-parity.md
+
+## Overview
+
+The concrete realization of the SP-11 action catalog in this project's stack: **one runtime registry of invocables** owned by the Rust core, **one `Invocation → Outcome` dispatch** through which every action is reached, and three surfaces — the `cronus` command line, the terminal UI, and the desktop shell — that **render their command surface as a projection of that registry** instead of restating it.
+
+The registry is simultaneously the `contribute` extension point of the EP-2 taxonomy: core-supplied invocables and extension-supplied invocables enter through the same published door (EP-12), which is what makes a plugin's command reachable from a surface the plugin has never heard of.
+
+## Related Specifications
+
+- [l1-surface-parity.md](l1-surface-parity.md) — Parent concept. SP-11 is this spec's subject; SP-1/SP-2 are the rules it makes structural rather than reviewable.
+- [l1-extension-points.md](l1-extension-points.md) — EP-2 (`contribute` kind), EP-4 (collision rule), EP-9 (lazy activation), EP-11 (reserved core namespace), EP-12 (no privileged registration door), EP-13 (registration as a reversible effect).
+- [l1-input-binding.md](l1-input-binding.md) — IB-1 makes the declared binder list the single source of the advertised schema; IB-2…IB-5 supply the rejection model this dispatch returns.
+- [l1-architecture.md](l1-architecture.md) — INV-3 (command parity) becomes a structural property here; INV-9 (shipped-surface honesty, incl. the v1.4.0 declared-retirement rule) is enforced at the projection.
+- [l2-surface-conformance.md](l2-surface-conformance.md) — Sibling. This spec makes the surfaces agree by construction; that one proves it (SP-6).
+- [l2-cli.md](l2-cli.md) · [l2-tui.md](l2-tui.md) · [l2-application-shell.md](l2-application-shell.md) — The three consuming surfaces.
+- [l2-crate-topology.md](l2-crate-topology.md) — The tier model that decides where the descriptor types may live.
+- [l2-extension-registry.md](l2-extension-registry.md) — Extension manifests and lifecycle; the origin of contributed invocables.
+- [l2-core-library.md](l2-core-library.md) — The facade crate that owns the capability contract.
+
+## 1. Motivation
+
+**The same mapping is written by hand once per surface, and there are three of them.** Shell input reaches the core through a command enum; slash input reaches it through a separately maintained catalog; the desktop's WebView reaches it through a per-capability IPC command list. Each is internally consistent, and no import gate, type check, or per-surface test can see that they describe different products. This is SP-2 in its pure form: three re-derivations of one fact.
+
+**A compile-time surface cannot host a runtime contribution.** A command enum is fixed when the binary is built, and so is the desktop's IPC handler list. An extension installed afterwards has nowhere to attach, whatever its manifest declares. Extension manifests already carry a capability list that no code consumes, and an extension can therefore reach *Active* while adding nothing a user can invoke. Any design that keeps a compile-time enum as the source of truth forecloses the plugin story permanently — the constraint decides the architecture before cost enters the discussion.
+
+**Parity that is asserted against a hand-copied list is not asserted at all.** The terminal UI proves its parity against a constant mirroring the command-line verb set, maintained by hand. When the command line grew, the mirror did not, and the check stayed green while the two surfaces diverged by eight verbs. A duplicated oracle degrades silently; it is the failure mode SP-6 exists to close, and it must be replaced by a projection rather than repaired as a list.
+
+**The drift reaches the specification layer too.** The command-line spec's own parity table lists verbs the product does not have and omits every group it does. A table maintained by hand alongside the thing it describes is the same defect at a different altitude, and the remedy is the same: stop maintaining a copy, and derive.
+
+**One decision point is also the only way the security property becomes real.** Output redaction is applied by the terminal UI and by the desktop bridge, and not at all by the command line. Three surfaces, two implementations, one omission — and all of them fed an empty secret list. A single dispatch boundary is the one place where INV-7 can be satisfied once instead of remembered three times.
+
+## 2. Constraints & Assumptions
+
+- **The ports tier is dependency-free by construction.** Its manifest carries an empty dependency section and its own specification states the property as structural. Serialization support for descriptor and outcome types is therefore an **optional feature**, off in the default build.
+- **Compile-time command surfaces remain in use, as generators rather than sources.** The command line keeps its argument parser and the desktop keeps its IPC transport; both are *built from* the registry at startup rather than declaring it.
+- **All three surfaces link the core in-process.** The command line, the terminal UI, and the desktop's Rust shell each construct the engine directly. There is no core↔frontend process boundary; the desktop's inter-process seam lies **inside** that frontend, between its shell and its WebView.
+- **The desktop shell is a separate build workspace,** deliberately detached so WebView dependencies stay out of the engine workspace. No single workspace-level test can link all three projections.
+- **The registry is startup-assembled and then read-mostly.** Registration happens during composition and on extension activation/deactivation; dispatch is the hot path.
+- **This spec does not implement the five unshipped command groups.** Their surface treatment is prescribed here (INV-9); their behavior is out of scope.
+
+## 3. Invariant Compliance (Layer 2 only)
+
+| L1 Invariant | Implementation |
+| --- | --- |
+| SP-1 One decision point per observable behavior | Every action a user can reach through more than one surface is an **invocable** registered once and dispatched once. A surface owns argument syntax, rendering, and view state, and nothing else. Where a surface needs a decision the registry does not expose, the remedy is a new invocable or a new binder — never a local computation. The current counter-example is explicit: the command line computes the board's on-disk location itself, a domain fact it must instead receive. |
+| SP-2 Derived facts are consumed, never recomputed | The advertised argument schema, the help text, the completion list, the verb set, and the grouping are all **projections of one descriptor**. A surface that recomputes any of them is defective even while it agrees. The three present re-derivations (parser enum, slash catalog, IPC command list) collapse into one, and their replacements are pinned by SP-5 tombstones. |
+| SP-3 Divergence is a tracked defect class | Each collapsed mapping is recorded as a finding in the inventory owned by [l2-surface-conformance.md](l2-surface-conformance.md) §4.1, naming its sites, the divergence reachable from it, and this registry as the replacing primitive. |
+| SP-4 A finding is repaid only when all four hold | Repayment is defined and tracked in the sibling spec: copies deleted, deletion pinned, adversarial fixture landed, every consumer registered. This spec supplies the primitive; it does not itself close the findings. |
+| SP-5 Deletion is pinned; ledgers move one way | The hand-copied verb mirror, the per-capability IPC command list, and the stale specification parity table are entered as tombstones when removed. The tombstone list only grows. |
+| SP-6 Parity is proven by one corpus through real projections | Delegated to [l2-surface-conformance.md](l2-surface-conformance.md). This spec's contribution is to make each surface's projection a **callable function of the registry**, so a corpus can drive the real one rather than a stand-in. |
+| SP-7 A new consumer registers before it ships | A surface becomes a surface by implementing the projection interface (§4.7) and running the shared corpus in its own test target. The desktop's separate workspace makes this a per-surface obligation rather than a central test. |
+| SP-8 Legitimate difference is named, with its reason | The descriptor's `locus` field (§4.8) is the machine-readable form of this rule. Host-owned facilities — the desktop's shell settings are the standing example — are declared `HostOnly` with their reason, not omitted. |
+| SP-9 Extract before the second implementation exists | The registry is extracted before the desktop's generic dispatch and before any further surface. Serialization is designed in at the start (§4.5) precisely because retrofitting it after the WebView projection exists is the expensive branch of the ladder. |
+| SP-10 Converge first, correct second | Adopting the registry is behavior-preserving by construction: a verb's observable result must not change in the same commit that moves it onto the registry. Known-wrong behaviors uncovered during migration — the swallowed store error that reports emptiness, the ignored output-format flag, the unescaped hand-built structured output — are recorded as residuals at the invocable that owns them and corrected in separate, disclosed changes. |
+| SP-11 Shared vocabulary, declared exposure | The registry **is** the catalog. Every invocable carries identity, human-readable name, summary, locus, and declared binders. Menus, help, completion, slash discovery, and agent-facing instructions render from it. A surface that deliberately does not expose an invocable declares the exclusion (§4.8); silence is not an available way to say "not here". |
+
+## 4. Detailed Design
+
+### 4.1 Placement in the crate tiers
+
+```plaintext
+ports tier      descriptor types, Invocation, Outcome, Rejection   (zero-dep; serialization optional)
+      ▲
+domain tier     the registry itself; core invocable definitions
+      ▲
+facade          composition root: registers core invocables through the public seam
+      ▲
+   ┌──┴──────────────┬────────────────────┐
+  CLI              TUI              desktop shell ──IPC──▶ WebView
+```
+
+Descriptor and envelope types live in the ports tier because all three surfaces and the domain must name them without any of them depending on each other. The registry's behavior lives in the domain tier: it is pure logic with no I/O. Composition — deciding *which* invocables exist in a given build — belongs to the facade, which is already the sole owner of the capability contract.
+
+**Serialization.** The ports tier gains an optional serialization feature, disabled by default so the tier's dependency-free property holds for the ordinary build. The desktop shell enables it; it already carries that dependency. The rejected alternative is a shell-owned data-transfer type, which would reintroduce exactly the hand-written mapping this spec removes.
+
+### 4.2 The invocable descriptor
+
+`[REFERENCE]` — shape, not implementation:
+
+```rust
+pub struct Invocable {
+    pub id: InvocableId,        // qualified: "core:board.list", "<ext-id>:verb"
+    pub name: &'static str,     // human-readable, catalog-facing
+    pub summary: &'static str,  // one line; feeds help, slash discovery, completion
+    pub group: &'static str,    // noun namespace, per the project command grammar
+    pub locus: Locus,           // Semantic | ClientLocal | HostOnly
+    pub binders: Vec<Binder>,   // ordered, typed; the single schema source (IB-1)
+    pub stability: Stability,   // Shipped | Retired { superseded_by }
+}
+```
+
+The descriptor is the **whole** advertised contract. Nothing about an invocable may be known to a surface that is not reachable from its descriptor, because anything else is a fact a surface would have to hold privately — and a privately held fact is the first step of a fork.
+
+`stability` carries the INV-9 obligation in both directions. `Shipped` is the only value that appears on a default surface. `Retired` keeps the migration path discoverable: the verb is off the shipped surface and out of completion, and an invocation of it resolves to a message naming its replacement — never a silent unknown-command failure, and never a permanent alias that leaves two verbs for one capability. An action the core cannot yet perform is **not registered at all**; it has no descriptor, so no surface can advertise it, and the "parses then answers *not implemented*" shape becomes unrepresentable rather than discouraged.
+
+### 4.3 Registration: one door
+
+Core invocables and contributed invocables register through the same published function. There is no privileged path, per EP-12: a seam exercised only by third parties is one nobody notices has become insufficient, and the core running through it fails loudly the moment the published surface stops being enough.
+
+Core-supplied contributions differ in exactly the three ways EP-12 sanctions — eager loading where ordering demands it, implicit trust, and survival of the switches that disable third-party contributions — and in no other way. Composition and failure isolation apply to them unchanged.
+
+### 4.4 Identity and collisions
+
+Names are qualified by their contributor's identity (EP-11). The core owns a **reserved identity no contribution may claim**, which is what guarantees a contribution cannot shadow a core name *whatever the core adds later* — a guarantee first-registration-wins cannot make. Identities are validated at load: a well-formed identity may not produce an ambiguous qualified name.
+
+Collisions on an unqualified verb are resolved by a **declared rule**, never by load order (EP-4): the core's verb wins the bare form, and a contributed verb is reachable by its qualified name. Two extensions claiming one identity resolve by declared source order — the first loads, the later is refused with a notice naming it.
+
+### 4.5 Dispatch
+
+`[REFERENCE]`:
+
+```rust
+pub struct Invocation { pub id: InvocableId, pub args: ArgValues, pub caller: Surface }
+pub enum Outcome { Value(OutcomeValue), Stream(StreamHandle), Rejected(Rejection) }
+```
+
+`Outcome` is **structured data, never rendered text**. This is what lets one dispatch serve a text renderer, a structured-output renderer, a set of terminal widgets, and an IPC payload without any of them re-deriving the others' content. The existing push-channel seam on the desktop bridge — message plus a one-shot close, with reconnection owned by the host's connection lifecycle rather than a frontend timer — is the transport for `Stream`; this spec adds no second streaming mechanism.
+
+### 4.6 Binding and rejection
+
+An invocable declares an ordered list of typed binders, and that declaration is the single source from which its advertised schema is derived, so what a caller is told and what the runtime enforces cannot drift (IB-1). Every binder completes before the body begins, making *did not run* a structural fact rather than a self-report (IB-2).
+
+A rejection travels the **normal result channel** as a structured value (IB-3), naming one of four distinguishable modes — **absent**, **unreadable**, **malformed**, **ill-shaped** — plus its location within the input (IB-4). Optional means absent and never invalid: a value that is present and fails to bind still rejects, with mode and location intact (IB-5).
+
+Two consequences for the surfaces. A rejection is rendered, not thrown: the command line maps it to an exit code and a located message, the terminal UI to inline feedback, the desktop to a typed payload. And the classic quiet failure — a store error reported as an empty result with a success code — is unrepresentable, because emptiness and unavailability are different `Outcome` values rather than two readings of one printed line.
+
+### 4.7 Surface projection
+
+Every surface implements one interface: given the registry, produce this surface's command surface.
+
+| Surface | Projection | Replaces |
+| --- | --- | --- |
+| Command line | Argument parser built at startup from descriptors; help and completion from the summary and binders | Hand-written command enum |
+| Terminal UI | Slash catalog and its discovery listing | Hand-written catalog + hand-copied verb mirror |
+| Desktop shell | One generic dispatch IPC command plus the existing subscription channel; the WebView's client is generated from the catalog it receives | Per-capability IPC command list and its hand-written client |
+
+Parity stops being a property that is checked and becomes one that is **structural**: there is no place for a surface to hold a verb the registry does not have, and no way for it to miss one the registry does have. The conformance corpus then guards the remaining risk — that two projections of the same descriptor disagree in behavior — which is precisely the class §4.2 of the parent spec says no structural gate can see.
+
+### 4.8 Locus and declared non-exposure
+
+| Locus | Meaning | Example |
+| --- | --- | --- |
+| `Semantic` | Belongs to the core; reachable from every surface and remotely invocable | board, memory, workspace operations |
+| `ClientLocal` | Belongs to a surface; the same identity may be implemented per surface | pane focus, panel toggle |
+| `HostOnly` | Never remotely invocable; a host-owned facility | the desktop's shell settings slice |
+
+The desktop's settings commands are the standing worked example: they are host-owned marshalling rather than core logic, so they legitimately stay outside generic dispatch — and are therefore **declared** `HostOnly` with that reason rather than quietly left out. A capability boundary stated as an exclusion is a scope decision; the same boundary expressed by silence is indistinguishable from a missing feature and will eventually be "fixed" by someone.
+
+### 4.9 Lifecycle
+
+A contribution is bound lazily — when its point is reached or its declared activation trigger fires — so installed-but-unused contributions cost nothing (EP-9), and the live wiring is inspectable at any time: which contributions are registered, under which identities, in what order.
+
+Registration is a **reversible effect owned by the registering component** (EP-13). Deactivating an extension unwinds its invocables through the seam that created them, rather than relying on the extension to remember; teardown completes only once the work it stopped has actually stopped. A verb belonging to a deactivated extension disappears from every projection at once, because every projection is a function of the same registry.
+
+### 4.10 Contribution safety
+
+A `contribute` point must declare what happens when a contribution misbehaves, who may attach to it, and how a user tells a contributed action from a core one. All three are properties of this registry, not of the surfaces projecting it.
+
+**Failure policy (EP-6).** A contributed invocable's error, panic, or overrun is contained at the point and never reaches the kernel. Dispatch is time- and step-bounded; an invocable that exceeds its bound is terminated and its invocation resolves as a **rejection attributed to the contribution**, not as a core fault and not as a hang. A failing contribution is logged and audited, and repeated failure is grounds for deactivation — which unwinds its registrations by §4.9 rather than leaving a verb that always fails. *Undefined behavior on contribution failure is forbidden*: every dispatch terminates in an `Outcome`.
+
+**Grant-gated reach (EP-7).** Attaching to the invocable point is a **default-deny, permissioned** capability declared in the contribution's manifest. An extension cannot register a verb it did not declare, and registering an invocable whose effects are security-relevant may require a specific grant beyond the general one. Point reach is capability-scoped, never ambient — an *Active* extension is not thereby entitled to contribute commands.
+
+**Attribution and the interrupt ceiling (EP-10).** Every contributed invocable carries a **core-drawn attribution marker** naming its extension wherever it occupies a user-visible surface: help, completion, discovery listings, palettes, and its rendered output. The marker is drawn by the projection and is **not composable by the contribution**, because a contributed verb that can present itself as the product converts the user's trust in the product into a capability an extension holds. A contributed invocable may interrupt ordinary work and MUST NOT outrank a decision about the session itself — a trust grant, a destructive confirmation, a save-or-discard.
+
+> These three, with EP-11's namespace reservation (§4.4), are what make a contributed verb *safe to be reachable*. Reachability without them is the plugin story with its failure modes left unspecified.
+
+### 4.11 Relationship to extension-authored command definitions
+
+The extension system already defines a **command definition format** — an extension-authored, templated command with argument tokens, documented in `l2-extension-registry`. That format is not a second command concept and does not survive as a parallel path: it is one **producer** of invocables. Loading an extension turns each of its command definitions into a descriptor that registers through the door in §4.3, exactly as a core invocable does (EP-12), and it is thereafter indistinguishable in reachability — it appears in every surface's projection — and fully distinguishable in provenance, through the qualified identity of §4.4 and the attribution marker of §4.10.
+
+The alternative, letting that format keep its own resolution path, would recreate the fork this spec closes: two kinds of command, discoverable in different places, with only one of them reaching the terminal UI and the desktop.
+
+### 4.12 Redaction at the boundary
+
+Output masking is applied **once**, at the dispatch boundary, through the core redaction path. No surface re-implements it and no surface may skip it.
+
+This is a correction of a live asymmetry, and the correction has two independent halves. The first is placement: today two of three surfaces mask and one does not. The second is that all three are fed an empty secret list, so the property is presently inert everywhere it exists. Moving redaction to the boundary fixes the first half; the second requires the core to expose its secret store to the dispatch path and is tracked as a distinct obligation, not as something this move has already achieved.
+
+## 5. Implementation Notes
+
+Ordering is constrained by SP-9 — the primitive precedes the second consumer — and by the rule that convergence never travels with correction (SP-10).
+
+1. **Descriptor, envelope, and rejection types** in the ports tier, with the optional serialization feature. No consumer yet.
+2. **Registry and dispatch** in the domain tier; core invocables registered from the facade through the public door.
+3. **Command line onto the projection.** Behavior-preserving. Two things land with it and neither is a behavior change: the unshipped groups leave the default surface (INV-9), and residuals are recorded at the invocables that own them.
+4. **Corpus and first registrations** — the command line registers as a consumer here, before the second projection exists.
+5. **Terminal UI onto the projection**; the hand-copied verb mirror is deleted and tombstoned; the UI registers with the corpus as it lands.
+6. **Single entry point** — the terminal UI becomes a verb of the one binary rather than a second one.
+7. **Desktop shell onto generic dispatch**; the per-capability command list is deleted and tombstoned; host-owned settings stay, now declared.
+8. **Disclosed corrections**, each separately: the swallowed store error, the ignored output-format flag, the unescaped structured output, and the empty secret list.
+
+## 6. Drawbacks & Alternatives
+
+- **A runtime surface loses compile-time exhaustiveness.** A statically derived command enum is checked by the compiler; a registry is checked by its own tests. The trade is forced rather than chosen — a compile-time surface cannot accept a contribution that arrives after the build — and the conformance corpus is what buys the assurance back.
+- **Startup does work that used to be a constant.** Building the parser from descriptors costs time on every invocation of a tool whose whole appeal is being cheap to run. The registry is read-mostly and the cost is bounded by the descriptor count; if it stops being negligible, the projection is cacheable, and that is an optimization rather than a design change.
+- **An optional feature on a dependency-free tier is a compromise.** It keeps the default build honest and gives one consumer what it needs, but the tier can no longer be described as unconditionally dependency-free — only as dependency-free by default. The alternative, a shell-owned transfer type, was rejected because it restores the hand-written mapping this spec exists to remove.
+- **Alternative — grow the capability trait into the full contract.** Rejected. It is a compile-time surface and forecloses contributed invocables exactly as the command enum does, while also requiring every surface to be recompiled for every capability.
+- **Alternative — let each surface keep its own mapping and add a linting check.** Rejected by §4.2 of the parent: a structural check cannot see two correct-shaped answers that differ, which is the entire defect class.
+- **Alternative — generate all surfaces from one declaration.** Rejected as over-reach, on the parent spec's own reasoning: it buys parity by surrendering the platform-idiomatic presentation each surface exists to provide. The catalog takes the part that pays — shared vocabulary — and leaves presentation to the surface.
+
+## Canonical References
+
+| Alias | Path | Purpose |
+| --- | --- | --- |
+| `[PARITY]` | `.design/main/specifications/l1-surface-parity.md` | Parent; SP-1…SP-11, and §4.2's account of what each check cannot see |
+| `[POINTS]` | `.design/main/specifications/l1-extension-points.md` | EP-2/EP-4/EP-9/EP-11/EP-12/EP-13 — the seam rules this registry realizes |
+| `[BINDING]` | `.design/main/specifications/l1-input-binding.md` | IB-1…IB-5 — binder declaration and the rejection model |
+| `[ARCH]` | `.design/main/specifications/l1-architecture.md` | INV-3 parity, INV-7 secrets, INV-9 honesty incl. declared retirement |
+| `[TOPOLOGY]` | `.design/main/specifications/l2-crate-topology.md` | Tier rules governing where descriptor types and registry logic may live |
+| `[CORPUS]` | `.design/main/specifications/l2-surface-conformance.md` | The sibling that proves what this spec makes possible |
+
+## Document History
+
+| Version | Date | Notes |
+| --- | --- | --- |
+| 1.0.0 | 2026-09-05 | Initial spec. Realizes the SP-11 action catalog as a **runtime invocable registry** in the core, dispatched once as `Invocation → Outcome`, with every surface rendering a **projection** rather than a restatement — making INV-3 parity structural instead of asserted. Registration uses **one published door** for core and contributed invocables (EP-12), qualified identities over a reserved core namespace (EP-11), declared collision resolution (EP-4), lazy binding (EP-9), and reversible registration (EP-13), which together make a plugin-contributed verb reachable from surfaces that predate the plugin. Argument schemas derive from ordered typed binders as their single source (IB-1); rejections are typed first-class outcomes with four located modes (IB-3/IB-4), making the empty-versus-unavailable confusion unrepresentable. `Outcome` is structured data, so one dispatch serves text, structured output, terminal widgets, and IPC without re-derivation; the existing push-channel seam carries streams. `locus` declares host-only and client-local actions as exclusions rather than omissions (SP-8/SP-11), and `stability` carries INV-9 in both directions — unshipped actions have no descriptor, retired ones keep a discoverable migration path. Redaction moves to the dispatch boundary, with the inert-empty-secret-list half recorded as a separate obligation rather than claimed as fixed. Records the three constraints that decided the design: dependency-free ports tier (serialization as an optional feature), compile-time command surfaces that cannot host runtime contributions, and all three frontends linking the core in-process with the desktop's IPC seam lying inside that frontend. Post-Update Review added §4.10 **contribution safety** — the three seam rules a `contribute` point must declare and this spec had left implicit: bounded, contained failure resolving to a rejection attributed to the contribution (EP-6); default-deny, grant-gated point reach, so an *Active* extension is not thereby entitled to contribute verbs (EP-7); and a **core-drawn attribution marker the contribution cannot compose away**, without which a contributed verb is indistinguishable from a core one and converts trust in the product into a capability an extension holds (EP-10) — and §4.11 reconciling the extension system's existing **command definition format**, which becomes one *producer* of invocables registering through the same door rather than a parallel resolution path that would reach only one surface. |

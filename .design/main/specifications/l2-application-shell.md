@@ -1,6 +1,6 @@
 # Application Shell Runtime (React 19 · Tauri v2)
 
-**Version:** 1.0.1
+**Version:** 1.1.0
 **Status:** Stable
 **Layer:** implementation
 **Implements:** l1-application-shell.md
@@ -33,6 +33,9 @@ a defined place beneath it.
 - [l1-navigation-model.md](l1-navigation-model.md) - NV-7's L0 facilities (command palette, file-tree dock) are delegated surfaces and panels in this runtime's vocabulary.
 - [l1-agent-framework-skeleton.md](l1-agent-framework-skeleton.md) - Typed state channels and lifecycle-bound observation; the UI-side echo realized in §4.2.
 - [l1-invariant-tripwires.md](l1-invariant-tripwires.md) - The discipline §5's verification table follows: a contract is claimed only against a check that can fail, and what is judgment is declared as judgment.
+- [l2-invocable-registry.md](l2-invocable-registry.md) - `[ADDED v1.1.0]` The core catalog this shell projects across its IPC seam; the machine-readable form of §4.3's admission classes.
+- [l2-surface-conformance.md](l2-surface-conformance.md) - `[ADDED v1.1.0]` The corpus this shell registers against, from its own build workspace.
+- [l1-surface-parity.md](l1-surface-parity.md) - `[ADDED v1.1.0]` SP-11's declared-locus catalog and SP-8's named exceptions; why host-owned facilities are declared rather than omitted.
 
 ## 1. Motivation
 
@@ -93,7 +96,7 @@ wiring from being invented once per surface.
 | **AS-3 Push-based reactivity** | Two push edges, no polling anywhere. Core → frontend: the bridge exposes a typed event subscription (§4.3); a core event updates the store, and the store notifies subscribers. Store → view: a subscribed component re-renders only when the slice it selected actually changed. No surface uses a timer to stay current; the sole permitted interval is a user-visible one (a relative-time label re-rendering), which reads no new state. |
 | **AS-4 Typed events with lifecycle-bound subscriptions** | Every subscription — store or bridge — returns an unsubscribe function, and every call site registers it as the cleanup of the effect that opened it. The subscriber owns the subscription: unmounting deregisters it. There is no module-scope listener registry that outlives its components, and the bridge holds no global emitter. |
 | **AS-5 Declarative render from state** | React function components are the views; render is a pure function of props and subscribed store state. Imperative DOM work is confined to effects and limited to what the platform exposes no declarative form for (focus placement, scroll restoration). No component mutates a store during render. Stateless presentational components compose views without subscribing. |
-| **AS-6 Actions are the command vocabulary** | Every user-invokable operation is a namespaced action (`{group}.{verb}`) carrying a localized descriptive label and an optional binding, registered in a registry rather than wired to a control (§4.4). A control invokes by id; it never holds the behavior. Because the label is required, the same action is renderable in a menu, the palette, and the keymap settings without bespoke wiring. |
+| **AS-6 Actions are the command vocabulary** | Every user-invokable operation is a namespaced action (`{group}.{verb}`) carrying a localized descriptive label and an optional binding, registered in a registry rather than wired to a control (§4.4). A control invokes by id; it never holds the behavior. Because the label is required, the same action is renderable in a menu, the palette, and the keymap settings without bespoke wiring. `[MODIFIED v1.1.0]` This registry is **not a second catalog**. It holds the `ClientLocal` actions this runtime genuinely owns — pane focus, dock toggles, layout moves — and **sources every `Semantic` action from the core catalog** delivered over the seam, keyed by the same identity. A semantic action declared here instead of derived would be catalog number four and the exact fork SP-11 forbids; the split by locus is what lets one palette list both without either side restating the other. |
 | **AS-7 Context-scoped dispatch over a focus tree** | Key input resolves against a **context stack** assembled from the focus path, not against a single root handler. A binding declares a context predicate and fires only when that predicate holds over the active stack. Multi-keystroke sequences are supported through a pending-prefix state that either completes, times out, or is cancelled. Conflicts resolve most-specific-first, then most-recently-layered (§4.4). |
 | **AS-8 Layered, user-overridable bindings and settings** | Bindings compose in three layers merged deterministically in fixed order — base preset, platform defaults, user overrides — with a later layer replacing a binding of the same action id and an explicit null disabling it. Every action is listed with its effective binding and its origin layer in the keymap surface, so a user can see *why* a key does what it does. Persistence of the override layer is the core's (`l2-app-ui` §4.7); the merge is this runtime's. |
 | **AS-9 Workbench composition** | The frame is expressed in the L1 vocabulary and nothing else: a **workspace** root, a **center** holding panes of interchangeable items, edge **docks** holding panels, and floating transient surfaces above (§4.5). Panels and items are uniform units behind one contract, so the router places a surface without knowing which surface it is. The shipped center holds exactly one pane; that is a populated subset of the vocabulary, declared as such, not a different model. |
@@ -188,22 +191,36 @@ graph LR
 
 ### 4.3 The core seam: widening without multiplying
 
-The seam gains an event direction and more methods; it does not gain siblings.
+The seam gains an event direction; it does not gain siblings. `[MODIFIED v1.1.0]` It also
+stops gaining **methods**: the request/response direction is one generic dispatch over the
+core's invocable catalog, so a capability reaches this surface by being registered in the
+core rather than by someone adding a bridge method and a client method to match it.
 
 ```text
 [REFERENCE]
 CoreClient {
-  // request/response — one method per bound core capability
-  version()  -> Promise<string>
-  status()   -> Promise<string>
-  ...                                    // widened per the admission rule below
+  // catalog — the shipped invocables this shell may project
+  catalog()                    -> Promise<Invocable[]>
+
+  // request/response — ONE generic entry, not one method per capability
+  invoke(invocation)           -> Promise<Outcome>
 
   // push — AS-3's core-to-frontend edge
-  subscribe(channel, handler) -> unsubscribe
+  subscribe(channel, handler)  -> unsubscribe
+
+  // host-owned facilities — declared HostOnly, deliberately NOT via invoke()
+  settings: { get(), set(patch) }
 }
 
 createCoreClient(invoke, listen) -> CoreClient   // both host functions injected
 ```
+
+The previous shape — one host command and one client method per bound capability — was the
+third hand-written statement of one mapping, and its client half was on course to become a
+fourth (recorded as findings F-1 and F-7). Both collapse into the two lines above. The host
+side collapses correspondingly: a compile-time handler list cannot carry a verb contributed
+by an extension installed after the build, so per-capability handlers give way to one
+dispatch handler plus the host-owned facilities.
 
 **Admission rule (INV-3 + INV-9).** A method may be added to the seam only when
 it binds a capability that **already exists in the core or the host** and is
@@ -232,6 +249,16 @@ verb*:
 What stays excluded is a seam method with no counterpart in *either* class — no
 core capability, no host facility, no other binder. That is the erosion the rule
 exists to stop.
+
+`[ADDED v1.1.0]` **The rule now has a machine-readable form.** Its two admissible classes
+are the catalog's `locus` values: a core capability another surface binds is `Semantic` and
+travels through `invoke()`; a host-owned facility is `HostOnly` and keeps its own method,
+declared as an exclusion rather than merely left out (SP-8/SP-11). The excluded third case —
+a seam method with no counterpart anywhere — has no locus to declare and therefore no way to
+be registered, which turns the admission rule from a review obligation into a structural one.
+The reconciliation this spec performed at 1.0.1, demoting command-line parity from necessary
+condition to sufficient signal, is preserved exactly: `Semantic` does not mean *has a shell
+verb*, it means *not frontend-only*.
 
 Consequently the shell ships partly bound, and says so. A projection with no
 capability behind it is *unavailable with a reason*, never an empty list styled
@@ -446,3 +473,4 @@ point.
 | --- | --- | --- |
 | 1.0.0 | 2026-09-03 | Initial implementation spec — the L2 realization `l1-application-shell` had never received. One composition root (§4.1), projection/view/session stores over a scoped external-store subscription (§4.2), the single seam's event direction plus the capability-admission rule (§4.3), namespaced actions with context-stack keymap resolution and three-layer merge (§4.4), the workbench vocabulary and versioned layout record (§4.5), delegated selection surfaces (§4.6), cancellation-owned async (§4.7), and a verification table naming one failable check per contract plus the two obligations that stay judgment (§5). Maps AS-1…AS-13, stating explicitly where the stack lacks the L1's mechanism (AS-2, AS-11) and how the intent is met instead. Post-Update Review added §4.3 channel liveness (a dead push edge moves dependent projections to *unavailable* rather than leaving stale values on screen) and the §5 verification table. |
 | 1.0.1 | 2026-09-03 | §4.3 admission rule reconciled to the principle it states. The old text made *"the capability the corresponding command-line verb reaches"* the necessary condition for adding a seam method; the stated purpose was only *"incapable of growing a frontend-only feature"*. §4.5's layout record and the theming axes are written by the host settings store — reached by no CLI verb and no other frontend, yet not a frontend invention — so the old letter forbade what §4.5 requires. Now: admissibility = the bound capability exists in the core **or the host** and is **not frontend-only**; two admissible classes named (a core capability another surface binds; a host-owned facility), CLI/TUI parity demoted from necessary condition to sufficient signal. No new requirement — a self-contradiction repaired. |
+| 1.1.0 | 2026-09-05 | §4.3's request/response direction collapses from **one method per bound capability** to **one generic dispatch** over the core's invocable catalog, plus a `catalog()` read and the unchanged push edge. The prior shape was the third hand-written statement of one input→core mapping and its TypeScript client was on course to be a fourth (findings F-1, F-7); it is also compile-time bound, so it could never carry a verb contributed by an extension installed after the build — the constraint that decides the design. The 1.0.1 admission rule is **preserved and given a machine-readable form**: its two admissible classes are the catalog's `locus` values — `Semantic` travels through dispatch, `HostOnly` keeps its own method and is *declared* as an exclusion rather than omitted (SP-8/SP-11) — while the third, frontend-only case has no locus to declare and so cannot be registered at all, turning a review obligation into a structural one. Command-line parity stays a sufficient signal, never a necessary condition, exactly as 1.0.1 established. AS-6 is clarified against the same risk: the runtime's action registry is **not a second catalog** — it owns `ClientLocal` actions and sources `Semantic` ones from the core catalog by identity. Records that this shell registers with the conformance corpus **from its own build workspace**, which is why the corpus is shaped as a library each surface runs rather than one central suite. |
