@@ -1,8 +1,10 @@
 //! The catalog half: one registration door for every action's descriptor,
-//! and the identity rules that keep a contribution from ever shadowing a
-//! core name. See [`super::dispatch`] for the execution half.
+//! the identity rules that keep a contribution from ever shadowing a core
+//! name, the manifest-grant gate on registering at all, and the attribution
+//! a contributed invocable cannot suppress. See [`super::dispatch`] for the
+//! execution half.
 
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet};
 
 use cronus_contract::{Invocable, InvocableId};
 
@@ -16,6 +18,13 @@ pub const CORE_IDENTITY: &str = "core";
 /// The origin token the core itself registers under.
 const CORE_SOURCE: &str = "core";
 
+/// The general capability a contribution's manifest must declare before it
+/// may register anything at all (EP-7). A point requiring a further,
+/// specific grant for a security-relevant invocable is a real refinement
+/// this general gate does not yet model — deferred to whichever task wires
+/// up real extension manifests, not silently dropped.
+pub const CONTRIBUTE_GRANT: &str = "invocable:contribute";
+
 /// Who is registering, and what physically distinguishes them.
 ///
 /// `identity` is the qualifier a contribution's invocable ids are prefixed
@@ -24,11 +33,15 @@ const CORE_SOURCE: &str = "core";
 /// string alone — so two different origins that happen to pick the same
 /// `identity` are still distinguishable, and the registry can tell "the same
 /// extension registering more of its own invocables" apart from "two
-/// different extensions colliding on one name".
+/// different extensions colliding on one name". `grants` is what the
+/// registrant's manifest declared (EP-7) — attaching to this registry at
+/// all requires [`CONTRIBUTE_GRANT`] among them; the core registrant needs
+/// none, being implicitly trusted (EP-12).
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Registrant {
     pub identity: String,
     pub source: String,
+    pub grants: HashSet<String>,
 }
 
 impl Registrant {
@@ -37,16 +50,25 @@ impl Registrant {
         Registrant {
             identity: CORE_IDENTITY.to_string(),
             source: CORE_SOURCE.to_string(),
+            grants: HashSet::new(),
         }
     }
 
     /// A contribution's registrant: its own declared identity, and the
-    /// origin token its loader assigned it.
+    /// origin token its loader assigned it. Carries no grants yet — chain
+    /// [`Registrant::with_grant`] to declare what its manifest grants.
     pub fn extension(identity: impl Into<String>, source: impl Into<String>) -> Self {
         Registrant {
             identity: identity.into(),
             source: source.into(),
+            grants: HashSet::new(),
         }
+    }
+
+    /// Declare one grant this registrant's manifest carries.
+    pub fn with_grant(mut self, grant: impl Into<String>) -> Self {
+        self.grants.insert(grant.into());
+        self
     }
 }
 
@@ -64,6 +86,10 @@ pub enum RegistrationError {
     /// construction, which is what makes claiming `"core"` as anyone else
     /// fail this same check rather than a separate one.
     IdentityCollision { identity: String },
+    /// The registrant's manifest did not declare the grant this registry
+    /// requires to register anything (EP-7). Never checked for the core
+    /// registrant, which needs no declared grant.
+    MissingGrant { identity: String, grant: String },
     /// This exact qualified id is already registered.
     DuplicateId(InvocableId),
 }
@@ -113,6 +139,13 @@ impl InvocableRegistry {
             });
         }
 
+        if registrant.identity != CORE_IDENTITY && !registrant.grants.contains(CONTRIBUTE_GRANT) {
+            return Err(RegistrationError::MissingGrant {
+                identity: registrant.identity.clone(),
+                grant: CONTRIBUTE_GRANT.to_string(),
+            });
+        }
+
         match self.identity_sources.get(&registrant.identity) {
             Some(existing_source) if existing_source != &registrant.source => {
                 return Err(RegistrationError::IdentityCollision {
@@ -151,6 +184,22 @@ impl InvocableRegistry {
     }
 }
 
+/// The core-drawn attribution for a contributed invocable, or `None` for a
+/// core one (EP-10). Always derived from the id's own qualifier — which
+/// [`InvocableRegistry::register`] already validated against the actual
+/// registrant before ever accepting it — so nothing the invocable's *other*
+/// fields say (`name`, `summary`) can alter or suppress it: the projection
+/// draws this independently of whatever the contribution would prefer
+/// displayed.
+pub fn attribution(invocable: &Invocable) -> Option<&str> {
+    let qualifier = invocable.id.qualifier();
+    if qualifier == CORE_IDENTITY {
+        None
+    } else {
+        Some(qualifier)
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -168,10 +217,16 @@ mod tests {
         }
     }
 
+    fn granted(identity: &str, source: &str) -> Registrant {
+        Registrant::extension(identity, source).with_grant(CONTRIBUTE_GRANT)
+    }
+
     #[test]
     fn a_contribution_cannot_claim_the_reserved_core_identity() {
         let mut registry = InvocableRegistry::new();
-        let impostor = Registrant::extension(CORE_IDENTITY, "malicious-ext");
+        // Even granted, an impostor claiming the reserved identity is
+        // refused by the identity-collision check, not by the grant gate.
+        let impostor = granted(CORE_IDENTITY, "malicious-ext");
         let err = registry
             .register(&impostor, sample_invocable("core:board.list"))
             .unwrap_err();
@@ -190,7 +245,7 @@ mod tests {
         // depend on registration order.
         registry
             .register(
-                &Registrant::extension("myext", "src-1"),
+                &granted("myext", "src-1"),
                 sample_invocable("myext:board.list"),
             )
             .unwrap();
@@ -213,17 +268,11 @@ mod tests {
     fn two_sources_claiming_one_identity_the_later_is_refused() {
         let mut registry = InvocableRegistry::new();
         registry
-            .register(
-                &Registrant::extension("myext", "src-1"),
-                sample_invocable("myext:one"),
-            )
+            .register(&granted("myext", "src-1"), sample_invocable("myext:one"))
             .unwrap();
 
         let err = registry
-            .register(
-                &Registrant::extension("myext", "src-2"),
-                sample_invocable("myext:two"),
-            )
+            .register(&granted("myext", "src-2"), sample_invocable("myext:two"))
             .unwrap_err();
         assert_eq!(
             err,
@@ -235,10 +284,7 @@ mod tests {
         // The SAME source registering more under its own identity is fine.
         assert!(
             registry
-                .register(
-                    &Registrant::extension("myext", "src-1"),
-                    sample_invocable("myext:three"),
-                )
+                .register(&granted("myext", "src-1"), sample_invocable("myext:three"))
                 .is_ok()
         );
     }
@@ -248,7 +294,7 @@ mod tests {
         let mut registry = InvocableRegistry::new();
         let err = registry
             .register(
-                &Registrant::extension("myext", "src-1"),
+                &granted("myext", "src-1"),
                 sample_invocable("otherext:verb"),
             )
             .unwrap_err();
@@ -274,5 +320,51 @@ mod tests {
             err,
             RegistrationError::DuplicateId(InvocableId::from("core:board.list"))
         );
+    }
+
+    #[test]
+    fn registering_without_the_declared_contribute_grant_is_refused() {
+        let mut registry = InvocableRegistry::new();
+        let ungranted = Registrant::extension("myext", "src-1");
+        let err = registry
+            .register(&ungranted, sample_invocable("myext:verb"))
+            .unwrap_err();
+        assert_eq!(
+            err,
+            RegistrationError::MissingGrant {
+                identity: "myext".to_string(),
+                grant: CONTRIBUTE_GRANT.to_string(),
+            }
+        );
+
+        // The same registration, with the grant declared, succeeds.
+        assert!(
+            registry
+                .register(&granted("myext", "src-1"), sample_invocable("myext:verb"))
+                .is_ok()
+        );
+    }
+
+    #[test]
+    fn the_core_registrant_needs_no_declared_grant() {
+        let mut registry = InvocableRegistry::new();
+        assert!(
+            registry
+                .register(&Registrant::core(), sample_invocable("core:board.list"))
+                .is_ok()
+        );
+    }
+
+    #[test]
+    fn attribution_is_derived_from_the_validated_identity_never_from_display_fields() {
+        let mut deceptive = sample_invocable("myext:settings");
+        // A contribution trying to look like a core feature through the
+        // fields it does control.
+        deceptive.name = "Core Settings";
+        deceptive.summary = "Built-in configuration";
+        assert_eq!(attribution(&deceptive), Some("myext"));
+
+        let core_invocable = sample_invocable("core:board.list");
+        assert_eq!(attribution(&core_invocable), None);
     }
 }

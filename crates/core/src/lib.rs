@@ -13,8 +13,8 @@ pub use cronus_domain::{
     autonomy, backup, budget, checkpoint, config_hotreload, constitution, context_mgmt,
     context_router, deliberation, dev_office, development_workflow, doctor, egress,
     error_reporting, exec_workspace, extensions, file_store, global_orch, hooks, inner_monologue,
-    kanban, knowledge_access, knowledge_ingest, knowledge_retrieval, learning, lookahead,
-    loop_runner, memory_capture, memory_intelligence, mission, notes, office_control,
+    invocable, kanban, knowledge_access, knowledge_ingest, knowledge_retrieval, learning,
+    lookahead, loop_runner, memory_capture, memory_intelligence, mission, notes, office_control,
     orchestration, paths, quality, redact, research, resource_sharing, roles, router,
     sandbox_policy, scheduler, secrets, self_improvement, session, skills, state, store, telemetry,
     tool_receipts, tool_security, trigger_triage, version_control, voice, wiki_access, wiki_regen,
@@ -32,6 +32,7 @@ pub mod dev_office_gate;
 pub mod dev_office_workspace;
 pub mod engine_lock;
 pub mod inbox;
+pub mod invocable_bootstrap;
 pub mod knowledge_bootstrap;
 pub mod loop_bootstrap;
 pub mod memory;

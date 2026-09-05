@@ -13,5 +13,7 @@
 mod dispatch;
 mod registry;
 
-pub use dispatch::{Dispatcher, Handler, bind};
-pub use registry::{CORE_IDENTITY, InvocableRegistry, Registrant, RegistrationError};
+pub use dispatch::{CONTRIBUTION_TIME_BOUND, Dispatcher, Handler, bind};
+pub use registry::{
+    CONTRIBUTE_GRANT, CORE_IDENTITY, InvocableRegistry, Registrant, RegistrationError, attribution,
+};
