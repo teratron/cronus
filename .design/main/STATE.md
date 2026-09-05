@@ -4,7 +4,7 @@
 <!-- Maximum 100 lines. Agent updates AFTER each completed action. -->
 
 **Workspace:** main
-**Updated:** 2026-09-05 13:38
+**Updated:** 2026-09-05 14:00
 **Phase:** — plan saturated: build phases 1–26 Done, Backlog empty, no active phase
 **Status:** Active
 
@@ -15,7 +15,7 @@
 - **Decisions carried (all `[DR]` in `archives/tasks/phase-26.md`, overridable):** A01 `Workbench` retired not remounted; B01 one generic store factory; B02 "composition root" = inside `BuildingShell`; B03 domain projection-store instantiation deferred (nothing emits yet); C02 timeout/cancel = caller drops the pending buffer + one-frame context stack; C03 `KeymapSurface` delivered but not mounted (until the user layer persists); D01 host frames its own close in-band + channel→store glue in `shared/`; D02 host stores `layout` opaque, frontend owns the schema + restore.
 - **Spec/Plan:** INDEX v1.0.185 → **v1.0.187** (287 specs: 210 L1 + 77 L2) · PLAN v2.65.0 → **v2.66.0** · TASKS v1.47.0 → **v1.48.0** · RULES v1.6.0 · project 0.1.534 → **0.1.536** (two finalize --workflow=spec runs, 2026-09-04; earlier finalize --workflow=run: `phase-26.md` archived → `archives/tasks/phase-26.md`; root `CHANGELOG.md` append skipped as duplicate — `.design/main/CHANGELOG.md` Phase 26 journal entry written by hand). Diagnostics: `SPEC_STATUS` 3 RFC (the concept-only L1 backlog, pre-existing) + a harmless `UNKNOWN_ARGUMENT` from an earlier stray `update-state --help`.
 - **Not yet committed:** all of Phase 26 (11 tasks across `packages/ui` + `apps/desktop`) + the `.design/` phase-completion edits. Standing follow-ups (not phases): `i18n.ts` `// Phase 8` / `// Phase 24` comment leaks (§6 containment cleanup); `KeymapSurface` + domain projection stores wait on a core channel to bind.
-- **Next Action:** Author new scope — nothing mechanical remains in main. Pre-flight is at ZERO warnings (287/287 Stable, 0 RFC, 0 Draft, Backlog empty, PLAN v2.68.0 = INDEX v1.0.188), so re-running /magic.task main is a confirmed no-op. The next step needs a direction chosen by a person: /magic.spec main {idea}, or an L2 over an existing Phase 0 concept (l1-evidence-currency EVC-3 over the quality-pipeline surface is the standing candidate in PLAN Risks v2.67.0). Note: nodus is NOT idle — Phase 33 is open and Todo; run /magic.run nodus.
+- **Next Action:** Author new scope — nothing mechanical remains in main. Pre-flight is at ZERO warnings (287/287 Stable, 0 RFC, 0 Draft, Backlog empty, PLAN v2.68.0 = INDEX v1.0.188), so re-running /magic.task main is a confirmed no-op. The next step needs a direction chosen by a person: /magic.spec main {idea}, or an L2 over an existing Phase 0 concept (l1-evidence-currency EVC-3 over the quality-pipeline surface is the standing candidate in PLAN Risks v2.67.0). Note: nodus is NOT idle — Phase 33 closed this session (490 tests); run /magic.task nodus to sync the plan.
 
 ## Progress
 

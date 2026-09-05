@@ -158,6 +158,37 @@ fn shape_check_not_in_enum() {
 }
 
 #[test]
+fn shape_check_duplicate_field() {
+    // NL-27: a field name declared twice is a validation error, not a
+    // silently-resolved ambiguity — regardless of whether the two
+    // declarations otherwise agree.
+    let decl = ConfigDecl {
+        header: None,
+        fields: vec![
+            ConfigField {
+                name: "api_key".to_string(),
+                type_name: "str".to_string(),
+                secret: true,
+                ..Default::default()
+            },
+            ConfigField {
+                name: "api_key".to_string(),
+                type_name: "str".to_string(),
+                secret: false,
+                ..Default::default()
+            },
+        ],
+    };
+    let violations = check_config_values(&decl, &[]).expect_err("must reject");
+    assert!(
+        violations
+            .iter()
+            .any(|v| v.field == "api_key" && v.reason == ConfigReason::DuplicateField),
+        "violations: {violations:?}"
+    );
+}
+
+#[test]
 fn shape_check_accepts_defaults_when_nothing_proposed_for_optional_fields() {
     let decl = sample_decl();
     let proposed = vec![("api_key".to_string(), Value::Text("k".to_string()))];
@@ -292,6 +323,64 @@ fn rejected_config_run_leaves_no_partial_state() {
     .expect("run_with_config");
     assert_eq!(result.out, Value::Null);
     assert!(result.vars.is_empty());
+}
+
+// ─── NL-27 regression: a duplicate field can no longer leak a secret ─────────
+
+#[test]
+fn duplicate_secret_field_rejects_rather_than_leaking() {
+    // Before NL-27 enforcement, a `§config:` name declared twice — once
+    // `secret`, once not — produced two entries in `AcceptedConfig` under one
+    // name: `is_secret` answered `true` (`.any()` over both), while
+    // `non_secret_fields()` (the set `run_with_config` merges into
+    // `$in.config`) filtered on the *other* declaration and emitted the value
+    // anyway. The assertion here is deliberately on the run's outcome — a
+    // rejection — rather than on any surviving two-entry shape, so it stays
+    // valid however the accept loop is later refactored: it is impossible for
+    // this scenario to produce an `AcceptedConfig` at all.
+    let decl = nodus::parser::Parser::parse_config(
+        "\
+§config:leaky v1.0
+api_key : str
+  required
+  secret
+api_key : str
+  default: not-a-secret
+",
+    )
+    .expect("parse_config");
+
+    let proposed = vec![("api_key".to_string(), Value::Text("sk-live".to_string()))];
+    let violations = check_config_values(&decl, &proposed).expect_err("must reject");
+    assert!(
+        violations
+            .iter()
+            .any(|v| v.field == "api_key" && v.reason == ConfigReason::DuplicateField),
+        "violations: {violations:?}"
+    );
+
+    // End-to-end: the run itself is rejected before boot, so no step — and no
+    // path that could read $in.config — ever executes.
+    let provider = DefaultConfigProvider;
+    let result = run_with_config(
+        CONFIG_WF,
+        "configured_greeting.nodus",
+        None,
+        &decl,
+        &proposed,
+        &provider,
+    )
+    .expect("run_with_config returns a RunResult, not a parse error");
+    assert_eq!(result.status, Status::Failed);
+    assert!(
+        result
+            .errors
+            .iter()
+            .any(|e| e.code == "NODUS:CONFIG_INVALID"),
+        "errors: {:?}",
+        result.errors
+    );
+    assert!(result.log.is_empty(), "no step may execute on rejection");
 }
 
 // ─── LP-8: ExtensionRole::Config fail-fast ────────────────────────────────────

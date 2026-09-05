@@ -1,9 +1,9 @@
 //! Validator — structural lint and schema-vocabulary checks.
 //!
-//! Runs 33 rules against a parsed [`WorkflowFile`] AST and returns a flat list
+//! Runs 34 rules against a parsed [`WorkflowFile`] AST and returns a flat list
 //! of [`Diagnostic`]s. Rules are grouped by severity:
 //!
-//! - **Error** (E001–E017): block execution when found.
+//! - **Error** (E001–E020): block execution when found.
 //! - **Warning** (W001–W017): workflow runs but has unsafe or incomplete patterns.
 //! - **Info** (I001–I006): style suggestions.
 //!
@@ -89,6 +89,7 @@ impl Validator {
         d.extend(Self::e017_retry_bounded(ast, filename));
         d.extend(Self::e018_restart_max_bounded(ast, filename));
         d.extend(Self::e019_restart_scope(ast, filename));
+        d.extend(Self::e020_no_duplicate_macro_names(ast, filename));
 
         // Warnings
         d.extend(Self::w001_err_handler(ast, filename));
@@ -407,6 +408,26 @@ impl Validator {
             }
             for sub in &step.sub_steps {
                 restart_scope_stmt(sub, &mut diags, filename);
+            }
+        }
+        diags
+    }
+
+    /// NL-27 — a `@macro` name admits exactly one holder (l2-nodus-runtime.md
+    /// §3.1). Modelled on `e015_no_duplicate_test_names`: same shape, same
+    /// per-extra-occurrence firing, applied to `wf.macros` instead of
+    /// `wf.tests`.
+    fn e020_no_duplicate_macro_names(wf: &WorkflowFile, filename: &str) -> Vec<Diagnostic> {
+        let mut seen = std::collections::HashSet::new();
+        let mut diags = Vec::new();
+        for mb in &wf.macros {
+            if !seen.insert(mb.name.clone()) {
+                diags.push(Diagnostic::new(
+                    Severity::Error,
+                    "E020",
+                    format!("Duplicate @macro: name '{}'.", mb.name),
+                    filename,
+                ));
             }
         }
         diags
@@ -1666,6 +1687,8 @@ pub enum ConfigReason {
     NotInEnum,
     /// A field's own declared `default` fails its declared type or constraint.
     BadDefault,
+    /// The declaration names this field more than once (NL-27).
+    DuplicateField,
 }
 
 /// A single shape-check failure, naming the offending field and why (NL-20).
@@ -1797,6 +1820,25 @@ pub fn check_config_values(
     proposed: &[(String, Value)],
 ) -> std::result::Result<AcceptedConfig, Vec<ConfigViolation>> {
     let mut violations = Vec::new();
+
+    // NL-27: a field name declared twice must never reach `accepted` below —
+    // two declarations of one name (one `secret`, one not) would resolve to
+    // two entries whose accessors then disagree with each other (`get`
+    // returns the first match, `is_secret` answers `any`, and
+    // `non_secret_fields` — the set merged into a workflow's `$in.config` —
+    // can emit the non-secret entry for a name `is_secret` reports true for).
+    // One violation per repeated name, however many times it repeats.
+    let mut seen_names: std::collections::HashSet<&str> = std::collections::HashSet::new();
+    let mut reported_duplicates: std::collections::HashSet<&str> = std::collections::HashSet::new();
+    for field in &decl.fields {
+        let name = field.name.as_str();
+        if !seen_names.insert(name) && reported_duplicates.insert(name) {
+            violations.push(ConfigViolation {
+                field: field.name.clone(),
+                reason: ConfigReason::DuplicateField,
+            });
+        }
+    }
 
     for (name, _) in proposed {
         if !decl.fields.iter().any(|f| &f.name == name) {
@@ -2430,6 +2472,49 @@ mod tests {
         assert!(
             !diags.iter().any(|d| d.code == "E015"),
             "unexpected E015 for unique test names"
+        );
+    }
+
+    #[test]
+    fn e020_fires_on_duplicate_macro_names() {
+        let src = "\
+§wf:e020_wf v1.0
+@in: { name: text }
+@out: $out
+@steps:
+  1. RUN(@greet) → $out
+@macro: greet
+  GEN($in.name) → $draft
+@macro: greet
+  GEN($in.name) → $draft
+";
+        let ast = Parser::parse(src).expect("parse");
+        let diags = Validator::validate(&ast, "e020_wf.nodus");
+        assert!(
+            diags.iter().any(|d| d.code == "E020"),
+            "expected E020 for duplicate macro name; got: {:?}",
+            diags.iter().map(|d| &d.code).collect::<Vec<_>>()
+        );
+    }
+
+    #[test]
+    fn e020_absent_with_unique_macro_names() {
+        let src = "\
+§wf:e020_ok v1.0
+@in: { name: text }
+@out: $out
+@steps:
+  1. RUN(@greet) → $out
+@macro: greet
+  GEN($in.name) → $draft
+@macro: farewell
+  GEN($in.name) → $draft
+";
+        let ast = Parser::parse(src).expect("parse");
+        let diags = Validator::validate(&ast, "e020_ok.nodus");
+        assert!(
+            !diags.iter().any(|d| d.code == "E020"),
+            "unexpected E020 for unique macro names"
         );
     }
 
