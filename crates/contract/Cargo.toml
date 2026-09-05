@@ -6,3 +6,16 @@ license.workspace = true
 repository.workspace = true
 
 [dependencies]
+# Optional and off by default — this tier is dependency-free by construction
+# (§4.3 of its own module doc). Enabled only by a consumer that must cross a
+# process boundary (the desktop shell's IPC seam); the default build, and
+# every other consumer, carry no dependency at all.
+serde = { workspace = true, optional = true }
+
+[features]
+serde = ["dep:serde"]
+
+[dev-dependencies]
+# Test-only, for the "serde" feature's round-trip tests. Never affects the
+# default dependency graph — `cargo tree` and `cargo check` never see it.
+serde_json = { workspace = true }

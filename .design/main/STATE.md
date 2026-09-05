@@ -4,18 +4,18 @@
 <!-- Maximum 100 lines. Agent updates AFTER each completed action. -->
 
 **Workspace:** main
-**Updated:** 2026-09-05 17:16
+**Updated:** 2026-09-05 17:57
 **Phase:** 27 — Invocable Registry & CLI Derivation
 **Status:** Active
 
 ## Current Position
 
-- **Task:** `/magic.task main` → **Phase 27 opened — Invocable Registry & CLI Derivation (14 tasks / 5 tracks: A ports types · B registry & dispatch · C conformance corpus · D CLI derivation · T validation); Phases 28–29 planned.** Phases the five-spec command-surface wave authored the same session, and promoted it RFC→Stable in Pre-Planning Stabilization. Scope came from a **code-first audit** of the three frontends, not a reference: one input→core mapping written by hand three times (build-time command enum, 29 groups · slash catalog, 21 verbs · per-capability IPC list, 4 commands), a fourth copy forming in the desktop's TypeScript client, and a stale parity table in the CLI spec itself. The architecture was not chosen but **forced** — every existing command surface is compile-time bound, so none can carry a verb an extension contributes after the build; the Stable L1s (SP-11 catalog, EP-2 `contribute`, EP-12 one door, IB-1 binders) had already decided the rest.
+- **Task:** T-27B02 Dispatch: bind-before-invoke over declared binders, returning a structured outcome
 - **Planning audit findings, fixed before write-back:** the claimed C ∥ D parallelism has a crossing edge (T-27D03's corpus registration needs T-27C01); one `Verify` line carried an unresolved crate-name placeholder (now `cronus-conformance`, constrained to be path-reachable from the detached desktop workspace so Phase 29 can register from it). Sizing warning recorded rather than smoothed: track D touches ~4000 lines across 29 command groups and is expected to need `.N` sub-task splits.
 - **Carried deliberately (SP-10 — convergence and correction travel separately):** four known-wrong behaviours stay live through Phases 27–28 and are corrected in 29, one disclosed change each — a store failure reported as an empty listing with exit 0; the output-format flag discarded in 9 sites; structured output assembled by unescaped string formatting in 5; redaction fed an empty secret list on every surface. Two are correctness defects. Recorded **at the owning invocable**, not in a tracker, so the next reader meets them where they are already looking.
 - **Spec/Plan:** INDEX v1.0.188 → **v1.0.190** (289 specs: 210 L1 + 79 L2) · PLAN v2.68.0 → **v2.69.0** · TASKS v1.50.0 → **v1.51.0** · RULES v1.6.0 · project 0.1.543 → **0.1.545** (`finalize --workflow=spec` then `--workflow=task`; root `CHANGELOG.md` append skipped as a detected duplicate both times). Post-write pre-flight: `ok:true`, **0 warnings** — `ORPHANED_SPEC` cleared only after converting the new phases' spec references from backticks to `[l2-x.md](specifications/l2-x.md)` link form, which is the shape the checker matches.
 - **Not yet committed:** the entire wave — 2 new specs, 3 amendments, `PLAN`/`TASKS`/`INDEX`/`CONTEXT`/`STATE`, `tasks/phase-27.md`. **No product file was touched**, so §6 containment holds trivially. Standing follow-ups (not phases): `i18n.ts` comment leaks (§6 containment cleanup); `KeymapSurface` + domain projection stores still wait on a core channel to bind. **Open risk, recorded in `PLAN.md` §Risks:** all five specs were authored, reviewed, and promoted by the same agent in one session — the Post-Update Review was real and closed three genuine gaps, but no independent reader has seen them, and the cheapest correction point is before track B lands.
-- **Next Action:** Execute T-27A01 Invocable descriptor and catalog types in the ports tier via /magic.run main
+- **Next Action:** Execute T-27B03 Contribution safety: failure policy, grant-gated reach, attribution marker
 
 ## Progress
 

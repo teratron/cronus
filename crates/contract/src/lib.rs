@@ -16,6 +16,7 @@
 // `MemorySearch` / `UserDataStore` seam traits below carry across the
 // domain/adapter boundary (§4.5); its field types travel with it.
 
+use std::collections::HashMap;
 use std::sync::Arc;
 use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
 use std::time::{Duration, SystemTime, UNIX_EPOCH};
@@ -1911,4 +1912,488 @@ pub trait KnowledgeStore {
         chunk_ids: &[String],
         min_curation: Option<Curation>,
     ) -> Result<Vec<RetrievedChunk>, String>;
+}
+
+// ── Invocable registry seam (SP-11, EP-2/4/11/12, IB-1) ──────────────────────
+//
+// The descriptor types below are the whole advertised contract for one
+// action. A surface renders help, completion, and command grouping from an
+// `Invocable` alone; nothing about an action may be known to a surface that
+// is not reachable from its descriptor, because any fact held privately
+// instead is the first step of two surfaces disagreeing about what the
+// product can do. The registry that holds and looks these up, and the
+// dispatch that runs them, live in the domain tier — this crate carries only
+// the shapes every tier and every surface must name without depending on
+// each other.
+
+/// A qualified invocable identity: `"core:board.list"` for a core action,
+/// `"<extension-id>:verb"` for a contributed one (EP-11). The qualifier is
+/// what lets a contribution and a core action share one namespace without
+/// either ever shadowing the other, whatever the core adds later.
+#[derive(Debug, Clone, PartialEq, Eq, Hash)]
+#[cfg_attr(feature = "serde", derive(serde::Serialize))]
+pub struct InvocableId(String);
+
+impl InvocableId {
+    pub fn as_str(&self) -> &str {
+        &self.0
+    }
+
+    /// The identity a qualified id is prefixed with (e.g. `"core"` in
+    /// `"core:board.list"`). An id with no `:` is its own qualifier — this
+    /// is a decoding convenience, not a claim that such an id is
+    /// well-formed; registration is what actually enforces the qualified
+    /// shape.
+    pub fn qualifier(&self) -> &str {
+        self.0.split_once(':').map_or(&self.0, |(q, _)| q)
+    }
+
+    /// The unqualified part after the identity (e.g. `"board.list"` in
+    /// `"core:board.list"`).
+    pub fn tail(&self) -> &str {
+        self.0.split_once(':').map_or(&self.0, |(_, t)| t)
+    }
+}
+
+impl From<String> for InvocableId {
+    fn from(s: String) -> Self {
+        InvocableId(s)
+    }
+}
+
+impl From<&str> for InvocableId {
+    fn from(s: &str) -> Self {
+        InvocableId(s.to_string())
+    }
+}
+
+impl std::fmt::Display for InvocableId {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        self.0.fmt(f)
+    }
+}
+
+/// Where an invocable's behavior is decided (SP-8/SP-11) — the machine-
+/// readable form of "legitimate difference, named with its reason". A
+/// surface consults this to know whether an action is reachable through
+/// generic dispatch at all, never by guessing from an omission.
+#[derive(Debug, Clone, PartialEq, Eq)]
+#[cfg_attr(feature = "serde", derive(serde::Serialize))]
+pub enum Locus {
+    /// Belongs to the core; reachable from every surface and remotely
+    /// invocable.
+    Semantic,
+    /// Belongs to a surface; the same identity may have a different
+    /// implementation per surface (e.g. pane focus, panel toggle).
+    ClientLocal,
+    /// Never remotely invocable — a host-owned facility, kept outside
+    /// generic dispatch and declared with the reason, never silently
+    /// omitted.
+    HostOnly { reason: &'static str },
+}
+
+/// Whether an invocable is on the shipped surface (INV-9). An action the
+/// core cannot yet perform simply has no descriptor at all — this type has
+/// no "not implemented" state, because that state must be unrepresentable
+/// rather than discouraged.
+#[derive(Debug, Clone, PartialEq, Eq)]
+#[cfg_attr(feature = "serde", derive(serde::Serialize))]
+pub enum Stability {
+    /// Appears on every default surface, in help, and in completion.
+    Shipped,
+    /// Off the shipped surface and out of completion; an invocation still
+    /// resolves — to a message naming the replacement — never a silent
+    /// unknown-command failure, and never a permanent second name for one
+    /// capability.
+    Retired { superseded_by: InvocableId },
+}
+
+/// The closed set of shapes a [`Binder`] may declare.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[cfg_attr(feature = "serde", derive(serde::Serialize))]
+pub enum BinderKind {
+    Text,
+    Integer,
+    Boolean,
+    Flag,
+}
+
+/// One argument an invocable declares, in order (IB-1). This is the single
+/// source an invocable's advertised schema is derived from — a caller is
+/// told exactly this, and it is exactly this the runtime later enforces, so
+/// the two cannot drift into two different answers to "what does this
+/// take". `optional` distinguishes a value that may be genuinely absent
+/// from one that, if present, must parse (IB-5): a present-but-malformed
+/// value is never silently treated as absent.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[cfg_attr(feature = "serde", derive(serde::Serialize))]
+pub struct Binder {
+    pub name: &'static str,
+    pub kind: BinderKind,
+    pub optional: bool,
+}
+
+/// The full advertised contract for one action (SP-1/SP-2). Every render of
+/// help, completion, or a command grammar's grouping is a projection of this
+/// struct; none restates it.
+#[derive(Debug, Clone, PartialEq, Eq)]
+#[cfg_attr(feature = "serde", derive(serde::Serialize))]
+pub struct Invocable {
+    /// Qualified identity (EP-11): `"core:…"` for the core, `"<ext-id>:…"`
+    /// for a contribution.
+    pub id: InvocableId,
+    /// Human-readable, catalog-facing name.
+    pub name: &'static str,
+    /// One line; feeds help, slash discovery, and completion.
+    pub summary: &'static str,
+    /// Noun namespace this action groups under, per the project's command
+    /// grammar.
+    pub group: &'static str,
+    pub locus: Locus,
+    /// Ordered, typed; the single schema source (IB-1).
+    pub binders: Vec<Binder>,
+    pub stability: Stability,
+}
+
+#[cfg(test)]
+mod invocable_tests {
+    use super::*;
+
+    #[test]
+    fn invocable_id_round_trips_through_display_and_as_str() {
+        let id = InvocableId::from("core:board.list");
+        assert_eq!(id.as_str(), "core:board.list");
+        assert_eq!(id.to_string(), "core:board.list");
+    }
+
+    #[test]
+    fn invocable_id_equality_is_by_qualified_string() {
+        assert_eq!(
+            InvocableId::from("core:board.list".to_string()),
+            InvocableId::from("core:board.list")
+        );
+        assert_ne!(
+            InvocableId::from("core:board.list"),
+            InvocableId::from("ext:board.list")
+        );
+    }
+
+    #[test]
+    fn host_only_locus_carries_a_stated_reason() {
+        let locus = Locus::HostOnly {
+            reason: "shell-owned marshalling, not core logic",
+        };
+        let Locus::HostOnly { reason } = locus else {
+            panic!("expected HostOnly");
+        };
+        assert!(!reason.is_empty());
+    }
+
+    #[test]
+    fn retired_stability_names_its_replacement() {
+        let stability = Stability::Retired {
+            superseded_by: InvocableId::from("core:board.list"),
+        };
+        assert_eq!(
+            stability,
+            Stability::Retired {
+                superseded_by: InvocableId::from("core:board.list")
+            }
+        );
+    }
+
+    #[test]
+    fn descriptor_carries_ordered_binders_and_their_optionality() {
+        let invocable = Invocable {
+            id: InvocableId::from("core:board.add"),
+            name: "Add card",
+            summary: "Add a card to the board",
+            group: "board",
+            locus: Locus::Semantic,
+            binders: vec![
+                Binder {
+                    name: "id",
+                    kind: BinderKind::Text,
+                    optional: false,
+                },
+                Binder {
+                    name: "task_ref",
+                    kind: BinderKind::Text,
+                    optional: true,
+                },
+            ],
+            stability: Stability::Shipped,
+        };
+        assert_eq!(invocable.binders.len(), 2);
+        assert!(!invocable.binders[0].optional);
+        assert!(invocable.binders[1].optional);
+    }
+}
+
+// ── Dispatch envelope (SP-11, IB-2/3/4/5) ─────────────────────────────────────
+//
+// `Invocation` is the runtime call; `Outcome` is what dispatch returns —
+// structured data, never rendered text, so one dispatch serves a text
+// renderer, a structured renderer, terminal widgets, and an IPC payload
+// without any of them re-deriving the others' content. `Rejection` is scoped
+// strictly to binder failures (bind-before-invoke: the body never ran); a
+// resource the body itself depends on being unreachable is a different kind
+// of failure with no binder and no input location to name, so it is its own
+// `Outcome` variant rather than a rejection with an invented location.
+
+/// The known callers of dispatch. Closed by design: a new surface joining
+/// the shared registry is a deliberate event, not something a caller
+/// declares for itself.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum Surface {
+    Cli,
+    Tui,
+    Desktop,
+}
+
+/// One argument value, shaped like the [`BinderKind`] it binds.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum ArgValue {
+    Text(String),
+    Integer(i64),
+    Boolean(bool),
+    Flag,
+}
+
+/// The caller-supplied arguments for one invocation, keyed by binder name.
+#[derive(Debug, Clone, Default, PartialEq, Eq)]
+pub struct ArgValues(HashMap<String, ArgValue>);
+
+impl ArgValues {
+    pub fn new() -> Self {
+        ArgValues(HashMap::new())
+    }
+
+    pub fn insert(&mut self, binder: impl Into<String>, value: ArgValue) {
+        self.0.insert(binder.into(), value);
+    }
+
+    pub fn get(&self, binder: &str) -> Option<&ArgValue> {
+        self.0.get(binder)
+    }
+}
+
+/// A runtime call against one invocable.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct Invocation {
+    pub id: InvocableId,
+    pub args: ArgValues,
+    pub caller: Surface,
+}
+
+/// A handle to the existing push-channel transport (no second streaming
+/// mechanism is introduced here) — a caller subscribes to `channel` on that
+/// transport to receive the invocation's stream.
+#[derive(Debug, Clone, PartialEq, Eq)]
+#[cfg_attr(feature = "serde", derive(serde::Serialize))]
+pub struct StreamHandle {
+    pub channel: String,
+}
+
+/// A bounded structured value tree — general enough for a text renderer, a
+/// structured renderer, and an IPC payload to each project without any of
+/// them recomputing the others' content, and no more general than the
+/// shapes a command's output actually takes.
+#[derive(Debug, Clone, PartialEq)]
+#[cfg_attr(feature = "serde", derive(serde::Serialize))]
+pub enum OutcomeValue {
+    /// A genuinely empty result — distinct from [`Outcome::Unavailable`],
+    /// which means the result could not be obtained at all.
+    Empty,
+    Text(String),
+    Integer(i64),
+    Boolean(bool),
+    List(Vec<OutcomeValue>),
+    Record(Vec<(String, OutcomeValue)>),
+}
+
+/// The closed set of reasons a binder failed to produce a value (IB-4).
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[cfg_attr(feature = "serde", derive(serde::Serialize))]
+pub enum RejectionMode {
+    /// Nothing was supplied for a binder that requires a value.
+    Absent,
+    /// The source named by the caller could not be obtained at all.
+    Unreadable,
+    /// Present, but not parseable as anything.
+    Malformed,
+    /// Parseable, but not conforming to the binder's declared shape.
+    IllShaped,
+}
+
+/// A binding failure, naming its mode and the binder it concerns (IB-4's
+/// location). Travels the normal result channel as a structured value
+/// (IB-3) — never an unstructured fault.
+#[derive(Debug, Clone, PartialEq, Eq)]
+#[cfg_attr(feature = "serde", derive(serde::Serialize))]
+pub struct Rejection {
+    /// The declared binder this rejection concerns (IB-4's location; this
+    /// crate's [`Binder`] is flat and named, so the binder name is exactly
+    /// the location).
+    pub binder: &'static str,
+    pub mode: RejectionMode,
+    pub detail: String,
+}
+
+/// What dispatch returns for one invocation. `Rejected` means a declared
+/// binder failed, so the body never ran at all (IB-2) — it always names a
+/// binder and a location. `Unavailable` covers everything else that keeps a
+/// result from existing without that being the caller's input at fault: a
+/// resource the body depends on could not be reached, or the invocation
+/// named no invocable the registry knows at all. Neither case has a binder
+/// or a location to name, which is exactly why it is not `Rejected`.
+/// Collapsing `Unavailable` into an empty [`OutcomeValue`] with a
+/// success-shaped `Value` is exactly the quiet failure this split forbids.
+#[derive(Debug, Clone, PartialEq)]
+#[cfg_attr(feature = "serde", derive(serde::Serialize))]
+pub enum Outcome {
+    Value(OutcomeValue),
+    Stream(StreamHandle),
+    Rejected(Rejection),
+    Unavailable { reason: String },
+}
+
+#[cfg(test)]
+mod dispatch_tests {
+    use super::*;
+
+    #[test]
+    fn empty_result_and_unavailable_are_distinct_and_not_interconvertible() {
+        let empty = Outcome::Value(OutcomeValue::Empty);
+        let unavailable = Outcome::Unavailable {
+            reason: "store connection failed".to_string(),
+        };
+        assert_ne!(empty, unavailable);
+        assert!(matches!(empty, Outcome::Value(OutcomeValue::Empty)));
+        assert!(matches!(unavailable, Outcome::Unavailable { .. }));
+    }
+
+    #[test]
+    fn rejection_names_one_of_four_modes_with_its_binder_location() {
+        for mode in [
+            RejectionMode::Absent,
+            RejectionMode::Unreadable,
+            RejectionMode::Malformed,
+            RejectionMode::IllShaped,
+        ] {
+            let rejection = Rejection {
+                binder: "id",
+                mode,
+                detail: "test".to_string(),
+            };
+            assert_eq!(rejection.binder, "id");
+            assert_eq!(rejection.mode, mode);
+        }
+    }
+
+    #[test]
+    fn arg_values_round_trips_by_binder_name() {
+        let mut args = ArgValues::new();
+        args.insert("id", ArgValue::Text("card-1".to_string()));
+        assert_eq!(args.get("id"), Some(&ArgValue::Text("card-1".to_string())));
+        assert_eq!(args.get("missing"), None);
+    }
+
+    #[test]
+    fn invocation_names_its_target_arguments_and_caller() {
+        let mut args = ArgValues::new();
+        args.insert("id", ArgValue::Text("card-1".to_string()));
+        let invocation = Invocation {
+            id: InvocableId::from("core:board.show"),
+            args,
+            caller: Surface::Cli,
+        };
+        assert_eq!(invocation.id.as_str(), "core:board.show");
+        assert_eq!(invocation.caller, Surface::Cli);
+    }
+
+    #[test]
+    fn outcome_value_represents_nested_records_and_lists() {
+        let value = OutcomeValue::Record(vec![
+            ("id".to_string(), OutcomeValue::Text("card-1".to_string())),
+            (
+                "tags".to_string(),
+                OutcomeValue::List(vec![OutcomeValue::Text("urgent".to_string())]),
+            ),
+        ]);
+        match value {
+            OutcomeValue::Record(fields) => assert_eq!(fields.len(), 2),
+            _ => panic!("expected Record"),
+        }
+    }
+}
+
+#[cfg(all(test, feature = "serde"))]
+mod serde_tests {
+    //! `Invocable`/`Outcome` cross the desktop IPC seam Rust → JS only (the
+    //! shell's `catalog()` and the return half of `invoke()`); the argument
+    //! half (`Invocation`, JS → Rust) is a different type and out of this
+    //! crate's current scope. So these types derive `Serialize` and
+    //! deliberately not `Deserialize` — `&'static str` fields (declared
+    //! literals, not owned data) cannot honestly be reconstructed from
+    //! arbitrary wire input without leaking memory per instance, and the
+    //! real data flow never asks them to. A true round-trip is not the
+    //! property to test here; that a shipped descriptor and every `Outcome`
+    //! variant serialize to the expected JSON shape is.
+
+    use super::*;
+
+    #[test]
+    fn descriptor_serializes_every_field_including_nested_binders() {
+        let invocable = Invocable {
+            id: InvocableId::from("core:board.add"),
+            name: "Add card",
+            summary: "Add a card to the board",
+            group: "board",
+            locus: Locus::HostOnly {
+                reason: "shell-owned marshalling, not core logic",
+            },
+            binders: vec![Binder {
+                name: "id",
+                kind: BinderKind::Text,
+                optional: false,
+            }],
+            stability: Stability::Retired {
+                superseded_by: InvocableId::from("core:board.show"),
+            },
+        };
+        let json: serde_json::Value =
+            serde_json::from_str(&serde_json::to_string(&invocable).expect("serialize"))
+                .expect("valid json");
+        assert_eq!(json["name"], "Add card");
+        assert_eq!(json["binders"][0]["name"], "id");
+        assert_eq!(json["binders"][0]["optional"], false);
+    }
+
+    #[test]
+    fn every_outcome_variant_serializes_to_distinct_json() {
+        let variants: Vec<Outcome> = vec![
+            Outcome::Value(OutcomeValue::Empty),
+            Outcome::Value(OutcomeValue::Record(vec![(
+                "id".to_string(),
+                OutcomeValue::Text("card-1".to_string()),
+            )])),
+            Outcome::Stream(StreamHandle {
+                channel: "board.events".to_string(),
+            }),
+            Outcome::Rejected(Rejection {
+                binder: "id",
+                mode: RejectionMode::Absent,
+                detail: "no id supplied".to_string(),
+            }),
+            Outcome::Unavailable {
+                reason: "store connection failed".to_string(),
+            },
+        ];
+        let mut seen = std::collections::HashSet::new();
+        for outcome in variants {
+            let json = serde_json::to_string(&outcome).expect("serialize");
+            assert!(seen.insert(json), "two variants serialized identically");
+        }
+    }
 }

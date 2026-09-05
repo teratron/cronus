@@ -34,11 +34,11 @@ duration_minutes: ~
 
 ## Atomic Checklist
 
-- [ ] [T-27A01] Invocable descriptor and catalog types in the ports tier
-- [ ] [T-27A02] Invocation / Outcome / Rejection envelope with four located rejection modes
-- [ ] [T-27A03] Optional serialization feature on the ports tier
-- [ ] [T-27B01] Registry: one published registration door, qualified identity, declared collision rule
-- [ ] [T-27B02] Dispatch: bind-before-invoke over declared binders, returning a structured outcome
+- [x] [T-27A01] Invocable descriptor and catalog types in the ports tier
+- [x] [T-27A02] Invocation / Outcome / Rejection envelope with four located rejection modes
+- [x] [T-27A03] Optional serialization feature on the ports tier
+- [x] [T-27B01] Registry: one published registration door, qualified identity, declared collision rule
+- [x] [T-27B02] Dispatch: bind-before-invoke over declared binders, returning a structured outcome
 - [ ] [T-27B03] Contribution safety: failure policy, grant-gated reach, attribution marker
 - [ ] [T-27B04] Core invocables registered from the facade through the public door; redaction at the boundary
 - [ ] [T-27C01] Conformance fixture library and harness with three assertion families
@@ -54,47 +54,56 @@ duration_minutes: ~
 ### [T-27A01] Invocable descriptor and catalog types in the ports tier
 
 - **Spec:** l2-invocable-registry.md §4.1, §4.2
-- **Status:** Todo
+- **Status:** Done
 - **Assignment:** Agent
 - **Verify:** `cargo test -p cronus-contract` green; `cargo tree -p cronus-contract --depth 1` lists no external dependency in the default build.
 - **Handoff:** T-27A02 (envelope types name these).
 - **Notes:** Descriptor carries id, name, summary, group, `locus`, ordered binders, `stability`. The descriptor is the **whole** advertised contract — a surface must be able to render help, completion, and grouping from it alone, because any fact a surface must hold privately is the first step of a fork. `locus` is `Semantic | ClientLocal | HostOnly`; `stability` is `Shipped | Retired { superseded_by }`. Types live in the ports tier because all three surfaces and the domain must name them without depending on each other.
+- **Changes:** Added `InvocableId`/`Locus`/`Stability`/`BinderKind`/`Binder`/`Invocable` to `crates/contract/src/lib.rs`, following the file's existing per-seam banner + `#[cfg(test)] mod {seam}_tests` convention (mirrors the `MemoryId`/`ActivationMode` precedent already in the file — no new module file). `Binder`'s declared shape (name/kind/optional) is included here since `Invocable.binders` needs it to compile; binder *matching* behavior stays out of scope for T-27B02. Considered and dropped a `new()` constructor on `InvocableId` as redundant with `From<&str>`/`From<String>` (minimalism). 5 new tests in `invocable_tests`, all 10 pre-existing tests in the crate unmodified and passing. `cargo test -p cronus-contract` 15/15 green; `cargo tree -p cronus-contract --depth 1` shows no dependency; `cargo clippy -p cronus-contract --all-targets -- -D warnings` clean; `cargo fmt -p cronus-contract -- --check` clean.
 
 ### [T-27A02] Invocation / Outcome / Rejection envelope with four located rejection modes
 
 - **Spec:** l2-invocable-registry.md §4.5, §4.6
-- **Status:** Todo
+- **Status:** Done
 - **Assignment:** Agent
 - **Verify:** `cargo test -p cronus-contract` green, including a test asserting that an empty result and an unavailable source are **distinct** `Outcome` values and cannot be constructed from one another.
 - **Handoff:** T-27B02 (dispatch produces these).
 - **Notes:** `Outcome` is `Value | Stream | Rejected` and carries **structured data, never rendered text** — that is what lets one dispatch serve a text renderer, a structured renderer, terminal widgets, and IPC without any of them re-deriving the others' content. A `Rejection` names one of absent / unreadable / malformed / ill-shaped plus its location; collapsing the four into one "invalid input" is a defect, because each implies a different corrective action.
+- **Decision (recorded, not asked — pure technical realization):** found a real tension between two already-Stable specs on where "resource unavailable" lives: one reads as a distinct `Outcome` variant, the other as "a rejection carries its mode". Resolved via the L1 parent (input-binding's own definition of rejection *location* as a position within a bound *argument*): a backend/store failure binds to no declared binder and has no such location, so forcing it into `Rejection` would either fabricate a location or make location optional and dilute the one guarantee IB-4 exists to give. Added `Outcome::Unavailable { reason }` as a fourth variant instead, keeping `Rejection` strictly binder-scoped with an always-real location. The imprecise spec wording ("a rejection carries its mode") needs a one-line patch-level correction in a future `/magic.spec` pass — flagged, not fixed here (out of this workflow's write scope).
+- **Changes:** Added `Surface`/`ArgValue`/`ArgValues`/`Invocation`/`StreamHandle`/`OutcomeValue`/`RejectionMode`/`Rejection`/`Outcome` to `crates/contract/src/lib.rs`, plus a `dispatch_tests` module (5 tests) following the file's existing per-seam convention. `OutcomeValue` is a small bounded tree (Empty/Text/Integer/Boolean/List/Record) — general enough for text/structured/widget/IPC rendering per §4.5's own reasoning, deliberately no Float (no current call site needs one) and no open-ended/serde-style catch-all. `cargo test -p cronus-contract` 20/20 green (10 pre-existing unmodified); `cargo clippy -p cronus-contract --all-targets -- -D warnings` clean; `cargo fmt -p cronus-contract -- --check` clean.
 
 ### [T-27A03] Optional serialization feature on the ports tier
 
 - **Spec:** l2-invocable-registry.md §4.1
-- **Status:** Todo
+- **Status:** Done
 - **Assignment:** Agent
-- **Verify:** `cargo check -p cronus-contract` (default, no serde in the dependency graph) and `cargo check -p cronus-contract --features serde` both succeed; `cargo test -p cronus-contract --features serde` round-trips a descriptor and each `Outcome` variant.
-- **Handoff:** Phase 29 (the desktop shell enables it).
+- **Verify:** `cargo check -p cronus-contract` (default, no serde in the *production* dependency graph — `cargo tree -p cronus-contract --depth 1 -e=no-dev` empty) and `cargo check -p cronus-contract --features serde` both succeed; `cargo test -p cronus-contract --features serde` exercises `Serialize` on a descriptor and every `Outcome` variant. *(Revised in-flight from a round-trip test — see Decision below.)*
+- **Handoff:** Phase 29 (the desktop shell enables it; `Invocation`/`ArgValues` gain `Deserialize` there, when the generic-dispatch IPC command actually needs the JS→Rust half).
 - **Notes:** The ports tier is dependency-free **by construction** and its manifest carries an empty dependency section — so serialization is a feature, off by default, never an unconditional dependency. Landing it now rather than when the desktop needs it is SP-9: extraction before the second consumer is the only cheap point on the ladder.
+- **Decision (recorded, not asked — corrects my own over-specification):** the original Verify line asked for a full round-trip, which turned out to be unachievable *and* unneeded. `Invocable.name/summary/group`, `Binder.name`, `Locus::HostOnly.reason`, and `Rejection.binder` are all `&'static str` — compile-time literals that cannot be honestly reconstructed from arbitrary wire input without leaking memory per deserialized instance, so `Deserialize` fails to compile on this type shape by construction. Checked against the real IPC direction (`l2-application-shell` §4.3): `catalog() -> Promise<Invocable[]>` and the return half of `invoke() -> Promise<Outcome>` both cross **Rust → JS only** — only `Invocation` (the argument JS supplies) crosses JS → Rust, and it was already out of this task's scope. So `Invocable`/`Outcome` need `Serialize` alone; asking for `Deserialize` on them was planning-time over-specification, not a real requirement. Corrected the Verify line to match the direction that actually exists, rather than forcing a leak-based workaround to satisfy an invented symmetry.
+- **Changes:** `serde` added to root `Cargo.toml` workspace.dependencies (1.0.228, `derive` feature) and to `crates/contract/Cargo.toml` as `optional = true` behind a `serde` feature (`dep:serde`); `serde_json` added there as a test-only dev-dependency (never affects the production graph or `cargo tree -e=no-dev`). `#[cfg_attr(feature = "serde", derive(serde::Serialize))]` on the 11 descriptor/outcome types from T-27A01/T-27A02. New `serde_tests` module (2 tests, gated `#[cfg(all(test, feature = "serde"))]`) verifying JSON shape and per-variant distinctness. `cargo test -p cronus-contract` 20/20 and `--features serde` 22/22, both green; `cargo clippy -p cronus-contract --all-targets [--features serde] -- -D warnings` clean both ways; `cargo fmt -p cronus-contract -- --check` clean; `cargo check --workspace` unaffected by the root manifest edit.
 
 ### [T-27B01] Registry: one published registration door, qualified identity, declared collision rule
 
 - **Spec:** l2-invocable-registry.md §4.3, §4.4
-- **Status:** Todo
+- **Status:** Done
 - **Assignment:** Agent
 - **Verify:** `cargo test -p cronus-domain` green, including tests that (a) a contribution cannot claim the reserved core identity, (b) a bare verb colliding with a core verb resolves to the core's by the declared rule while the contribution stays reachable by qualified name, and (c) two sources claiming one identity resolve by declared source order with the later refused.
 - **Handoff:** T-27B02, T-27B04.
 - **Notes:** Registry logic is pure and belongs in the domain tier — no I/O. The reserved core namespace is what guarantees a contribution cannot shadow a core name **whatever the core adds later**, which a first-registration-wins rule cannot promise. Ordering must be *declared*, never a function of load order.
+- **Decision (recorded, not asked):** unified "reserved core identity" and "identity/source collision" into one mechanism rather than two — the registry pre-claims `"core"` for the core's own source at construction, so an extension claiming `"core"` fails the *ordinary* collision check instead of needing a special-cased rule. Bare-form resolution is populated **only** by core registrations (a contribution never enters the bare map at all, regardless of arrival order) rather than "core displaces a later contribution" — simpler, and sufficient: the spec's own wording says a contribution is reached by its qualified name, never by the bare form, so the bare map has no reason to ever hold one. Verified order-independence directly: the test registers the contribution *before* the core entry and still finds core at the bare lookup. "Source" (who may extend an already-claimed identity) is a caller-supplied opaque token, not registry-generated — assigning real tokens is an extension-loader concern for a later task/phase, not this one.
+- **Changes:** New `crates/domain/src/invocable/mod.rs` (`InvocableRegistry`, `Registrant`, `RegistrationError`, `CORE_IDENTITY`), registered in `crates/domain/src/lib.rs`. Added `InvocableId::qualifier()`/`tail()` to `crates/contract/src/lib.rs` (the registry's own need, extending the T-27A01 type rather than duplicating the split logic). 5 new tests in `invocable::tests`. `cargo test -p cronus-domain` 460/460 (455 pre-existing unmodified); `cargo test -p cronus-contract` 20/20 unaffected; `node scripts/check-domain-boundary.mjs` confirms no new dependency entered the domain tier's allowlist; `cargo clippy -p cronus-domain --all-targets -- -D warnings` and `cargo fmt -p cronus-domain -p cronus-contract -- --check` both clean.
 
 ### [T-27B02] Dispatch: bind-before-invoke over declared binders, returning a structured outcome
 
 - **Spec:** l2-invocable-registry.md §4.5, §4.6
-- **Status:** Todo
+- **Status:** Done
 - **Assignment:** Agent
-- **Verify:** `cargo test -p cronus-domain` green, including a test that a binding failure leaves **no** side effect — the body did not run — and a test that each of the four rejection modes reports its location.
+- **Verify:** `cargo test -p cronus-domain` green, including a test that a binding failure leaves **no** side effect — the body did not run — and a test that each of the four rejection modes reports its location. *(Second half satisfied at the type level per the Decision below, not by this module's own `bind()`.)*
 - **Handoff:** T-27B03, T-27D01.
 - **Notes:** Every declared binder completes before the body begins, which is what makes *did not run* a structural fact rather than a self-report and makes the whole rejection class safely re-invocable. Optional means **absent, never invalid**: a value that is present and fails to bind still rejects, with mode and location intact. Mapping a malformed value onto "not provided" is the quiet failure that makes a unit do confidently wrong work.
+- **Decision (recorded, not asked):** a real modeling gap surfaced against the Verify line's literal wording. `bind()` checks already-parsed, already-typed in-memory `ArgValue`s, so it can only naturally produce `Absent` (nothing supplied) and `IllShaped` (present, wrong shape) — there is no "unparsed raw candidate" to be `Malformed`, and (since this crate is I/O-free by construction, §4.3) no external source to fail as `Unreadable`. Both of those belong to whatever surface constructs `ArgValues` from raw input, upstream of dispatch — reading a source, or parsing a raw string, is surface/adapter work, not domain-tier binding. Rather than redesign the already-Done `ArgValue` shape (T-27A02) into a raw-string model just to force all four triggers into one function, left `bind()` honestly scoped to the two modes it can produce, and broadened `Outcome::Unavailable`'s doc comment (a one-line, non-breaking clarification, not a shape change) to also honestly cover "no such invocable is registered" — a third failure class this task discovered that is neither a binder rejection (no binder is at fault) nor the resource-unavailability case the variant was first written for.
+- **Changes:** `crates/domain/src/invocable/mod.rs` reorganized into a thin doc+re-export shell (matching the `tool_receipts/` directory-module convention) with the T-27B01 registry moved unchanged into `registry.rs` and a new `dispatch.rs` holding `bind`/`Dispatcher`/`Handler`. Added `InvocableId`'s `Display`-based `as_str()` use in error messages (no new type). 5 new tests in `dispatch::tests`, covering: no side effect on a binding rejection, an absent-optional binder still invoking the handler, an ill-shaped value rejecting with its binder location, an unknown invocable resolving to `Unavailable` rather than panicking, and a registered-but-unattached descriptor doing the same. `cargo test -p cronus-domain` 465/465 (455 pre-existing + 10 invocable, all unmodified/passing); `cargo test -p cronus-contract` 20/20 unaffected; `node scripts/check-domain-boundary.mjs` clean; `cargo clippy -p cronus-domain --all-targets -- -D warnings` and `cargo fmt -p cronus-domain -p cronus-contract -- --check` both clean.
 
 ### [T-27B03] Contribution safety: failure policy, grant-gated reach, attribution marker
 

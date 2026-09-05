@@ -36,6 +36,7 @@ pub mod file_store;
 pub mod global_orch;
 pub mod hooks;
 pub mod inner_monologue;
+pub mod invocable;
 pub mod kanban;
 pub mod knowledge_access;
 pub mod knowledge_ingest;
