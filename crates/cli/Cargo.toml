@@ -12,6 +12,7 @@ path = "src/main.rs"
 [dependencies]
 clap = { workspace = true }
 cronus-codegraph = { workspace = true }
+cronus-contract = { workspace = true }
 cronus-core = { workspace = true }
 nodus = { workspace = true }
 serde_json = { workspace = true }

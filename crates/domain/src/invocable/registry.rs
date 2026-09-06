@@ -408,6 +408,16 @@ impl InvocableRegistry {
         let claimants = self.bare.get(tail)?;
         self.by_id.get(bare_winner(claimants))
     }
+
+    /// Every currently registered descriptor, regardless of identity,
+    /// locus, or stability — the one enumeration every generated
+    /// projection (a parser, a catalog, a slash-command listing) builds
+    /// from. Callers filter by whatever they actually need (a shipped-only
+    /// listing, one locus); this method stays a plain enumeration rather
+    /// than encoding any one caller's policy.
+    pub fn all(&self) -> impl Iterator<Item = &Invocable> {
+        self.by_id.values()
+    }
 }
 
 /// The core-drawn attribution for a contributed invocable, or `None` for a
@@ -585,6 +595,24 @@ mod tests {
                 .register(&Registrant::core(), sample_invocable("core:board.list"))
                 .is_ok()
         );
+    }
+
+    #[test]
+    fn all_enumerates_every_registration_regardless_of_registrant() {
+        let mut registry = InvocableRegistry::new();
+        registry
+            .register(&Registrant::core(), sample_invocable("core:board.list"))
+            .unwrap();
+        registry
+            .register(&granted("myext", "src-1"), sample_invocable("myext:one"))
+            .unwrap();
+
+        let mut ids: Vec<&str> = registry
+            .all()
+            .map(|invocable| invocable.id.as_str())
+            .collect();
+        ids.sort_unstable();
+        assert_eq!(ids, vec!["core:board.list", "myext:one"]);
     }
 
     #[test]

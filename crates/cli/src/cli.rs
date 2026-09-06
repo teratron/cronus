@@ -20,13 +20,6 @@ pub struct Cli {
 
 #[derive(Subcommand)]
 pub enum Command {
-    /// Initialize a Cronus workspace in the target directory
-    Init {
-        /// Target path (defaults to the current directory)
-        path: Option<PathBuf>,
-    },
-    /// Show the current workspace status
-    Status,
     /// Manage workflow (.nodus) files
     Workflow {
         #[command(subcommand)]
@@ -36,11 +29,6 @@ pub enum Command {
     Workspace {
         #[command(subcommand)]
         sub: WorkspaceCommand,
-    },
-    /// Manage memory entries
-    Memory {
-        #[command(subcommand)]
-        sub: MemoryCommand,
     },
     /// Code graph operations
     Codegraph {
@@ -122,21 +110,10 @@ pub enum Command {
         #[command(subcommand)]
         sub: ChangeCommand,
     },
-    /// Self-healing: run health checks, optionally applying safe repairs
-    Doctor {
-        /// Apply safe, deterministic repairs (risky findings still escalate)
-        #[arg(long)]
-        fix: bool,
-    },
     /// Back up the state tier (secrets and cache excluded)
     Backup {
         #[command(subcommand)]
         sub: BackupCommand,
-    },
-    /// Restore a backup into the current state tier
-    Restore {
-        /// Backup id (as shown by `cronus backup list`)
-        backup: String,
     },
     /// Manage background activation
     Activation {
@@ -158,22 +135,6 @@ pub enum Command {
         #[command(subcommand)]
         sub: KnowledgeCommand,
     },
-    /// Self-hosting developer office: conditional, human-admitted, canonical-repo-only
-    Dev {
-        #[command(subcommand)]
-        sub: DevCommand,
-    },
-}
-
-#[derive(Subcommand)]
-pub enum DevCommand {
-    /// Print the resolved admission tier for the current directory
-    Status,
-    /// Grant developer-office admission — a human-operator act; run this
-    /// yourself, never through an agent-invoked path (DVO-3)
-    Admit,
-    /// Revoke developer-office admission
-    Revoke,
 }
 
 #[derive(Subcommand)]
@@ -338,27 +299,6 @@ pub enum LoopCommand {
     Show {
         /// Run id, as printed by `cronus loop run`
         run_id: String,
-    },
-}
-
-#[derive(Subcommand)]
-pub enum MemoryCommand {
-    /// Store a key-value memory entry
-    Store {
-        /// Entry title / key
-        key: String,
-        /// Entry body / value
-        value: String,
-    },
-    /// Search memory entries by keyword
-    Search {
-        /// Search query
-        query: String,
-    },
-    /// Delete a memory entry by ID
-    Forget {
-        /// Entry ID to delete
-        id: String,
     },
 }
 

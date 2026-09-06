@@ -18,12 +18,11 @@ use cronus_core::invocable_bootstrap::bootstrap;
 fn core_invocables_and_a_contribution_share_one_registration_door() {
     let (mut registry, _dispatcher) = bootstrap(Engine::new());
 
-    assert!(
-        registry
-            .resolve(&InvocableId::new("core:status").expect("well-formed invocable id"))
-            .is_found(),
-        "bootstrap must register core:status"
-    );
+    // `core:status` is deliberately not asserted here any more: it moved to
+    // the CLI frontend's own installation-grammar declaration (installation
+    // verbs are declared by the frontend that owns them, not the shared
+    // facade), so the facade's own `bootstrap` no longer registers it.
+    // `core:version` alone still proves this test's actual point.
     assert!(
         registry
             .resolve(&InvocableId::new("core:version").expect("well-formed invocable id"))
@@ -43,8 +42,8 @@ fn core_invocables_and_a_contribution_share_one_registration_door() {
     };
     let registrant = Registrant::extension("myext", "src-1").with_grant(CONTRIBUTE_GRANT);
 
-    // The SAME `register` the bootstrap used for "core:status"/"core:version"
-    // accepts this contribution — no privileged, core-only path exists.
+    // The SAME `register` the bootstrap used for "core:version" accepts
+    // this contribution — no privileged, core-only path exists.
     assert!(registry.register(&registrant, contribution).is_ok());
     assert!(
         registry
@@ -98,5 +97,86 @@ fn dispatch_output_passes_through_the_shared_redaction_path() {
             assert!(text.contains("***"), "masked output must show the mask");
         }
         other => panic!("expected Ran(Value(Text)), got {other:?}"),
+    }
+}
+
+/// The first real semantic migration (§4.1.1's generated-parser half):
+/// `memory.store`/`memory.search`/`memory.forget` registered through
+/// `bootstrap`, driven through the real dispatch path — a real store call,
+/// not a stand-in.
+///
+/// Each verb opens its own store independently, exactly preserving the
+/// pre-migration behavior: the handler this test drives calls
+/// `MemoryStore::open_in_memory()` fresh per dispatch, the identical
+/// pattern the CLI's old per-command `open_store()` used. This is why
+/// `search`/`forget` below do **not** find what `store` just wrote — an
+/// ephemeral, per-call store was already the shipped behavior before this
+/// migration, carried through unchanged rather than quietly "fixed" as a
+/// side effect of moving the dispatch path (SP-10).
+#[test]
+fn memory_store_returns_a_new_entry_id() {
+    let (registry, dispatcher) = bootstrap(Engine::new());
+    let mut args = cronus_contract::ArgValues::new();
+    args.insert("key", cronus_contract::ArgValue::Text("fact".to_string()));
+    args.insert(
+        "value",
+        cronus_contract::ArgValue::Text("the sky is blue".to_string()),
+    );
+    let invocation = cronus_contract::Invocation {
+        id: InvocableId::new("core:memory.store").expect("well-formed invocable id"),
+        args,
+        caller: cronus_contract::Surface::Cli,
+    };
+
+    match dispatcher.dispatch(&registry, &invocation) {
+        Dispatched::Ran(Outcome::Value(OutcomeValue::Record(fields))) => {
+            assert_eq!(fields[0].0, "id");
+            assert!(matches!(fields[0].1, OutcomeValue::Text(ref id) if !id.is_empty()));
+        }
+        other => panic!("expected a successful store Record, got {other:?}"),
+    }
+}
+
+#[test]
+fn memory_search_with_no_matches_is_a_zero_item_list_not_an_empty_result() {
+    let (registry, dispatcher) = bootstrap(Engine::new());
+    let mut args = cronus_contract::ArgValues::new();
+    args.insert(
+        "query",
+        cronus_contract::ArgValue::Text("nonexistent".to_string()),
+    );
+    let invocation = cronus_contract::Invocation {
+        id: InvocableId::new("core:memory.search").expect("well-formed invocable id"),
+        args,
+        caller: cronus_contract::Surface::Cli,
+    };
+
+    match dispatcher.dispatch(&registry, &invocation) {
+        Dispatched::Ran(Outcome::Value(OutcomeValue::List(items))) => {
+            assert!(items.is_empty());
+        }
+        other => panic!("expected an empty List, not Empty or anything else, got {other:?}"),
+    }
+}
+
+#[test]
+fn memory_forget_of_an_unknown_id_is_unavailable_not_a_silent_success() {
+    let (registry, dispatcher) = bootstrap(Engine::new());
+    let mut args = cronus_contract::ArgValues::new();
+    args.insert(
+        "id",
+        cronus_contract::ArgValue::Text("no-such-entry".to_string()),
+    );
+    let invocation = cronus_contract::Invocation {
+        id: InvocableId::new("core:memory.forget").expect("well-formed invocable id"),
+        args,
+        caller: cronus_contract::Surface::Cli,
+    };
+
+    match dispatcher.dispatch(&registry, &invocation) {
+        Dispatched::Ran(Outcome::Unavailable { reason }) => {
+            assert!(reason.contains("no-such-entry"));
+        }
+        other => panic!("expected Unavailable naming the missing id, got {other:?}"),
     }
 }

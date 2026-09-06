@@ -3,11 +3,8 @@ use crate::output::Context;
 
 pub fn dispatch(command: Command, ctx: &Context) -> i32 {
     match command {
-        Command::Init { path } => init::run(path, ctx),
-        Command::Status => status::run(ctx),
         Command::Workflow { sub } => workflow::dispatch(sub, ctx),
         Command::Workspace { sub } => workspace::dispatch(sub, ctx),
-        Command::Memory { sub } => memory::dispatch(sub, ctx),
         Command::Codegraph { sub } => codegraph_cmd::dispatch(sub, ctx),
         Command::Agent { sub } => agent::dispatch(sub, ctx),
         Command::Role { sub } => role::dispatch(sub, ctx),
@@ -24,20 +21,17 @@ pub fn dispatch(command: Command, ctx: &Context) -> i32 {
         Command::Mission { sub } => mission::dispatch(sub, ctx),
         Command::Research { sub } => research::dispatch(sub, ctx),
         Command::Change { sub } => change::dispatch(sub, ctx),
-        Command::Doctor { fix } => doctor::run(fix, ctx),
         Command::Backup { sub } => backup_cmd::dispatch(sub, ctx),
-        Command::Restore { backup } => backup_cmd::restore(&backup, ctx),
         Command::Activation { sub } => activation_cmd::dispatch(sub, ctx),
         Command::Loop { sub } => loop_cmd::dispatch(sub, ctx),
         Command::Archetype { sub } => archetype_cmd::dispatch(sub, ctx),
         Command::Knowledge { sub } => knowledge_cmd::dispatch(sub, ctx),
-        Command::Dev { sub } => dev_office_cmd::dispatch(sub, ctx),
     }
 }
 
 // ─── init ─────────────────────────────────────────────────────────────────────
 
-mod init {
+pub(crate) mod init {
     use std::path::{Path, PathBuf};
 
     use cronus_core::state;
@@ -124,7 +118,7 @@ mod init {
 
 // ─── status ───────────────────────────────────────────────────────────────────
 
-mod status {
+pub(crate) mod status {
     use std::path::Path;
 
     use cronus_core::paths::{Paths, Root};
@@ -195,7 +189,7 @@ mod status {
 
 // ─── doctor ───────────────────────────────────────────────────────────────────
 
-mod doctor {
+pub(crate) mod doctor {
     use std::path::Path;
 
     use cronus_core::doctor::{self, Disposition};
@@ -293,7 +287,7 @@ mod doctor {
 
 // ─── backup ───────────────────────────────────────────────────────────────────
 
-mod backup_cmd {
+pub(crate) mod backup_cmd {
     use std::path::{Path, PathBuf};
 
     use cronus_core::backup::{self, BackupOptions};
@@ -1187,145 +1181,6 @@ mod workspace {
         #[allow(dead_code)]
         fn _use_ctx() -> Context {
             text_ctx()
-        }
-    }
-}
-
-// ─── memory ───────────────────────────────────────────────────────────────────
-
-mod memory {
-    use cronus_core::memory::{MemoryEntry, MemoryKind, MemorySource, store::MemoryStore};
-
-    use crate::cli::MemoryCommand;
-    use crate::output::Context;
-
-    fn open_store() -> Result<MemoryStore, String> {
-        MemoryStore::open_in_memory().map_err(|e| e.to_string())
-    }
-
-    pub fn dispatch(sub: MemoryCommand, ctx: &Context) -> i32 {
-        match sub {
-            MemoryCommand::Store { key, value } => store_entry(key, value, ctx),
-            MemoryCommand::Search { query } => search_entries(query, ctx),
-            MemoryCommand::Forget { id } => forget_entry(id, ctx),
-        }
-    }
-
-    fn store_entry(key: String, value: String, ctx: &Context) -> i32 {
-        let store = match open_store() {
-            Ok(s) => s,
-            Err(e) => {
-                eprintln!("error: {e}");
-                return 1;
-            }
-        };
-        let entry = MemoryEntry::new(
-            MemoryKind::ProjectContext,
-            MemorySource::System,
-            key.clone(),
-            value,
-        );
-        match store.add(entry) {
-            Ok(id) => {
-                if ctx.is_json() {
-                    println!("{{\"result\":\"stored\",\"id\":\"{id}\"}}");
-                } else {
-                    println!("Stored: {key} ({id})");
-                }
-                0
-            }
-            Err(e) => {
-                eprintln!("error: {e}");
-                1
-            }
-        }
-    }
-
-    fn search_entries(query: String, ctx: &Context) -> i32 {
-        let store = match open_store() {
-            Ok(s) => s,
-            Err(e) => {
-                eprintln!("error: {e}");
-                return 1;
-            }
-        };
-        match store.search_fts(&query, 10) {
-            Ok(entries) => {
-                if ctx.is_json() {
-                    let items: Vec<String> = entries
-                        .iter()
-                        .map(|e| format!("{{\"id\":\"{}\",\"title\":\"{}\"}}", e.id, e.title))
-                        .collect();
-                    println!("[{}]", items.join(","));
-                } else if entries.is_empty() {
-                    println!("No results for '{query}'.");
-                } else {
-                    for e in &entries {
-                        println!("{}: {}", e.id, e.title);
-                    }
-                }
-                0
-            }
-            Err(e) => {
-                eprintln!("error: {e}");
-                1
-            }
-        }
-    }
-
-    fn forget_entry(id: String, ctx: &Context) -> i32 {
-        let store = match open_store() {
-            Ok(s) => s,
-            Err(e) => {
-                eprintln!("error: {e}");
-                return 1;
-            }
-        };
-        match store.delete(&id) {
-            Ok(true) => {
-                if ctx.is_json() {
-                    println!("{{\"result\":\"deleted\",\"id\":\"{id}\"}}");
-                } else {
-                    println!("Deleted: {id}");
-                }
-                0
-            }
-            Ok(false) => {
-                eprintln!("error: entry '{id}' not found");
-                1
-            }
-            Err(e) => {
-                eprintln!("error: {e}");
-                1
-            }
-        }
-    }
-
-    #[cfg(test)]
-    mod tests {
-        use super::{forget_entry, search_entries, store_entry};
-        use crate::output::{Context, OutputFormat};
-
-        fn ctx() -> Context {
-            Context::new(OutputFormat::Text)
-        }
-
-        #[test]
-        fn memory_store_exits_0() {
-            assert_eq!(
-                store_entry("fact".into(), "the sky is blue".into(), &ctx()),
-                0
-            );
-        }
-
-        #[test]
-        fn memory_search_exits_0_empty() {
-            assert_eq!(search_entries("nothing".into(), &ctx()), 0);
-        }
-
-        #[test]
-        fn memory_forget_exits_1_for_unknown() {
-            assert_eq!(forget_entry("nonexistent-id".into(), &ctx()), 1);
         }
     }
 }
@@ -3856,7 +3711,7 @@ mod knowledge_cmd {
 
 // ─── dev ──────────────────────────────────────────────────────────────────────
 
-mod dev_office_cmd {
+pub(crate) mod dev_office_cmd {
     use std::path::{Path, PathBuf};
 
     use cronus_core::auth::{DeveloperAdmissionStore, HumanPrincipal};
@@ -3864,7 +3719,6 @@ mod dev_office_cmd {
     use cronus_core::dev_office_gate::{AuthLocalAdmissionReader, repo_authenticity};
     use cronus_core::paths::{Paths, Root};
 
-    use crate::cli::DevCommand;
     use crate::output::Context;
 
     /// The shipped default (DVO-5): the feedback tier is off. A build/deploy
@@ -3897,15 +3751,10 @@ mod dev_office_cmd {
         }
     }
 
-    pub fn dispatch(sub: DevCommand, ctx: &Context) -> i32 {
-        match sub {
-            DevCommand::Status => status(ctx),
-            DevCommand::Admit => admit(ctx),
-            DevCommand::Revoke => revoke(ctx),
-        }
-    }
-
-    fn status(ctx: &Context) -> i32 {
+    // Reached directly from `crate::installation::dispatch` now — the
+    // installation half's own generated grammar owns the three-verb `dev`
+    // group, so no `DevCommand`-shaped wrapper is needed here any more.
+    pub(crate) fn status(ctx: &Context) -> i32 {
         let cwd = std::env::current_dir().unwrap_or_else(|_| PathBuf::from("."));
         let label = tier_label(resolve_tier(&cwd));
         if ctx.is_json() {
@@ -3919,7 +3768,7 @@ mod dev_office_cmd {
     /// The CLI operator running this command themselves IS the DVO-3 human
     /// principal — a legitimate admission path, distinct from an *agent*
     /// self-granting through a tool call (no such tool call exists).
-    fn admit(ctx: &Context) -> i32 {
+    pub(crate) fn admit(ctx: &Context) -> i32 {
         let path = admission_path();
         if let Some(parent) = path.parent() {
             let _ = std::fs::create_dir_all(parent);
@@ -3940,7 +3789,7 @@ mod dev_office_cmd {
         }
     }
 
-    fn revoke(ctx: &Context) -> i32 {
+    pub(crate) fn revoke(ctx: &Context) -> i32 {
         let path = admission_path();
         if let Some(parent) = path.parent() {
             let _ = std::fs::create_dir_all(parent);
