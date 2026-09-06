@@ -155,14 +155,24 @@ pub fn matched_generated_group<'a>(
 /// the group matched but no verb subcommand was actually given (clap's own
 /// `--help`/usage handling covers that case before this is ever reached in
 /// practice).
+///
+/// Scoped to `group` deliberately: verb names are unique only *within* a
+/// group (the whole reason the tree nests verbs under their group in the
+/// first place), not across the full descriptor set — searching the
+/// unscoped set let the first alphabetically-sorted group holding a
+/// same-named verb silently win over the one the user actually typed
+/// (`role list` resolving to `core:exec.list` the moment a second group
+/// also declared a `list` verb). A regression test below proves this with
+/// two groups sharing a verb name.
 pub fn invocation_from_matches<'a>(
+    group: &str,
     group_matches: &ArgMatches,
     invocables: &'a [&'a Invocable],
 ) -> Option<(&'a Invocable, ArgValues)> {
     let (verb_name, verb_matches) = group_matches.subcommand()?;
     let invocable = invocables
         .iter()
-        .find(|invocable| verb_of(invocable) == verb_name)?;
+        .find(|invocable| invocable.group == group && verb_of(invocable) == verb_name)?;
 
     let mut args = ArgValues::new();
     for binder in &invocable.binders {
@@ -264,8 +274,8 @@ mod tests {
             .expect("parse must succeed");
         let (_, group_matches) = matches.subcommand().unwrap();
 
-        let (resolved, args) =
-            invocation_from_matches(group_matches, &invocables).expect("store must resolve");
+        let (resolved, args) = invocation_from_matches("memory", group_matches, &invocables)
+            .expect("store must resolve");
         assert_eq!(resolved.id.as_str(), "core:memory.store");
         assert_eq!(args.get("key"), Some(&ArgValue::Text("fact".to_string())));
         assert_eq!(
@@ -304,7 +314,54 @@ mod tests {
             .expect("--presets must parse");
         let (_, group_matches) = matches.subcommand().unwrap();
         let (_, args) =
-            invocation_from_matches(group_matches, &invocables).expect("list must resolve");
+            invocation_from_matches("role", group_matches, &invocables).expect("list must resolve");
+        assert_eq!(args.get("presets"), Some(&ArgValue::Flag));
+    }
+
+    /// A real bug this exact shape produced: two different groups each
+    /// declaring a `list` verb, and typing `role list` silently resolved
+    /// to the *other* group's `list` (the first one alphabetically) once
+    /// `invocation_from_matches` searched the whole descriptor set instead
+    /// of the matched group alone. `exec.list` takes no binders at all, so
+    /// the wrong resolution was invisible except by its own dropped
+    /// `--presets` flag — caught by comparing which invocable actually
+    /// resolved, not merely that dispatch succeeded.
+    #[test]
+    fn invocation_from_matches_resolves_the_matched_groups_own_verb_not_a_same_named_one_elsewhere()
+    {
+        let exec_list = descriptor("core:exec.list", "exec", Vec::new());
+        let role_list = descriptor(
+            "core:role.list",
+            "role",
+            vec![Binder {
+                name: "presets",
+                kind: BinderKind::Flag,
+                optional: true,
+            }],
+        );
+        // Sorted the same way `semantic_shipped` sorts its output — "exec"
+        // alphabetically precedes "role", which is exactly the ordering
+        // that let the bug hide.
+        let invocables = vec![&exec_list, &role_list];
+
+        let (groups, _) = build_semantic_tree(&invocables);
+        let mut tree = Command::new("cronus");
+        for group in groups {
+            tree = tree.subcommand(group);
+        }
+
+        let matches = tree
+            .try_get_matches_from(["cronus", "role", "list", "--presets"])
+            .expect("role list --presets must parse");
+        let (matched_group, group_matches) = matches.subcommand().unwrap();
+        let (resolved, args) = invocation_from_matches(matched_group, group_matches, &invocables)
+            .expect("role list must resolve");
+
+        assert_eq!(
+            resolved.id.as_str(),
+            "core:role.list",
+            "must resolve role's own `list`, not exec's same-named one"
+        );
         assert_eq!(args.get("presets"), Some(&ArgValue::Flag));
     }
 

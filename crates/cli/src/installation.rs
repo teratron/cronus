@@ -22,20 +22,20 @@
 //! projects the `Installation` locus (only the command line does), so the
 //! indirection would buy nothing here.
 //!
-//! Ten of the eleven installation groups live here — `init`, `status`,
-//! `doctor`, `restore`, `dev`, `workspace`, `backup`, `activation`,
-//! `archetype`, and `registry` — covering three tree shapes: **flat** (a
-//! group's one verb's id-tail equals its group name, so it renders as a
-//! single top-level command with no nested verb), **nested** (`dev`,
-//! `workspace`, `backup`, `activation`, `archetype`, `registry` — a group
-//! command containing verb subcommands), and a **named value flag**
-//! (`--actor cli`, `--mode login`), which `BinderKind::NamedText` exists to
-//! express — `Binder` had no positional-vs-named-value distinction before
-//! this module needed one for `workspace create --name/--path`, `backup
-//! create --to`, `activation enable --mode`, and `archetype create --from`.
-//! `ext` (with its own nested `skill` sub-group — a real third level of
-//! nesting this module's two-level tree builder does not yet handle) is the
-//! one remaining group, follow-up work, not silently dropped.
+//! All eleven installation groups live here — `init`, `status`, `doctor`,
+//! `restore`, `dev`, `workspace`, `backup`, `activation`, `archetype`,
+//! `registry`, and `ext` — covering four tree shapes: **flat** (a group's
+//! one verb's id-tail equals its group name, so it renders as a single
+//! top-level command with no nested verb), **nested** (a group command
+//! containing verb subcommands), a **named value flag** (`--actor cli`,
+//! `--mode login`), which `BinderKind::NamedText` exists to express —
+//! `Binder` had no positional-vs-named-value distinction before this module
+//! needed one for `workspace create --name/--path`, `backup create --to`,
+//! `activation enable --mode`, and `archetype create --from` — and one
+//! extra level of **sub-nesting** (`ext skill import|create|status`),
+//! signalled the same way `verb_of` already separates a group from its
+//! verbs: a dot in the verb tail (`skill.import`) names one sub-group, not
+//! a fourth top-level command.
 
 use std::collections::HashSet;
 
@@ -356,6 +356,99 @@ pub fn declared_invocables() -> Vec<Invocable> {
             stability: Stability::Shipped,
             journal_raw_input: true,
         },
+        Invocable {
+            id: id("ext.list"),
+            name: "Ext List",
+            summary: "List registered extensions",
+            group: "ext",
+            locus: Locus::Installation,
+            binders: Vec::new(),
+            stability: Stability::Shipped,
+            journal_raw_input: true,
+        },
+        Invocable {
+            id: id("ext.add"),
+            name: "Ext Add",
+            summary: "Add an extension by manifest path",
+            group: "ext",
+            locus: Locus::Installation,
+            binders: vec![text("path", false)],
+            stability: Stability::Shipped,
+            journal_raw_input: true,
+        },
+        Invocable {
+            id: id("ext.remove"),
+            name: "Ext Remove",
+            summary: "Remove an extension",
+            group: "ext",
+            locus: Locus::Installation,
+            binders: vec![text("id", false)],
+            stability: Stability::Shipped,
+            journal_raw_input: true,
+        },
+        Invocable {
+            id: id("ext.scan"),
+            name: "Ext Scan",
+            summary: "Scan an extension for security issues",
+            group: "ext",
+            locus: Locus::Installation,
+            binders: vec![text("path", false)],
+            stability: Stability::Shipped,
+            journal_raw_input: true,
+        },
+        Invocable {
+            id: id("ext.activate"),
+            name: "Ext Activate",
+            summary: "Activate an extension",
+            group: "ext",
+            locus: Locus::Installation,
+            binders: vec![text("id", false)],
+            stability: Stability::Shipped,
+            journal_raw_input: true,
+        },
+        Invocable {
+            id: id("ext.deactivate"),
+            name: "Ext Deactivate",
+            summary: "Deactivate an extension",
+            group: "ext",
+            locus: Locus::Installation,
+            binders: vec![text("id", false)],
+            stability: Stability::Shipped,
+            journal_raw_input: true,
+        },
+        // `ext skill …` — one level deeper than every other `ext` verb
+        // (§ the flat-vs-nested-vs-sub-nested note on `build_installation_tree`):
+        // the dot in the verb tail (`skill.import`) is what signals it.
+        Invocable {
+            id: id("ext.skill.import"),
+            name: "Ext Skill Import",
+            summary: "Import and convert a foreign skill package",
+            group: "ext",
+            locus: Locus::Installation,
+            binders: vec![text("path", false)],
+            stability: Stability::Shipped,
+            journal_raw_input: true,
+        },
+        Invocable {
+            id: id("ext.skill.create"),
+            name: "Ext Skill Create",
+            summary: "Author a new skill from a natural-language prompt",
+            group: "ext",
+            locus: Locus::Installation,
+            binders: vec![named_text("prompt", false)],
+            stability: Stability::Shipped,
+            journal_raw_input: true,
+        },
+        Invocable {
+            id: id("ext.skill.status"),
+            name: "Ext Skill Status",
+            summary: "Show conversion and review status for one or all tracked skills",
+            group: "ext",
+            locus: Locus::Installation,
+            binders: vec![text("id", true)],
+            stability: Stability::Shipped,
+            journal_raw_input: true,
+        },
     ]
 }
 
@@ -374,6 +467,8 @@ fn group_about(group: &str) -> Option<&'static str> {
         "activation" => Some("Manage background activation"),
         "archetype" => Some("Office archetypes: a prior on staffing, never a roster"),
         "registry" => Some("Agent registry: list and manage agent definitions"),
+        "ext" => Some("Extensions: manage skills, MCP servers, and plugins"),
+        "skill" => Some("Skill packages: import, create, and inspect status"),
         _ => None,
     }
 }
@@ -415,13 +510,52 @@ pub fn build_installation_tree(invocables: &[&Invocable]) -> (Vec<Command>, Hash
             .map(str::to_string)
             .unwrap_or_else(|| format!("{group} operations"));
         let mut nested = Command::new(group.to_string()).about(about);
-        for invocable in members {
+
+        // A verb tail itself containing a dot (`skill.import`) names one
+        // sub-group, one level deeper than every other verb in this group
+        // — `ext skill import`, not a fourth top-level `skill-import`
+        // command. Not a general N-level scheme: exactly one extra level,
+        // for the one group that has ever needed it, following the same
+        // "the dot in the tail is the nesting signal" rule `verb_of`
+        // already uses to separate a group from its verbs.
+        let mut plain_verbs: Vec<&Invocable> = Vec::new();
+        let mut subgroups: std::collections::HashMap<&str, Vec<(&str, &Invocable)>> =
+            std::collections::HashMap::new();
+        for invocable in members.iter().copied() {
+            match verb_of(invocable).split_once('.') {
+                Some((subgroup, leaf)) => subgroups
+                    .entry(subgroup)
+                    .or_default()
+                    .push((leaf, invocable)),
+                None => plain_verbs.push(invocable),
+            }
+        }
+
+        for invocable in plain_verbs {
             let mut verb = Command::new(verb_of(invocable).to_string()).about(invocable.summary);
             for binder in &invocable.binders {
                 verb = verb.arg(arg_for(binder));
             }
             nested = nested.subcommand(verb);
         }
+
+        let mut subgroup_names: Vec<&str> = subgroups.keys().copied().collect();
+        subgroup_names.sort_unstable();
+        for subgroup in subgroup_names {
+            let about = group_about(subgroup)
+                .map(str::to_string)
+                .unwrap_or_else(|| format!("{subgroup} operations"));
+            let mut sub_command = Command::new(subgroup.to_string()).about(about);
+            for (leaf, invocable) in &subgroups[subgroup] {
+                let mut verb = Command::new((*leaf).to_string()).about(invocable.summary);
+                for binder in &invocable.binders {
+                    verb = verb.arg(arg_for(binder));
+                }
+                sub_command = sub_command.subcommand(verb);
+            }
+            nested = nested.subcommand(sub_command);
+        }
+
         groups.push(nested);
     }
 
@@ -442,11 +576,41 @@ pub fn format_arg() -> Arg {
         .default_value("text")
 }
 
-/// Dispatch a resolved installation verb directly to its already-proven
-/// handler in [`crate::commands`] — no shared `Dispatcher`/`Outcome`
-/// indirection, for the reason the module doc gives. Returns the same exit
-/// code the handler itself already returned before this migration.
-pub fn dispatch(group: &str, verb: &str, matches: &ArgMatches, ctx: &Context) -> i32 {
+/// Resolve `group`'s own matched subcommand and dispatch it directly to its
+/// already-proven handler in [`crate::commands`] — no shared
+/// `Dispatcher`/`Outcome` indirection, for the reason the module doc gives.
+/// Returns the same exit code the handler itself already returned before
+/// this migration.
+///
+/// `group_matches` is the group's own top-level `ArgMatches` (what its
+/// `Command` produced), not pre-split into verb/args by the caller: a group
+/// with `ext`'s one extra nesting level needs a second `.subcommand()` call
+/// to reach the leaf verb, and resolving both levels here — rather than
+/// asking every caller to know which groups nest how deep — keeps that
+/// knowledge in the one place [`build_installation_tree`] already has it.
+pub fn dispatch(group: &str, group_matches: &ArgMatches, ctx: &Context) -> i32 {
+    let Some((first, first_matches)) = group_matches.subcommand() else {
+        return application_error(&format!(
+            "internal: {group} matched with no verb subcommand — a bug in this module's own tree, not a caller condition"
+        ));
+    };
+    // A verb never has a subcommand of its own (every verb's own arguments
+    // are positional/named `Arg`s, never further subcommands) — so a
+    // *further* subcommand here means `first` named a sub-group (`skill`),
+    // not a leaf verb, and the leaf verb is one level deeper.
+    let (verb, matches): (String, &ArgMatches) = match first_matches.subcommand() {
+        Some((leaf, leaf_matches)) => (format!("{first}.{leaf}"), leaf_matches),
+        None => (first.to_string(), first_matches),
+    };
+    dispatch_leaf(group, &verb, matches, ctx)
+}
+
+fn application_error(message: &str) -> i32 {
+    eprintln!("error: {message}");
+    1
+}
+
+fn dispatch_leaf(group: &str, verb: &str, matches: &ArgMatches, ctx: &Context) -> i32 {
     match (group, verb) {
         ("init", _) => {
             let path = matches
@@ -578,6 +742,51 @@ pub fn dispatch(group: &str, verb: &str, matches: &ArgMatches, ctx: &Context) ->
                 .cloned()
                 .unwrap_or_default();
             crate::commands::registry::enable(name, ctx)
+        }
+        ("ext", "list") => crate::commands::ext::list(ctx),
+        ("ext", "add") => {
+            let path = matches
+                .get_one::<String>("path")
+                .map(std::path::PathBuf::from)
+                .unwrap_or_default();
+            crate::commands::ext::add(path, ctx)
+        }
+        ("ext", "remove") => {
+            let ext_id = matches.get_one::<String>("id").cloned().unwrap_or_default();
+            crate::commands::ext::remove(ext_id, ctx)
+        }
+        ("ext", "scan") => {
+            let path = matches
+                .get_one::<String>("path")
+                .map(std::path::PathBuf::from)
+                .unwrap_or_default();
+            crate::commands::ext::scan(path, ctx)
+        }
+        ("ext", "activate") => {
+            let ext_id = matches.get_one::<String>("id").cloned().unwrap_or_default();
+            crate::commands::ext::activate(ext_id, ctx)
+        }
+        ("ext", "deactivate") => {
+            let ext_id = matches.get_one::<String>("id").cloned().unwrap_or_default();
+            crate::commands::ext::deactivate(ext_id, ctx)
+        }
+        ("ext", "skill.import") => {
+            let path = matches
+                .get_one::<String>("path")
+                .map(std::path::PathBuf::from)
+                .unwrap_or_default();
+            crate::commands::ext::skill::import(&path, ctx)
+        }
+        ("ext", "skill.create") => {
+            let prompt = matches
+                .get_one::<String>("prompt")
+                .cloned()
+                .unwrap_or_default();
+            crate::commands::ext::skill::create(&prompt, ctx)
+        }
+        ("ext", "skill.status") => {
+            let skill_id = matches.get_one::<String>("id").cloned();
+            crate::commands::ext::skill::status(skill_id, ctx)
         }
         _ => {
             eprintln!(
@@ -714,6 +923,43 @@ mod tests {
         assert_eq!(verb_matches.get_one::<String>("path"), None);
     }
 
+    /// `ext skill create --prompt` — the one group needing a third tree
+    /// level (`ext` → `skill` → its own verbs), proven end to end through
+    /// real parsing: the sub-group renders, its own verb binds its own
+    /// binder, and `dispatch` resolves the composite `"skill.create"` verb
+    /// key rather than stopping at the sub-group's own name.
+    #[test]
+    fn a_sub_nested_groups_verb_parses_and_dispatch_resolves_the_composite_verb() {
+        let invocables = declared_invocables();
+        let refs: Vec<&Invocable> = invocables.iter().filter(|i| i.group == "ext").collect();
+        let (groups, _) = build_installation_tree(&refs);
+        let tree = Command::new("cronus").subcommand(groups.into_iter().next().unwrap());
+
+        let matches = tree
+            .try_get_matches_from(["cronus", "ext", "skill", "create", "--prompt", "a skill"])
+            .expect("ext skill create --prompt must parse");
+        let (_, ext_matches) = matches.subcommand().unwrap();
+        let (subgroup, skill_matches) = ext_matches.subcommand().unwrap();
+        assert_eq!(subgroup, "skill");
+        let (verb, verb_matches) = skill_matches.subcommand().unwrap();
+        assert_eq!(verb, "create");
+        assert_eq!(
+            verb_matches.get_one::<String>("prompt").map(String::as_str),
+            Some("a skill")
+        );
+
+        // `dispatch` itself resolves the same matches down to the leaf —
+        // proven directly rather than only proving the parse tree shape.
+        assert_eq!(
+            dispatch(
+                "ext",
+                ext_matches,
+                &Context::new(crate::output::OutputFormat::Json)
+            ),
+            0
+        );
+    }
+
     /// The literal Verify criterion this task names: the pre-composition
     /// parser and the post-composition catalog registration are two
     /// **consumers** of the same declaration, not two declarations — proven
@@ -728,10 +974,22 @@ mod tests {
         for group in &groups {
             if group.get_subcommands().count() == 0 {
                 parser_verbs.insert((group.get_name().to_string(), group.get_name().to_string()));
-            } else {
-                for verb in group.get_subcommands() {
+                continue;
+            }
+            for verb in group.get_subcommands() {
+                if verb.get_subcommands().count() == 0 {
                     parser_verbs
                         .insert((group.get_name().to_string(), verb.get_name().to_string()));
+                } else {
+                    // `verb` is actually a sub-group (`ext skill`) — one
+                    // level deeper, composed the same way `verb_of` does
+                    // on the catalog side (`"skill.import"`).
+                    for leaf in verb.get_subcommands() {
+                        parser_verbs.insert((
+                            group.get_name().to_string(),
+                            format!("{}.{}", verb.get_name(), leaf.get_name()),
+                        ));
+                    }
                 }
             }
         }

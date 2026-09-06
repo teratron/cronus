@@ -42,9 +42,7 @@ fn main() -> std::process::ExitCode {
                         .copied()
                         .unwrap_or(OutputFormat::Text);
                     let ctx = output::Context::new(format);
-                    let (verb, verb_matches) =
-                        sub_matches.subcommand().unwrap_or(("", sub_matches));
-                    return exit_code(installation::dispatch(name, verb, verb_matches, &ctx));
+                    return exit_code(installation::dispatch(name, sub_matches, &ctx));
                 }
                 // Matched nothing this half owns (an external subcommand,
                 // under `allow_external_subcommands` below) — fall through
@@ -106,14 +104,13 @@ fn main() -> std::process::ExitCode {
     if let Some((name, sub_matches)) = matches.subcommand()
         && installation_group_names.contains(name)
     {
-        let (verb, verb_matches) = sub_matches.subcommand().unwrap_or(("", sub_matches));
-        return exit_code(installation::dispatch(name, verb, verb_matches, &ctx));
+        return exit_code(installation::dispatch(name, sub_matches, &ctx));
     }
 
-    if let Some((_, group_matches)) =
+    if let Some((group, group_matches)) =
         generated::matched_generated_group(&matches, &generated_group_names)
         && let Some((invocable, args)) =
-            generated::invocation_from_matches(group_matches, &semantic)
+            generated::invocation_from_matches(group, group_matches, &semantic)
     {
         let invocation = cronus_contract::Invocation {
             id: invocable.id.clone(),
@@ -214,9 +211,13 @@ fn render(dispatched: Dispatched, ctx: &output::Context) -> i32 {
 }
 
 fn render_value(value: OutcomeValue, ctx: &output::Context) -> i32 {
-    match value {
-        // `core:memory.store` / `core:memory.forget`: a one-field Record
-        // naming the affected entry's id.
+    match &value {
+        // `core:memory.store` / `core:memory.forget` / `core:role.fire` /
+        // `core:exec.create|finalize|discard`: a one-field Record naming
+        // the affected entry's id — kept as its own arm since "Ok: <id>"
+        // reads better than the generic `id: <id>` the fallback below
+        // would produce, and several migrated verbs share this exact
+        // shape.
         OutcomeValue::Record(fields) if fields.len() == 1 && fields[0].0 == "id" => {
             let id = match &fields[0].1 {
                 OutcomeValue::Text(id) => id.as_str(),
@@ -227,69 +228,84 @@ fn render_value(value: OutcomeValue, ctx: &output::Context) -> i32 {
             } else {
                 println!("Ok: {id}");
             }
-            0
         }
-        // `core:memory.search`: a list of `{id, title}` records.
+        OutcomeValue::List(items) if ctx.is_json() => {
+            let rendered: Vec<String> = items.iter().map(render_json).collect();
+            println!("[{}]", rendered.join(","));
+        }
+        OutcomeValue::List(items) if items.is_empty() => println!("No results."),
         OutcomeValue::List(items) => {
-            if ctx.is_json() {
-                let rendered: Vec<String> = items
-                    .iter()
-                    .map(|item| match item {
-                        OutcomeValue::Record(fields) => {
-                            let get = |key: &str| {
-                                fields
-                                    .iter()
-                                    .find(|(name, _)| name == key)
-                                    .and_then(|(_, v)| match v {
-                                        OutcomeValue::Text(s) => Some(s.as_str()),
-                                        _ => None,
-                                    })
-                                    .unwrap_or("")
-                            };
-                            format!(
-                                "{{\"id\":\"{}\",\"title\":\"{}\"}}",
-                                json_escape(get("id")),
-                                json_escape(get("title"))
-                            )
-                        }
-                        _ => "null".to_string(),
-                    })
-                    .collect();
-                println!("[{}]", rendered.join(","));
-            } else if items.is_empty() {
-                println!("No results.");
-            } else {
-                for item in &items {
-                    if let OutcomeValue::Record(fields) = item {
-                        let get = |key: &str| {
-                            fields
-                                .iter()
-                                .find(|(name, _)| name == key)
-                                .and_then(|(_, v)| match v {
-                                    OutcomeValue::Text(s) => Some(s.as_str()),
-                                    _ => None,
-                                })
-                                .unwrap_or("")
-                        };
-                        println!("{}: {}", get("id"), get("title"));
-                    }
-                }
+            for item in items {
+                println!("{}", render_text_line(item));
             }
-            0
         }
-        OutcomeValue::Text(text) => {
-            if ctx.is_json() {
-                println!("\"{}\"", json_escape(&text));
-            } else {
-                println!("{text}");
-            }
-            0
+        OutcomeValue::Text(text) if ctx.is_json() => println!("\"{}\"", json_escape(text)),
+        OutcomeValue::Text(text) => println!("{text}"),
+        // Every other shape — an arbitrary `Record` (`core:codegraph.index`'s
+        // `{path, symbols}`, `core:check.run`'s `{card, language}`, …),
+        // a bare `Integer`/`Boolean`, or `Empty` — has no per-verb bespoke
+        // format to preserve (none was ever shipped for these shapes), so
+        // it renders through the general mapping below rather than
+        // through a hand-written arm per verb: the mapping this whole
+        // renderer stays a genuine bridge, not an ever-growing pile of
+        // special cases, until the uniform renderer replaces it outright.
+        OutcomeValue::Empty => {}
+        other if ctx.is_json() => println!("{}", render_json(other)),
+        other => println!("{}", render_text_line(other)),
+    }
+    0
+}
+
+/// A general JSON projection of any `OutcomeValue` shape — recursive, so a
+/// nested `List`/`Record` renders correctly without a dedicated arm.
+fn render_json(value: &OutcomeValue) -> String {
+    match value {
+        OutcomeValue::Empty => "null".to_string(),
+        OutcomeValue::Text(s) => format!("\"{}\"", json_escape(s)),
+        OutcomeValue::Integer(n) => n.to_string(),
+        OutcomeValue::Boolean(b) => b.to_string(),
+        OutcomeValue::List(items) => {
+            format!(
+                "[{}]",
+                items.iter().map(render_json).collect::<Vec<_>>().join(",")
+            )
         }
-        OutcomeValue::Empty => 0,
-        other => {
-            eprintln!("error: internal: no renderer for this outcome shape yet: {other:?}");
-            1
+        OutcomeValue::Record(fields) => {
+            let rendered: Vec<String> = fields
+                .iter()
+                .map(|(name, v)| format!("\"{}\":{}", json_escape(name), render_json(v)))
+                .collect();
+            format!("{{{}}}", rendered.join(","))
         }
+    }
+}
+
+/// A general one-line text projection: a `Record`'s fields as `key: value`
+/// pairs, everything else inline. Used for a `List`'s items and for any
+/// bare value that reaches the general fallback.
+fn render_text_line(value: &OutcomeValue) -> String {
+    match value {
+        OutcomeValue::Record(fields) => fields
+            .iter()
+            .map(|(name, v)| format!("{name}: {}", render_text_inline(v)))
+            .collect::<Vec<_>>()
+            .join(", "),
+        other => render_text_inline(other),
+    }
+}
+
+fn render_text_inline(value: &OutcomeValue) -> String {
+    match value {
+        OutcomeValue::Empty => "(empty)".to_string(),
+        OutcomeValue::Text(s) => s.clone(),
+        OutcomeValue::Integer(n) => n.to_string(),
+        OutcomeValue::Boolean(b) => b.to_string(),
+        OutcomeValue::List(items) => items
+            .iter()
+            .map(render_text_inline)
+            .collect::<Vec<_>>()
+            .join(", "),
+        record @ OutcomeValue::Record(_) => render_text_line(record),
     }
 }
 

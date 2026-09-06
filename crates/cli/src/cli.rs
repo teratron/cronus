@@ -25,21 +25,6 @@ pub enum Command {
         #[command(subcommand)]
         sub: WorkflowCommand,
     },
-    /// Code graph operations
-    Codegraph {
-        #[command(subcommand)]
-        sub: CodegraphCommand,
-    },
-    /// Agent management
-    Agent {
-        #[command(subcommand)]
-        sub: AgentCommand,
-    },
-    /// Role catalog: hire, fire, and manage agent roles
-    Role {
-        #[command(subcommand)]
-        sub: RoleCommand,
-    },
     /// Kanban board: track work cards through a state machine
     Board {
         #[command(subcommand)]
@@ -54,26 +39,6 @@ pub enum Command {
     Budget {
         #[command(subcommand)]
         sub: BudgetCommand,
-    },
-    /// Execution workspaces: isolated git worktrees per card
-    Exec {
-        #[command(subcommand)]
-        sub: ExecCommand,
-    },
-    /// Quality gates: run lint/test/format checks
-    Check {
-        #[command(subcommand)]
-        sub: CheckCommand,
-    },
-    /// Extensions: manage skills, MCP servers, and plugins
-    Ext {
-        #[command(subcommand)]
-        sub: ExtCommand,
-    },
-    /// Learning loop: review and approve proposed skills
-    Learn {
-        #[command(subcommand)]
-        sub: LearnCommand,
     },
     /// Goal runs: start and manage autonomous goal sessions
     Goal {
@@ -208,49 +173,6 @@ pub enum LoopCommand {
 }
 
 #[derive(Subcommand)]
-pub enum CodegraphCommand {
-    /// Index a directory or file
-    Index {
-        /// Path to index
-        path: std::path::PathBuf,
-    },
-    /// Search the code graph by keyword
-    Search {
-        /// Search query
-        query: String,
-    },
-}
-
-#[derive(Subcommand)]
-pub enum AgentCommand {
-    /// Show agent identity files and status
-    Constitution,
-    /// Show agent runtime status
-    Status,
-}
-
-#[derive(Subcommand)]
-pub enum RoleCommand {
-    /// List hired instances (or preset catalog with --presets)
-    List {
-        #[arg(long)]
-        presets: bool,
-    },
-    /// Hire a role from the preset catalog
-    Hire {
-        preset: String,
-        #[arg(long)]
-        name: Option<String>,
-    },
-    /// Show a hired role instance
-    Show { id: String },
-    /// Create a custom role
-    Create { id: String, display_name: String },
-    /// Fire (remove) a hired role
-    Fire { id: String },
-}
-
-#[derive(Subcommand)]
 pub enum BoardCommand {
     /// List board cards
     List,
@@ -306,83 +228,6 @@ pub enum BudgetCommand {
     Set { limit: f64 },
     /// Reset budget counters
     Reset,
-}
-
-#[derive(Subcommand)]
-pub enum ExecCommand {
-    /// List execution workspaces
-    List,
-    /// Create an execution workspace for a card
-    Create { ws_id: String, card_id: String },
-    /// Finalize an execution workspace
-    Finalize { id: String },
-    /// Discard an execution workspace
-    Discard { id: String },
-}
-
-#[derive(Subcommand)]
-pub enum CheckCommand {
-    /// Run quality gates for a card
-    Run {
-        card_id: String,
-        #[arg(long)]
-        path: Option<PathBuf>,
-    },
-    /// Show gate results for a card
-    Show { card_id: String },
-    /// Show gate result history for a card
-    History { card_id: String },
-}
-
-#[derive(Subcommand)]
-pub enum ExtCommand {
-    /// List registered extensions
-    List,
-    /// Add an extension by manifest path
-    Add { path: PathBuf },
-    /// Remove an extension
-    Remove { id: String },
-    /// Scan an extension for security issues
-    Scan { path: PathBuf },
-    /// Activate an extension
-    Activate { id: String },
-    /// Deactivate an extension
-    Deactivate { id: String },
-    /// Skill packages: import, create, and inspect status
-    Skill {
-        #[command(subcommand)]
-        sub: SkillCommand,
-    },
-}
-
-#[derive(Subcommand)]
-pub enum SkillCommand {
-    /// Import and convert a foreign skill package
-    Import {
-        /// Path to the foreign skill file or package root
-        path: PathBuf,
-    },
-    /// Author a new skill from a natural-language prompt
-    Create {
-        /// Description of the desired skill
-        #[arg(long)]
-        prompt: String,
-    },
-    /// Show conversion and review status for one or all tracked skills
-    Status {
-        /// Skill id (all tracked skills if omitted)
-        id: Option<String>,
-    },
-}
-
-#[derive(Subcommand)]
-pub enum LearnCommand {
-    /// List pending skill proposals
-    List,
-    /// Approve a skill proposal
-    Approve { id: String },
-    /// Reject a skill proposal
-    Reject { id: String },
 }
 
 #[derive(Subcommand)]

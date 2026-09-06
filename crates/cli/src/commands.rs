@@ -4,16 +4,9 @@ use crate::output::Context;
 pub fn dispatch(command: Command, ctx: &Context) -> i32 {
     match command {
         Command::Workflow { sub } => workflow::dispatch(sub, ctx),
-        Command::Codegraph { sub } => codegraph_cmd::dispatch(sub, ctx),
-        Command::Agent { sub } => agent::dispatch(sub, ctx),
-        Command::Role { sub } => role::dispatch(sub, ctx),
         Command::Board { sub } => board::dispatch(sub, ctx),
         Command::Schedule { sub } => schedule::dispatch(sub, ctx),
         Command::Budget { sub } => budget_cmd::dispatch(sub, ctx),
-        Command::Exec { sub } => exec::dispatch(sub, ctx),
-        Command::Check { sub } => check::dispatch(sub, ctx),
-        Command::Ext { sub } => ext::dispatch(sub, ctx),
-        Command::Learn { sub } => learn::dispatch(sub, ctx),
         Command::Goal { sub } => goal::dispatch(sub, ctx),
         Command::Trigger { sub } => trigger::dispatch(sub, ctx),
         Command::Mission { sub } => mission::dispatch(sub, ctx),
@@ -1180,265 +1173,6 @@ pub(crate) mod workspace {
     }
 }
 
-// ─── codegraph ────────────────────────────────────────────────────────────────
-
-mod codegraph_cmd {
-    use cronus_codegraph::{
-        extractor::{Extractor, RegexExtractor},
-        index::CodeIndex,
-    };
-    use std::path::PathBuf;
-
-    use crate::cli::CodegraphCommand;
-    use crate::output::Context;
-
-    fn open_index() -> Result<CodeIndex, String> {
-        CodeIndex::open_in_memory().map_err(|e| e.to_string())
-    }
-
-    pub fn dispatch(sub: CodegraphCommand, ctx: &Context) -> i32 {
-        match sub {
-            CodegraphCommand::Index { path } => index_path(path, ctx),
-            CodegraphCommand::Search { query } => search_graph(query, ctx),
-        }
-    }
-
-    fn index_path(path: PathBuf, ctx: &Context) -> i32 {
-        let index = match open_index() {
-            Ok(idx) => idx,
-            Err(e) => {
-                eprintln!("error: {e}");
-                return 1;
-            }
-        };
-        let extractor = RegexExtractor;
-        let mut total = 0usize;
-
-        if path.is_file() {
-            total += index_file(&index, &path, &extractor);
-        } else if path.is_dir()
-            && let Ok(entries) = std::fs::read_dir(&path)
-        {
-            for entry in entries.filter_map(|e| e.ok()) {
-                let p = entry.path();
-                if p.extension().and_then(|e| e.to_str()) == Some("rs") {
-                    total += index_file(&index, &p, &extractor);
-                }
-            }
-        }
-
-        if ctx.is_json() {
-            println!("{{\"result\":\"indexed\",\"symbols\":{total}}}");
-        } else {
-            println!("Indexed {total} symbols from {}", path.display());
-        }
-        0
-    }
-
-    fn index_file(index: &CodeIndex, path: &PathBuf, extractor: &RegexExtractor) -> usize {
-        let source = std::fs::read_to_string(path).unwrap_or_default();
-        let syms = extractor.extract(&source);
-        let n = syms.len();
-        let _ = index.index_symbols(&path.display().to_string(), &syms);
-        n
-    }
-
-    fn search_graph(query: String, ctx: &Context) -> i32 {
-        let index = match open_index() {
-            Ok(idx) => idx,
-            Err(e) => {
-                eprintln!("error: {e}");
-                return 1;
-            }
-        };
-        match index.search(&query, 10) {
-            Ok(results) => {
-                if ctx.is_json() {
-                    let items: Vec<String> = results
-                        .iter()
-                        .map(|s| {
-                            format!(
-                                "{{\"name\":\"{}\",\"file\":\"{}\",\"line\":{}}}",
-                                s.name, s.file, s.line
-                            )
-                        })
-                        .collect();
-                    println!("[{}]", items.join(","));
-                } else if results.is_empty() {
-                    println!("No symbols matching '{query}'.");
-                } else {
-                    for s in &results {
-                        println!("{}:{} — {}", s.file, s.line, s.name);
-                    }
-                }
-                0
-            }
-            Err(e) => {
-                eprintln!("error: {e}");
-                1
-            }
-        }
-    }
-
-    #[cfg(test)]
-    mod tests {
-        use super::{index_path, search_graph};
-        use crate::output::{Context, OutputFormat};
-        use std::path::PathBuf;
-
-        fn ctx() -> Context {
-            Context::new(OutputFormat::Text)
-        }
-
-        #[test]
-        fn codegraph_index_nonexistent_path_exits_0_with_zero() {
-            // Non-existent dir → exits 0, prints 0 symbols
-            let p = PathBuf::from("/nonexistent/path/xyz");
-            assert_eq!(index_path(p, &ctx()), 0);
-        }
-
-        #[test]
-        fn codegraph_search_empty_db_exits_0() {
-            assert_eq!(search_graph("alpha".into(), &ctx()), 0);
-        }
-    }
-}
-
-// ─── role ─────────────────────────────────────────────────────────────────────
-
-mod role {
-    use cronus_core::roles::{PRESET_CATALOG, RoleManager};
-
-    use crate::cli::RoleCommand;
-    use crate::output::Context;
-
-    fn state_dir() -> std::path::PathBuf {
-        cronus_core::paths::Paths::os_native().resolve(cronus_core::paths::Root::State)
-    }
-
-    fn open_manager() -> RoleManager {
-        let state = state_dir();
-        RoleManager::new(state.clone(), state.join("employees"))
-    }
-
-    pub fn dispatch(sub: RoleCommand, ctx: &Context) -> i32 {
-        match sub {
-            RoleCommand::List { presets } => list(presets, ctx),
-            RoleCommand::Hire { preset, name } => hire(preset, name.as_deref(), ctx),
-            RoleCommand::Show { id } => show(id, ctx),
-            RoleCommand::Create { id, display_name } => create(id, display_name, ctx),
-            RoleCommand::Fire { id } => fire(id, ctx),
-        }
-    }
-
-    fn list(presets: bool, ctx: &Context) -> i32 {
-        if presets {
-            if ctx.is_json() {
-                let items: Vec<String> = PRESET_CATALOG
-                    .iter()
-                    .map(|r| format!("{{\"id\":\"{}\",\"name\":\"{}\"}}", r.id, r.name))
-                    .collect();
-                println!("[{}]", items.join(","));
-            } else {
-                for r in PRESET_CATALOG {
-                    println!("{}: {}", r.id, r.name);
-                }
-            }
-            return 0;
-        }
-        let mgr = open_manager();
-        match mgr.list_hired() {
-            Ok(instances) if instances.is_empty() => {
-                println!("No roles hired.");
-                0
-            }
-            Ok(instances) => {
-                for inst in &instances {
-                    println!("{}: {}", inst.id, inst.display_name);
-                }
-                0
-            }
-            Err(_) => {
-                println!("No roles hired.");
-                0
-            }
-        }
-    }
-
-    fn hire(preset: String, name: Option<&str>, ctx: &Context) -> i32 {
-        let mgr = open_manager();
-        match mgr.hire(&preset, name) {
-            Ok(inst) => {
-                if ctx.is_json() {
-                    println!("{{\"result\":\"hired\",\"id\":\"{}\"}}", inst.id);
-                } else {
-                    println!("Hired: {} ({})", inst.id, inst.display_name);
-                }
-                0
-            }
-            Err(e) => {
-                eprintln!("error: {e}");
-                1
-            }
-        }
-    }
-
-    fn show(id: String, _ctx: &Context) -> i32 {
-        let mgr = open_manager();
-        match mgr.get(&id) {
-            Ok(Some(inst)) => {
-                println!("id:   {}", inst.id);
-                println!("name: {}", inst.display_name);
-                0
-            }
-            Ok(None) => {
-                eprintln!("error: role '{id}' not found");
-                1
-            }
-            Err(e) => {
-                eprintln!("error: {e}");
-                1
-            }
-        }
-    }
-
-    fn create(id: String, display_name: String, ctx: &Context) -> i32 {
-        let mgr = open_manager();
-        match mgr.create_custom(&id, &display_name) {
-            Ok(inst) => {
-                if ctx.is_json() {
-                    println!("{{\"result\":\"created\",\"id\":\"{}\"}}", inst.id);
-                } else {
-                    println!("Created: {} ({})", inst.id, inst.display_name);
-                }
-                0
-            }
-            Err(e) => {
-                eprintln!("error: {e}");
-                1
-            }
-        }
-    }
-
-    fn fire(id: String, ctx: &Context) -> i32 {
-        let mgr = open_manager();
-        match mgr.fire(&id) {
-            Ok(()) => {
-                if ctx.is_json() {
-                    println!("{{\"result\":\"fired\",\"id\":\"{id}\"}}");
-                } else {
-                    println!("Fired: {id}");
-                }
-                0
-            }
-            Err(e) => {
-                eprintln!("error: {e}");
-                1
-            }
-        }
-    }
-}
-
 // ─── board ────────────────────────────────────────────────────────────────────
 
 mod board {
@@ -1825,165 +1559,9 @@ mod budget_cmd {
     }
 }
 
-// ─── exec ─────────────────────────────────────────────────────────────────────
-
-mod exec {
-    use std::path::PathBuf;
-
-    use cronus_core::exec_workspace::ExecWorkspaceManager;
-    use cronus_core::tool_security::now_ms;
-
-    use crate::cli::ExecCommand;
-    use crate::output::Context;
-
-    fn base_dir() -> PathBuf {
-        cronus_core::paths::Paths::os_native()
-            .resolve(cronus_core::paths::Root::State)
-            .join("exec-workspaces")
-    }
-
-    pub fn dispatch(sub: ExecCommand, ctx: &Context) -> i32 {
-        match sub {
-            ExecCommand::List => list(ctx),
-            ExecCommand::Create { ws_id, card_id } => create(ws_id, card_id, ctx),
-            ExecCommand::Finalize { id } => finalize(id, ctx),
-            ExecCommand::Discard { id } => discard(id, ctx),
-        }
-    }
-
-    fn list(ctx: &Context) -> i32 {
-        let mgr = ExecWorkspaceManager::new();
-        let items = mgr.list();
-        if items.is_empty() {
-            if ctx.is_json() {
-                println!("[]");
-            } else {
-                println!("No exec workspaces.");
-            }
-        } else {
-            for w in items {
-                println!("{}: {}", w.id, w.state.as_str());
-            }
-        }
-        0
-    }
-
-    fn create(ws_id: String, card_id: String, ctx: &Context) -> i32 {
-        let mut mgr = ExecWorkspaceManager::new();
-        let dir = base_dir();
-        let _ = std::fs::create_dir_all(&dir);
-        match mgr.create(&ws_id, &card_id, &dir, now_ms()) {
-            Ok(w) => {
-                if ctx.is_json() {
-                    println!("{{\"result\":\"created\",\"id\":\"{}\"}}", w.id);
-                } else {
-                    println!("Created: {}", w.id);
-                }
-                0
-            }
-            Err(e) => {
-                eprintln!("error: {e}");
-                1
-            }
-        }
-    }
-
-    fn finalize(id: String, ctx: &Context) -> i32 {
-        let mut mgr = ExecWorkspaceManager::new();
-        match mgr.finalize(&id, true, now_ms()) {
-            Ok(()) => {
-                if ctx.is_json() {
-                    println!("{{\"result\":\"finalized\",\"id\":\"{id}\"}}");
-                } else {
-                    println!("Finalized: {id}");
-                }
-                0
-            }
-            Err(e) => {
-                eprintln!("error: {e}");
-                1
-            }
-        }
-    }
-
-    fn discard(id: String, ctx: &Context) -> i32 {
-        let mut mgr = ExecWorkspaceManager::new();
-        match mgr.discard(&id) {
-            Ok(()) => {
-                if ctx.is_json() {
-                    println!("{{\"result\":\"discarded\",\"id\":\"{id}\"}}");
-                } else {
-                    println!("Discarded: {id}");
-                }
-                0
-            }
-            Err(e) => {
-                eprintln!("error: {e}");
-                1
-            }
-        }
-    }
-}
-
-// ─── check ────────────────────────────────────────────────────────────────────
-
-mod check {
-    use std::path::PathBuf;
-
-    use cronus_core::quality::{GateResultStore, detect_language};
-
-    use crate::cli::CheckCommand;
-    use crate::output::Context;
-
-    pub fn dispatch(sub: CheckCommand, ctx: &Context) -> i32 {
-        match sub {
-            CheckCommand::Run { card_id, path } => run(card_id, path, ctx),
-            CheckCommand::Show { card_id } => show(card_id, ctx),
-            CheckCommand::History { card_id } => history(card_id, ctx),
-        }
-    }
-
-    fn run(card_id: String, path: Option<PathBuf>, ctx: &Context) -> i32 {
-        let root =
-            path.unwrap_or_else(|| std::env::current_dir().unwrap_or_else(|_| PathBuf::from(".")));
-        let lang = detect_language(&root);
-        if ctx.is_json() {
-            println!(
-                "{{\"card\":\"{card_id}\",\"language\":\"{}\"}}",
-                lang.as_str()
-            );
-        } else {
-            println!("card:     {card_id}");
-            println!("language: {}", lang.as_str());
-            println!("(gate runner seam — no tools invoked yet)");
-        }
-        0
-    }
-
-    fn show(card_id: String, _ctx: &Context) -> i32 {
-        let store = GateResultStore::new();
-        let results = store.results_for(&card_id);
-        if results.is_empty() {
-            println!("No gate results for '{card_id}'.");
-        } else {
-            for r in results {
-                println!("{}: {}", r.gate.as_str(), r.status.as_str());
-            }
-        }
-        0
-    }
-
-    fn history(card_id: String, _ctx: &Context) -> i32 {
-        let store = GateResultStore::new();
-        let results = store.results_for(&card_id);
-        println!("{} gate result(s) for '{card_id}'.", results.len());
-        0
-    }
-}
-
 // ─── ext ──────────────────────────────────────────────────────────────────────
 
-mod ext {
+pub(crate) mod ext {
     use std::path::PathBuf;
 
     use cronus_core::extensions::{
@@ -1991,22 +1569,14 @@ mod ext {
         ExtensionState,
     };
 
-    use crate::cli::ExtCommand;
     use crate::output::Context;
 
-    pub fn dispatch(sub: ExtCommand, ctx: &Context) -> i32 {
-        match sub {
-            ExtCommand::List => list(ctx),
-            ExtCommand::Add { path } => add(path, ctx),
-            ExtCommand::Remove { id } => remove(id, ctx),
-            ExtCommand::Scan { path } => scan(path, ctx),
-            ExtCommand::Activate { id } => activate(id, ctx),
-            ExtCommand::Deactivate { id } => deactivate(id, ctx),
-            ExtCommand::Skill { sub } => skill::dispatch(sub, ctx),
-        }
-    }
+    // Reached directly from `crate::installation::dispatch` now — the
+    // installation half's own generated grammar owns the `ext` group
+    // (including its nested `skill` sub-group), so no `ExtCommand`-shaped
+    // wrapper is needed here any more.
 
-    fn list(ctx: &Context) -> i32 {
+    pub(crate) fn list(ctx: &Context) -> i32 {
         let registry = ExtensionRegistry::new();
         let all = registry.list();
         if all.is_empty() {
@@ -2023,7 +1593,7 @@ mod ext {
         0
     }
 
-    fn add(path: PathBuf, ctx: &Context) -> i32 {
+    pub(crate) fn add(path: PathBuf, ctx: &Context) -> i32 {
         let json = match std::fs::read_to_string(&path) {
             Ok(s) => s,
             Err(e) => {
@@ -2055,12 +1625,12 @@ mod ext {
         }
     }
 
-    fn remove(_id: String, _ctx: &Context) -> i32 {
+    pub(crate) fn remove(_id: String, _ctx: &Context) -> i32 {
         eprintln!("error: extension removal not yet supported");
         1
     }
 
-    fn scan(path: PathBuf, _ctx: &Context) -> i32 {
+    pub(crate) fn scan(path: PathBuf, _ctx: &Context) -> i32 {
         let content = match std::fs::read_to_string(&path) {
             Ok(s) => s,
             Err(e) => {
@@ -2076,7 +1646,7 @@ mod ext {
         0
     }
 
-    fn activate(id: String, ctx: &Context) -> i32 {
+    pub(crate) fn activate(id: String, ctx: &Context) -> i32 {
         let mut registry = ExtensionRegistry::new();
         // State machine: Discovered → Permitted → Active. Try the intermediate step first.
         let _ = registry.transition(&id, ExtensionState::Permitted);
@@ -2096,7 +1666,7 @@ mod ext {
         }
     }
 
-    fn deactivate(id: String, ctx: &Context) -> i32 {
+    pub(crate) fn deactivate(id: String, ctx: &Context) -> i32 {
         let mut registry = ExtensionRegistry::new();
         match registry.transition(&id, ExtensionState::Inactive) {
             Ok(()) => {
@@ -2137,7 +1707,7 @@ mod ext {
         Some(rest[..end].to_string())
     }
 
-    mod skill {
+    pub(crate) mod skill {
         use std::collections::HashMap;
         use std::path::Path;
 
@@ -2150,7 +1720,6 @@ mod ext {
         use cronus_core::skills::store::{SkillId, SkillStore, SkillTier};
         use cronus_core::skills::synthesize::{self, AuthoredSkill, SynthesizeError};
 
-        use crate::cli::SkillCommand;
         use crate::output::Context;
 
         /// Single-name lookups aren't pack-qualified at the CLI surface yet;
@@ -2158,13 +1727,9 @@ mod ext {
         /// namespacing scheme lands.
         const DEFAULT_PACK: &str = "core";
 
-        pub fn dispatch(sub: SkillCommand, ctx: &Context) -> i32 {
-            match sub {
-                SkillCommand::Import { path } => import(&path, ctx),
-                SkillCommand::Create { prompt } => create(&prompt, ctx),
-                SkillCommand::Status { id } => status(id, ctx),
-            }
-        }
+        // Reached directly from `crate::installation::dispatch` now — the
+        // installation half's own generated grammar owns `ext skill`, so no
+        // `SkillCommand`-shaped wrapper is needed here any more.
 
         /// Best-effort kind inference from a single imported file's
         /// extension. A real foreign package spans many files classified by
@@ -2180,7 +1745,7 @@ mod ext {
             }
         }
 
-        fn import(path: &Path, ctx: &Context) -> i32 {
+        pub(crate) fn import(path: &Path, ctx: &Context) -> i32 {
             let content = match std::fs::read_to_string(path) {
                 Ok(s) => s,
                 Err(e) => {
@@ -2242,7 +1807,7 @@ mod ext {
             }
         }
 
-        fn create(prompt: &str, ctx: &Context) -> i32 {
+        pub(crate) fn create(prompt: &str, ctx: &Context) -> i32 {
             let slug = slugify(prompt);
             let manifest = ExtensionManifest {
                 id: format!("generated/{slug}"),
@@ -2320,7 +1885,7 @@ mod ext {
                 })
         }
 
-        fn status(id: Option<String>, ctx: &Context) -> i32 {
+        pub(crate) fn status(id: Option<String>, ctx: &Context) -> i32 {
             // No persistence layer is wired yet (matches every other `ext`
             // command's fresh-registry pattern): status reports against an
             // empty store honestly rather than fabricating tracked skills.
@@ -2464,70 +2029,6 @@ mod ext {
     }
 }
 
-// ─── learn ────────────────────────────────────────────────────────────────────
-
-mod learn {
-    use cronus_core::learning::LearningApprovalGate;
-
-    use crate::cli::LearnCommand;
-    use crate::output::Context;
-
-    pub fn dispatch(sub: LearnCommand, ctx: &Context) -> i32 {
-        match sub {
-            LearnCommand::List => list(ctx),
-            LearnCommand::Approve { id } => approve(id, ctx),
-            LearnCommand::Reject { id } => reject(id, ctx),
-        }
-    }
-
-    fn list(ctx: &Context) -> i32 {
-        let gate = LearningApprovalGate::new();
-        let pending = gate.list_pending();
-        if pending.is_empty() {
-            if ctx.is_json() {
-                println!("[]");
-            } else {
-                println!("No pending skill proposals.");
-            }
-        } else {
-            for s in &pending {
-                println!("{}: {} (confidence: {:.2})", s.id, s.trigger, s.confidence);
-            }
-        }
-        0
-    }
-
-    fn approve(id: String, ctx: &Context) -> i32 {
-        let mut gate = LearningApprovalGate::new();
-        if gate.approve(&id) {
-            if ctx.is_json() {
-                println!("{{\"result\":\"approved\",\"id\":\"{id}\"}}");
-            } else {
-                println!("Approved: {id}");
-            }
-            0
-        } else {
-            eprintln!("error: skill proposal '{id}' not found");
-            1
-        }
-    }
-
-    fn reject(id: String, ctx: &Context) -> i32 {
-        let mut gate = LearningApprovalGate::new();
-        if gate.reject(&id) {
-            if ctx.is_json() {
-                println!("{{\"result\":\"rejected\",\"id\":\"{id}\"}}");
-            } else {
-                println!("Rejected: {id}");
-            }
-            0
-        } else {
-            eprintln!("error: skill proposal '{id}' not found");
-            1
-        }
-    }
-}
-
 // ─── registry ─────────────────────────────────────────────────────────────────
 
 pub(crate) mod registry {
@@ -2605,74 +2106,6 @@ pub(crate) mod registry {
             println!("Enabled: {name}");
         }
         0
-    }
-}
-
-// ─── agent ────────────────────────────────────────────────────────────────────
-
-mod agent {
-    use cronus_core::constitution::{IDENTITY_FILES, identity_paths};
-
-    use crate::cli::AgentCommand;
-    use crate::output::Context;
-
-    pub fn dispatch(sub: AgentCommand, ctx: &Context) -> i32 {
-        match sub {
-            AgentCommand::Constitution => constitution(ctx),
-            AgentCommand::Status => status(ctx),
-        }
-    }
-
-    fn constitution(ctx: &Context) -> i32 {
-        let workspace = std::env::current_dir().unwrap_or_else(|_| std::path::PathBuf::from("."));
-        let paths = identity_paths(&workspace);
-        if ctx.is_json() {
-            let items: Vec<String> = IDENTITY_FILES
-                .iter()
-                .zip(paths.iter())
-                .map(|(name, path)| {
-                    let exists = path.exists();
-                    let p = path
-                        .display()
-                        .to_string()
-                        .replace('\\', "\\\\")
-                        .replace('"', "\\\"");
-                    format!("{{\"file\":\"{name}\",\"path\":\"{p}\",\"exists\":{exists}}}")
-                })
-                .collect();
-            println!("[{}]", items.join(","));
-        } else {
-            for (name, path) in IDENTITY_FILES.iter().zip(paths.iter()) {
-                let exists = if path.exists() { "✓" } else { "✗" };
-                println!("{exists} {name}: {}", path.display());
-            }
-        }
-        0
-    }
-
-    fn status(_ctx: &Context) -> i32 {
-        println!("agent: no active session");
-        0
-    }
-
-    #[cfg(test)]
-    mod tests {
-        use super::{constitution, status};
-        use crate::output::{Context, OutputFormat};
-
-        fn ctx() -> Context {
-            Context::new(OutputFormat::Text)
-        }
-
-        #[test]
-        fn agent_constitution_exits_0() {
-            assert_eq!(constitution(&ctx()), 0);
-        }
-
-        #[test]
-        fn agent_status_exits_0() {
-            assert_eq!(status(&ctx()), 0);
-        }
     }
 }
 
