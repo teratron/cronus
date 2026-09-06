@@ -67,6 +67,10 @@ fn matches_kind(value: &ArgValue, kind: cronus_contract::BinderKind) -> bool {
             | (ArgValue::Integer(_), BinderKind::Integer)
             | (ArgValue::Boolean(_), BinderKind::Boolean)
             | (ArgValue::Flag, BinderKind::Flag)
+            // A `NamedText` binder's bound value is still a plain
+            // `ArgValue::Text` — only its command-line binding style
+            // differs from a positional `Text`, not its runtime shape.
+            | (ArgValue::Text(_), BinderKind::NamedText)
     )
 }
 
@@ -519,14 +523,48 @@ mod tests {
         }
     }
 
+    /// `NamedText` differs from `Text` only in how a CLI frontend positions
+    /// it on the command line — its bound runtime value is the same
+    /// `ArgValue::Text`, and `bind` must accept it exactly as it would a
+    /// positional `Text` binder. Not caught by the compiler if this arm is
+    /// ever dropped from `matches_kind` (it is a `matches!` over a tuple,
+    /// not an exhaustive match on `BinderKind` alone) — this test is the
+    /// only thing that would catch a silent regression here.
+    #[test]
+    fn a_named_text_binder_accepts_a_text_value_exactly_like_a_positional_one() {
+        let descriptor = Invocable {
+            binders: vec![Binder {
+                name: "actor",
+                kind: BinderKind::NamedText,
+                optional: false,
+            }],
+            ..card_add_descriptor()
+        };
+        let mut args = ArgValues::new();
+        args.insert("actor", ArgValue::Text("cli".to_string()));
+        assert_eq!(
+            bind(&descriptor, &args),
+            None,
+            "a NamedText binder must accept a Text-shaped value, not reject it as ill-shaped"
+        );
+
+        let mut wrong_shape = ArgValues::new();
+        wrong_shape.insert("actor", ArgValue::Boolean(true));
+        assert_eq!(
+            bind(&descriptor, &wrong_shape).map(|r| r.mode),
+            Some(RejectionMode::IllShaped),
+            "a NamedText binder must still reject a genuinely wrong-shaped value"
+        );
+    }
+
     #[test]
     fn dispatch_against_an_unknown_invocable_yields_resolved_unknown_not_an_outcome() {
         // SP-13: nothing ran, nothing was rejected — this is a resolution
         // miss, not a failure-shaped `Outcome`. Folding this into
-        // `Outcome::Unavailable` is exactly the shape T-27B06 retrofits
-        // away, because the three surfaces answer `Unknown` three
-        // incompatible ways (fall through / usage error / catalog refresh)
-        // and none of those readings is "render an error".
+        // `Outcome::Unavailable` forces one wrong reading on the other two,
+        // because the three surfaces answer `Unknown` three incompatible
+        // ways (fall through / usage error / catalog refresh) and none of
+        // those readings is "render an error".
         let registry = InvocableRegistry::new();
         let dispatcher = Dispatcher::new();
         let dispatched = dispatcher.dispatch(&registry, &invocation_with(ArgValues::new()));

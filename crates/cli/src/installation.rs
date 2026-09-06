@@ -22,13 +22,20 @@
 //! projects the `Installation` locus (only the command line does), so the
 //! indirection would buy nothing here.
 //!
-//! Only a first slice of the eleven installation groups lives here today —
-//! `init`, `status`, `doctor`, `restore`, and `dev` — proving the mechanism
-//! against both shapes it must support: a **flat** group (its one verb's
-//! id-tail equals its group name, so it renders as a single top-level
-//! command with no nested verb) and a **nested** group (`dev`, three
-//! zero-argument verbs). The remaining groups are follow-up work, not
-//! silently dropped.
+//! Ten of the eleven installation groups live here — `init`, `status`,
+//! `doctor`, `restore`, `dev`, `workspace`, `backup`, `activation`,
+//! `archetype`, and `registry` — covering three tree shapes: **flat** (a
+//! group's one verb's id-tail equals its group name, so it renders as a
+//! single top-level command with no nested verb), **nested** (`dev`,
+//! `workspace`, `backup`, `activation`, `archetype`, `registry` — a group
+//! command containing verb subcommands), and a **named value flag**
+//! (`--actor cli`, `--mode login`), which `BinderKind::NamedText` exists to
+//! express — `Binder` had no positional-vs-named-value distinction before
+//! this module needed one for `workspace create --name/--path`, `backup
+//! create --to`, `activation enable --mode`, and `archetype create --from`.
+//! `ext` (with its own nested `skill` sub-group — a real third level of
+//! nesting this module's two-level tree builder does not yet handle) is the
+//! one remaining group, follow-up work, not silently dropped.
 
 use std::collections::HashSet;
 
@@ -56,6 +63,20 @@ fn flag(name: &'static str) -> Binder {
         name,
         kind: BinderKind::Flag,
         optional: true,
+    }
+}
+
+/// A value bound as a named `--name <value>` flag rather than positionally.
+/// A missing optional one reads back as absent from `ArgValues`, and the
+/// handler applies its own default the same way an absent positional `Text`
+/// binder's caller already would — `Binder` carries no default-value slot
+/// of its own, matching the minimalism the rest of this mechanism already
+/// holds to.
+fn named_text(name: &'static str, optional: bool) -> Binder {
+    Binder {
+        name,
+        kind: BinderKind::NamedText,
+        optional,
     }
 }
 
@@ -134,6 +155,207 @@ pub fn declared_invocables() -> Vec<Invocable> {
             stability: Stability::Shipped,
             journal_raw_input: true,
         },
+        Invocable {
+            id: id("workspace.create"),
+            name: "Workspace Create",
+            summary: "Create a new workspace",
+            group: "workspace",
+            locus: Locus::Installation,
+            binders: vec![
+                text("id", false),
+                named_text("name", true),
+                named_text("path", true),
+            ],
+            stability: Stability::Shipped,
+            journal_raw_input: true,
+        },
+        Invocable {
+            id: id("workspace.list"),
+            name: "Workspace List",
+            summary: "List all workspaces",
+            group: "workspace",
+            locus: Locus::Installation,
+            binders: Vec::new(),
+            stability: Stability::Shipped,
+            journal_raw_input: true,
+        },
+        Invocable {
+            id: id("workspace.switch"),
+            name: "Workspace Switch",
+            summary: "Switch the active workspace",
+            group: "workspace",
+            locus: Locus::Installation,
+            binders: vec![text("id", false)],
+            stability: Stability::Shipped,
+            journal_raw_input: true,
+        },
+        Invocable {
+            id: id("workspace.delete"),
+            name: "Workspace Delete",
+            summary: "Delete a workspace",
+            group: "workspace",
+            locus: Locus::Installation,
+            binders: vec![text("id", false)],
+            stability: Stability::Shipped,
+            journal_raw_input: true,
+        },
+        Invocable {
+            id: id("workspace.check"),
+            name: "Workspace Check",
+            summary: "Check the status of a workspace",
+            group: "workspace",
+            locus: Locus::Installation,
+            binders: vec![text("id", false)],
+            stability: Stability::Shipped,
+            journal_raw_input: true,
+        },
+        Invocable {
+            id: id("backup.create"),
+            name: "Backup Create",
+            summary: "Create a backup",
+            group: "backup",
+            locus: Locus::Installation,
+            binders: vec![named_text("to", true), flag("include_logs")],
+            stability: Stability::Shipped,
+            journal_raw_input: true,
+        },
+        Invocable {
+            id: id("backup.list"),
+            name: "Backup List",
+            summary: "List backups under the state tier's backups/ directory",
+            group: "backup",
+            locus: Locus::Installation,
+            binders: Vec::new(),
+            stability: Stability::Shipped,
+            journal_raw_input: true,
+        },
+        Invocable {
+            id: id("activation.status"),
+            name: "Activation Status",
+            summary: "Print the observed activation state — read from the OS, never a \
+                       remembered value (BA-8)",
+            group: "activation",
+            locus: Locus::Installation,
+            binders: Vec::new(),
+            stability: Stability::Shipped,
+            journal_raw_input: true,
+        },
+        Invocable {
+            id: id("activation.enable"),
+            name: "Activation Enable",
+            summary: "Register background activation for a mode (BA-5: an autonomy grant, \
+                       not a preference — disclosed and confirmed before it takes effect)",
+            group: "activation",
+            locus: Locus::Installation,
+            binders: vec![
+                named_text("mode", false),
+                flag("acknowledge_unattended_execution"),
+            ],
+            stability: Stability::Shipped,
+            journal_raw_input: true,
+        },
+        Invocable {
+            id: id("activation.disable"),
+            name: "Activation Disable",
+            summary: "Remove whatever activation registration is currently active (BA-7: \
+                       removed and verified, never left partially registered)",
+            group: "activation",
+            locus: Locus::Installation,
+            binders: Vec::new(),
+            stability: Stability::Shipped,
+            journal_raw_input: true,
+        },
+        Invocable {
+            id: id("archetype.list"),
+            name: "Archetype List",
+            summary: "List archetypes — the shipped catalog, or the office's active one",
+            group: "archetype",
+            locus: Locus::Installation,
+            binders: vec![flag("catalog"), flag("active")],
+            stability: Stability::Shipped,
+            journal_raw_input: true,
+        },
+        Invocable {
+            id: id("archetype.info"),
+            name: "Archetype Info",
+            summary: "Show one archetype's pool, shape, and seed (or its blocked reason)",
+            group: "archetype",
+            locus: Locus::Installation,
+            binders: vec![text("id", false), flag("deviations")],
+            stability: Stability::Shipped,
+            journal_raw_input: true,
+        },
+        Invocable {
+            id: id("archetype.set"),
+            name: "Archetype Set",
+            summary: "Apply an archetype, or return to the archetype-free default. Changes \
+                       what the manager expects, never staff — non-destructive by construction",
+            group: "archetype",
+            locus: Locus::Installation,
+            binders: vec![text("id", true), flag("clear")],
+            stability: Stability::Shipped,
+            journal_raw_input: true,
+        },
+        Invocable {
+            id: id("archetype.create"),
+            name: "Archetype Create",
+            summary: "Create a custom archetype by copying a preset into the state tier",
+            group: "archetype",
+            locus: Locus::Installation,
+            binders: vec![text("name", false), named_text("from", false)],
+            stability: Stability::Shipped,
+            journal_raw_input: true,
+        },
+        Invocable {
+            id: id("registry.list"),
+            name: "Registry List",
+            summary: "List all agent definitions",
+            group: "registry",
+            locus: Locus::Installation,
+            binders: Vec::new(),
+            stability: Stability::Shipped,
+            journal_raw_input: true,
+        },
+        Invocable {
+            id: id("registry.show"),
+            name: "Registry Show",
+            summary: "Show an agent definition",
+            group: "registry",
+            locus: Locus::Installation,
+            binders: vec![text("name", false)],
+            stability: Stability::Shipped,
+            journal_raw_input: true,
+        },
+        Invocable {
+            id: id("registry.create"),
+            name: "Registry Create",
+            summary: "Create a custom agent entry",
+            group: "registry",
+            locus: Locus::Installation,
+            binders: vec![text("name", false), text("description", false)],
+            stability: Stability::Shipped,
+            journal_raw_input: true,
+        },
+        Invocable {
+            id: id("registry.disable"),
+            name: "Registry Disable",
+            summary: "Disable an agent",
+            group: "registry",
+            locus: Locus::Installation,
+            binders: vec![text("name", false)],
+            stability: Stability::Shipped,
+            journal_raw_input: true,
+        },
+        Invocable {
+            id: id("registry.enable"),
+            name: "Registry Enable",
+            summary: "Enable a previously disabled agent",
+            group: "registry",
+            locus: Locus::Installation,
+            binders: vec![text("name", false)],
+            stability: Stability::Shipped,
+            journal_raw_input: true,
+        },
     ]
 }
 
@@ -147,6 +369,11 @@ fn group_about(group: &str) -> Option<&'static str> {
         "dev" => {
             Some("Self-hosting developer office: conditional, human-admitted, canonical-repo-only")
         }
+        "workspace" => Some("Manage named workspaces"),
+        "backup" => Some("Back up the state tier (secrets and cache excluded)"),
+        "activation" => Some("Manage background activation"),
+        "archetype" => Some("Office archetypes: a prior on staffing, never a roster"),
+        "registry" => Some("Agent registry: list and manage agent definitions"),
         _ => None,
     }
 }
@@ -242,6 +469,116 @@ pub fn dispatch(group: &str, verb: &str, matches: &ArgMatches, ctx: &Context) ->
         ("dev", "status") => crate::commands::dev_office_cmd::status(ctx),
         ("dev", "admit") => crate::commands::dev_office_cmd::admit(ctx),
         ("dev", "revoke") => crate::commands::dev_office_cmd::revoke(ctx),
+        ("workspace", "create") => {
+            let id = matches.get_one::<String>("id").cloned().unwrap_or_default();
+            let name = matches.get_one::<String>("name").cloned();
+            let path = matches
+                .get_one::<String>("path")
+                .map(std::path::PathBuf::from);
+            crate::commands::workspace::create(id, name, path, ctx)
+        }
+        ("workspace", "list") => crate::commands::workspace::list(ctx),
+        ("workspace", "switch") => {
+            let id = matches.get_one::<String>("id").cloned().unwrap_or_default();
+            crate::commands::workspace::switch(id, ctx)
+        }
+        ("workspace", "delete") => {
+            let id = matches.get_one::<String>("id").cloned().unwrap_or_default();
+            crate::commands::workspace::delete(id, ctx)
+        }
+        ("workspace", "check") => {
+            let id = matches.get_one::<String>("id").cloned().unwrap_or_default();
+            crate::commands::workspace::check(id, ctx)
+        }
+        ("backup", "create") => {
+            let to = matches
+                .get_one::<String>("to")
+                .map(std::path::PathBuf::from);
+            let include_logs = matches.get_flag("include_logs");
+            crate::commands::backup_cmd::create(to, include_logs, ctx)
+        }
+        ("backup", "list") => crate::commands::backup_cmd::list(ctx),
+        ("activation", "status") => crate::commands::activation_cmd::status(ctx),
+        ("activation", "enable") => {
+            let mode = match matches.get_one::<String>("mode").map(String::as_str) {
+                Some("login") => crate::cli::ActivationModeArg::Login,
+                Some("system") => crate::cli::ActivationModeArg::System,
+                other => {
+                    // An application-level refusal, not a clap-level usage
+                    // failure: the flag parsed fine as text, dispatch ran,
+                    // and the value it ran with was one it does not accept
+                    // — the same "ran and refused" shape every other
+                    // handler in this module reports with exit 1.
+                    eprintln!(
+                        "error: --mode must be 'login' or 'system', got {:?}",
+                        other.unwrap_or("<none>")
+                    );
+                    return 1;
+                }
+            };
+            let acknowledged = matches.get_flag("acknowledge_unattended_execution");
+            crate::commands::activation_cmd::enable(mode, acknowledged, ctx)
+        }
+        ("activation", "disable") => crate::commands::activation_cmd::disable(ctx),
+        ("archetype", "list") => {
+            let catalog = matches.get_flag("catalog");
+            let active = matches.get_flag("active");
+            crate::commands::archetype_cmd::list(catalog, active)
+        }
+        ("archetype", "info") => {
+            let id = matches.get_one::<String>("id").cloned().unwrap_or_default();
+            let deviations = matches.get_flag("deviations");
+            crate::commands::archetype_cmd::info(&id, deviations)
+        }
+        ("archetype", "set") => {
+            let id = matches.get_one::<String>("id").cloned();
+            let clear = matches.get_flag("clear");
+            crate::commands::archetype_cmd::set(id, clear, ctx)
+        }
+        ("archetype", "create") => {
+            let name = matches
+                .get_one::<String>("name")
+                .cloned()
+                .unwrap_or_default();
+            let from = matches
+                .get_one::<String>("from")
+                .cloned()
+                .unwrap_or_default();
+            crate::commands::archetype_cmd::create(&name, &from)
+        }
+        ("registry", "list") => crate::commands::registry::list(ctx),
+        ("registry", "show") => {
+            let name = matches
+                .get_one::<String>("name")
+                .cloned()
+                .unwrap_or_default();
+            crate::commands::registry::show(name, ctx)
+        }
+        ("registry", "create") => {
+            let name = matches
+                .get_one::<String>("name")
+                .cloned()
+                .unwrap_or_default();
+            let description = matches
+                .get_one::<String>("description")
+                .cloned()
+                .unwrap_or_default();
+            crate::commands::registry::create(name, description, ctx)
+        }
+        ("registry", "disable") => {
+            let name = matches
+                .get_one::<String>("name")
+                .cloned()
+                .unwrap_or_default();
+            crate::commands::registry::disable(name, ctx)
+        }
+        ("registry", "enable") => {
+            let name = matches
+                .get_one::<String>("name")
+                .cloned()
+                .unwrap_or_default();
+            crate::commands::registry::enable(name, ctx)
+        }
         _ => {
             eprintln!(
                 "error: internal: no installation handler wired for {group} {verb} — a bug in this module's own dispatch table, not a caller condition"
@@ -309,6 +646,72 @@ mod tests {
             sub.get_one::<String>("backup").map(String::as_str),
             Some("b-1")
         );
+    }
+
+    /// `BinderKind::NamedText` — proves the extension end to end: bound as
+    /// `--name <value>`, never positionally, and a required one refuses the
+    /// verb entirely when absent, exactly like a required positional would.
+    #[test]
+    fn a_named_text_binder_is_bound_as_a_named_flag_never_a_positional_word() {
+        let invocables = declared_invocables();
+        let refs: Vec<&Invocable> = invocables
+            .iter()
+            .filter(|i| i.group == "archetype")
+            .collect();
+        let (groups, _) = build_installation_tree(&refs);
+        let tree = Command::new("cronus").subcommand(groups.into_iter().next().unwrap());
+
+        // `create` requires `name` (positional) and `--from` (named) — the
+        // bare word form must not satisfy `--from`.
+        assert!(
+            tree.clone()
+                .try_get_matches_from(["cronus", "archetype", "create", "custom", "preset-a"])
+                .is_err(),
+            "a NamedText binder must not accept its value as a second positional word"
+        );
+
+        let matches = tree
+            .try_get_matches_from([
+                "cronus",
+                "archetype",
+                "create",
+                "custom",
+                "--from",
+                "preset-a",
+            ])
+            .expect("create custom --from preset-a must parse");
+        let (_, group_matches) = matches.subcommand().unwrap();
+        let (_, verb_matches) = group_matches.subcommand().unwrap();
+        assert_eq!(
+            verb_matches.get_one::<String>("from").map(String::as_str),
+            Some("preset-a")
+        );
+    }
+
+    /// An optional `NamedText` binder (`workspace create --name`) must
+    /// parse fine when absent — the handler, not the parser, supplies a
+    /// default, matching every other optional binder's contract.
+    #[test]
+    fn an_optional_named_text_binder_is_absent_when_not_supplied() {
+        let invocables = declared_invocables();
+        let refs: Vec<&Invocable> = invocables
+            .iter()
+            .filter(|i| i.group == "workspace")
+            .collect();
+        let (groups, _) = build_installation_tree(&refs);
+        let tree = Command::new("cronus").subcommand(groups.into_iter().next().unwrap());
+
+        let matches = tree
+            .try_get_matches_from(["cronus", "workspace", "create", "my-ws"])
+            .expect("create with no --name/--path must still parse");
+        let (_, group_matches) = matches.subcommand().unwrap();
+        let (_, verb_matches) = group_matches.subcommand().unwrap();
+        assert_eq!(
+            verb_matches.get_one::<String>("id").map(String::as_str),
+            Some("my-ws")
+        );
+        assert_eq!(verb_matches.get_one::<String>("name"), None);
+        assert_eq!(verb_matches.get_one::<String>("path"), None);
     }
 
     /// The literal Verify criterion this task names: the pre-composition

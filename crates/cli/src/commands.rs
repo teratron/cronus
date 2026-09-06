@@ -4,7 +4,6 @@ use crate::output::Context;
 pub fn dispatch(command: Command, ctx: &Context) -> i32 {
     match command {
         Command::Workflow { sub } => workflow::dispatch(sub, ctx),
-        Command::Workspace { sub } => workspace::dispatch(sub, ctx),
         Command::Codegraph { sub } => codegraph_cmd::dispatch(sub, ctx),
         Command::Agent { sub } => agent::dispatch(sub, ctx),
         Command::Role { sub } => role::dispatch(sub, ctx),
@@ -15,16 +14,12 @@ pub fn dispatch(command: Command, ctx: &Context) -> i32 {
         Command::Check { sub } => check::dispatch(sub, ctx),
         Command::Ext { sub } => ext::dispatch(sub, ctx),
         Command::Learn { sub } => learn::dispatch(sub, ctx),
-        Command::Registry { sub } => registry::dispatch(sub, ctx),
         Command::Goal { sub } => goal::dispatch(sub, ctx),
         Command::Trigger { sub } => trigger::dispatch(sub, ctx),
         Command::Mission { sub } => mission::dispatch(sub, ctx),
         Command::Research { sub } => research::dispatch(sub, ctx),
         Command::Change { sub } => change::dispatch(sub, ctx),
-        Command::Backup { sub } => backup_cmd::dispatch(sub, ctx),
-        Command::Activation { sub } => activation_cmd::dispatch(sub, ctx),
         Command::Loop { sub } => loop_cmd::dispatch(sub, ctx),
-        Command::Archetype { sub } => archetype_cmd::dispatch(sub, ctx),
         Command::Knowledge { sub } => knowledge_cmd::dispatch(sub, ctx),
     }
 }
@@ -293,7 +288,6 @@ pub(crate) mod backup_cmd {
     use cronus_core::backup::{self, BackupOptions};
     use cronus_core::paths::{Paths, Root};
 
-    use crate::cli::BackupCommand;
     use crate::output::Context;
 
     fn state_root_and_backups_dir() -> (PathBuf, PathBuf) {
@@ -303,14 +297,17 @@ pub(crate) mod backup_cmd {
         (root, backups_dir)
     }
 
-    pub fn dispatch(sub: BackupCommand, ctx: &Context) -> i32 {
+    // Reached directly from `crate::installation::dispatch` now — the
+    // installation half's own generated grammar owns the `backup` group, so
+    // no `BackupCommand`-shaped wrapper is needed here any more.
+    pub(crate) fn create(to: Option<PathBuf>, include_logs: bool, ctx: &Context) -> i32 {
         let (state_root, backups_dir) = state_root_and_backups_dir();
-        match sub {
-            BackupCommand::Create { to, include_logs } => {
-                create_at(&state_root, &backups_dir, to.as_deref(), include_logs, ctx)
-            }
-            BackupCommand::List => list_at(&backups_dir, ctx),
-        }
+        create_at(&state_root, &backups_dir, to.as_deref(), include_logs, ctx)
+    }
+
+    pub(crate) fn list(ctx: &Context) -> i32 {
+        let (_, backups_dir) = state_root_and_backups_dir();
+        list_at(&backups_dir, ctx)
     }
 
     fn create_at(
@@ -884,23 +881,16 @@ mod workflow {
 
 // ─── workspace ────────────────────────────────────────────────────────────────
 
-mod workspace {
+pub(crate) mod workspace {
     use std::path::{Path, PathBuf};
 
     use cronus_core::workspace::{WorkspaceId, WorkspaceManager, WorkspaceTemplate};
 
-    use crate::cli::WorkspaceCommand;
     use crate::output::Context;
 
-    pub fn dispatch(sub: WorkspaceCommand, ctx: &Context) -> i32 {
-        match sub {
-            WorkspaceCommand::Create { id, name, path } => create(id, name, path, ctx),
-            WorkspaceCommand::List => list(ctx),
-            WorkspaceCommand::Switch { id } => switch(id, ctx),
-            WorkspaceCommand::Delete { id } => delete(id, ctx),
-            WorkspaceCommand::Check { id } => check(id, ctx),
-        }
-    }
+    // Reached directly from `crate::installation::dispatch` now — the
+    // installation half's own generated grammar owns the `workspace` group,
+    // so no `WorkspaceCommand`-shaped wrapper is needed here any more.
 
     fn db_path() -> PathBuf {
         cronus_core::paths::Paths::os_native()
@@ -920,7 +910,12 @@ mod workspace {
         WorkspaceId::new(s).map_err(|e| e.to_string())
     }
 
-    fn create(id: String, name: Option<String>, path: Option<PathBuf>, ctx: &Context) -> i32 {
+    pub(crate) fn create(
+        id: String,
+        name: Option<String>,
+        path: Option<PathBuf>,
+        ctx: &Context,
+    ) -> i32 {
         create_inner(&id, name.as_deref(), path.as_deref(), ctx)
     }
 
@@ -963,7 +958,7 @@ mod workspace {
         }
     }
 
-    fn list(ctx: &Context) -> i32 {
+    pub(crate) fn list(ctx: &Context) -> i32 {
         let mgr = match open_manager() {
             Ok(m) => m,
             Err(e) => {
@@ -1008,7 +1003,7 @@ mod workspace {
         }
     }
 
-    fn switch(id: String, ctx: &Context) -> i32 {
+    pub(crate) fn switch(id: String, ctx: &Context) -> i32 {
         let ws_id = match parse_id(&id) {
             Ok(i) => i,
             Err(e) => {
@@ -1039,7 +1034,7 @@ mod workspace {
         }
     }
 
-    fn delete(id: String, ctx: &Context) -> i32 {
+    pub(crate) fn delete(id: String, ctx: &Context) -> i32 {
         if cronus_core::dev_office_workspace::is_reserved_dev_workspace_id(&id) {
             eprintln!("error: '{id}' is a reserved system workspace and cannot be deleted here");
             return 1;
@@ -1078,7 +1073,7 @@ mod workspace {
         }
     }
 
-    fn check(id: String, ctx: &Context) -> i32 {
+    pub(crate) fn check(id: String, ctx: &Context) -> i32 {
         let ws_id = match parse_id(&id) {
             Ok(i) => i,
             Err(e) => {
@@ -2535,23 +2530,16 @@ mod learn {
 
 // ─── registry ─────────────────────────────────────────────────────────────────
 
-mod registry {
+pub(crate) mod registry {
     use cronus_core::agent_registry::AgentRegistry;
 
-    use crate::cli::RegistryCommand;
     use crate::output::Context;
 
-    pub fn dispatch(sub: RegistryCommand, ctx: &Context) -> i32 {
-        match sub {
-            RegistryCommand::List => list(ctx),
-            RegistryCommand::Show { name } => show(name, ctx),
-            RegistryCommand::Create { name, description } => create(name, description, ctx),
-            RegistryCommand::Disable { name } => disable(name, ctx),
-            RegistryCommand::Enable { name } => enable(name, ctx),
-        }
-    }
+    // Reached directly from `crate::installation::dispatch` now — the
+    // installation half's own generated grammar owns the `registry` group,
+    // so no `RegistryCommand`-shaped wrapper is needed here any more.
 
-    fn list(ctx: &Context) -> i32 {
+    pub(crate) fn list(ctx: &Context) -> i32 {
         let registry = AgentRegistry::new();
         let agents = registry.list_active();
         if ctx.is_json() {
@@ -2568,7 +2556,7 @@ mod registry {
         0
     }
 
-    fn show(name: String, _ctx: &Context) -> i32 {
+    pub(crate) fn show(name: String, _ctx: &Context) -> i32 {
         let registry = AgentRegistry::new();
         match registry.resolve(&name) {
             Ok(a) => {
@@ -2584,7 +2572,7 @@ mod registry {
         }
     }
 
-    fn create(name: String, description: String, ctx: &Context) -> i32 {
+    pub(crate) fn create(name: String, description: String, ctx: &Context) -> i32 {
         let mut registry = AgentRegistry::new();
         let def = AgentRegistry::generate_from_description(&name, &description);
         let def_name = def.name.clone();
@@ -2597,7 +2585,7 @@ mod registry {
         0
     }
 
-    fn disable(name: String, ctx: &Context) -> i32 {
+    pub(crate) fn disable(name: String, ctx: &Context) -> i32 {
         let mut registry = AgentRegistry::new();
         registry.apply_user_config(&name, true, None);
         if ctx.is_json() {
@@ -2608,7 +2596,7 @@ mod registry {
         0
     }
 
-    fn enable(name: String, ctx: &Context) -> i32 {
+    pub(crate) fn enable(name: String, ctx: &Context) -> i32 {
         let mut registry = AgentRegistry::new();
         registry.apply_user_config(&name, false, None);
         if ctx.is_json() {
@@ -3006,7 +2994,7 @@ mod change {
 
 // ─── activation ─────────────────────────────────────────────────────────────
 
-mod activation_cmd {
+pub(crate) mod activation_cmd {
     use std::io::{self, IsTerminal, Write};
 
     use cronus_core::activation::{
@@ -3017,19 +3005,13 @@ mod activation_cmd {
         ActivationMode, ActivationRegistry, ActivationState, default_activation_registry,
     };
 
-    use crate::cli::{ActivationCommand, ActivationModeArg};
+    use crate::cli::ActivationModeArg;
     use crate::output::Context;
 
-    pub fn dispatch(sub: ActivationCommand, ctx: &Context) -> i32 {
-        match sub {
-            ActivationCommand::Status => status(ctx),
-            ActivationCommand::Enable {
-                mode,
-                acknowledge_unattended_execution,
-            } => enable(mode, acknowledge_unattended_execution, ctx),
-            ActivationCommand::Disable => disable(ctx),
-        }
-    }
+    // Reached directly from `crate::installation::dispatch` now — the
+    // installation half's own generated grammar owns the `activation`
+    // group, so no `ActivationCommand`-shaped wrapper is needed here any
+    // more.
 
     fn mode_str(mode: ActivationMode) -> &'static str {
         match mode {
@@ -3064,7 +3046,7 @@ mod activation_cmd {
         }
     }
 
-    fn status(ctx: &Context) -> i32 {
+    pub(crate) fn status(ctx: &Context) -> i32 {
         let registry = default_activation_registry();
         let state = registry.observe();
         if ctx.is_json() {
@@ -3128,7 +3110,7 @@ mod activation_cmd {
         input.trim().eq_ignore_ascii_case("yes")
     }
 
-    fn enable(mode: ActivationModeArg, acknowledged: bool, ctx: &Context) -> i32 {
+    pub(crate) fn enable(mode: ActivationModeArg, acknowledged: bool, ctx: &Context) -> i32 {
         let target = match mode {
             ActivationModeArg::Login => ActivationMode::Login,
             ActivationModeArg::System => ActivationMode::System,
@@ -3176,7 +3158,7 @@ mod activation_cmd {
         }
     }
 
-    fn disable(ctx: &Context) -> i32 {
+    pub(crate) fn disable(ctx: &Context) -> i32 {
         let registry = default_activation_registry();
         match disable_transition(&registry) {
             Ok(_) => {
@@ -3353,23 +3335,18 @@ mod loop_cmd {
 
 // ─── archetype ────────────────────────────────────────────────────────────────
 
-mod archetype_cmd {
+pub(crate) mod archetype_cmd {
     use std::path::PathBuf;
 
     use cronus_core::archetype::{ArchetypeCatalog, ValidationStatus};
     use cronus_core::paths::{Paths, Root};
 
-    use crate::cli::ArchetypeCommand;
     use crate::output::Context;
 
-    pub fn dispatch(sub: ArchetypeCommand, ctx: &Context) -> i32 {
-        match sub {
-            ArchetypeCommand::List { catalog, active } => list(catalog, active),
-            ArchetypeCommand::Info { id, deviations } => info(&id, deviations),
-            ArchetypeCommand::Set { id, clear } => set(id, clear, ctx),
-            ArchetypeCommand::Create { name, from } => create(&name, &from),
-        }
-    }
+    // Reached directly from `crate::installation::dispatch` now — the
+    // installation half's own generated grammar owns the `archetype`
+    // group, so no `ArchetypeCommand`-shaped wrapper is needed here any
+    // more.
 
     fn state_dir() -> PathBuf {
         Paths::os_native().resolve(Root::State)
@@ -3388,7 +3365,7 @@ mod archetype_cmd {
             .filter(|s| !s.is_empty())
     }
 
-    fn list(_catalog: bool, active: bool) -> i32 {
+    pub(crate) fn list(_catalog: bool, active: bool) -> i32 {
         let catalog = ArchetypeCatalog::program();
         if active {
             match read_active() {
@@ -3413,7 +3390,7 @@ mod archetype_cmd {
         0
     }
 
-    fn info(id: &str, deviations: bool) -> i32 {
+    pub(crate) fn info(id: &str, deviations: bool) -> i32 {
         let catalog = ArchetypeCatalog::program();
         if let Some(def) = catalog.get(id) {
             println!("archetype: {}", def.id);
@@ -3444,7 +3421,7 @@ mod archetype_cmd {
         }
     }
 
-    fn set(id: Option<String>, clear: bool, ctx: &Context) -> i32 {
+    pub(crate) fn set(id: Option<String>, clear: bool, ctx: &Context) -> i32 {
         let marker = active_marker();
         if let Some(parent) = marker.parent()
             && let Err(e) = std::fs::create_dir_all(parent)
@@ -3492,7 +3469,7 @@ mod archetype_cmd {
         0
     }
 
-    fn create(name: &str, from: &str) -> i32 {
+    pub(crate) fn create(name: &str, from: &str) -> i32 {
         let catalog = ArchetypeCatalog::program();
         match catalog.create_from_preset(&state_dir(), name, from) {
             Ok(custom) => {

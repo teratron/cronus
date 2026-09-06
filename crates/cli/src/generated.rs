@@ -94,6 +94,10 @@ pub(crate) fn arg_for(binder: &Binder) -> Arg {
             .long(binder.name)
             .required(false)
             .action(ArgAction::SetTrue),
+        // A named text value — `--actor cli`, `--mode login` — bound the
+        // same way `Flag` already is (by its own name, not by position),
+        // but carrying a value rather than a presence bit.
+        BinderKind::NamedText => arg.long(binder.name).required(!binder.optional),
     }
 }
 
@@ -173,6 +177,9 @@ pub fn invocation_from_matches<'a>(
                 .get_one::<bool>(binder.name)
                 .map(|value| ArgValue::Boolean(*value)),
             BinderKind::Flag => verb_matches.get_flag(binder.name).then_some(ArgValue::Flag),
+            BinderKind::NamedText => verb_matches
+                .get_one::<String>(binder.name)
+                .map(|value| ArgValue::Text(value.clone())),
         };
         if let Some(value) = value {
             args.insert(binder.name, value);

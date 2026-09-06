@@ -2074,14 +2074,28 @@ pub enum Stability {
     Retired { superseded_by: InvocableId },
 }
 
-/// The closed set of shapes a [`Binder`] may declare.
+/// The closed set of shapes a [`Binder`] may declare. A kind names both a
+/// value's shape and — for `Flag` and `NamedText` — how it is positioned on
+/// a command line, the same way `Flag` (a boolean, always `--name`, never a
+/// bare word) already does: a binding style is not a fourth, independent
+/// axis bolted onto every kind, only the two kinds that actually need one.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 #[cfg_attr(feature = "serde", derive(serde::Serialize))]
 pub enum BinderKind {
+    /// A string value, bound positionally in declared order.
     Text,
     Integer,
     Boolean,
+    /// A boolean presence flag: `--name`, never a bare positional word, and
+    /// never required (its absence simply means false).
     Flag,
+    /// A string value bound as a named `--name <value>` flag rather than
+    /// positionally — for a verb whose grammar names its argument rather
+    /// than ordering it (`--actor cli`, `--mode login`). `optional`
+    /// distinguishes a required named flag from one that may be absent; a
+    /// missing optional one is read back as `None` by whatever handler
+    /// wants a default, the same way an absent `Text` binder already is.
+    NamedText,
 }
 
 /// One argument an invocable declares, in order (IB-1). This is the single

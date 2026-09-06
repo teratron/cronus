@@ -25,11 +25,6 @@ pub enum Command {
         #[command(subcommand)]
         sub: WorkflowCommand,
     },
-    /// Manage named workspaces
-    Workspace {
-        #[command(subcommand)]
-        sub: WorkspaceCommand,
-    },
     /// Code graph operations
     Codegraph {
         #[command(subcommand)]
@@ -80,11 +75,6 @@ pub enum Command {
         #[command(subcommand)]
         sub: LearnCommand,
     },
-    /// Agent registry: list and manage agent definitions
-    Registry {
-        #[command(subcommand)]
-        sub: RegistryCommand,
-    },
     /// Goal runs: start and manage autonomous goal sessions
     Goal {
         #[command(subcommand)]
@@ -110,25 +100,10 @@ pub enum Command {
         #[command(subcommand)]
         sub: ChangeCommand,
     },
-    /// Back up the state tier (secrets and cache excluded)
-    Backup {
-        #[command(subcommand)]
-        sub: BackupCommand,
-    },
-    /// Manage background activation
-    Activation {
-        #[command(subcommand)]
-        sub: ActivationCommand,
-    },
     /// Run and inspect governed autonomous loops
     Loop {
         #[command(subcommand)]
         sub: LoopCommand,
-    },
-    /// Office archetypes: a prior on staffing, never a roster
-    Archetype {
-        #[command(subcommand)]
-        sub: ArchetypeCommand,
     },
     /// Knowledge base: named collections with hybrid semantic+keyword retrieval
     Knowledge {
@@ -185,81 +160,11 @@ pub enum KnowledgeCommand {
     },
 }
 
-#[derive(Subcommand)]
-pub enum ArchetypeCommand {
-    /// List archetypes — the shipped catalog, or the office's active one
-    List {
-        /// Show the program-tier catalog (shipped + declared-blocked)
-        #[arg(long)]
-        catalog: bool,
-        /// Show the office's currently active archetype
-        #[arg(long)]
-        active: bool,
-    },
-    /// Show one archetype's pool, shape, and seed (or its blocked reason)
-    Info {
-        /// Archetype id
-        id: String,
-        /// Include the deviation counters + validation status
-        #[arg(long)]
-        deviations: bool,
-    },
-    /// Apply an archetype, or return to the archetype-free default. Changes
-    /// what the manager expects, never staff — non-destructive by construction
-    Set {
-        /// Archetype id to apply
-        id: Option<String>,
-        /// Return the office to the archetype-free state
-        #[arg(long)]
-        clear: bool,
-    },
-    /// Create a custom archetype by copying a preset into the state tier
-    Create {
-        /// Name for the new custom archetype
-        name: String,
-        /// Preset id to copy from
-        #[arg(long = "from")]
-        from: String,
-    },
-}
-
-#[derive(Subcommand)]
-pub enum BackupCommand {
-    /// Create a backup
-    Create {
-        /// Destination path (defaults to `<state>/backups/backup-<timestamp>`)
-        #[arg(long = "to")]
-        to: Option<PathBuf>,
-        /// Include the regenerable logs directory (excluded by default)
-        #[arg(long)]
-        include_logs: bool,
-    },
-    /// List backups under the state tier's `backups/` directory
-    List,
-}
-
-#[derive(Subcommand)]
-pub enum ActivationCommand {
-    /// Print the observed activation state — read from the OS, never a
-    /// remembered value (BA-8)
-    Status,
-    /// Register background activation for a mode (BA-5: an autonomy grant,
-    /// not a preference — disclosed and confirmed before it takes effect)
-    Enable {
-        #[arg(long, value_enum)]
-        mode: ActivationModeArg,
-        /// Skip the interactive confirmation. Required in a non-interactive
-        /// context (a script, a CI runner) — `enable` otherwise refuses,
-        /// because an unattended grant would silently satisfy the consent
-        /// moment BA-5 requires a human to see.
-        #[arg(long)]
-        acknowledge_unattended_execution: bool,
-    },
-    /// Remove whatever activation registration is currently active (BA-7:
-    /// removed and verified, never left partially registered)
-    Disable,
-}
-
+/// Bound at runtime by the installation half's own generated grammar now
+/// (`crate::installation`, `activation enable --mode`) — the `ArchetypeCommand`/
+/// `BackupCommand`/`ActivationCommand`/`WorkspaceCommand` enums those verbs
+/// used to derive from are tombstoned, but `enable`'s handler still takes
+/// this small value type rather than a bare string.
 #[derive(Clone, Copy, clap::ValueEnum)]
 pub enum ActivationModeArg {
     /// Starts with the user's session; ends when it ends; no elevation
@@ -322,38 +227,6 @@ pub enum AgentCommand {
     Constitution,
     /// Show agent runtime status
     Status,
-}
-
-#[derive(Subcommand)]
-pub enum WorkspaceCommand {
-    /// Create a new workspace
-    Create {
-        /// Workspace ID (lowercase kebab-case, e.g. my-project)
-        id: String,
-        /// Human-readable name
-        #[arg(long, short = 'n')]
-        name: Option<String>,
-        /// Root path for the workspace (defaults to current directory)
-        #[arg(long)]
-        path: Option<PathBuf>,
-    },
-    /// List all workspaces
-    List,
-    /// Switch the active workspace
-    Switch {
-        /// Workspace ID to activate
-        id: String,
-    },
-    /// Delete a workspace
-    Delete {
-        /// Workspace ID to delete
-        id: String,
-    },
-    /// Check the status of a workspace
-    Check {
-        /// Workspace ID to inspect
-        id: String,
-    },
 }
 
 #[derive(Subcommand)]
@@ -510,20 +383,6 @@ pub enum LearnCommand {
     Approve { id: String },
     /// Reject a skill proposal
     Reject { id: String },
-}
-
-#[derive(Subcommand)]
-pub enum RegistryCommand {
-    /// List all agent definitions
-    List,
-    /// Show an agent definition
-    Show { name: String },
-    /// Create a custom agent entry
-    Create { name: String, description: String },
-    /// Disable an agent
-    Disable { name: String },
-    /// Enable a previously disabled agent
-    Enable { name: String },
 }
 
 #[derive(Subcommand)]
