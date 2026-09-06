@@ -30,7 +30,8 @@ fn register_status(
     dispatcher: &mut Dispatcher,
     engine: Arc<Engine>,
 ) {
-    let id = InvocableId::from("core:status");
+    let id = InvocableId::new("core:status")
+        .expect("core-authored literal identity must be well-formed — a bug if it isn't");
     let invocable = Invocable {
         id: id.clone(),
         name: "Status",
@@ -39,6 +40,7 @@ fn register_status(
         locus: Locus::Semantic,
         binders: Vec::<Binder>::new(),
         stability: Stability::Shipped,
+        journal_raw_input: true,
     };
     registry
         .register(&Registrant::core(), invocable)
@@ -54,7 +56,8 @@ fn register_version(
     dispatcher: &mut Dispatcher,
     engine: Arc<Engine>,
 ) {
-    let id = InvocableId::from("core:version");
+    let id = InvocableId::new("core:version")
+        .expect("core-authored literal identity must be well-formed — a bug if it isn't");
     let invocable = Invocable {
         id: id.clone(),
         name: "Version",
@@ -63,6 +66,7 @@ fn register_version(
         locus: Locus::Semantic,
         binders: Vec::<Binder>::new(),
         stability: Stability::Shipped,
+        journal_raw_input: true,
     };
     registry
         .register(&Registrant::core(), invocable)

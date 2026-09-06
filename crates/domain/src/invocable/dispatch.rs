@@ -33,12 +33,13 @@
 
 use std::collections::HashMap;
 use std::panic::{self, AssertUnwindSafe};
-use std::sync::Arc;
-use std::sync::mpsc;
+use std::sync::atomic::{AtomicU64, Ordering};
+use std::sync::{Arc, Mutex, mpsc};
 use std::time::Duration;
 
 use cronus_contract::{
-    ArgValue, ArgValues, Invocable, InvocableId, Invocation, Outcome, Rejection, RejectionMode,
+    ArgValue, ArgValues, Dispatched, Invocable, InvocableId, Invocation, Outcome, Rejection,
+    RejectionMode, Resolved,
 };
 
 use super::registry::{CORE_IDENTITY, InvocableRegistry};
@@ -134,12 +135,93 @@ fn run_contribution(
     }
 }
 
+/// The effect that reverses one [`Dispatcher::attach`] call (EP-13):
+/// disposing it removes exactly the handler it attached, and nothing else.
+/// The invocable's descriptor (if any) is untouched — disposing a handler
+/// leaves a normal, catalog-readable, unattached descriptor behind, the
+/// same state as one that was never given a handler at all. Consumed by
+/// value on disposal, so a handle can be spent only once.
+#[derive(Debug)]
+pub struct DispatchHandle {
+    id: InvocableId,
+}
+
+impl DispatchHandle {
+    /// Remove this exact handler from `dispatcher`.
+    pub fn dispose(self, dispatcher: &mut Dispatcher) {
+        dispatcher.handlers.remove(&self.id);
+    }
+}
+
+/// One record of a resolved dispatch's lifecycle (§4.13). The pair — never
+/// a single combined record — is what makes an unsettled dispatch (one
+/// whose handler never returned) visible: a lone `Enter` with no matching
+/// `Settle` is exactly that state, which a record written only on
+/// completion could never represent.
+pub enum JournalRecord<'a> {
+    /// Written before the handler runs.
+    Enter {
+        dispatch_id: &'a str,
+        invocable: &'a InvocableId,
+        /// `None` when the invocable declares its raw input unrecordable
+        /// (`Invocable::journal_raw_input == false`) — a secret-bearing
+        /// argument, or a payload an authoritative domain event already
+        /// owns. Removes that argument class from the journal entirely
+        /// rather than filtering it after the fact, which is what
+        /// redaction alone cannot do for an argument that IS entirely a
+        /// credential the secret store never learns.
+        args: Option<&'a ArgValues>,
+    },
+    /// Written after the handler settles, paired with the `Enter` sharing
+    /// the same `dispatch_id`.
+    Settle {
+        dispatch_id: &'a str,
+        outcome: &'a Outcome,
+    },
+}
+
+/// Where a resolved dispatch's lifecycle is recorded (§4.13). A pure
+/// interface — no I/O lives in this crate; a real durable journal is
+/// supplied by whatever composes the `Dispatcher`, the same residual shape
+/// as [`Dispatcher::set_secrets`]: the seam exists and is exercised here,
+/// wiring a real sink into the facade is a separate, recorded obligation.
+pub trait DispatchJournal {
+    /// Write one record. `Err` on an `Enter` record fails the dispatch
+    /// before the handler runs (§4.13); the same failure on `Settle` is
+    /// contained by the caller so the handler's own outcome stays the
+    /// reported one.
+    fn record(&mut self, record: JournalRecord<'_>) -> Result<(), String>;
+}
+
+/// A boxed, thread-safe [`DispatchJournal`] — `Dispatcher` stores it behind
+/// a `Mutex` because `dispatch` takes `&self`, not `&mut self` (multiple
+/// callers may dispatch concurrently through one shared `Dispatcher`).
+pub type JournalSink = Box<dyn DispatchJournal + Send + Sync>;
+
+/// A token unique to this process instance, salted by the process id and a
+/// wall-clock timestamp taken at construction — §4.13's "unique across
+/// process restarts" requirement. A per-process counter alone repeats after
+/// a restart and would silently pair a new dispatch with an old one; this
+/// token makes that collision require the same pid AND the same nanosecond
+/// of construction, which is not a bound worth spending a dependency on.
+fn mint_instance_token() -> String {
+    let pid = std::process::id();
+    let nanos = std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .map(|since_epoch| since_epoch.as_nanos())
+        .unwrap_or(0);
+    format!("{pid:x}-{nanos:x}")
+}
+
 /// Holds the executable behavior attached to each invocable, and runs
 /// bind-before-invoke over a [`InvocableRegistry`]'s descriptors.
 pub struct Dispatcher {
     handlers: HashMap<InvocableId, Handler>,
     contribution_bound: Duration,
     secrets: Vec<String>,
+    journal: Option<Mutex<JournalSink>>,
+    instance_token: String,
+    dispatch_seq: AtomicU64,
 }
 
 impl Default for Dispatcher {
@@ -154,6 +236,9 @@ impl Dispatcher {
             handlers: HashMap::new(),
             contribution_bound: CONTRIBUTION_TIME_BOUND,
             secrets: Vec::new(),
+            journal: None,
+            instance_token: mint_instance_token(),
+            dispatch_seq: AtomicU64::new(0),
         }
     }
 
@@ -165,15 +250,20 @@ impl Dispatcher {
             handlers: HashMap::new(),
             contribution_bound: bound,
             secrets: Vec::new(),
+            journal: None,
+            instance_token: mint_instance_token(),
+            dispatch_seq: AtomicU64::new(0),
         }
     }
 
     /// Attach the executable behavior for an invocable. Independent of
     /// registry registration — the two may happen in either order, and a
     /// descriptor with no attached handler is a normal, catalog-readable
-    /// state (dispatch reports it as unavailable, never panics).
-    pub fn attach(&mut self, id: InvocableId, handler: Handler) {
-        self.handlers.insert(id, handler);
+    /// state (dispatch reports it as unavailable, never panics). Returns
+    /// the effect that reverses exactly this attachment (EP-13).
+    pub fn attach(&mut self, id: InvocableId, handler: Handler) -> DispatchHandle {
+        self.handlers.insert(id.clone(), handler);
+        DispatchHandle { id }
     }
 
     /// Replace the secret values every dispatched [`Outcome`] is masked
@@ -184,25 +274,82 @@ impl Dispatcher {
         self.secrets = secrets;
     }
 
-    /// Resolve `invocation` against `registry`, bind its arguments, run the
-    /// attached handler if binding succeeds, and mask the result against
-    /// the configured secrets — the single point every dispatched
-    /// [`Outcome`] passes through, regardless of which branch produced it.
-    /// Every path returns a structured `Outcome`; none of them is a Rust
-    /// panic or an unstructured error (IB-3).
-    pub fn dispatch(&self, registry: &InvocableRegistry, invocation: &Invocation) -> Outcome {
-        let outcome = self.dispatch_unmasked(registry, invocation);
-        let secret_refs: Vec<&str> = self.secrets.iter().map(String::as_str).collect();
-        crate::redact::redact_outcome(outcome, &secret_refs)
+    /// Install where this dispatcher records a resolved dispatch's
+    /// lifecycle (§4.13). Starts unconfigured — with no journal, dispatch
+    /// proceeds exactly as before journaling existed, the same residual
+    /// shape as [`Dispatcher::set_secrets`] starting with an empty list.
+    pub fn set_journal(&mut self, journal: JournalSink) {
+        self.journal = Some(Mutex::new(journal));
     }
 
-    fn dispatch_unmasked(&self, registry: &InvocableRegistry, invocation: &Invocation) -> Outcome {
-        let Some(descriptor) = registry.resolve(&invocation.id) else {
-            return Outcome::Unavailable {
-                reason: format!("no such invocable: {}", invocation.id.as_str()),
-            };
+    fn next_dispatch_id(&self) -> String {
+        let seq = self.dispatch_seq.fetch_add(1, Ordering::Relaxed);
+        format!("{}-{seq}", self.instance_token)
+    }
+
+    /// Write one journal record if a journal is configured. No journal
+    /// configured is success — dispatch behaves exactly as if this method
+    /// did not exist. A poisoned mutex is treated as a journal failure
+    /// rather than propagated as a panic (no panics on this path).
+    fn write_journal(&self, record: JournalRecord<'_>) -> Result<(), String> {
+        let Some(journal) = &self.journal else {
+            return Ok(());
+        };
+        match journal.lock() {
+            Ok(mut sink) => sink.record(record),
+            Err(_poisoned) => Err("dispatch journal mutex poisoned".to_string()),
+        }
+    }
+
+    /// Resolve `invocation` against `registry` first (SP-13) — an id
+    /// naming nothing the registry knows returns [`Dispatched::Unknown`]
+    /// immediately, before any journal record is written and before any
+    /// binder runs, because nothing happened that a journal entry or a
+    /// binding rejection could describe. A resolved invocation is journaled
+    /// as a paired entry/settlement record (§4.13): a failure to write the
+    /// entry fails the dispatch loudly, before the handler runs; the same
+    /// failure on the settlement record is contained so the handler's own
+    /// outcome — masked against the configured secrets at this single
+    /// boundary point, regardless of which branch produced it — stays the
+    /// reported one.
+    pub fn dispatch(&self, registry: &InvocableRegistry, invocation: &Invocation) -> Dispatched {
+        let descriptor = match registry.resolve(&invocation.id) {
+            Resolved::Found(descriptor) => descriptor,
+            Resolved::Unknown => return Dispatched::Unknown,
         };
 
+        let dispatch_id = self.next_dispatch_id();
+        let entry_args = descriptor.journal_raw_input.then_some(&invocation.args);
+        if let Err(reason) = self.write_journal(JournalRecord::Enter {
+            dispatch_id: &dispatch_id,
+            invocable: &invocation.id,
+            args: entry_args,
+        }) {
+            // §4.13: a dispatch that runs unrecorded is the one case the
+            // journal exists to prevent — refuse before the handler runs.
+            return Dispatched::Ran(Outcome::Unavailable {
+                reason: format!("dispatch journal refused the entry record: {reason}"),
+            });
+        }
+
+        let outcome = self.run_resolved(descriptor, invocation);
+        let secret_refs: Vec<&str> = self.secrets.iter().map(String::as_str).collect();
+        let outcome = crate::redact::redact_outcome(outcome, &secret_refs);
+
+        // A settlement-record failure is contained: the handler's own
+        // outcome stays the reported one regardless (§4.13).
+        let _ = self.write_journal(JournalRecord::Settle {
+            dispatch_id: &dispatch_id,
+            outcome: &outcome,
+        });
+
+        Dispatched::Ran(outcome)
+    }
+
+    /// Bind and run a resolved invocation's handler — the part of dispatch
+    /// that happens only once resolution and the journal's entry record
+    /// have both already succeeded.
+    fn run_resolved(&self, descriptor: &Invocable, invocation: &Invocation) -> Outcome {
         if let Some(rejection) = bind(descriptor, &invocation.args) {
             return Outcome::Rejected(rejection);
         }
@@ -230,8 +377,8 @@ impl Dispatcher {
 
 #[cfg(test)]
 mod tests {
-    use std::sync::Arc;
     use std::sync::atomic::{AtomicUsize, Ordering};
+    use std::sync::{Arc, Mutex};
 
     use cronus_contract::{Binder, BinderKind, Locus, OutcomeValue, Stability, Surface};
 
@@ -240,13 +387,14 @@ mod tests {
 
     fn contributed_descriptor() -> Invocable {
         Invocable {
-            id: InvocableId::from("myext:risky"),
+            id: InvocableId::new("myext:risky").expect("well-formed invocable id"),
             name: "Risky",
             summary: "A contributed invocable used to exercise containment.",
             group: "test",
             locus: Locus::Semantic,
             binders: Vec::new(),
             stability: Stability::Shipped,
+            journal_raw_input: true,
         }
     }
 
@@ -256,7 +404,7 @@ mod tests {
 
     fn card_add_descriptor() -> Invocable {
         Invocable {
-            id: InvocableId::from("core:board.add"),
+            id: InvocableId::new("core:board.add").expect("well-formed invocable id"),
             name: "Add card",
             summary: "Add a card to the board",
             group: "board",
@@ -274,14 +422,26 @@ mod tests {
                 },
             ],
             stability: Stability::Shipped,
+            journal_raw_input: true,
         }
     }
 
     fn invocation_with(args: ArgValues) -> Invocation {
         Invocation {
-            id: InvocableId::from("core:board.add"),
+            id: InvocableId::new("core:board.add").expect("well-formed invocable id"),
             args,
             caller: Surface::Cli,
+        }
+    }
+
+    /// Unwrap a resolved dispatch's outcome, panicking with a clear message
+    /// if resolution unexpectedly missed — every call site below expects
+    /// the invocable to exist, so an `Unknown` here is the test's own setup
+    /// being wrong, not a case it means to exercise.
+    fn ran(dispatched: Dispatched) -> Outcome {
+        match dispatched {
+            Dispatched::Ran(outcome) => outcome,
+            Dispatched::Unknown => panic!("expected a resolved dispatch, got Unknown"),
         }
     }
 
@@ -292,23 +452,23 @@ mod tests {
             .register(&Registrant::core(), card_add_descriptor())
             .unwrap();
 
-        let ran = Arc::new(AtomicUsize::new(0));
-        let ran_in_handler = Arc::clone(&ran);
+        let handler_calls = Arc::new(AtomicUsize::new(0));
+        let handler_calls_in_handler = Arc::clone(&handler_calls);
         let mut dispatcher = Dispatcher::new();
         dispatcher.attach(
-            InvocableId::from("core:board.add"),
+            InvocableId::new("core:board.add").expect("well-formed invocable id"),
             Arc::new(move |_args: &ArgValues| {
-                ran_in_handler.fetch_add(1, Ordering::SeqCst);
+                handler_calls_in_handler.fetch_add(1, Ordering::SeqCst);
                 Outcome::Value(OutcomeValue::Empty)
             }),
         );
 
         // No "id" supplied — a required binder is absent.
-        let outcome = dispatcher.dispatch(&registry, &invocation_with(ArgValues::new()));
+        let outcome = ran(dispatcher.dispatch(&registry, &invocation_with(ArgValues::new())));
 
         assert!(matches!(outcome, Outcome::Rejected(_)));
         assert_eq!(
-            ran.load(Ordering::SeqCst),
+            handler_calls.load(Ordering::SeqCst),
             0,
             "the handler must not run when binding rejects"
         );
@@ -323,14 +483,14 @@ mod tests {
 
         let mut dispatcher = Dispatcher::new();
         dispatcher.attach(
-            InvocableId::from("core:board.add"),
+            InvocableId::new("core:board.add").expect("well-formed invocable id"),
             Arc::new(|_args: &ArgValues| Outcome::Value(OutcomeValue::Text("added".to_string()))),
         );
 
         let mut args = ArgValues::new();
         args.insert("id", ArgValue::Text("card-1".to_string()));
         // "task_ref" is optional and genuinely absent — not a rejection.
-        let outcome = dispatcher.dispatch(&registry, &invocation_with(args));
+        let outcome = ran(dispatcher.dispatch(&registry, &invocation_with(args)));
 
         assert_eq!(
             outcome,
@@ -348,7 +508,7 @@ mod tests {
 
         let mut args = ArgValues::new();
         args.insert("id", ArgValue::Boolean(true)); // declared Text, supplied Boolean
-        let outcome = dispatcher.dispatch(&registry, &invocation_with(args));
+        let outcome = ran(dispatcher.dispatch(&registry, &invocation_with(args)));
 
         match outcome {
             Outcome::Rejected(rejection) => {
@@ -360,11 +520,17 @@ mod tests {
     }
 
     #[test]
-    fn dispatch_against_an_unknown_invocable_reports_unavailable_not_a_panic() {
+    fn dispatch_against_an_unknown_invocable_yields_resolved_unknown_not_an_outcome() {
+        // SP-13: nothing ran, nothing was rejected — this is a resolution
+        // miss, not a failure-shaped `Outcome`. Folding this into
+        // `Outcome::Unavailable` is exactly the shape T-27B06 retrofits
+        // away, because the three surfaces answer `Unknown` three
+        // incompatible ways (fall through / usage error / catalog refresh)
+        // and none of those readings is "render an error".
         let registry = InvocableRegistry::new();
         let dispatcher = Dispatcher::new();
-        let outcome = dispatcher.dispatch(&registry, &invocation_with(ArgValues::new()));
-        assert!(matches!(outcome, Outcome::Unavailable { .. }));
+        let dispatched = dispatcher.dispatch(&registry, &invocation_with(ArgValues::new()));
+        assert!(matches!(dispatched, Dispatched::Unknown));
     }
 
     #[test]
@@ -377,7 +543,7 @@ mod tests {
 
         let mut args = ArgValues::new();
         args.insert("id", ArgValue::Text("card-1".to_string()));
-        let outcome = dispatcher.dispatch(&registry, &invocation_with(args));
+        let outcome = ran(dispatcher.dispatch(&registry, &invocation_with(args)));
 
         assert!(matches!(outcome, Outcome::Unavailable { .. }));
     }
@@ -391,19 +557,19 @@ mod tests {
 
         let mut dispatcher = Dispatcher::new();
         dispatcher.attach(
-            InvocableId::from("myext:risky"),
+            InvocableId::new("myext:risky").expect("well-formed invocable id"),
             Arc::new(|_args: &ArgValues| panic!("boom")),
         );
 
         let invocation = Invocation {
-            id: InvocableId::from("myext:risky"),
+            id: InvocableId::new("myext:risky").expect("well-formed invocable id"),
             args: ArgValues::new(),
             caller: Surface::Cli,
         };
         // If the panic unwound into this thread rather than being caught on
         // its own thread, this call itself would abort the test process —
         // reaching the assertion below is part of the proof.
-        let outcome = dispatcher.dispatch(&registry, &invocation);
+        let outcome = ran(dispatcher.dispatch(&registry, &invocation));
 
         match outcome {
             Outcome::Unavailable { reason } => assert!(
@@ -424,7 +590,7 @@ mod tests {
         let bound = Duration::from_millis(50);
         let mut dispatcher = Dispatcher::with_contribution_bound(bound);
         dispatcher.attach(
-            InvocableId::from("myext:risky"),
+            InvocableId::new("myext:risky").expect("well-formed invocable id"),
             Arc::new(|_args: &ArgValues| {
                 std::thread::sleep(Duration::from_secs(60));
                 Outcome::Value(OutcomeValue::Empty)
@@ -432,13 +598,13 @@ mod tests {
         );
 
         let invocation = Invocation {
-            id: InvocableId::from("myext:risky"),
+            id: InvocableId::new("myext:risky").expect("well-formed invocable id"),
             args: ArgValues::new(),
             caller: Surface::Cli,
         };
 
         let started = std::time::Instant::now();
-        let outcome = dispatcher.dispatch(&registry, &invocation);
+        let outcome = ran(dispatcher.dispatch(&registry, &invocation));
         let elapsed = started.elapsed();
 
         assert!(
@@ -468,7 +634,7 @@ mod tests {
             .unwrap();
         let mut dispatcher = Dispatcher::new();
         dispatcher.attach(
-            InvocableId::from("core:board.add"),
+            InvocableId::new("core:board.add").expect("well-formed invocable id"),
             Arc::new(|_args: &ArgValues| panic!("a genuine core defect")),
         );
 
@@ -482,6 +648,218 @@ mod tests {
         assert!(
             result.is_err(),
             "a core panic must propagate, not resolve to a contained Outcome"
+        );
+    }
+
+    #[test]
+    fn disposing_a_registration_and_its_handler_removes_both_independently() {
+        let mut registry = InvocableRegistry::new();
+        let mut dispatcher = Dispatcher::new();
+        let id = InvocableId::new("core:board.add").expect("well-formed invocable id");
+
+        let registration = registry
+            .register(&Registrant::core(), card_add_descriptor())
+            .unwrap();
+        let dispatch_handle = dispatcher.attach(
+            id.clone(),
+            Arc::new(|_args: &ArgValues| Outcome::Value(OutcomeValue::Text("added".to_string()))),
+        );
+
+        let mut args = ArgValues::new();
+        args.insert("id", ArgValue::Text("card-1".to_string()));
+        assert_eq!(
+            ran(dispatcher.dispatch(&registry, &invocation_with(args.clone()))),
+            Outcome::Value(OutcomeValue::Text("added".to_string()))
+        );
+
+        // Disposing only the handler: the descriptor still resolves and
+        // binds, but nothing remains to run it.
+        dispatch_handle.dispose(&mut dispatcher);
+        assert!(registry.resolve(&id).is_found(), "the descriptor survives");
+        assert!(
+            matches!(
+                ran(dispatcher.dispatch(&registry, &invocation_with(args.clone()))),
+                Outcome::Unavailable { .. }
+            ),
+            "no handler remains attached"
+        );
+
+        // Disposing the registration itself: the descriptor is gone too, so
+        // dispatch can no longer even resolve the invocable — this is now a
+        // resolution miss, not an Outcome at all.
+        registration.handle.dispose(&mut registry);
+        assert!(registry.resolve(&id).is_unknown());
+        assert!(matches!(
+            dispatcher.dispatch(&registry, &invocation_with(args)),
+            Dispatched::Unknown
+        ));
+    }
+
+    #[derive(Debug, Clone, PartialEq)]
+    enum RecordedEntry {
+        Enter { dispatch_id: String, had_args: bool },
+        Settle { dispatch_id: String },
+    }
+
+    /// A journal that records every call it receives, for tests to inspect
+    /// after dispatch returns. Shares its log via `Arc` so the constructing
+    /// test keeps a handle after the sink itself is moved into the
+    /// `Dispatcher`.
+    struct RecordingJournal(Arc<Mutex<Vec<RecordedEntry>>>);
+
+    impl DispatchJournal for RecordingJournal {
+        fn record(&mut self, record: JournalRecord<'_>) -> Result<(), String> {
+            let entry = match record {
+                JournalRecord::Enter {
+                    dispatch_id, args, ..
+                } => RecordedEntry::Enter {
+                    dispatch_id: dispatch_id.to_string(),
+                    had_args: args.is_some(),
+                },
+                JournalRecord::Settle { dispatch_id, .. } => RecordedEntry::Settle {
+                    dispatch_id: dispatch_id.to_string(),
+                },
+            };
+            self.0.lock().expect("test mutex poisoned").push(entry);
+            Ok(())
+        }
+    }
+
+    /// A journal whose entry record always fails — for proving §4.13's
+    /// failure asymmetry: an entry failure must refuse the dispatch before
+    /// the handler runs.
+    struct FailingEntryJournal;
+
+    impl DispatchJournal for FailingEntryJournal {
+        fn record(&mut self, record: JournalRecord<'_>) -> Result<(), String> {
+            match record {
+                JournalRecord::Enter { .. } => Err("simulated entry failure".to_string()),
+                JournalRecord::Settle { .. } => Ok(()),
+            }
+        }
+    }
+
+    #[test]
+    fn dispatching_an_unknown_invocable_writes_no_journal_entry() {
+        let log = Arc::new(Mutex::new(Vec::new()));
+        let registry = InvocableRegistry::new();
+        let mut dispatcher = Dispatcher::new();
+        dispatcher.set_journal(Box::new(RecordingJournal(Arc::clone(&log))));
+
+        let dispatched = dispatcher.dispatch(&registry, &invocation_with(ArgValues::new()));
+
+        assert!(matches!(dispatched, Dispatched::Unknown));
+        assert!(
+            log.lock().unwrap().is_empty(),
+            "a resolution miss entered no handler and must journal nothing"
+        );
+    }
+
+    #[test]
+    fn a_resolved_dispatch_is_journaled_as_a_paired_entry_and_settlement() {
+        let log = Arc::new(Mutex::new(Vec::new()));
+        let mut registry = InvocableRegistry::new();
+        registry
+            .register(&Registrant::core(), card_add_descriptor())
+            .unwrap();
+        let mut dispatcher = Dispatcher::new();
+        dispatcher.set_journal(Box::new(RecordingJournal(Arc::clone(&log))));
+        dispatcher.attach(
+            InvocableId::new("core:board.add").expect("well-formed invocable id"),
+            Arc::new(|_args: &ArgValues| Outcome::Value(OutcomeValue::Text("added".to_string()))),
+        );
+
+        let mut args = ArgValues::new();
+        args.insert("id", ArgValue::Text("card-1".to_string()));
+        let outcome = ran(dispatcher.dispatch(&registry, &invocation_with(args)));
+        assert_eq!(
+            outcome,
+            Outcome::Value(OutcomeValue::Text("added".to_string()))
+        );
+
+        let recorded = log.lock().unwrap().clone();
+        assert_eq!(recorded.len(), 2, "exactly an entry and a settlement");
+        match (&recorded[0], &recorded[1]) {
+            (
+                RecordedEntry::Enter {
+                    dispatch_id: enter_id,
+                    had_args,
+                },
+                RecordedEntry::Settle {
+                    dispatch_id: settle_id,
+                },
+            ) => {
+                assert!(
+                    *had_args,
+                    "this invocable journals its raw input by default"
+                );
+                assert_eq!(enter_id, settle_id, "the pair shares one dispatch identity");
+            }
+            other => panic!("expected [Enter, Settle], got {other:?}"),
+        }
+    }
+
+    #[test]
+    fn an_invocable_may_decline_to_journal_its_raw_input() {
+        let log = Arc::new(Mutex::new(Vec::new()));
+        let mut registry = InvocableRegistry::new();
+        let mut secret_descriptor = card_add_descriptor();
+        secret_descriptor.journal_raw_input = false;
+        registry
+            .register(&Registrant::core(), secret_descriptor)
+            .unwrap();
+        let mut dispatcher = Dispatcher::new();
+        dispatcher.set_journal(Box::new(RecordingJournal(Arc::clone(&log))));
+        dispatcher.attach(
+            InvocableId::new("core:board.add").expect("well-formed invocable id"),
+            Arc::new(|_args: &ArgValues| Outcome::Value(OutcomeValue::Empty)),
+        );
+
+        let mut args = ArgValues::new();
+        args.insert("id", ArgValue::Text("card-1".to_string()));
+        ran(dispatcher.dispatch(&registry, &invocation_with(args)));
+
+        match &log.lock().unwrap()[0] {
+            RecordedEntry::Enter { had_args, .. } => {
+                assert!(
+                    !had_args,
+                    "a suppressed invocable must not journal its args"
+                )
+            }
+            other => panic!("expected Enter, got {other:?}"),
+        }
+    }
+
+    #[test]
+    fn a_failed_entry_record_refuses_the_dispatch_before_the_handler_runs() {
+        let mut registry = InvocableRegistry::new();
+        registry
+            .register(&Registrant::core(), card_add_descriptor())
+            .unwrap();
+        let handler_calls = Arc::new(AtomicUsize::new(0));
+        let handler_calls_in_handler = Arc::clone(&handler_calls);
+        let mut dispatcher = Dispatcher::new();
+        dispatcher.set_journal(Box::new(FailingEntryJournal));
+        dispatcher.attach(
+            InvocableId::new("core:board.add").expect("well-formed invocable id"),
+            Arc::new(move |_args: &ArgValues| {
+                handler_calls_in_handler.fetch_add(1, Ordering::SeqCst);
+                Outcome::Value(OutcomeValue::Text("added".to_string()))
+            }),
+        );
+
+        let mut args = ArgValues::new();
+        args.insert("id", ArgValue::Text("card-1".to_string()));
+        let outcome = ran(dispatcher.dispatch(&registry, &invocation_with(args)));
+
+        assert!(
+            matches!(outcome, Outcome::Unavailable { .. }),
+            "an entry-record failure is a loud, visible outcome"
+        );
+        assert_eq!(
+            handler_calls.load(Ordering::SeqCst),
+            0,
+            "a dispatch that could not be journaled must never run — that is the one case §4.13 exists to prevent"
         );
     }
 }

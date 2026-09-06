@@ -3,7 +3,9 @@
 //! (`cronus_core::invocable_bootstrap::bootstrap`, `cronus_core::invocable::*`),
 //! not a stand-in.
 
-use cronus_contract::{Invocable, InvocableId, Locus, Outcome, OutcomeValue, Stability};
+use cronus_contract::{
+    Dispatched, Invocable, InvocableId, Locus, Outcome, OutcomeValue, Stability,
+};
 use cronus_core::Engine;
 use cronus_core::invocable::{CONTRIBUTE_GRANT, Dispatcher, InvocableRegistry, Registrant};
 use cronus_core::invocable_bootstrap::bootstrap;
@@ -18,25 +20,26 @@ fn core_invocables_and_a_contribution_share_one_registration_door() {
 
     assert!(
         registry
-            .resolve(&InvocableId::from("core:status"))
-            .is_some(),
+            .resolve(&InvocableId::new("core:status").expect("well-formed invocable id"))
+            .is_found(),
         "bootstrap must register core:status"
     );
     assert!(
         registry
-            .resolve(&InvocableId::from("core:version"))
-            .is_some(),
+            .resolve(&InvocableId::new("core:version").expect("well-formed invocable id"))
+            .is_found(),
         "bootstrap must register core:version"
     );
 
     let contribution = Invocable {
-        id: InvocableId::from("myext:hello"),
+        id: InvocableId::new("myext:hello").expect("well-formed invocable id"),
         name: "Hello",
         summary: "A contributed invocable proving the shared door.",
         group: "test",
         locus: Locus::Semantic,
         binders: Vec::new(),
         stability: Stability::Shipped,
+        journal_raw_input: true,
     };
     let registrant = Registrant::extension("myext", "src-1").with_grant(CONTRIBUTE_GRANT);
 
@@ -45,8 +48,8 @@ fn core_invocables_and_a_contribution_share_one_registration_door() {
     assert!(registry.register(&registrant, contribution).is_ok());
     assert!(
         registry
-            .resolve(&InvocableId::from("myext:hello"))
-            .is_some()
+            .resolve(&InvocableId::new("myext:hello").expect("well-formed invocable id"))
+            .is_found()
     );
 }
 
@@ -58,7 +61,7 @@ fn dispatch_output_passes_through_the_shared_redaction_path() {
     let mut registry = InvocableRegistry::new();
     let mut dispatcher = Dispatcher::new();
 
-    let id = InvocableId::from("core:echo-secret");
+    let id = InvocableId::new("core:echo-secret").expect("well-formed invocable id");
     registry
         .register(
             &Registrant::core(),
@@ -70,6 +73,7 @@ fn dispatch_output_passes_through_the_shared_redaction_path() {
                 locus: Locus::Semantic,
                 binders: Vec::new(),
                 stability: Stability::Shipped,
+                journal_raw_input: true,
             },
         )
         .unwrap();
@@ -86,13 +90,13 @@ fn dispatch_output_passes_through_the_shared_redaction_path() {
         args: cronus_contract::ArgValues::new(),
         caller: cronus_contract::Surface::Cli,
     };
-    let outcome = dispatcher.dispatch(&registry, &invocation);
+    let dispatched = dispatcher.dispatch(&registry, &invocation);
 
-    match outcome {
-        Outcome::Value(OutcomeValue::Text(text)) => {
+    match dispatched {
+        Dispatched::Ran(Outcome::Value(OutcomeValue::Text(text))) => {
             assert!(!text.contains("sk-LIVE-777"), "secret must be masked");
             assert!(text.contains("***"), "masked output must show the mask");
         }
-        other => panic!("expected Value(Text), got {other:?}"),
+        other => panic!("expected Ran(Value(Text)), got {other:?}"),
     }
 }

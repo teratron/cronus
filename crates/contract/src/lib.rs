@@ -1934,16 +1934,70 @@ pub trait KnowledgeStore {
 #[cfg_attr(feature = "serde", derive(serde::Serialize))]
 pub struct InvocableId(String);
 
+/// Why a candidate identity does not match the grammar (§4.4): exactly one
+/// `:` separator, with a non-empty qualifier before it and a non-empty,
+/// separator-free tail after it. Returned by [`InvocableId::new`] —
+/// everything downstream of construction can therefore rely on any
+/// `InvocableId` it holds already having this shape, with nothing left to
+/// re-check.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum InvocableIdError {
+    /// No `:` separator is present at all.
+    MissingSeparator,
+    /// The qualifier (before the first `:`) is empty.
+    EmptyQualifier,
+    /// The tail (after the first `:`) is empty.
+    EmptyTail,
+    /// The tail itself contains a `:` — more than one separator.
+    ExtraSeparator,
+}
+
+impl std::fmt::Display for InvocableIdError {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.write_str(match self {
+            InvocableIdError::MissingSeparator => "missing ':' qualifier separator",
+            InvocableIdError::EmptyQualifier => "qualifier before ':' is empty",
+            InvocableIdError::EmptyTail => "tail after ':' is empty",
+            InvocableIdError::ExtraSeparator => "tail contains a second ':' separator",
+        })
+    }
+}
+
+impl std::error::Error for InvocableIdError {}
+
 impl InvocableId {
+    /// Construct a qualified identity, refusing anything that does not
+    /// match the grammar: `<qualifier>:<tail>`, both halves non-empty,
+    /// neither containing the separator (§4.4). Refusing here — rather than
+    /// accepting any string and validating later at registration — is what
+    /// keeps an unvalidated identity from existing at all: a multi-
+    /// separator or empty-half string would otherwise parse silently and
+    /// resolve to the wrong entry, or to none, far from where it was built.
+    pub fn new(id: impl Into<String>) -> Result<Self, InvocableIdError> {
+        let id = id.into();
+        let Some((qualifier, tail)) = id.split_once(':') else {
+            return Err(InvocableIdError::MissingSeparator);
+        };
+        if qualifier.is_empty() {
+            return Err(InvocableIdError::EmptyQualifier);
+        }
+        if tail.is_empty() {
+            return Err(InvocableIdError::EmptyTail);
+        }
+        if tail.contains(':') {
+            return Err(InvocableIdError::ExtraSeparator);
+        }
+        Ok(InvocableId(id))
+    }
+
     pub fn as_str(&self) -> &str {
         &self.0
     }
 
     /// The identity a qualified id is prefixed with (e.g. `"core"` in
-    /// `"core:board.list"`). An id with no `:` is its own qualifier — this
-    /// is a decoding convenience, not a claim that such an id is
-    /// well-formed; registration is what actually enforces the qualified
-    /// shape.
+    /// `"core:board.list"`). Every `InvocableId` in existence was refused
+    /// by [`InvocableId::new`] unless it has exactly this shape, so this
+    /// split never falls back to the whole string.
     pub fn qualifier(&self) -> &str {
         self.0.split_once(':').map_or(&self.0, |(q, _)| q)
     }
@@ -1955,15 +2009,19 @@ impl InvocableId {
     }
 }
 
-impl From<String> for InvocableId {
-    fn from(s: String) -> Self {
-        InvocableId(s)
+impl TryFrom<String> for InvocableId {
+    type Error = InvocableIdError;
+
+    fn try_from(s: String) -> Result<Self, Self::Error> {
+        InvocableId::new(s)
     }
 }
 
-impl From<&str> for InvocableId {
-    fn from(s: &str) -> Self {
-        InvocableId(s.to_string())
+impl TryFrom<&str> for InvocableId {
+    type Error = InvocableIdError;
+
+    fn try_from(s: &str) -> Result<Self, Self::Error> {
+        InvocableId::new(s)
     }
 }
 
@@ -1990,6 +2048,14 @@ pub enum Locus {
     /// generic dispatch and declared with the reason, never silently
     /// omitted.
     HostOnly { reason: &'static str },
+    /// Acts on the product's own installation rather than on the user's
+    /// work — runs to completion without a session and never appears on a
+    /// session-scoped surface (workspace init, configuration, extension
+    /// management, diagnostics). Declared once in the launcher's own closed
+    /// grammar and registered here so a session-scoped surface can
+    /// *declare* that it deliberately does not offer it, rather than
+    /// merely omitting it (SP-11).
+    Installation,
 }
 
 /// Whether an invocable is on the shipped surface (INV-9). An action the
@@ -2033,6 +2099,22 @@ pub struct Binder {
     pub optional: bool,
 }
 
+/// Bounds enforced on a contributed descriptor's text at registration
+/// (EP-14). Declared here, in the dependency-free tier, so the registry
+/// (domain tier) and any surface rendering a validation refusal read the
+/// same numbers rather than each guessing its own. Enforcement lives at the
+/// registration door, not here — this crate only names the limits.
+///
+/// `Binder` carries no `description` field today, so the bound below covers
+/// `name` only; a spec passage describing a bounded binder *description*
+/// predates the field and is a wording defect, not a shape this crate
+/// implements.
+pub const INVOCABLE_NAME_MAX_LEN: usize = 80;
+pub const INVOCABLE_SUMMARY_MAX_LEN: usize = 240;
+pub const INVOCABLE_GROUP_MAX_LEN: usize = 40;
+pub const INVOCABLE_MAX_BINDERS: usize = 16;
+pub const BINDER_NAME_MAX_LEN: usize = 40;
+
 /// The full advertised contract for one action (SP-1/SP-2). Every render of
 /// help, completion, or a command grammar's grouping is a projection of this
 /// struct; none restates it.
@@ -2053,6 +2135,45 @@ pub struct Invocable {
     /// Ordered, typed; the single schema source (IB-1).
     pub binders: Vec<Binder>,
     pub stability: Stability,
+    /// Whether a resolved dispatch of this invocable records its raw
+    /// arguments in the dispatch journal (§4.13). An invocable whose
+    /// argument may itself be a secret, or whose own domain event already
+    /// owns the payload, declares `false` — this removes that argument
+    /// class from the journal entirely rather than relying on redaction to
+    /// catch it after the fact, which cannot help an argument that IS
+    /// entirely a credential the store never learns.
+    pub journal_raw_input: bool,
+}
+
+/// Whether an id names something the registry currently knows, asked and
+/// answered **before** dispatch (SP-13). Deliberately not `Option`: the two
+/// outcomes read as domain facts here (`Found`/`Unknown`), not as a generic
+/// absence, because three different surfaces act on `Unknown` in three
+/// different — and mutually incompatible — ways (§4.5), and folding it into
+/// a failure-shaped `Outcome` would force one of them to behave incorrectly.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum Resolved<'a> {
+    Found(&'a Invocable),
+    Unknown,
+}
+
+impl<'a> Resolved<'a> {
+    pub fn is_found(&self) -> bool {
+        matches!(self, Resolved::Found(_))
+    }
+
+    pub fn is_unknown(&self) -> bool {
+        matches!(self, Resolved::Unknown)
+    }
+
+    /// Convert to the generic `Option` shape, for a caller that only needs
+    /// the descriptor and not the domain distinction.
+    pub fn found(self) -> Option<&'a Invocable> {
+        match self {
+            Resolved::Found(invocable) => Some(invocable),
+            Resolved::Unknown => None,
+        }
+    }
 }
 
 #[cfg(test)]
@@ -2061,7 +2182,7 @@ mod invocable_tests {
 
     #[test]
     fn invocable_id_round_trips_through_display_and_as_str() {
-        let id = InvocableId::from("core:board.list");
+        let id = InvocableId::new("core:board.list").expect("well-formed invocable id");
         assert_eq!(id.as_str(), "core:board.list");
         assert_eq!(id.to_string(), "core:board.list");
     }
@@ -2069,12 +2190,83 @@ mod invocable_tests {
     #[test]
     fn invocable_id_equality_is_by_qualified_string() {
         assert_eq!(
-            InvocableId::from("core:board.list".to_string()),
-            InvocableId::from("core:board.list")
+            InvocableId::new("core:board.list".to_string()).expect("well-formed invocable id"),
+            InvocableId::new("core:board.list").expect("well-formed invocable id")
         );
         assert_ne!(
-            InvocableId::from("core:board.list"),
-            InvocableId::from("ext:board.list")
+            InvocableId::new("core:board.list").expect("well-formed invocable id"),
+            InvocableId::new("ext:board.list").expect("well-formed invocable id")
+        );
+    }
+
+    #[test]
+    fn invocable_id_refuses_a_string_with_no_separator() {
+        assert_eq!(
+            InvocableId::new("noqualifier").unwrap_err(),
+            InvocableIdError::MissingSeparator
+        );
+    }
+
+    #[test]
+    fn invocable_id_refuses_an_empty_qualifier() {
+        assert_eq!(
+            InvocableId::new(":board.list").unwrap_err(),
+            InvocableIdError::EmptyQualifier
+        );
+    }
+
+    #[test]
+    fn invocable_id_refuses_an_empty_tail() {
+        assert_eq!(
+            InvocableId::new("core:").unwrap_err(),
+            InvocableIdError::EmptyTail
+        );
+    }
+
+    #[test]
+    fn invocable_id_refuses_a_second_separator_in_the_tail() {
+        // "a:b:c" splits on the FIRST ':' into qualifier "a", tail "b:c" —
+        // the tail itself still contains a ':', which is refused rather
+        // than silently accepted as an ambiguous three-part id.
+        assert_eq!(
+            InvocableId::new("a:b:c").unwrap_err(),
+            InvocableIdError::ExtraSeparator
+        );
+    }
+
+    #[test]
+    fn invocable_id_refuses_the_empty_string() {
+        assert_eq!(
+            InvocableId::new("").unwrap_err(),
+            InvocableIdError::MissingSeparator
+        );
+    }
+
+    #[test]
+    fn invocable_id_try_from_agrees_with_new() {
+        let via_new = InvocableId::new("core:board.list").expect("well-formed invocable id");
+        let via_try_from_str: InvocableId = "core:board.list".try_into().expect("well-formed");
+        let via_try_from_string: InvocableId = "core:board.list"
+            .to_string()
+            .try_into()
+            .expect("well-formed");
+        assert_eq!(via_new, via_try_from_str);
+        assert_eq!(via_new, via_try_from_string);
+        assert_eq!(
+            InvocableId::try_from("bad").unwrap_err(),
+            InvocableIdError::MissingSeparator
+        );
+    }
+
+    #[test]
+    fn installation_locus_is_distinct_from_the_other_three() {
+        assert_ne!(Locus::Installation, Locus::Semantic);
+        assert_ne!(Locus::Installation, Locus::ClientLocal);
+        assert_ne!(
+            Locus::Installation,
+            Locus::HostOnly {
+                reason: "unrelated"
+            }
         );
     }
 
@@ -2092,12 +2284,13 @@ mod invocable_tests {
     #[test]
     fn retired_stability_names_its_replacement() {
         let stability = Stability::Retired {
-            superseded_by: InvocableId::from("core:board.list"),
+            superseded_by: InvocableId::new("core:board.list").expect("well-formed invocable id"),
         };
         assert_eq!(
             stability,
             Stability::Retired {
-                superseded_by: InvocableId::from("core:board.list")
+                superseded_by: InvocableId::new("core:board.list")
+                    .expect("well-formed invocable id")
             }
         );
     }
@@ -2105,7 +2298,7 @@ mod invocable_tests {
     #[test]
     fn descriptor_carries_ordered_binders_and_their_optionality() {
         let invocable = Invocable {
-            id: InvocableId::from("core:board.add"),
+            id: InvocableId::new("core:board.add").expect("well-formed invocable id"),
             name: "Add card",
             summary: "Add a card to the board",
             group: "board",
@@ -2123,10 +2316,39 @@ mod invocable_tests {
                 },
             ],
             stability: Stability::Shipped,
+            journal_raw_input: true,
         };
         assert_eq!(invocable.binders.len(), 2);
         assert!(!invocable.binders[0].optional);
         assert!(invocable.binders[1].optional);
+    }
+
+    #[test]
+    fn resolved_found_and_unknown_are_distinguishable_and_convert_to_option() {
+        let invocable = Invocable {
+            id: InvocableId::new("core:board.list").expect("well-formed invocable id"),
+            name: "List cards",
+            summary: "List cards on the board",
+            group: "board",
+            locus: Locus::Semantic,
+            binders: Vec::new(),
+            stability: Stability::Shipped,
+            journal_raw_input: true,
+        };
+
+        let found = Resolved::Found(&invocable);
+        assert!(found.is_found());
+        assert!(!found.is_unknown());
+
+        let unknown: Resolved<'_> = Resolved::Unknown;
+        assert!(unknown.is_unknown());
+        assert!(!unknown.is_found());
+
+        assert_eq!(
+            Resolved::Found(&invocable).found().map(|i| i.name),
+            Some("List cards")
+        );
+        assert_eq!(Resolved::<'_>::Unknown.found(), None);
     }
 }
 
@@ -2240,15 +2462,22 @@ pub struct Rejection {
     pub detail: String,
 }
 
-/// What dispatch returns for one invocation. `Rejected` means a declared
+/// What dispatch returns for a **resolved** invocation (§4.5) — an
+/// invocable the registry does know exists. `Rejected` means a declared
 /// binder failed, so the body never ran at all (IB-2) — it always names a
 /// binder and a location. `Unavailable` covers everything else that keeps a
 /// result from existing without that being the caller's input at fault: a
-/// resource the body depends on could not be reached, or the invocation
-/// named no invocable the registry knows at all. Neither case has a binder
+/// resource the body depends on could not be reached, or a contribution's
+/// handler panicked or exceeded its time bound. Neither case has a binder
 /// or a location to name, which is exactly why it is not `Rejected`.
 /// Collapsing `Unavailable` into an empty [`OutcomeValue`] with a
 /// success-shaped `Value` is exactly the quiet failure this split forbids.
+///
+/// An invocation naming nothing the registry knows produces no `Outcome`
+/// at all — see [`Resolved`] and [`Dispatched`]. Folding that case in here
+/// was this type's shape before the distinction was drawn (SP-13); an
+/// unresolved invocation is not an incident, and three different surfaces
+/// react to it three different ways, none of which is "render an error".
 #[derive(Debug, Clone, PartialEq)]
 #[cfg_attr(feature = "serde", derive(serde::Serialize))]
 pub enum Outcome {
@@ -2256,6 +2485,36 @@ pub enum Outcome {
     Stream(StreamHandle),
     Rejected(Rejection),
     Unavailable { reason: String },
+}
+
+/// What `Dispatcher::dispatch` returns: resolution, asked first (SP-13),
+/// before whether a resolved invocation produced an ordinary [`Outcome`].
+/// `Unknown` is not a failure — nothing ran, nothing was rejected, nothing
+/// was journaled — and each surface acts on it differently (fall through to
+/// ordinary input, a usage error, a catalog refresh); collapsing it into
+/// `Outcome::Unavailable` would force one of the three to behave
+/// incorrectly.
+#[derive(Debug, Clone, PartialEq)]
+pub enum Dispatched {
+    /// The invocation named nothing the registry currently knows.
+    Unknown,
+    /// The invocable resolved; this is its ordinary dispatch outcome.
+    Ran(Outcome),
+}
+
+impl Dispatched {
+    pub fn is_unknown(&self) -> bool {
+        matches!(self, Dispatched::Unknown)
+    }
+
+    /// Convert to the generic `Option` shape, for a caller that only needs
+    /// the outcome and not the domain distinction.
+    pub fn outcome(self) -> Option<Outcome> {
+        match self {
+            Dispatched::Ran(outcome) => Some(outcome),
+            Dispatched::Unknown => None,
+        }
+    }
 }
 
 #[cfg(test)]
@@ -2304,12 +2563,26 @@ mod dispatch_tests {
         let mut args = ArgValues::new();
         args.insert("id", ArgValue::Text("card-1".to_string()));
         let invocation = Invocation {
-            id: InvocableId::from("core:board.show"),
+            id: InvocableId::new("core:board.show").expect("well-formed invocable id"),
             args,
             caller: Surface::Cli,
         };
         assert_eq!(invocation.id.as_str(), "core:board.show");
         assert_eq!(invocation.caller, Surface::Cli);
+    }
+
+    #[test]
+    fn dispatched_unknown_and_ran_are_distinguishable_and_convert_to_option() {
+        let unknown = Dispatched::Unknown;
+        assert!(unknown.is_unknown());
+        assert_eq!(Dispatched::Unknown.outcome(), None);
+
+        let ran = Dispatched::Ran(Outcome::Value(OutcomeValue::Empty));
+        assert!(!ran.is_unknown());
+        assert_eq!(
+            Dispatched::Ran(Outcome::Value(OutcomeValue::Empty)).outcome(),
+            Some(Outcome::Value(OutcomeValue::Empty))
+        );
     }
 
     #[test]
@@ -2346,7 +2619,7 @@ mod serde_tests {
     #[test]
     fn descriptor_serializes_every_field_including_nested_binders() {
         let invocable = Invocable {
-            id: InvocableId::from("core:board.add"),
+            id: InvocableId::new("core:board.add").expect("well-formed invocable id"),
             name: "Add card",
             summary: "Add a card to the board",
             group: "board",
@@ -2359,8 +2632,10 @@ mod serde_tests {
                 optional: false,
             }],
             stability: Stability::Retired {
-                superseded_by: InvocableId::from("core:board.show"),
+                superseded_by: InvocableId::new("core:board.show")
+                    .expect("well-formed invocable id"),
             },
+            journal_raw_input: true,
         };
         let json: serde_json::Value =
             serde_json::from_str(&serde_json::to_string(&invocable).expect("serialize"))
