@@ -1,6 +1,6 @@
 # Application Shell Runtime (React 19 · Tauri v2)
 
-**Version:** 1.1.0
+**Version:** 1.2.0
 **Status:** Stable
 **Layer:** implementation
 **Implements:** l1-application-shell.md
@@ -24,6 +24,7 @@ a defined place beneath it.
 
 ## Related Specifications
 
+- [l1-launch-handoff.md](l1-launch-handoff.md) - `[ADDED v1.2.0]` LH-2 is why this shell supplies the composition an explicit empty invocation rather than letting components read a command line it does not have; it is the host that proves the provided-invocation rule earns its ceremony.
 - [l1-application-shell.md](l1-application-shell.md) - L1 parent; AS-1…AS-13, the runtime contracts realized here.
 - [l2-app-ui.md](l2-app-ui.md) - The surrounding application layer: surface catalog (§4.1), the shell↔core bridge picture (§4.2), settings persistence (§4.7), tray (§4.8), **OS-global** shortcuts (§4.9), overlay windows (§4.10). This spec owns the **in-app** runtime those surfaces run on; it never re-specifies them.
 - [l2-navigation.md](l2-navigation.md) - The concrete navigation catalog and its four layers; the surfaces this runtime hosts and routes between.
@@ -221,6 +222,33 @@ fourth (recorded as findings F-1 and F-7). Both collapse into the two lines abov
 side collapses correspondingly: a compile-time handler list cannot carry a verb contributed
 by an extension installed after the build, so per-capability handlers give way to one
 dispatch handler plus the host-owned facilities.
+
+#### 4.3.1 The catalog crosses; the behavior never does
+
+`[ADDED v1.2.0]` `catalog()` returns **descriptors only** — identity, name, summary, group,
+locus, binders, stability. The behavior behind an invocable, and every host handle it closed
+over, stay on the Rust side and have no serialized form at all (SP-12). This is not a rule
+the bridge remembers to apply at each call; it is a property of the descriptor type, which is
+serializable **outbound only**, so there is nothing on this seam through which a handle could
+travel and no inbound path by which the WebView could synthesize a descriptor the core did
+not author. The seam is the boundary where a *forgotten* omission would be least visible and
+most damaging, which is why the omission is made impossible rather than mandated.
+
+#### 4.3.2 The client's catalog is a copy, and `Unknown` is how it learns it is stale
+
+`[ADDED v1.2.0]` This is the only surface whose catalog lives in a different process from the
+registry, so the copy it holds is correct as of the last delivery and not necessarily now: an
+extension activating or being disabled changes the registry while this client holds the prior
+snapshot. Dispatching an identity the registry does not know therefore returns the **`Unknown`
+resolution result**, distinct from any outcome (SP-13), and this surface's correct response is
+to **refresh the catalog**, not to render a failure to the user.
+
+The distinction earns its place here. Reported as a generic failure, a stale-copy problem
+reaches the user as a broken feature and reaches the developer as an unreproducible bug —
+because by the time anyone looks, the catalog has been refreshed. Reported as `Unknown`, it is
+a self-correcting condition the client handles without the user seeing it. The registry also
+announces its own mutations, so the refresh is normally driven by the announcement and
+`Unknown` is the backstop for the window between the change and its delivery.
 
 **Admission rule (INV-3 + INV-9).** A method may be added to the seam only when
 it binds a capability that **already exists in the core or the host** and is
@@ -471,6 +499,7 @@ point.
 
 | Version | Date | Change |
 | --- | --- | --- |
+| 1.2.0 | 2026-09-06 | Seam-boundary amendment. §4.3.1 states that `catalog()` carries **descriptors only** and that the executable face has no serialized form at all — not a rule the bridge applies per call but a property of the type, serializable outbound only, so no handle can travel this seam and no inbound path can synthesize a descriptor the core did not author (SP-12); this is the boundary where a forgotten omission would be least visible, so the omission is made impossible rather than mandated. §4.3.2 makes this surface's catalog an explicit **copy** and `Unknown` the signal that it is stale: dispatching an identity the registry no longer knows refreshes the catalog instead of rendering a failure, because a stale-copy problem reported as a generic failure reaches the user as a broken feature and the developer as an unreproducible bug — the catalog having refreshed by the time anyone looks (SP-13). The registry's own change announcement normally drives the refresh; `Unknown` is the backstop for the delivery window. |
 | 1.0.0 | 2026-09-03 | Initial implementation spec — the L2 realization `l1-application-shell` had never received. One composition root (§4.1), projection/view/session stores over a scoped external-store subscription (§4.2), the single seam's event direction plus the capability-admission rule (§4.3), namespaced actions with context-stack keymap resolution and three-layer merge (§4.4), the workbench vocabulary and versioned layout record (§4.5), delegated selection surfaces (§4.6), cancellation-owned async (§4.7), and a verification table naming one failable check per contract plus the two obligations that stay judgment (§5). Maps AS-1…AS-13, stating explicitly where the stack lacks the L1's mechanism (AS-2, AS-11) and how the intent is met instead. Post-Update Review added §4.3 channel liveness (a dead push edge moves dependent projections to *unavailable* rather than leaving stale values on screen) and the §5 verification table. |
 | 1.0.1 | 2026-09-03 | §4.3 admission rule reconciled to the principle it states. The old text made *"the capability the corresponding command-line verb reaches"* the necessary condition for adding a seam method; the stated purpose was only *"incapable of growing a frontend-only feature"*. §4.5's layout record and the theming axes are written by the host settings store — reached by no CLI verb and no other frontend, yet not a frontend invention — so the old letter forbade what §4.5 requires. Now: admissibility = the bound capability exists in the core **or the host** and is **not frontend-only**; two admissible classes named (a core capability another surface binds; a host-owned facility), CLI/TUI parity demoted from necessary condition to sufficient signal. No new requirement — a self-contradiction repaired. |
 | 1.1.0 | 2026-09-05 | §4.3's request/response direction collapses from **one method per bound capability** to **one generic dispatch** over the core's invocable catalog, plus a `catalog()` read and the unchanged push edge. The prior shape was the third hand-written statement of one input→core mapping and its TypeScript client was on course to be a fourth (findings F-1, F-7); it is also compile-time bound, so it could never carry a verb contributed by an extension installed after the build — the constraint that decides the design. The 1.0.1 admission rule is **preserved and given a machine-readable form**: its two admissible classes are the catalog's `locus` values — `Semantic` travels through dispatch, `HostOnly` keeps its own method and is *declared* as an exclusion rather than omitted (SP-8/SP-11) — while the third, frontend-only case has no locus to declare and so cannot be registered at all, turning a review obligation into a structural one. Command-line parity stays a sufficient signal, never a necessary condition, exactly as 1.0.1 established. AS-6 is clarified against the same risk: the runtime's action registry is **not a second catalog** — it owns `ClientLocal` actions and sources `Semantic` ones from the core catalog by identity. Records that this shell registers with the conformance corpus **from its own build workspace**, which is why the corpus is shaped as a library each surface runs rather than one central suite. |

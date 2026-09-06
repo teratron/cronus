@@ -1,6 +1,6 @@
 # CLI Frontend
 
-**Version:** 1.1.0
+**Version:** 1.2.0
 **Status:** Stable
 **Layer:** implementation
 **Implements:** l1-architecture.md
@@ -13,6 +13,7 @@ Its command surface is not declared here. It is a **projection of the core's inv
 
 ## Related Specifications
 
+- [l1-launch-handoff.md](l1-launch-handoff.md) — `[ADDED v1.2.0]` The entry contract this frontend implements: one binary, one entry procedure, a closed launcher grammar, and the ordering that lets an extension contribute a verb without every invocation loading every extension.
 - [l1-architecture.md](l1-architecture.md) - Concept this layer implements.
 - [l2-core-library.md](l2-core-library.md) - The core this CLI drives.
 - [l2-tui.md](l2-tui.md) - Sibling frontend (interactive terminal).
@@ -65,12 +66,32 @@ The prior revision carried a hand-maintained parity table. By the time of this a
 
 > The TUI mirrors the same set in slash form and the desktop shell in generic dispatch. Parity is required by INV-3 and is structural, not restated.
 
+### 4.1.1 Two halves, split by locus
+
+`[ADDED v1.2.0]` Not every verb on this surface comes from the registry, and the division is not a convenience — it is forced by when each kind can be answered.
+
+| Half | Source | Contents |
+| --- | --- | --- |
+| **Semantic verbs** | Generated from `Semantic` descriptors after composition | Every domain operation, including every verb an extension contributed |
+| **Installation verbs** | Declared by this frontend, in its own closed grammar | Workspace initialization, configuration, extension management, diagnostics, completion generation |
+
+The installation half is the **launcher grammar** of [l1-launch-handoff.md](l1-launch-handoff.md) and obeys LH-1 and LH-5: it is closed, small, owned entirely by this frontend's own source, and contains **no name an extension can define**. That last property is what makes it answerable at all — an installation verb must work when the composition it would configure is precisely what failed to come up, so it cannot be projected from a registry that does not yet exist.
+
+The semantic half is resolved **after** composition, which is when the extensions contributing to it exist. This ordering is the whole reason a command line can be extended by a plugin without every invocation paying to load every plugin (EP-9): the launcher never asks a question the plugin set answers.
+
+Generating *all* of it was the v1.1.0 reading of this spec and it does not survive the launcher contract. Hand-declaring *all* of it is the fork the registry exists to remove. The split is by locus and is checkable: a descriptor's locus decides which half it belongs to, and nothing is in both.
+
 ### 4.2 Invocation modes
 
+`[MODIFIED v1.2.0]` **One binary.** `cronus` is the only executable this product ships; the terminal UI is a composition it brings up, not a separate program. A second binary is a second entry procedure, and two entry procedures resolve configuration in two orders — a difference discovered only when one of them starts honoring a setting the other ignores (LH-10).
+
+- **Bare invocation:** `cronus` with no verb brings up the **default composition**, the terminal UI. The verb `cronus tui` names that same composition explicitly. Both are required and neither replaces the other (LH-4): the default is what makes the product usable by typing its name, and the explicit name is what makes it usable from a script or a shortcut whose meaning must not change on the day the default does.
 - **Interactive:** a REPL-style session bound to a core session.
 - **Headless:** `cronus <command> [--flags]` returns a result and a process exit code suitable for scripting/CI.
 - **Output mode:** default text; `--format json` for structured consumption. `[MODIFIED v1.1.0]` The flag is honored **uniformly**, because rendering is one function of `Outcome` and the requested format rather than a per-command decision. Nine sites that silently discarded the flag, and five that assembled structured output by unescaped string formatting, are recorded as finding F-6 with their corrections staged as residuals.
 - **Exit codes and rejections:** `[ADDED v1.1.0]` A binding rejection is a typed outcome carrying its mode (absent / unreadable / malformed / ill-shaped) and its location, which the frontend renders as a located message and maps to a non-zero exit code. An unavailable resource and an empty result are **different outcomes**; reporting the former as the latter with a success code is a correctness defect, recorded as a residual.
+- **Three failures, three reports:** `[ADDED v1.2.0]` A malformed invocation, a composition that failed to come up, and a verb that ran and failed are distinguishable outcomes with distinct exit signals (LH-7). A usage failure opens no session and journals no run, so a misspelled flag leaves nothing resembling an execution behind it. This is the distinction an operator needs first — *did my command reach the product at all?* — and it is the one a single non-zero exit code destroys.
+- **Help belongs to its grammar's owner:** `[ADDED v1.2.0]` This frontend renders usage for the installation half from its own declarations and for the semantic half from descriptors (LH-3). Where usage must be produced before composing — shell completion above all, which is asked on a keystroke — it is served from an artifact built by a prior composition that records the conditions under which it stops being valid (LH-6). A completion script regenerated by composing on every keypress is one the user will disable.
 
 ### 4.3 Flow
 
@@ -120,5 +141,6 @@ The CLI follows mainstream-CLI conventions (the git/docker/kubectl family). This
 
 | Version | Date | Notes |
 | --- | --- | --- |
+| 1.2.0 | 2026-09-06 | Entry-contract amendment. **One binary** — the terminal UI becomes a composition this executable brings up rather than a second program, since two entry procedures resolve configuration in two orders and the difference surfaces only when one starts honoring a setting the other ignores (LH-10). **Bare invocation** brings up the default composition (the terminal UI) and `cronus tui` names it explicitly; both are required (LH-4). **§4.1.1 splits the verb set by locus**: semantic verbs are generated from descriptors after composition, installation verbs are declared in this frontend's own closed grammar — because an installation verb must be answerable when the composition it configures is exactly what failed to come up, and because a launcher that resolved a contributed name would have to load every extension on every invocation (LH-1/LH-5). Generating all of it was the v1.1.0 reading and does not survive that constraint; hand-declaring all of it restores the fork the registry removes. Adds the three-way failure distinction (LH-7) and help ownership with a pre-composition artifact for completion (LH-3/LH-6). |
 | 1.0.1 | 2026-07-29 | Extended §3 Invariant-Compliance to INV-8/9/10 (sanctioned frontend↔core boundary; honest verb surface — the strong INV-9 case; consumes contract types only, no adapter shape) — completeness fix. |
 | 1.1.0 | 2026-09-05 | The command surface becomes a **projection of the invocable registry** rather than a declaration of its own: the parser is generated at startup from descriptors, and help, completion, and grouping derive from the same catalog. INV-3 parity is restated as **structural rather than asserted** — a frontend that derives its verbs cannot hold one the registry lacks — with residual behavioral agreement proven by the conformance corpus this surface registers against. INV-9 moves from discipline to representability: an unshipped action has no descriptor, so the "parses then answers *not implemented*" shape (five command groups at the time of amendment) cannot be expressed, and the v1.4.0 declared-retirement rule governs departure symmetrically. INV-7 masking moves to the dispatch boundary, closing the asymmetry in which the sibling frontends masked and this one did not; the inert-empty-secret-list half is recorded as a residual, not claimed as fixed. §4.1's hand-maintained parity table is **deleted** — it had drifted to listing verbs the product lacked while omitting every group it had — and tombstoned as finding F-3. §4.2 gains uniform format handling and the typed located rejection model, with the ignored-format and unescaped-structured-output defects recorded as residuals for separate correction. Adds the constraint that a statically declared command enum is forbidden as a source of truth, and the reasoning: it is fixed at build time and forecloses contributed verbs permanently. |

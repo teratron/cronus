@@ -4,23 +4,26 @@
 <!-- Maximum 100 lines. Agent updates AFTER each completed action. -->
 
 **Workspace:** main
-**Updated:** 2026-09-05 18:30
+**Updated:** 2026-09-06 08:44
 **Phase:** 27 — Invocable Registry & CLI Derivation
 **Status:** Active
 
 ## Current Position
 
-- **Task:** T-27B04 Core invocables registered from the facade through the public door; redaction at the boundary
-- **Planning audit findings, fixed before write-back:** the claimed C ∥ D parallelism has a crossing edge (T-27D03's corpus registration needs T-27C01); one `Verify` line carried an unresolved crate-name placeholder (now `cronus-conformance`, constrained to be path-reachable from the detached desktop workspace so Phase 29 can register from it). Sizing warning recorded rather than smoothed: track D touches ~4000 lines across 29 command groups and is expected to need `.N` sub-task splits.
-- **Carried deliberately (SP-10 — convergence and correction travel separately):** four known-wrong behaviours stay live through Phases 27–28 and are corrected in 29, one disclosed change each — a store failure reported as an empty listing with exit 0; the output-format flag discarded in 9 sites; structured output assembled by unescaped string formatting in 5; redaction fed an empty secret list on every surface. Two are correctness defects. Recorded **at the owning invocable**, not in a tracker, so the next reader meets them where they are already looking.
-- **Spec/Plan:** INDEX v1.0.188 → **v1.0.190** (289 specs: 210 L1 + 79 L2) · PLAN v2.68.0 → **v2.69.0** · TASKS v1.50.0 → **v1.51.0** · RULES v1.6.0 · project 0.1.543 → **0.1.545** (`finalize --workflow=spec` then `--workflow=task`; root `CHANGELOG.md` append skipped as a detected duplicate both times). Post-write pre-flight: `ok:true`, **0 warnings** — `ORPHANED_SPEC` cleared only after converting the new phases' spec references from backticks to `[l2-x.md](specifications/l2-x.md)` link form, which is the shape the checker matches.
-- **Not yet committed:** the entire wave — 2 new specs, 3 amendments, `PLAN`/`TASKS`/`INDEX`/`CONTEXT`/`STATE`, `tasks/phase-27.md`. **No product file was touched**, so §6 containment holds trivially. Standing follow-ups (not phases): `i18n.ts` comment leaks (§6 containment cleanup); `KeymapSurface` + domain projection stores still wait on a core channel to bind. **Open risk, recorded in `PLAN.md` §Risks:** all five specs were authored, reviewed, and promoted by the same agent in one session — the Post-Update Review was real and closed three genuine gaps, but no independent reader has seen them, and the cheapest correction point is before track B lands.
-- **Next Action:** Track B complete. Execute T-27C01 Conformance fixture library and harness with three assertion families
+- **Task:** `/magic.run main` → **T-27A04**, the first of three retrofit tasks. Phase 27 is now **18 tasks, 7 done**; no product file has been touched since track B closed.
+- **How this phase changed shape.** The user paused execution to challenge the command surface before track D cements it, and supplied seven comparable products to study. The study **confirmed** the single binary and bare-invocation-boots-the-interactive-surface, and **refuted** the assumption underneath track D — that the command line's verb set and the interactive surface's verb set are one set. Every studied product keeps them separate; the one with a genuinely shared registry feeds it to its interactive surface, its editor protocol, its remote clients, and its plugins, but **not** to its command line. The axis is *acts on the user's work* vs *acts on the product's installation*.
+- **Specs (v1.0.192, all Stable):** new L1 `l1-launch-handoff` (LH-1…LH-10) — the launcher/composition boundary that dissolves the argv-vs-lazy-plugins ordering problem by **narrowing the launcher** rather than speeding the loader. Amendments: `l1-surface-parity` 1.1.0 (installation locus · projectable/executable faces · unrecognized ≠ unavailable), `l1-extension-points` 1.3.0 (EP-14 · scope-shadowing), `l2-invocable-registry` 1.1.0, `l2-cli` 1.2.0, `l2-tui` 1.2.0, `l2-application-shell` 1.2.0, `l2-surface-conformance` 1.0.1.
+- **Plan (v2.70.0 / TASKS v1.52.0):** tracks A and B keep `[x]` at their delivered 1.0.0 scope; the 1.1.0 delta is **three explicit retrofit tasks** — T-27A04 (`Installation` locus, fallible identity grammar, descriptor bounds), T-27B05 (registration returns its own reversal; descriptor refused, never repaired), T-27B06 (resolution split from outcome, change announcement, paired journal). They are **on the critical path**: the corpus asserts on the resolution split and the generated parser needs the locus. **T-27D01 renarrowed** to the semantic half; **T-27D01.1** added for the installation half as one closed declaration feeding both the pre-composition parser and the catalog.
+- **Known crossing edge into Done work, recorded not discovered:** the retrofit breaks `InvocableId`'s `From` impls (a `From` cannot fail), changes `register`'s signature, and changes `Dispatcher::dispatch`'s return — so it edits tests that tracks A and B wrote. Not behaviour changes; say so in the task's `Changes` note so a reviewer does not read a modified test as a weakened one. **Phase-size tripwire:** 18 tasks with the largest track unstarted — if track D's `.N` splits push past ~24, split D into its own phase; until then they stay together because T-27T02 proves behaviour preservation across the primitive *and* its first migration.
+- **Carried deliberately (SP-10):** four known-wrong behaviours stay live through phases 27–28, corrected in 29 one disclosed change each — store failure reported as an empty listing with exit 0; output-format flag discarded in 9 sites; structured output built by unescaped string formatting in 5; redaction fed an empty secret list everywhere.
+- **Gates:** pre-flight `ok:true`, **0 warnings** (`ORPHANED_SPEC` and `SYNC_GAP` both cleared by this pass; the finalize digest replays them as historical findings). 290 specs, all Stable. project 0.1.545 → **0.1.547**. **Uncommitted:** 1 new spec + 6 amendments + `PLAN`/`TASKS`/`INDEX`/`CONTEXT`/`STATE`/`phase-27`; no product file touched, so §6 containment holds trivially.
+- **Open risk:** every spec in this wave was authored, reviewed, and promoted by the same agent in one session. The Post-Update Review was real and closed three genuine gaps (LH-2's launcher exemption, LH-6's first-run artifact, and a §4.7.1 ambiguity that would have made installation verbs either a fork or an SP-11 violation), but no independent reader has seen any of it. Cheapest correction point is before the retrofit lands.
+- **Next Action:** Run /magic.run main to execute T-27A04
 
 ## Progress
 
 ```
-Phase 27: [0/14] ░░░░░░░░ 0%
+Phase 27: [7/18] ███░░░░░ 39%
 Overall: [25/28] ███████░ 89%
 ```
 

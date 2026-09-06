@@ -1,6 +1,6 @@
 # Surface Conformance Corpus
 
-**Version:** 1.0.0
+**Version:** 1.0.1
 **Status:** Stable
 **Layer:** implementation
 **Implements:** l1-surface-parity.md
@@ -142,7 +142,7 @@ Recorded at the invocable that owns each, and corrected separately after converg
 
 | Residual | Present behavior | Correction |
 | --- | --- | --- |
-| Unavailability reported as emptiness | A store error prints an empty listing and exits successfully | Distinct `Outcome` values; a rejection carries its mode |
+| Unavailability reported as emptiness | A store error prints an empty listing and exits successfully | `[MODIFIED v1.0.1]` A **distinct `Outcome` variant naming why**, never a success-shaped empty `Value`. Not a rejection: a rejection is strictly binder-scoped and always carries a real location within a bound argument (IB-4), which an unreachable backend does not have |
 | Output format ignored | Nine sites discard the requested format and print text | One renderer, driven by the requested format |
 | Structured output hand-built | Five sites assemble it by string formatting, unescaped; an identifier containing a quote or backslash emits invalid output | Serialization of `Outcome` |
 | Redaction fed nothing | Every surface's secret list is constructed empty, so masking is inert wherever it exists | Core exposes its secret store to the dispatch boundary |
@@ -182,4 +182,5 @@ The first and third are correctness defects, not stylistic ones: the first misre
 
 | Version | Date | Notes |
 | --- | --- | --- |
+| 1.0.1 | 2026-09-06 | Patch. The unavailability-as-emptiness residual's correction column said 'a rejection carries its mode', which named the wrong mechanism: a rejection is strictly binder-scoped and always carries a real location within a bound argument (IB-4), and an unreachable backend has none. Corrected to a **distinct `Outcome` variant naming why** — the shape the registry actually implements. Wording only; the residual, its owner, and its SP-10 staging are unchanged. |
 | 1.0.0 | 2026-09-05 | Initial spec. Realizes SP-3…SP-8 and SP-10 as a **finding inventory**, two one-way **ledgers**, and a **conformance corpus** shaped as a shared fixture library plus a harness each surface runs in its own test target — the shape forced by the desktop shell's detached build workspace, and the shape SP-7 asks for independently. Seeds the inventory with eight audited findings (§4.2), including the live check-that-cannot-fail: parity asserted against a hand-copied verb list, green while the surfaces differ by eight verbs. Defines repayment as all four SP-4 conditions with no partial credit; pins deletions in an append-only tombstone ledger against a shrink-only debt ledger, so a reversal of either is legible. The corpus drives each surface's **real** projection across three assertion families — surface set (declared exclusions only, INV-9), advertised schema against declared binders (IB-1), and semantic outcome including rejection mode and the empty-versus-unavailable distinction — with fixtures written from the divergence rather than the feature. Records four residuals at their owning invocables (unavailability reported as emptiness, ignored output format, unescaped hand-built structured output, inert empty secret list), two of them correctness defects, all preserved through convergence and corrected separately per SP-10. Names the legitimate per-surface differences (§4.6) so an unstated exception cannot be read as either oversight or licence. |

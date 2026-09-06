@@ -26,7 +26,21 @@ duration_minutes: ~
 
 **Build environment.** Anything that triggers C compilation (`rusqlite` `bundled`) or a Tauri/`windres` step must run in **PowerShell**, not Git Bash — MSYS2 makes `cc1.exe` fail to load there, so a clean check from Bash that suddenly fails at a C step is an environment artifact, not a code defect.
 
-**Track independence.** A → B → (C ∥ D) → T, with **one crossing edge**: T-27D03 registers the command line against the corpus and therefore needs T-27C01. So C and D are file-independent and may run in parallel once B lands, but D cannot *finish* before C01 does. Treat C01 as the earliest task in track C rather than assuming the tracks are fully independent.
+**The specification moved after tracks A and B shipped — read this before opening any remaining task.** T-27A01…T-27B04 were built against `l2-invocable-registry` 1.0.0 and are **correct at that scope**; their `[x]` stands and is not reopened. The spec is now 1.1.0, and the delta is scheduled as three explicit retrofit tasks (T-27A04, T-27B05, T-27B06) rather than folded silently into C or D. What changed, concretely: an `Installation` locus exists; identity construction is fallible; a descriptor is bounds-checked and detached at registration; `register` returns the effect that reverses it; the bare-form collision rule is **shadowing, not displacement**, and is reported; an unknown invocable is a **resolution** result rather than an `Outcome`; the registry announces its own mutations; a resolved dispatch is journaled as a pair.
+
+**Track independence.** A → B → **retrofit (A04, B05, B06)** → (C ∥ D) → T, with **one crossing edge**: T-27D03 registers the command line against the corpus and therefore needs T-27C01. So C and D are file-independent and may run in parallel once the retrofit lands, but D cannot *finish* before C01 does. Treat C01 as the earliest task in track C rather than assuming the tracks are fully independent.
+
+**The retrofit is on the critical path and is not optional sequencing.** The corpus asserts on the resolution/outcome split, and the generated parser needs the `Installation` locus to know which half of the verb set it owns. Opening C or D against the 1.0.0 shape means writing code twice.
+
+**The retrofit reaches backwards into files tracks A and B already delivered — this is a known crossing edge, not a surprise.** Three concrete consequences, each already identified so no executor has to rediscover it:
+
+1. **`InvocableId`'s `From<&str>`/`From<String>` impls cannot survive.** A `From` conversion cannot fail, and T-27A04 makes identity construction fallible. They give way to a fallible constructor (`TryFrom`, or a named function returning a result). Every current call site — the facade bootstrap, the dispatcher, and both integration tests — changes.
+2. **`register`'s signature changes**, so the two bootstrap call sites and the registration assertions in the facade integration test change with it.
+3. **`Dispatcher::dispatch`'s return changes** when resolution splits out, which the facade integration test asserts on directly.
+
+None of these are behaviour changes and none of them touch a *product* behaviour a user observes — but they do mean the retrofit's diff includes edits to tests written by tracks A and B. Say so in the task's `Changes` note rather than letting a reviewer read a modified test as a weakened one.
+
+**Phase-size tripwire (planner audit).** This phase is now **18 tasks**, up from 14, and the largest track has not started. The retrofit is re-sequenced scope rather than new scope, and T-27D01.1 is a split of T-27D01 rather than an addition — so the growth is honest. But the prior audit's warning stands and now has a number attached: **if track D's `.N` splits push this phase past ~24 tasks, split track D into its own phase rather than continuing to grow this one.** The reason to hold them together until then is that T-27T02 proves behaviour preservation across the primitive *and* its first migration; splitting earlier splits that proof.
 
 **Critical path and cascade risk.** Track B is the single point every later task and both later phases depend on. If the registry or dispatch shape is wrong, tracks C and D and all of Phases 28–29 rework. Land B behind its own tests before opening C or D, and prefer discovering a shape problem in B's unit tests over discovering it in the command line's migration.
 
@@ -41,9 +55,13 @@ duration_minutes: ~
 - [x] [T-27B02] Dispatch: bind-before-invoke over declared binders, returning a structured outcome
 - [x] [T-27B03] Contribution safety: failure policy, grant-gated reach, attribution marker
 - [x] [T-27B04] Core invocables registered from the facade through the public door; redaction at the boundary
+- [ ] [T-27A04] Retrofit: `Installation` locus, validated identity grammar, descriptor bounds
+- [ ] [T-27B05] Retrofit: registration returns its own reversal; descriptor normalized and refused, never repaired
+- [ ] [T-27B06] Retrofit: resolution split from outcome; change announcement; paired dispatch journal
 - [ ] [T-27C01] Conformance fixture library and harness with three assertion families
 - [ ] [T-27C02] Finding inventory and the two one-way ledgers, seeded with F-1…F-8
-- [ ] [T-27D01] Command-line parser generated from descriptors
+- [ ] [T-27D01] Command-line parser generated from `Semantic` descriptors (semantic half only)
+- [ ] [T-27D01.1] The installation half: one closed launcher grammar feeding both the parser and the catalog
 - [ ] [T-27D02] One renderer over the structured outcome; uniform output-format handling
 - [ ] [T-27D03] Shipped-surface honesty: the five unbound groups leave the default surface; corpus registration
 - [ ] [T-27T01] Corpus first run — convert failures into findings before fixing anything
@@ -127,6 +145,37 @@ duration_minutes: ~
 - **Decision (recorded, not asked):** scoped "core invocables registered from the facade" to two real, already-existing capabilities (`core:status`, `core:version`, delegating to the `Capabilities` methods `Engine` already implements) rather than the full 29-group CLI surface — that migration is T-27D01's own explicitly-scoped job (its notes cite ~4000 lines needing `.N` splits), and this task's own Verify line only asks to prove the *mechanism*, not completeness. `redact_outcome` was added to the existing `cronus_domain::redact` module (extending the established single-owner precedent) rather than a new module, walking `Outcome`'s string-bearing fields (`OutcomeValue::Text`/`List`/`Record`, `Rejection.detail`, `Unavailable.reason`) — `Stream`'s channel name is left unmasked since it names a subscription, not rendered content. `Dispatcher::dispatch` was split into a private `dispatch_unmasked` plus one public wrapper applying `redact_outcome` exactly once, so every return path — including the three early-return `Unavailable`/`Rejected` cases — passes through the same single point structurally, not by remembering to call it at each site. `Dispatcher` gained a `secrets: Vec<String>` field defaulting empty (mirroring the TUI/desktop bridge's own pre-existing `secrets` field) plus `set_secrets` — proving the mechanism while leaving the empty-list-in-production defect as the recorded residual the task notes call for.
 - **Changes:** `crates/domain/src/redact.rs`: `redact_outcome` + `redact_value`, 2 new tests (nested Record/List masking, Rejection/Unavailable masking). `crates/domain/src/invocable/dispatch.rs`: `Dispatcher` gained `secrets`/`set_secrets`; `dispatch` now wraps a private `dispatch_unmasked` with one `redact_outcome` call. New `crates/core/src/invocable_bootstrap.rs` (`bootstrap(Engine) -> (InvocableRegistry, Dispatcher)`, registering `core:status`/`core:version` through `Registrant::core()` + `InvocableRegistry::register`). `crates/core/src/lib.rs`: added `invocable` to the domain re-export list and `pub mod invocable_bootstrap;`. New `crates/core/tests/invocable_invariants.rs` (2 tests, matching this crate's `*_invariants.rs` convention): shared-door proof (a real contribution registers into the exact registry `bootstrap` populated) and redaction-boundary proof (a secret-bearing `Outcome::Value` comes back masked). `cargo test -p cronus-core` green across the whole crate (every `test result:` line 0 failed, unit + all ~37 integration files incl. the 2 new); `cargo test -p cronus-domain redact` 6/6; `node scripts/check-domain-boundary.mjs` clean; `cargo clippy -p cronus-core -p cronus-domain --all-targets -- -D warnings` and `cargo fmt` on both, clean; `cargo check --workspace` green.
 
+### [T-27A04] Retrofit: `Installation` locus, validated identity grammar, descriptor bounds
+
+- **Spec:** l2-invocable-registry.md §4.2, §4.4, §4.8
+- **Status:** Todo
+- **Assignment:** Agent
+- **Scope:** In the ports tier: add the fourth `Locus` variant; make identity construction **fallible** against a closed grammar (`<qualifier>:<tail>`, both halves non-empty, neither containing the separator) so an unvalidated identity cannot exist; declare the descriptor bound constants (name, summary, group, binder count, binder name/description) that T-27B05 enforces.
+- **Why it is fallible rather than checked at registration:** a type that accepts any string parses `"a:b:c"` and `"noqualifier"` without complaint, and the ambiguity surfaces much later as a lookup resolving to the wrong entry or to none. Refusing at construction means no unvalidated identity exists to be registered.
+- **Verify:** `cargo test -p cronus-contract` green, including new cases that a multi-separator, empty-half, and empty-string identity are all **refused**; `cargo clippy --all-targets -- -D warnings` and `cargo fmt --check` clean. Existing call sites updated to the fallible constructor — the count of changed sites is reported, not glossed.
+- **Handoff:** T-27B05.
+
+### [T-27B05] Retrofit: registration returns its own reversal; descriptor normalized and refused, never repaired
+
+- **Spec:** l2-invocable-registry.md §4.2, §4.3, §4.4
+- **Status:** Todo
+- **Assignment:** Agent
+- **Scope:** `register` returns a handle whose disposal removes that registration **and its attached handler** (EP-13); no `unregister(id)` is added. Descriptor fields are bounds-checked at registration and stored as a **normalized owned copy** the registrant cannot afterwards reach (EP-14). The bare-form collision rule is implemented as declared: the core's tail wins, the loser stays registered and reachable by qualified identity, and the shadowing is **reported** naming winner, loser, and the qualified name the loser is still reachable by.
+- **Refuse, do not repair:** a descriptor failing a bound is rejected naming the field and the constraint. Truncating or defaulting it is forbidden — a repaired declaration is one whose author never learns it was invalid, and the repair silently becomes part of the contract.
+- **Verify:** `cargo test -p cronus-domain` green with new cases for: disposal removing both descriptor and handler; a shadowed contribution still resolvable by qualified id **and** returning to the bare form after the shadowing entry is disposed; an over-long and an empty descriptor field each refused with the field named. `clippy -D warnings` + `fmt --check` clean; `node scripts/check-domain-boundary.mjs` clean.
+- **Handoff:** T-27B06.
+
+### [T-27B06] Retrofit: resolution split from outcome; change announcement; paired dispatch journal
+
+- **Spec:** l2-invocable-registry.md §4.5, §4.9, §4.13
+- **Status:** Todo
+- **Assignment:** Agent
+- **Scope:** Split resolution from dispatch so an unknown invocable yields a **resolution** result, not an `Outcome`; `Outcome::Unavailable` narrows back to *resolved, ran, could not answer*. Add the registry change announcement with **individually contained** observer failures (one failing observer neither aborts the mutation nor starves the observers after it). Journal a resolved dispatch as a paired entry/settlement record joined by an identity unique across process restarts, with a per-invocable declaration that suppresses raw-input recording.
+- **Why the split is not cosmetic:** the three surfaces answer `Unknown` in three incompatible ways — the terminal UI falls through to ordinary input, the command line raises a usage error, the desktop refreshes a stale catalog. One outcome variant cannot serve all three without one of them behaving incorrectly.
+- **Journal failure asymmetry (implement exactly this way):** a failure to write the **entry** record fails the dispatch loudly; a failure to write the **settlement** record on an already-failing dispatch is contained, so the handler's own failure stays the reported one.
+- **Verify:** `cargo test -p cronus-domain -p cronus-core` green with new cases for: an unknown id producing a resolution miss and **no journal entry**; a panicking observer not preventing registration and not starving a later observer; a paired run/settle journal for a resolved dispatch; a suppressed-input invocable recording its name but not its arguments. `clippy -D warnings` + `fmt --check` clean.
+- **Handoff:** T-27C01, T-27D01.
+
 ### [T-27C01] Conformance fixture library and harness with three assertion families
 
 - **Spec:** l2-surface-conformance.md §4.4
@@ -145,12 +194,25 @@ duration_minutes: ~
 - **Handoff:** T-27T01.
 - **Notes:** Keep tombstones boringly literal — a path or an owner-qualified symbol plus its finding. Cleverness here produces a check nobody trusts and everybody bypasses. Repayment requires **all four** SP-4 conditions; three of four is recorded as *open*, not as *mostly repaid*.
 
-### [T-27D01] Command-line parser generated from descriptors
+### [T-27D01] Command-line parser generated from `Semantic` descriptors (semantic half only)
 
-- **Spec:** l2-cli.md §4.1, §4.3, §4.4
+- **Spec:** l2-cli.md §4.1, §4.1.1, §4.3, §4.4
 - **Status:** Todo
 - **Assignment:** Agent
-- **Verify:** `cargo test -p cronus-cli` green; `cronus --help` lists exactly the registry's shipped groups; the statically declared command enum is **deleted** from the crate and its removal recorded as a tombstone.
+- **Renarrowed at v2.70.0 — read this before starting.** The prior wording was *generate the parser from descriptors*, meaning all of it. That is wrong and would not work: an installation verb must be answerable when the composition it would configure is precisely what failed to come up, so it cannot be projected from a registry that does not exist yet (LH-1/LH-5). This task now covers the **`Semantic` half only**; the installation half is T-27D01.1.
+- **Scope:** Build the argument parser for `Semantic` descriptors at startup, after composition. Help, completion, and grouping for that half derive from the same descriptors. The statically declared command enum is deleted **for the semantic verbs it held** and its removal recorded as a tombstone; verbs belonging to the installation half move to T-27D01.1 rather than being deleted here.
+- **Verify:** `cargo test -p cronus-cli` green; `cli_smoke.rs` passes **unmodified** (behaviour preservation); `cronus --help` lists exactly the registry's shipped `Semantic` groups plus the installation verbs T-27D01.1 owns, and nothing else. `clippy -D warnings` + `fmt --check` clean.
+- **Sizing:** expected to split by group with `.N` sub-task ids rather than one sweeping edit — see the Phase Notes sizing warning.
+- **Handoff:** T-27D01.1, T-27D02.
+
+### [T-27D01.1] The installation half: one closed launcher grammar feeding both the parser and the catalog
+
+- **Spec:** l2-cli.md §4.1.1, §4.2; l2-invocable-registry.md §4.7.1
+- **Status:** Todo
+- **Assignment:** Agent
+- **Scope:** Declare the installation verbs **once**, in this frontend's own source: a closed grammar containing no name an extension can define. That single declaration has two consumers — the pre-composition parser is built from it, and the same declaration registers `Installation` descriptors into the catalog at composition. Add the three-way failure distinction (usage ≠ composition ≠ application) with a usage failure opening no session and journaling no run (LH-7).
+- **The two-consumer shape is the point, and the shortcut is the defect.** A verb hand-declared in a parser *and* hand-listed as a descriptor is two statements of one fact — the exact fork this phase exists to close. Omitting the descriptor instead is the other failure: SP-11 forbids expressing a boundary by silence, and without the catalog entry the terminal UI cannot **declare** that it deliberately does not offer `config`, leaving it indistinguishable from unimplemented.
+- **Verify:** `cargo test -p cronus-cli` green with a test asserting **set equality** between the verbs the launcher parser accepts and the `Installation` descriptors registered at composition. State the oracle honestly: this equality is what fails the moment the two are maintained separately and drift, and it is the checkable form of "one declaration" — *derived from one source* is a structural property a unit test cannot observe directly, so it is asserted through the consequence it would violate. A usage error and an application error produce different exit codes, asserted. `clippy -D warnings` + `fmt --check` clean.
 - **Handoff:** T-27D02.
 - **Notes:** Build the parser at startup from descriptors using the builder API rather than the derive macro — the derive form is fixed at build time and therefore cannot carry a contributed verb, which is the whole reason for this phase. The project command grammar (verb-first, explicit verbs, noun groups) becomes a property the **registry** validates at registration, so it holds for a contributed verb as well as a core one.
 
