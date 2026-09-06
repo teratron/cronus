@@ -1,0 +1,16 @@
+[package]
+name = "cronus-conformance"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+repository.workspace = true
+
+[dependencies]
+# Deliberately the ports tier and nothing else. A surface registers against
+# this harness from its own test target, and one of those surfaces — the
+# desktop shell — builds in a detached workspace and holds no registry at
+# all, only a catalog delivered over its IPC seam. A harness that demanded
+# the domain tier (or a live `InvocableRegistry`) would be a harness that
+# surface could never call, which is exactly the corpus one surface can
+# never join.
+cronus-contract = { workspace = true }
