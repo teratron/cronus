@@ -1,10 +1,14 @@
 //! Slash-command parsing and the command catalog.
 //!
 //! The command bar accepts `/verb arg…` lines. This module turns a line into a
-//! structured [`SlashCommand`], holds the [`CATALOG`] of known commands (mirroring
-//! the CLI's top-level verb set so the two surfaces stay at parity, INV-3), and
-//! classifies a submitted line into a [`CommandOutcome`]. Dispatch to the core is
-//! a separate concern — this module never calls the core (INV-2).
+//! structured [`SlashCommand`], builds the [`CommandSpec`] catalog from the
+//! core's invocable registry — never a hand-maintained list — and classifies a
+//! submitted line into a [`CommandOutcome`]. Dispatch to the core is a separate
+//! concern — this module never calls the core (INV-2); [`build_catalog`] only
+//! ever consumes an already-fetched `&[&Invocable]` slice, the same shape data
+//! the sibling CLI frontend's own `generated.rs` consumes.
+
+use cronus_contract::{Invocable, Locus, Stability};
 
 /// A parsed slash command: the verb plus its whitespace-separated arguments.
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -26,7 +30,7 @@ pub enum ParseError {
 
 /// Parse a command-bar line into a [`SlashCommand`].
 ///
-/// Syntactic only — it does not check the verb against the [`CATALOG`]; use
+/// Syntactic only — it does not check the verb against a catalog; use
 /// [`classify`] for that. Leading/trailing whitespace is ignored.
 pub fn parse(input: &str) -> Result<SlashCommand, ParseError> {
     let body = input
@@ -42,129 +46,86 @@ pub fn parse(input: &str) -> Result<SlashCommand, ParseError> {
 }
 
 /// One entry in the slash-command catalog.
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub struct CommandSpec {
-    /// Verb name (without the leading `/`).
+    /// Verb name (without the leading `/`) — a registry `group`, or `help`.
     pub name: &'static str,
     /// One-line summary shown by `/help`.
-    pub summary: &'static str,
+    pub summary: String,
 }
 
-/// The slash-command catalog.
+/// Build the slash-command catalog from the core's invocable registry.
 ///
-/// Each entry past `help` mirrors a CLI top-level command (same verb), so a TUI
-/// slash command always has a CLI counterpart — the parity the validation track
-/// asserts structurally. `help` is the TUI's own discovery affordance (the CLI
-/// uses `--help`).
-pub const CATALOG: &[CommandSpec] = &[
-    CommandSpec {
+/// One entry per **group**, not per invocable: this surface's slash form
+/// mirrors the CLI's own two-level `<noun> <verb>` grammar (`/<noun> <verb>
+/// …`, l2-cli.md §4.4) — the noun is the slash verb here, and the CLI-side
+/// verb travels as the command's first argument. A slash verb and its shell
+/// counterpart are still two renderings of one descriptor once a group+args
+/// pair resolves to a specific invocable; this catalog is the discovery
+/// layer above that, exactly as `/board` (not `/board.list`) is what a user
+/// discovers before typing `list`.
+///
+/// Filtered to what this surface actually projects: `Semantic` (the shared
+/// vocabulary INV-3 parity binds) plus `ClientLocal` (this surface's own
+/// pane/panel actions) — never `Installation` or `HostOnly`, which belong to
+/// the command line and the host respectively. Only `Shipped` stability
+/// enters the catalog (INV-9): a retired or unshipped group is
+/// unrepresentable here, not merely undiscoverable.
+///
+/// `help` is prepended as this surface's own discovery affordance — it has
+/// no registry counterpart (the CLI uses `--help` instead), matching the
+/// same carve-out the deleted hand-copied mirror already documented.
+///
+/// No per-group summary exists in the registry (`Invocable.summary` is
+/// per-verb, not per-group), so every derived entry reads `"{group}
+/// operations"` — the exact fallback text the CLI's own `generated.rs`
+/// already uses for a semantic group's top-level `--help` line. A curated,
+/// hand-written per-group description was deliberately not built instead:
+/// that would be a second list to keep in sync, the same defect class this
+/// task deletes, just relocated from verb *names* (which broke parity) to
+/// verb *prose* (which would only ever degrade quietly).
+pub fn build_catalog(invocables: &[&Invocable]) -> Vec<CommandSpec> {
+    let mut groups: Vec<&'static str> = invocables
+        .iter()
+        .filter(|invocable| {
+            matches!(invocable.locus, Locus::Semantic | Locus::ClientLocal)
+                && matches!(invocable.stability, Stability::Shipped)
+        })
+        .map(|invocable| invocable.group)
+        .collect();
+    groups.sort_unstable();
+    groups.dedup();
+
+    let mut catalog = Vec::with_capacity(groups.len() + 1);
+    catalog.push(CommandSpec {
         name: "help",
-        summary: "List available slash commands",
-    },
-    CommandSpec {
-        name: "init",
-        summary: "Initialize a Cronus workspace",
-    },
-    CommandSpec {
-        name: "status",
-        summary: "Show the current workspace status",
-    },
-    CommandSpec {
-        name: "workflow",
-        summary: "Manage workflow (.nodus) files",
-    },
-    CommandSpec {
-        name: "workspace",
-        summary: "Manage named workspaces",
-    },
-    CommandSpec {
-        name: "memory",
-        summary: "Manage memory entries",
-    },
-    CommandSpec {
-        name: "codegraph",
-        summary: "Code graph operations",
-    },
-    CommandSpec {
-        name: "agent",
-        summary: "Agent management",
-    },
-    CommandSpec {
-        name: "role",
-        summary: "Role catalog: hire, fire, manage roles",
-    },
-    CommandSpec {
-        name: "board",
-        summary: "Kanban board: track work cards",
-    },
-    CommandSpec {
-        name: "schedule",
-        summary: "Scheduler: recurring and one-shot",
-    },
-    CommandSpec {
-        name: "budget",
-        summary: "Budget: track and enforce cost policies",
-    },
-    CommandSpec {
-        name: "exec",
-        summary: "Execution workspaces (git worktrees)",
-    },
-    CommandSpec {
-        name: "check",
-        summary: "Quality gates: lint/test/format",
-    },
-    CommandSpec {
-        name: "ext",
-        summary: "Extensions: skills, MCP servers, plugins",
-    },
-    CommandSpec {
-        name: "learn",
-        summary: "Learning loop: review proposed skills",
-    },
-    CommandSpec {
-        name: "registry",
-        summary: "Agent registry: list and manage",
-    },
-    CommandSpec {
-        name: "goal",
-        summary: "Goal runs: autonomous goal sessions",
-    },
-    CommandSpec {
-        name: "trigger",
-        summary: "Trigger triage: classify inbound signals",
-    },
-    CommandSpec {
-        name: "mission",
-        summary: "Mission mode: two-phase execution",
-    },
-    CommandSpec {
-        name: "research",
-        summary: "Deep research: search-and-synthesize",
-    },
-    CommandSpec {
-        name: "change",
-        summary: "Change graph: inspect pending changes",
-    },
-];
+        summary: "List available slash commands".to_string(),
+    });
+    catalog.extend(groups.into_iter().map(|group| CommandSpec {
+        name: group,
+        summary: format!("{group} operations"),
+    }));
+    catalog
+}
 
 /// The catalog entry for `verb`, if it is a known command.
-pub fn lookup(verb: &str) -> Option<&'static CommandSpec> {
-    CATALOG.iter().find(|c| c.name == verb)
+pub fn lookup<'a>(verb: &str, catalog: &'a [CommandSpec]) -> Option<&'a CommandSpec> {
+    catalog.iter().find(|c| c.name == verb)
 }
 
 /// Whether `verb` is a known slash command.
-pub fn is_known(verb: &str) -> bool {
-    lookup(verb).is_some()
+pub fn is_known(verb: &str, catalog: &[CommandSpec]) -> bool {
+    lookup(verb, catalog).is_some()
 }
 
 /// Every known verb name, in catalog order.
-pub fn names() -> impl Iterator<Item = &'static str> {
-    CATALOG.iter().map(|c| c.name)
+pub fn names(catalog: &[CommandSpec]) -> impl Iterator<Item = &str> {
+    catalog.iter().map(|c| c.name)
 }
 
 /// The `/help` discovery listing: one `"/verb — summary"` line per command.
-pub fn help_lines() -> Vec<String> {
-    CATALOG
+pub fn help_lines(catalog: &[CommandSpec]) -> Vec<String> {
+    catalog
         .iter()
         .map(|c| format!("/{:<9} — {}", c.name, c.summary))
         .collect()
@@ -182,12 +143,12 @@ pub enum CommandOutcome {
 }
 
 /// Classify a submitted command-bar line into an outcome.
-pub fn classify(input: &str) -> CommandOutcome {
+pub fn classify(input: &str, catalog: &[CommandSpec]) -> CommandOutcome {
     match parse(input) {
         Err(ParseError::NotACommand) => CommandOutcome::Error("commands start with /".to_string()),
         Err(ParseError::Empty) => CommandOutcome::Error("type a command, e.g. /help".to_string()),
         Ok(cmd) if cmd.verb == "help" => CommandOutcome::Help,
-        Ok(cmd) if is_known(&cmd.verb) => CommandOutcome::Run(cmd),
+        Ok(cmd) if is_known(&cmd.verb, catalog) => CommandOutcome::Run(cmd),
         Ok(cmd) => CommandOutcome::Error(format!("unknown command: /{} (try /help)", cmd.verb)),
     }
 }
@@ -195,6 +156,7 @@ pub fn classify(input: &str) -> CommandOutcome {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use cronus_contract::{InvocableId, Stability};
 
     #[test]
     fn command_parse_extracts_verb_and_args() {
@@ -221,98 +183,184 @@ mod tests {
         assert_eq!(parse("/   "), Err(ParseError::Empty));
     }
 
+    /// A small, hand-built catalog — deliberately not `build_catalog`'s own
+    /// output, so these tests exercise the catalog-*consuming* functions
+    /// (`lookup`/`is_known`/`names`/`help_lines`/`classify`) independently of
+    /// whether derivation from a registry is itself correct (that is
+    /// `build_catalog`'s own test, below).
+    fn sample_catalog() -> Vec<CommandSpec> {
+        vec![
+            CommandSpec {
+                name: "help",
+                summary: "List available slash commands".to_string(),
+            },
+            CommandSpec {
+                name: "board",
+                summary: "board operations".to_string(),
+            },
+            CommandSpec {
+                name: "memory",
+                summary: "memory operations".to_string(),
+            },
+        ]
+    }
+
     #[test]
     fn command_parse_help_lists_known_commands() {
-        let listing = help_lines();
-        // Discovery surface includes representative CLI-mirrored verbs.
-        for verb in ["status", "goal", "board", "memory"] {
+        let catalog = sample_catalog();
+        let listing = help_lines(&catalog);
+        for verb in ["help", "board", "memory"] {
             assert!(
                 listing.iter().any(|l| l.contains(&format!("/{verb} "))),
                 "/help should list /{verb}"
             );
         }
-        assert_eq!(listing.len(), CATALOG.len());
+        assert_eq!(listing.len(), catalog.len());
     }
 
     #[test]
     fn command_parse_classifies_help_run_and_unknown() {
-        assert_eq!(classify("/help"), CommandOutcome::Help);
-        assert!(matches!(classify("/status"), CommandOutcome::Run(c) if c.verb == "status"));
-        assert!(matches!(classify("/frobnicate"), CommandOutcome::Error(_)));
-        assert!(matches!(classify("hello"), CommandOutcome::Error(_)));
+        let catalog = sample_catalog();
+        assert_eq!(classify("/help", &catalog), CommandOutcome::Help);
+        assert!(matches!(
+            classify("/board", &catalog),
+            CommandOutcome::Run(c) if c.verb == "board"
+        ));
+        assert!(matches!(
+            classify("/frobnicate", &catalog),
+            CommandOutcome::Error(_)
+        ));
+        assert!(matches!(
+            classify("hello", &catalog),
+            CommandOutcome::Error(_)
+        ));
     }
 
     #[test]
     fn command_parse_catalog_verbs_are_unique() {
+        let catalog = sample_catalog();
         let mut seen = std::collections::HashSet::new();
-        for name in names() {
+        for name in names(&catalog) {
             assert!(seen.insert(name), "duplicate catalog verb: {name}");
         }
     }
 
-    /// The CLI's top-level command verbs (crates/cli/src/cli.rs `Command` enum),
-    /// kebab-cased. Mirrored here so parity can be asserted WITHOUT the TUI taking
-    /// a dependency on `cronus-cli` — that dependency is itself forbidden (INV-2),
-    /// and the parity check below would otherwise have to violate the very rule it
-    /// guards. `help` is the TUI's own discovery affordance (the CLI uses `--help`).
-    const EXPECTED_CLI_VERBS: &[&str] = &[
-        "init",
-        "status",
-        "workflow",
-        "workspace",
-        "memory",
-        "codegraph",
-        "agent",
-        "role",
-        "board",
-        "schedule",
-        "budget",
-        "exec",
-        "check",
-        "ext",
-        "learn",
-        "registry",
-        "goal",
-        "trigger",
-        "mission",
-        "research",
-        "change",
-    ];
-
-    #[test]
-    fn parity_matrix_every_slash_command_maps_to_a_cli_verb() {
-        for spec in CATALOG {
-            if spec.name == "help" {
-                continue; // TUI-only discovery affordance, no CLI verb.
-            }
-            assert!(
-                EXPECTED_CLI_VERBS.contains(&spec.name),
-                "/{} has no CLI counterpart — a TUI-only command violates INV-3 parity",
-                spec.name
-            );
+    fn descriptor(
+        tail: &str,
+        group: &'static str,
+        locus: Locus,
+        stability: Stability,
+    ) -> Invocable {
+        Invocable {
+            id: InvocableId::new(format!("core:{tail}")).expect("well-formed test id"),
+            name: "Test",
+            summary: "A test descriptor.",
+            group,
+            locus,
+            binders: Vec::new(),
+            stability,
+            journal_raw_input: true,
         }
     }
 
+    /// Proves the built catalog's verb set equals the registry's own
+    /// `Semantic`+`ClientLocal`+`Shipped` set for a registry this test
+    /// populates itself — never a restated literal
+    /// list, which is the exact defect this task deletes.
     #[test]
-    fn parity_matrix_covers_the_full_cli_verb_set() {
-        // Parity in the other direction: no CLI verb is missing from the catalog.
-        for verb in EXPECTED_CLI_VERBS {
-            assert!(
-                is_known(verb),
-                "CLI verb /{verb} is missing from the TUI catalog"
-            );
-        }
+    fn build_catalog_matches_the_registrys_own_semantic_and_client_local_shipped_set() {
+        let semantic = descriptor("board.list", "board", Locus::Semantic, Stability::Shipped);
+        let client_local = descriptor("pane.focus", "pane", Locus::ClientLocal, Stability::Shipped);
+        let installation = descriptor("status", "status", Locus::Installation, Stability::Shipped);
+        let host_only = descriptor(
+            "settings.write",
+            "settings",
+            Locus::HostOnly {
+                reason: "host-owned",
+            },
+            Stability::Shipped,
+        );
+        let retired = Invocable {
+            stability: Stability::Retired {
+                superseded_by: InvocableId::new("core:board.list").expect("well-formed test id"),
+            },
+            ..descriptor(
+                "board.old-list",
+                "board",
+                Locus::Semantic,
+                Stability::Shipped,
+            )
+        };
+        let all = [
+            &semantic,
+            &client_local,
+            &installation,
+            &host_only,
+            &retired,
+        ];
+
+        let catalog = build_catalog(&all);
+        let names: Vec<&str> = catalog.iter().map(|c| c.name).collect();
+
+        assert!(
+            names.contains(&"help"),
+            "help is always the discovery entry"
+        );
+        assert!(
+            names.contains(&"board"),
+            "a Semantic Shipped group must appear"
+        );
+        assert!(
+            names.contains(&"pane"),
+            "a ClientLocal Shipped group must appear"
+        );
+        assert!(
+            !names.contains(&"status"),
+            "an Installation-locus group must not appear — that half belongs to the CLI"
+        );
+        assert!(
+            !names.contains(&"settings"),
+            "a HostOnly-locus group must not appear on any generic surface"
+        );
+        assert_eq!(
+            names.len(),
+            3,
+            "exactly help + the two Shipped Semantic/ClientLocal groups — a Retired \
+             descriptor is never a member of the shipped set by construction"
+        );
+    }
+
+    #[test]
+    fn build_catalog_deduplicates_multiple_invocables_in_one_group() {
+        let list = descriptor("board.list", "board", Locus::Semantic, Stability::Shipped);
+        let add = descriptor("board.add", "board", Locus::Semantic, Stability::Shipped);
+        let catalog = build_catalog(&[&list, &add]);
+        let board_entries = catalog.iter().filter(|c| c.name == "board").count();
+        assert_eq!(
+            board_entries, 1,
+            "a group with several invocables still yields exactly one catalog entry"
+        );
     }
 
     #[test]
     fn parity_matrix_crate_depends_on_core_not_the_cli() {
-        // Structural INV-2 guard: the manifest links the engine tier it
-        // actually needs (here, `cronus-domain` — the TUI uses no adapter
-        // functionality), never the CLI.
+        // Structural INV-2 guard: the manifest links the engine tiers it
+        // actually needs — `cronus-domain` (Capabilities/Engine/redact),
+        // `cronus-contract` (the descriptor types this module consumes), and
+        // `cronus-core` (the facade composing the registry) — never the CLI
+        // frontend.
         let manifest = include_str!(concat!(env!("CARGO_MANIFEST_DIR"), "/Cargo.toml"));
         assert!(
             manifest.contains("cronus-domain = { workspace = true }"),
             "the TUI must link the domain crate (cronus-domain)"
+        );
+        assert!(
+            manifest.contains("cronus-contract = { workspace = true }"),
+            "the TUI must link the ports crate (cronus-contract) for descriptor types"
+        );
+        assert!(
+            manifest.contains("cronus-core = { workspace = true }"),
+            "the TUI must link the facade crate (cronus-core) for the invocable registry"
         );
         assert!(
             !manifest.contains("cronus-cli"),

@@ -17,7 +17,9 @@ pub use app::{
     App, CapabilityDispatcher, CapabilitySource, CoreSnapshot, Dispatcher, NoopDispatcher,
     RatatuiRenderer, Renderer, SnapshotSource, TickResult, ViewModel, render_view, run, run_with,
 };
-pub use command::{CommandOutcome, CommandSpec, ParseError, SlashCommand, classify, parse};
+pub use command::{
+    CommandOutcome, CommandSpec, ParseError, SlashCommand, build_catalog, classify, parse,
+};
 pub use terminal::{CrosstermBackend, Key, TermEvent, TerminalBackend, Tui};
 pub use view::{
     AgentActivity, BoardCard, BoardColumn, BoardView, Focus, OfficeView, PanelAreas, SessionsView,

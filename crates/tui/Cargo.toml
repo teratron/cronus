@@ -14,6 +14,8 @@ name = "cronus-tui"
 path = "src/main.rs"
 
 [dependencies]
+cronus-contract = { workspace = true }
+cronus-core = { workspace = true }
 cronus-domain = { workspace = true }
 crossterm = { workspace = true }
 ratatui = { version = "0.30.2", default-features = false, features = [

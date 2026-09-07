@@ -18,9 +18,10 @@ use ratatui::buffer::Buffer;
 use ratatui::layout::Rect;
 use ratatui::widgets::{Paragraph, Widget};
 
-use crate::command::{self, CommandOutcome, SlashCommand};
+use crate::command::{self, CommandOutcome, CommandSpec, SlashCommand};
 use crate::terminal::{CrosstermBackend, Key, TermEvent, TerminalBackend, Tui};
 use crate::view::{self, BoardView, Focus, OfficeView, SessionsView};
+use cronus_contract::Invocable;
 use cronus_domain::{Capabilities, Engine};
 
 /// How long the loop blocks for input before ticking again. Bounds redraw
@@ -109,22 +110,32 @@ pub struct App {
     pending_dispatch: Option<SlashCommand>,
     /// Runs recognized commands against the core (masking secrets in output).
     dispatcher: Box<dyn Dispatcher>,
+    /// The slash-command catalog, built once at construction from the core's
+    /// invocable registry (`command::build_catalog`) — never a hand-maintained
+    /// list. Held on `App` rather than re-derived per keystroke, since it
+    /// changes only if the registry itself does.
+    catalog: Vec<CommandSpec>,
 }
 
 impl App {
     /// Construct an app with a no-op dispatcher: commands parse and resolve but
     /// invoke nothing. Used where dispatch behavior is irrelevant.
-    pub fn new(initial: ViewModel) -> Self {
-        Self::with_dispatcher(initial, NoopDispatcher)
+    pub fn new(initial: ViewModel, catalog: Vec<CommandSpec>) -> Self {
+        Self::with_dispatcher(initial, NoopDispatcher, catalog)
     }
 
-    /// Construct an app with an explicit command dispatcher.
-    pub fn with_dispatcher(initial: ViewModel, dispatcher: impl Dispatcher + 'static) -> Self {
+    /// Construct an app with an explicit command dispatcher and catalog.
+    pub fn with_dispatcher(
+        initial: ViewModel,
+        dispatcher: impl Dispatcher + 'static,
+        catalog: Vec<CommandSpec>,
+    ) -> Self {
         Self {
             view: initial,
             should_quit: false,
             pending_dispatch: None,
             dispatcher: Box::new(dispatcher),
+            catalog,
         }
     }
 
@@ -244,11 +255,11 @@ impl App {
     /// dispatcher and performs the core call + masking).
     fn submit_command(&mut self) {
         let line = format!("/{}", self.view.command_input);
-        match command::classify(&line) {
+        match command::classify(&line, &self.catalog) {
             CommandOutcome::Help => {
                 self.view.command_feedback = Some(format!(
                     "commands: {}",
-                    command::names().collect::<Vec<_>>().join(" ")
+                    command::names(&self.catalog).collect::<Vec<_>>().join(" ")
                 ));
             }
             CommandOutcome::Run(command) => self.pending_dispatch = Some(command),
@@ -413,6 +424,16 @@ pub fn render_view(area: Rect, buf: &mut Buffer, view: &ViewModel) {
 
 /// Run the TUI against the real terminal and the live engine.
 pub fn run() -> io::Result<()> {
+    // The registry this surface's catalog is derived from — the same public
+    // composition door every surface uses (`invocable_bootstrap::bootstrap`),
+    // never a private construction path. Only the registry half is consumed
+    // here; the paired `Dispatcher` this call also returns is unused until
+    // dispatch itself is wired through it.
+    let (registry, _dispatcher) =
+        cronus_core::invocable_bootstrap::bootstrap(cronus_core::Engine::new());
+    let invocables: Vec<&Invocable> = registry.all().collect();
+    let catalog = command::build_catalog(&invocables);
+
     run_with(
         CrosstermBackend::new(),
         CapabilitySource::new(Engine::new()),
@@ -420,6 +441,7 @@ pub fn run() -> io::Result<()> {
         // Secret values to mask are loaded from the core secrets store once that
         // binding lands; the redaction path is already wired (INV-7).
         CapabilityDispatcher::new(Engine::new(), Vec::new()),
+        catalog,
     )
 }
 
@@ -432,6 +454,7 @@ pub fn run_with<B, S, R, D>(
     mut source: S,
     mut renderer: R,
     dispatcher: D,
+    catalog: Vec<CommandSpec>,
 ) -> io::Result<()>
 where
     B: TerminalBackend,
@@ -447,6 +470,7 @@ where
             ..Default::default()
         },
         dispatcher,
+        catalog,
     );
 
     // Initial frame so the screen is populated before the first event.
@@ -550,9 +574,25 @@ mod tests {
         }
     }
 
+    /// A minimal catalog naming `status` as a known verb — used only by tests
+    /// exercising dispatch *wiring* (does a recognized command reach the
+    /// dispatcher, does secret-masking work), not by anything asserting on
+    /// catalog derivation itself (see `command.rs`'s own `build_catalog`
+    /// tests for that). `status` here is an arbitrary catalog string with no
+    /// connection to the real `core:status` invocable (which is
+    /// `Installation`-locus and therefore never appears in this surface's
+    /// real, registry-derived catalog) — it is meaningful only because
+    /// `CapabilityDispatcher::route` still special-cases that literal verb.
+    fn test_catalog() -> Vec<CommandSpec> {
+        vec![CommandSpec {
+            name: "status",
+            summary: "test-only catalog entry".to_string(),
+        }]
+    }
+
     #[test]
     fn render_loop_state_change_schedules_exactly_one_redraw() {
-        let mut app = App::new(ViewModel::default());
+        let mut app = App::new(ViewModel::default(), Vec::new());
         let mut source = ScriptedSource::new(vec![Some(snap("running"))]);
         let mut renderer = RecordingRenderer::default();
 
@@ -567,7 +607,7 @@ mod tests {
 
     #[test]
     fn render_loop_unchanged_snapshot_does_not_redraw() {
-        let mut app = App::new(ViewModel::default());
+        let mut app = App::new(ViewModel::default(), Vec::new());
         // Same snapshot delivered twice across two ticks.
         let mut source = ScriptedSource::new(vec![Some(snap("idle")), Some(snap("idle"))]);
         let mut renderer = RecordingRenderer::default();
@@ -582,7 +622,7 @@ mod tests {
 
     #[test]
     fn render_loop_stays_responsive_while_core_call_is_slow() {
-        let mut app = App::new(ViewModel::default());
+        let mut app = App::new(ViewModel::default(), Vec::new());
         // `None` models a snapshot still being produced — a slow core call.
         let mut source = ScriptedSource::new(vec![None]);
         let mut renderer = RecordingRenderer::default();
@@ -600,7 +640,7 @@ mod tests {
 
     #[test]
     fn render_loop_resize_updates_view_and_redraws_without_snapshot() {
-        let mut app = App::new(ViewModel::default());
+        let mut app = App::new(ViewModel::default(), Vec::new());
         let mut source = ScriptedSource::new(vec![None]);
         let mut renderer = RecordingRenderer::default();
 
@@ -615,7 +655,7 @@ mod tests {
 
     #[test]
     fn layout_focus_tab_key_advances_focus_and_redraws() {
-        let mut app = App::new(ViewModel::default());
+        let mut app = App::new(ViewModel::default(), Vec::new());
         let mut source = ScriptedSource::new(vec![None]);
         let mut renderer = RecordingRenderer::default();
 
@@ -641,6 +681,7 @@ mod tests {
                 ..Default::default()
             },
             CapabilityDispatcher::new(Engine::new(), Vec::new()),
+            test_catalog(),
         );
         let mut source = ScriptedSource::new(vec![]);
         let mut renderer = RecordingRenderer::default();
@@ -667,10 +708,13 @@ mod tests {
 
     #[test]
     fn command_parse_bar_unknown_errors_and_esc_cancels_without_quitting() {
-        let mut app = App::new(ViewModel {
-            focus: Focus::CommandBar,
-            ..Default::default()
-        });
+        let mut app = App::new(
+            ViewModel {
+                focus: Focus::CommandBar,
+                ..Default::default()
+            },
+            Vec::new(),
+        );
         let mut source = ScriptedSource::new(vec![]);
         let mut renderer = RecordingRenderer::default();
 
@@ -702,13 +746,13 @@ mod tests {
         // same event/snapshot script end in identical view-models.
         let script = || ScriptedSource::new(vec![Some(snap("a")), Some(snap("b"))]);
 
-        let mut app1 = App::new(ViewModel::default());
+        let mut app1 = App::new(ViewModel::default(), Vec::new());
         let mut r1 = RecordingRenderer::default();
         let mut s1 = script();
         app1.tick(&[], &mut s1, &mut r1).unwrap();
         app1.tick(&[], &mut s1, &mut r1).unwrap();
 
-        let mut app2 = App::new(ViewModel::default());
+        let mut app2 = App::new(ViewModel::default(), Vec::new());
         let mut r2 = RecordingRenderer::default();
         let mut s2 = script();
         app2.tick(&[], &mut s2, &mut r2).unwrap();
@@ -763,6 +807,7 @@ mod tests {
                 ..Default::default()
             },
             CapabilityDispatcher::new(core, vec!["sk-LIVE-7".to_string()]),
+            test_catalog(),
         );
         let mut source = ScriptedSource::new(vec![]);
         let mut renderer = RecordingRenderer::default();
@@ -866,6 +911,7 @@ mod tests {
                 ..Default::default()
             },
             CapabilityDispatcher::new(core, vec!["sk-LIVE-42".to_string()]),
+            test_catalog(),
         );
         let mut source = ScriptedSource::new(vec![]);
         let mut renderer = RecordingRenderer::default();

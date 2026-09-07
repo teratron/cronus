@@ -94,9 +94,17 @@ pub fn seed_inventory() -> Vec<Finding> {
             divergence: "a parity check compared a stale copy of the thing under test against itself, and stayed green while the surfaces differed by eight verbs — a check that cannot fail",
             class: FindingClass::Observed,
             primitive: "a corpus driven through real projections",
+            // `copies_deleted`/`deletion_pinned` close here: the mirror
+            // constant and its self-comparing parity test are gone, and the
+            // deletion is pinned in the tombstone ledger above, in the same
+            // change. `consumer_registered` stays open — this surface has
+            // not yet registered against the corpus from its own test
+            // target, which is a later, separate task.
             repayment: Repayment {
+                copies_deleted: true,
+                deletion_pinned: true,
                 fixture_landed: true,
-                ..Repayment::open()
+                consumer_registered: false,
             },
             residual: None,
         },
@@ -203,10 +211,16 @@ pub struct Tombstone {
 /// boringly literal on purpose, since cleverness here produces a check
 /// nobody trusts and everybody bypasses.
 pub fn tombstones() -> Vec<Tombstone> {
-    vec![Tombstone {
-        finding: "F-3",
-        location: "the command line's own hand-maintained command-parity documentation table",
-    }]
+    vec![
+        Tombstone {
+            finding: "F-3",
+            location: "the command line's own hand-maintained command-parity documentation table",
+        },
+        Tombstone {
+            finding: "F-2",
+            location: "the terminal UI's own hand-copied verb-mirror constant and its self-comparing parity test",
+        },
+    ]
 }
 
 /// One shrink-only entry: a finding knowingly left open, and why.
@@ -251,10 +265,16 @@ mod ledger_baseline {
     use super::{AcceptedDebt, Tombstone};
 
     pub fn tombstones() -> Vec<Tombstone> {
-        vec![Tombstone {
-            finding: "F-3",
-            location: "the command line's own hand-maintained command-parity documentation table",
-        }]
+        vec![
+            Tombstone {
+                finding: "F-3",
+                location: "the command line's own hand-maintained command-parity documentation table",
+            },
+            Tombstone {
+                finding: "F-2",
+                location: "the terminal UI's own hand-copied verb-mirror constant and its self-comparing parity test",
+            },
+        ]
     }
 
     pub fn accepted_debt() -> Vec<AcceptedDebt> {
