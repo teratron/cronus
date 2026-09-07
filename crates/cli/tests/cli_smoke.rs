@@ -250,6 +250,36 @@ fn activation_help_exits_0() {
     assert!(status.success(), "activation --help must exit 0");
 }
 
+/// `tui` is answerable pre-composition like every other installation verb
+/// (LH-1/LH-5) — `--help` never actually launches the interactive session,
+/// which would block a subprocess test on a raw-mode terminal it does not
+/// have.
+#[test]
+fn tui_help_exits_0() {
+    let status = bin()
+        .args(["tui", "--help"])
+        .status()
+        .expect("failed to spawn binary");
+    assert!(status.success(), "tui --help must exit 0");
+}
+
+/// The retired standalone `cronus-tui` executable's replacement is
+/// discoverable from the one binary's own top-level listing (l2-tui.md
+/// §4.4).
+#[test]
+fn top_level_help_lists_tui() {
+    let output = bin()
+        .arg("--help")
+        .output()
+        .expect("failed to spawn binary");
+    assert!(output.status.success());
+    let stdout = String::from_utf8_lossy(&output.stdout);
+    assert!(
+        stdout.contains("tui"),
+        "the top-level --help listing must name the tui verb: {stdout}"
+    );
+}
+
 #[test]
 fn activation_enable_without_acknowledgement_refuses_when_noninteractive() {
     // `status`/`observe` reads the real OS (read-only, harmless); `enable`

@@ -24,7 +24,7 @@ The runtime resolves these paths through a single path resolver. Cache and logs 
 
 ```plaintext
 <program>/
-├── bin/            # Launchers and entry points: cronus (CLI), cronus-tui (TUI), cronusd (always-on service).
+├── bin/            # Launchers and entry points: cronus (CLI; `cronus tui` opens the terminal UI as a verb of the same binary — no separate `cronus-tui` executable), cronusd (always-on service).
 ├── app/            # Compiled runtime: core engine library + desktop application shell.
 ├── templates/      # Blueprints copied into the state tier on init.
 │   ├── employee/   # Skeleton for a hired employee (config, rules, memory, skills, skins).
@@ -87,8 +87,8 @@ cronus/
 ├── crates/                 # Rust workspace
 │   ├── core/               # engine library (orchestration, memory, scheduler, routers, quality, board, office)
 │   ├── nodus/              # workflow-language runtime (lexer/parser/validator/executor/transpiler); core depends on it
-│   ├── cli/                # `cronus` binary
-│   └── tui/                # `cronus-tui` binary
+│   ├── cli/                # `cronus` binary — the single entry point; composes and launches the tui crate for `cronus tui`
+│   └── tui/                # terminal-UI library — no binary target of its own; reached only through `cronus tui`
 ├── apps/
 │   └── desktop/            # Tauri v2 shell (desktop + mobile thin client)
 └── packages/

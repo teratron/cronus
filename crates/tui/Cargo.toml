@@ -9,10 +9,6 @@ repository.workspace = true
 name = "cronus_tui"
 path = "src/lib.rs"
 
-[[bin]]
-name = "cronus-tui"
-path = "src/main.rs"
-
 [dependencies]
 cronus-contract = { workspace = true }
 cronus-core = { workspace = true }

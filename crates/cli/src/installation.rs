@@ -20,22 +20,26 @@
 //! shared [`cronus_core::invocable::Dispatcher`]: that shared pipeline
 //! exists so one handler can serve every surface, and no other surface ever
 //! projects the `Installation` locus (only the command line does), so the
-//! indirection would buy nothing here.
+//! indirection would buy nothing here. `tui` is the one exception to
+//! *which* function it answers through — it launches the sibling terminal
+//! frontend's own composition (`cronus_tui::run`) rather than a
+//! `crate::commands` handler, since that frontend's own registry/dispatcher
+//! pair is what actually runs a session, not this launcher's.
 //!
-//! All eleven installation groups live here — `init`, `status`, `doctor`,
+//! All twelve installation groups live here — `init`, `status`, `doctor`,
 //! `restore`, `dev`, `workspace`, `backup`, `activation`, `archetype`,
-//! `registry`, and `ext` — covering four tree shapes: **flat** (a group's
-//! one verb's id-tail equals its group name, so it renders as a single
-//! top-level command with no nested verb), **nested** (a group command
-//! containing verb subcommands), a **named value flag** (`--actor cli`,
-//! `--mode login`), which `BinderKind::NamedText` exists to express —
-//! `Binder` had no positional-vs-named-value distinction before this module
-//! needed one for `workspace create --name/--path`, `backup create --to`,
-//! `activation enable --mode`, and `archetype create --from` — and one
-//! extra level of **sub-nesting** (`ext skill import|create|status`),
-//! signalled the same way `verb_of` already separates a group from its
-//! verbs: a dot in the verb tail (`skill.import`) names one sub-group, not
-//! a fourth top-level command.
+//! `registry`, `ext`, and `tui` — covering four tree shapes: **flat** (a
+//! group's one verb's id-tail equals its group name, so it renders as a
+//! single top-level command with no nested verb — `tui` is this shape),
+//! **nested** (a group command containing verb subcommands), a **named
+//! value flag** (`--actor cli`, `--mode login`), which `BinderKind::NamedText`
+//! exists to express — `Binder` had no positional-vs-named-value distinction
+//! before this module needed one for `workspace create --name/--path`,
+//! `backup create --to`, `activation enable --mode`, and `archetype create
+//! --from` — and one extra level of **sub-nesting** (`ext skill
+//! import|create|status`), signalled the same way `verb_of` already
+//! separates a group from its verbs: a dot in the verb tail (`skill.import`)
+//! names one sub-group, not a fourth top-level command.
 
 use std::collections::HashSet;
 
@@ -449,6 +453,23 @@ pub fn declared_invocables() -> Vec<Invocable> {
             stability: Stability::Shipped,
             journal_raw_input: true,
         },
+        // `Installation`, not `Semantic`/`ClientLocal`: launching the
+        // terminal UI has no meaning inside an already-running session, the
+        // same reasoning that places every other verb here (l2-tui.md §4.4,
+        // LH-10). Answerable with zero composition, matching every other
+        // installation verb — the terminal UI composes its own registry and
+        // dispatcher internally the moment it starts, so this launcher never
+        // needs to build one first.
+        Invocable {
+            id: id("tui"),
+            name: "Tui",
+            summary: "Launch the terminal UI — also the default composition when no verb is given",
+            group: "tui",
+            locus: Locus::Installation,
+            binders: Vec::new(),
+            stability: Stability::Shipped,
+            journal_raw_input: true,
+        },
     ]
 }
 
@@ -788,6 +809,13 @@ fn dispatch_leaf(group: &str, verb: &str, matches: &ArgMatches, ctx: &Context) -
             let skill_id = matches.get_one::<String>("id").cloned();
             crate::commands::ext::skill::status(skill_id, ctx)
         }
+        ("tui", _) => match cronus_tui::run() {
+            Ok(()) => 0,
+            Err(e) => {
+                eprintln!("error: tui: {e}");
+                1
+            }
+        },
         _ => {
             eprintln!(
                 "error: internal: no installation handler wired for {group} {verb} — a bug in this module's own dispatch table, not a caller condition"

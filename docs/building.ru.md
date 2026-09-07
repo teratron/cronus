@@ -6,7 +6,7 @@
 >
 > | Мир | Инструмент | Что собирает |
 > | --- | --- | --- |
-> | `crates/` | Cargo (Rust workspace) | движок, `cronus` (CLI), `cronus-tui` (TUI) |
+> | `crates/` | Cargo (Rust workspace) | движок, `cronus` — единый бинарник (CLI; `cronus tui` открывает терминальный интерфейс как глагол того же бинарника, отдельного `cronus-tui` больше нет) |
 > | `packages/` | pnpm + Vite | `@cronus/ui` — общий React-фронтенд |
 > | `apps/desktop/` | pnpm + Vite + **отдельный** Cargo-проект (`apps/desktop/tauri`) | `cronus-desktop` — оболочка Tauri v2 |
 >
@@ -93,10 +93,9 @@ cargo build --release
 
 | Бинарь | Из крейта | Путь (release) |
 | --- | --- | --- |
-| `cronus.exe` | `crates/cli` | `target/release/cronus.exe` |
-| `cronus-tui.exe` | `crates/tui` | `target/release/cronus-tui.exe` |
+| `cronus.exe` | `crates/cli` (собирает и связывает `crates/tui` как библиотеку) | `target/release/cronus.exe` |
 
-Собрать только CLI: `cargo build --release -p cronus-cli`.
+Единственный бинарник в воркспейсе — `crates/tui` больше не даёт собственный `[[bin]]`-таргет; терминальный интерфейс запускается как `cronus tui`. Собрать: `cargo build --release -p cronus-cli`.
 
 `.cargo/config.toml` уже проставляет `CFLAGS` для обхода упаковочного бага `sqlite-vec` (отключены неиспользуемые DiskANN/rescore) — ручных действий не требуется.
 
@@ -178,8 +177,7 @@ npx fallow dead-code --workspace packages/ui         # границы слоёв
 
 | Что | Команда | Путь |
 | --- | --- | --- |
-| CLI | `cargo build --release -p cronus-cli` | `target/release/cronus.exe` |
-| TUI | `cargo build --release -p cronus-tui` | `target/release/cronus-tui.exe` |
+| CLI + TUI (единый бинарник; `cronus tui` — терминальный интерфейс) | `cargo build --release -p cronus-cli` | `target/release/cronus.exe` |
 | UI-библиотека (бандл) | `pnpm -C packages/ui build` | `packages/ui/dist/index.js` |
 | Фронтенд десктопа | `pnpm -C apps/desktop build` | `apps/desktop/dist/` |
 | Десктоп-приложение | `pnpm -C apps/desktop tauri build` | `apps/desktop/tauri/target/release/cronus-desktop.exe` |

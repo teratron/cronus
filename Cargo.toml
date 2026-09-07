@@ -31,6 +31,7 @@ cronus-core = { path = "crates/core" }
 cronus-contract = { path = "crates/contract" }
 cronus-domain = { path = "crates/domain" }
 cronus-conformance = { path = "crates/conformance" }
+cronus-tui = { path = "crates/tui" }
 cronus-store-local = { path = "crates/store-local" }
 cronus-auth-local = { path = "crates/auth-local" }
 cronus-model-local = { path = "crates/model-local" }
