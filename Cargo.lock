@@ -626,6 +626,7 @@ version = "0.1.0"
 dependencies = [
  "clap",
  "cronus-codegraph",
+ "cronus-conformance",
  "cronus-contract",
  "cronus-core",
  "nodus",

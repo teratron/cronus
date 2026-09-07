@@ -1,10 +1,12 @@
 mod cli;
 mod commands;
+#[cfg(test)]
+mod conformance_registration;
 mod generated;
 mod installation;
 mod output;
 
-use clap::{Command, CommandFactory, FromArgMatches};
+use clap::{Command, CommandFactory};
 use cronus_contract::{Dispatched, Invocable, Outcome, OutcomeValue};
 use cronus_core::invocable::Registrant;
 use output::OutputFormat;
@@ -86,7 +88,12 @@ fn main() -> std::process::ExitCode {
     // whatever the registry currently ships on the semantic half. Built
     // fresh every run — cheap, and the only way a plugin's newly
     // registered verb becomes visible in `--help` without a rebuild.
-    let mut command = cli::Cli::command();
+    // `subcommand_required` is set explicitly here rather than left to
+    // derive-macro inference (INV-9: `Cli` itself declares no subcommand
+    // field for a compile-time enum to imply it from) — a bare invocation
+    // with neither half's verbs to fall back on must still refuse cleanly,
+    // the same usage failure it always has.
+    let mut command = cli::Cli::command().subcommand_required(true);
     for group in installation_groups {
         command = command.subcommand(group);
     }
@@ -122,14 +129,15 @@ fn main() -> std::process::ExitCode {
         return exit_code(rendered.exit_code);
     }
 
-    // Not a registry-generated group and not an installation verb — the
-    // remaining hand-declared enum. This launcher never resolves a name an
-    // extension could define (LH-1/LH-5), so the semantic half is never
-    // reached by this fallback.
-    match cli::Cli::from_arg_matches(&matches) {
-        Ok(args) => exit_code(commands::dispatch(args.command, &ctx)),
-        Err(e) => e.exit(),
-    }
+    // Every verb this launcher can reach is either an installation verb or a
+    // registry-generated semantic one (INV-9: nothing else has a
+    // descriptor, so nothing else can be shipped) — `subcommand_required`
+    // above means `command.get_matches()` itself already refused anything
+    // that matched neither before this point could ever be reached. A
+    // defensive internal error, not a panic, if that invariant is ever
+    // violated.
+    eprintln!("error: internal: matched a subcommand neither half of the launcher owns");
+    std::process::ExitCode::from(1)
 }
 
 /// The installation half's own pre-composition parser: just enough grammar

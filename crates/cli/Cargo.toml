@@ -16,3 +16,9 @@ cronus-contract = { workspace = true }
 cronus-core = { workspace = true }
 nodus = { workspace = true }
 serde_json = { workspace = true }
+
+[dev-dependencies]
+# The shared conformance corpus (§4.4/§4.5) — a surface registers by driving
+# it from its own test target, never from product code, so this stays a
+# dev-dependency only.
+cronus-conformance = { workspace = true }
