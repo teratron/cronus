@@ -29,8 +29,10 @@ use crate::command::{self, CommandOutcome, CommandSpec, SlashCommand};
 use crate::dispatch;
 use crate::pane_actions::{self, PaneAction};
 use crate::terminal::{CrosstermBackend, Key, TermEvent, TerminalBackend, Tui};
-use crate::view::{self, BoardView, Focus, OfficeView, SessionsView};
-use cronus_contract::{ArgValues, Dispatched, Invocable, Invocation, Surface};
+use crate::view::{self, BoardView, Focus, OfficeView, Projection, SessionsView, StatusView};
+use cronus_contract::{
+    ArgValues, Dispatched, Invocable, InvocableId, Invocation, Outcome, OutcomeValue, Surface,
+};
 use cronus_core::invocable::{Dispatcher, InvocableRegistry};
 use cronus_domain::{Capabilities, Engine};
 
@@ -40,22 +42,25 @@ const TICK: Duration = Duration::from_millis(50);
 
 /// An immutable projection of durable core state at one instant.
 ///
-/// The TUI renders from this and never mutates it (INV-5). The version/status
-/// fields come from the core capability surface; the board/office projections are
-/// populated once the core exposes a cheap board snapshot — until then they stay
-/// empty and the panels render empty columns.
+/// The TUI renders from this and never mutates it (INV-5). Every field is a
+/// [`Projection`] (INV-6): `status` comes from the core capability surface;
+/// `board`/`office` are dispatched through the shared registry (`core:board
+/// .list`/`core:role.list`) — the same door the command bar uses — never a
+/// path opened directly by this crate (which would re-derive the domain fact
+/// of where the board/roster live, the exact class of defect finding F-4
+/// already names on the sibling surface). `sessions` stays the neutral,
+/// genuinely-empty default until the core exposes a durable activity log to
+/// read from.
 #[derive(Debug, Clone, PartialEq, Eq, Default)]
 pub struct CoreSnapshot {
-    /// Engine/product version string.
-    pub version: String,
-    /// Human-readable status line.
-    pub status: String,
+    /// Engine/product version + status line.
+    pub status: Projection<StatusView>,
     /// Kanban board projection (cards by column).
-    pub board: BoardView,
+    pub board: Projection<BoardView>,
     /// Office projection (agents and their current tasks).
-    pub office: OfficeView,
+    pub office: Projection<OfficeView>,
     /// Sessions/log projection (bounded tail of recent activity).
-    pub sessions: SessionsView,
+    pub sessions: Projection<SessionsView>,
 }
 
 /// View-only state the panels render from.
@@ -83,13 +88,20 @@ pub struct ViewModel {
 /// The core exposes no event/observe bus yet, so the production source
 /// ([`CapabilitySource`]) *polls* a fresh snapshot each tick — the poll-snapshot
 /// fallback the spec mandates. An event-driven source can implement the same
-/// trait unchanged if the core later grows a subscription.
+/// trait unchanged if the core later grows a subscription. Takes the loop's own
+/// `registry`/`dispatcher` so a real source can dispatch `board`/`office`
+/// reads through the identical mechanism the command bar uses — one dispatch
+/// mechanism, never a second, direct path into the domain tier.
 pub trait SnapshotSource {
     /// Return the latest snapshot if one is available, else `None`.
     ///
     /// `None` models a snapshot still being produced (a slow core call in
     /// flight). The loop must stay responsive to input when this happens.
-    fn poll_snapshot(&mut self) -> Option<CoreSnapshot>;
+    fn poll_snapshot(
+        &mut self,
+        registry: &InvocableRegistry,
+        dispatcher: &Dispatcher,
+    ) -> Option<CoreSnapshot>;
 }
 
 /// Draws a single frame from the immutable view-model.
@@ -202,7 +214,10 @@ impl App {
 
         // 2) Snapshot poll — may be `None` (slow call in flight); the loop has
         //    already handled input above, so it stays responsive regardless.
-        if let Some(snapshot) = source.poll_snapshot()
+        //    Passes this loop's own registry/dispatcher through so a real
+        //    source dispatches board/office reads the same way the command
+        //    bar does — never a second, direct path into the domain tier.
+        if let Some(snapshot) = source.poll_snapshot(&self.registry, &self.dispatcher)
             && snapshot != self.view.snapshot
         {
             self.view.snapshot = snapshot;
@@ -335,15 +350,156 @@ impl<C: Capabilities> CapabilitySource<C> {
 }
 
 impl<C: Capabilities> SnapshotSource for CapabilitySource<C> {
-    fn poll_snapshot(&mut self) -> Option<CoreSnapshot> {
+    fn poll_snapshot(
+        &mut self,
+        registry: &InvocableRegistry,
+        dispatcher: &Dispatcher,
+    ) -> Option<CoreSnapshot> {
         Some(CoreSnapshot {
-            version: self.core.version().to_string(),
-            status: self.core.status(),
-            // Board/office stay empty until the core exposes a cheap snapshot;
-            // the panels render empty columns in the meantime.
-            ..CoreSnapshot::default()
+            status: Projection::Available(StatusView {
+                version: self.core.version().to_string(),
+                status: self.core.status(),
+            }),
+            board: dispatch_board(registry, dispatcher),
+            office: dispatch_office(registry, dispatcher),
+            // No durable activity log exists in the domain tier yet to read
+            // from — the neutral, genuinely-empty starting point, never a
+            // fabricated `Unavailable` with no real call behind it.
+            sessions: Projection::Available(SessionsView::default()),
         })
     }
+}
+
+/// Dispatch `core:board.list` through the shared registry/dispatcher and
+/// project its result — never a store opened directly by this crate, which
+/// would re-derive the domain fact of where the board lives (finding F-4's
+/// exact defect, on the sibling surface). The verb has no declared binders,
+/// so `Outcome::Rejected` is unreachable in practice; handled anyway for
+/// exhaustive, honest coverage of every `Outcome`/`Dispatched` shape rather
+/// than a partial match that would panic if that ever changed.
+fn dispatch_board(registry: &InvocableRegistry, dispatcher: &Dispatcher) -> Projection<BoardView> {
+    dispatch_projection(registry, dispatcher, "core:board.list", |value| {
+        let OutcomeValue::List(items) = value else {
+            return None;
+        };
+        let mut cards = Vec::with_capacity(items.len());
+        for item in items {
+            let OutcomeValue::Record(fields) = item else {
+                return None;
+            };
+            let id = record_text(fields, "id")?;
+            let column = board_column(record_text(fields, "state")?)?;
+            cards.push(view::BoardCard {
+                id: id.to_string(),
+                // `core:board.list`'s current outcome shape carries no
+                // `task_ref` field — a disclosed limitation of that
+                // invocable's response, not something this panel derives
+                // locally; the same gap the command line's own output has.
+                title: String::new(),
+                column,
+            });
+        }
+        Some(BoardView { cards })
+    })
+}
+
+/// Dispatch `core:role.list` (no `--presets` flag: hired instances, not the
+/// preset catalog) and project its result the same way [`dispatch_board`]
+/// does for the board.
+fn dispatch_office(
+    registry: &InvocableRegistry,
+    dispatcher: &Dispatcher,
+) -> Projection<OfficeView> {
+    dispatch_projection(registry, dispatcher, "core:role.list", |value| {
+        let OutcomeValue::List(items) = value else {
+            return None;
+        };
+        let mut agents = Vec::with_capacity(items.len());
+        for item in items {
+            let OutcomeValue::Record(fields) = item else {
+                return None;
+            };
+            agents.push(view::AgentActivity {
+                agent: record_text(fields, "display_name")?.to_string(),
+                // No live task-tracking exists in the domain layer yet
+                // (`HiredInstance` carries no "current task" field) — an
+                // honest absence, not a locally-derived default; the
+                // panel's own "idle" fallback already renders this
+                // correctly.
+                task: String::new(),
+            });
+        }
+        Some(OfficeView { agents })
+    })
+}
+
+/// Dispatch one no-argument invocable and turn its result into a
+/// [`Projection`]: a registry miss or a real `Outcome::Unavailable`/
+/// `Rejected`/`Stream` all become `Unavailable` with a legible reason; a
+/// `Value` that does not match `parse`'s expected shape is *also*
+/// `Unavailable`, never silently treated as empty — an unrecognized shape is
+/// exactly the case this crate must not paper over as "nothing to show".
+fn dispatch_projection<T>(
+    registry: &InvocableRegistry,
+    dispatcher: &Dispatcher,
+    id: &str,
+    parse: impl FnOnce(&OutcomeValue) -> Option<T>,
+) -> Projection<T> {
+    let invocation = Invocation {
+        id: InvocableId::new(id).expect("a literal invocable id must be well-formed"),
+        args: ArgValues::new(),
+        caller: Surface::Tui,
+    };
+    match dispatcher.dispatch(registry, &invocation) {
+        Dispatched::Unknown => Projection::Unavailable {
+            reason: format!("{id} is not registered"),
+        },
+        Dispatched::Ran(Outcome::Value(value)) => match parse(&value) {
+            Some(parsed) => Projection::Available(parsed),
+            None => Projection::Unavailable {
+                reason: format!("{id} returned an unrecognized result shape"),
+            },
+        },
+        Dispatched::Ran(Outcome::Rejected(rejection)) => Projection::Unavailable {
+            reason: format!(
+                "{id} rejected its own no-argument call: {} ({:?})",
+                rejection.binder, rejection.mode
+            ),
+        },
+        Dispatched::Ran(Outcome::Unavailable { reason }) => Projection::Unavailable { reason },
+        Dispatched::Ran(Outcome::Stream(_)) => Projection::Unavailable {
+            reason: format!(
+                "{id} streamed a result; this surface has no panel renderer for it yet"
+            ),
+        },
+    }
+}
+
+/// The inverse of the domain's own `CardState::as_str()` — this crate names
+/// no domain type of its own, it only recognizes the same strings
+/// `core:board.list`'s handler already emits.
+fn board_column(state: &str) -> Option<view::BoardColumn> {
+    match state {
+        "triage" => Some(view::BoardColumn::Triage),
+        "todo" => Some(view::BoardColumn::Todo),
+        "ready" => Some(view::BoardColumn::Ready),
+        "running" => Some(view::BoardColumn::Running),
+        "blocked" => Some(view::BoardColumn::Blocked),
+        "done" => Some(view::BoardColumn::Done),
+        _ => None,
+    }
+}
+
+/// Read one named `Text` field out of an `Outcome::Value(Record(..))`'s
+/// field list.
+fn record_text<'a>(fields: &'a [(String, OutcomeValue)], name: &str) -> Option<&'a str> {
+    fields
+        .iter()
+        .find(|(k, _)| k == name)
+        .and_then(|(_, v)| match v {
+            OutcomeValue::Text(s) => Some(s.as_str()),
+            _ => None,
+        })
 }
 
 /// Production [`Renderer`] drawing the panel layout via ratatui.
@@ -399,7 +555,6 @@ pub fn render_view(area: Rect, buf: &mut Buffer, view: &ViewModel) {
     view::render_status(
         areas.status,
         buf,
-        &snapshot.version,
         &snapshot.status,
         view.focus == Focus::Status,
     );
@@ -518,7 +673,11 @@ mod tests {
     }
 
     impl SnapshotSource for ScriptedSource {
-        fn poll_snapshot(&mut self) -> Option<CoreSnapshot> {
+        fn poll_snapshot(
+            &mut self,
+            _registry: &InvocableRegistry,
+            _dispatcher: &Dispatcher,
+        ) -> Option<CoreSnapshot> {
             self.queue.pop_front().flatten()
         }
     }
@@ -538,8 +697,10 @@ mod tests {
 
     fn snap(status: &str) -> CoreSnapshot {
         CoreSnapshot {
-            version: "0.1.0".to_string(),
-            status: status.to_string(),
+            status: Projection::Available(StatusView {
+                version: "0.1.0".to_string(),
+                status: status.to_string(),
+            }),
             ..CoreSnapshot::default()
         }
     }
@@ -999,22 +1160,24 @@ mod tests {
         sessions.push("agent started");
         ViewModel {
             snapshot: CoreSnapshot {
-                version: "1.2.3".to_string(),
-                status: "running | 80%".to_string(),
-                board: BoardView {
+                status: Projection::Available(StatusView {
+                    version: "1.2.3".to_string(),
+                    status: "running | 80%".to_string(),
+                }),
+                board: Projection::Available(BoardView {
                     cards: vec![view::BoardCard {
                         id: "k1".to_string(),
                         title: String::new(),
                         column: view::BoardColumn::Running,
                     }],
-                },
-                office: OfficeView {
+                }),
+                office: Projection::Available(OfficeView {
                     agents: vec![view::AgentActivity {
                         agent: "orchestrator".to_string(),
                         task: "planning".to_string(),
                     }],
-                },
-                sessions,
+                }),
+                sessions: Projection::Available(sessions),
             },
             size: (80, 24),
             focus: Focus::Board,
@@ -1061,10 +1224,173 @@ mod tests {
         let base = render_to_buffer(&populated_view(), area);
 
         let mut changed = populated_view();
-        changed.snapshot.status = "running | 100%".to_string();
+        changed.snapshot.status = Projection::Available(StatusView {
+            version: "1.2.3".to_string(),
+            status: "running | 100%".to_string(),
+        });
         let after = render_to_buffer(&changed, area);
 
         assert_ne!(base, after, "a changed snapshot must change the frame");
+    }
+
+    // ── Board/office projection dispatch (INV-6: unavailable vs. empty) ────
+    //
+    // `dispatch_board`/`dispatch_office` are what `CapabilitySource` and the
+    // production `poll_snapshot` call every tick; proven directly here
+    // against a real registry/dispatcher, the same way every other dispatch
+    // path in this crate is — never through a stand-in that only pretends
+    // to be the real mechanism.
+
+    #[test]
+    fn dispatch_board_reports_unavailable_when_core_board_list_is_not_registered() {
+        let registry = InvocableRegistry::new();
+        let dispatcher = Dispatcher::new();
+        assert!(matches!(
+            dispatch_board(&registry, &dispatcher),
+            Projection::Unavailable { .. }
+        ));
+    }
+
+    /// Registers a fixture `core:board.list` handler returning exactly
+    /// `pairs` as `(id, state)` records — the same field shape the real
+    /// invocable produces — so `dispatch_board` is proven against a real
+    /// dispatch path, not a stub of it.
+    fn register_board_list(
+        registry: &mut InvocableRegistry,
+        dispatcher: &mut Dispatcher,
+        pairs: Vec<(&'static str, &'static str)>,
+    ) {
+        let id = InvocableId::new("core:board.list").expect("well-formed test id");
+        registry
+            .register(
+                &Registrant::core(),
+                Invocable {
+                    id: id.clone(),
+                    name: "List",
+                    summary: "Test-only board.list fixture.",
+                    group: "board",
+                    locus: Locus::Semantic,
+                    binders: Vec::new(),
+                    stability: Stability::Shipped,
+                    journal_raw_input: true,
+                },
+            )
+            .expect("test fixture registers cleanly");
+        dispatcher.attach(
+            id,
+            Arc::new(move |_args| {
+                Outcome::Value(OutcomeValue::List(
+                    pairs
+                        .iter()
+                        .map(|(cid, state)| {
+                            OutcomeValue::Record(vec![
+                                ("id".to_string(), OutcomeValue::Text(cid.to_string())),
+                                ("state".to_string(), OutcomeValue::Text(state.to_string())),
+                            ])
+                        })
+                        .collect(),
+                ))
+            }),
+        );
+    }
+
+    #[test]
+    fn dispatch_board_reports_a_genuinely_empty_result_as_available() {
+        let mut registry = InvocableRegistry::new();
+        let mut dispatcher = Dispatcher::new();
+        register_board_list(&mut registry, &mut dispatcher, Vec::new());
+
+        assert_eq!(
+            dispatch_board(&registry, &dispatcher),
+            Projection::Available(BoardView::default()),
+            "a real, genuinely empty result must be Available, never Unavailable"
+        );
+    }
+
+    #[test]
+    fn dispatch_board_maps_a_real_result_into_board_cards() {
+        let mut registry = InvocableRegistry::new();
+        let mut dispatcher = Dispatcher::new();
+        register_board_list(
+            &mut registry,
+            &mut dispatcher,
+            vec![("k1", "running"), ("k2", "todo")],
+        );
+
+        let Projection::Available(board) = dispatch_board(&registry, &dispatcher) else {
+            panic!("expected an available board");
+        };
+        assert_eq!(board.cards.len(), 2);
+        assert!(
+            board
+                .cards
+                .iter()
+                .any(|c| c.id == "k1" && c.column == view::BoardColumn::Running)
+        );
+        assert!(
+            board
+                .cards
+                .iter()
+                .any(|c| c.id == "k2" && c.column == view::BoardColumn::Todo)
+        );
+    }
+
+    #[test]
+    fn dispatch_office_reports_unavailable_when_core_role_list_is_not_registered() {
+        let registry = InvocableRegistry::new();
+        let dispatcher = Dispatcher::new();
+        assert!(matches!(
+            dispatch_office(&registry, &dispatcher),
+            Projection::Unavailable { .. }
+        ));
+    }
+
+    #[test]
+    fn dispatch_office_maps_a_real_result_into_agent_activity() {
+        let mut registry = InvocableRegistry::new();
+        let mut dispatcher = Dispatcher::new();
+        let id = InvocableId::new("core:role.list").expect("well-formed test id");
+        registry
+            .register(
+                &Registrant::core(),
+                Invocable {
+                    id: id.clone(),
+                    name: "List",
+                    summary: "Test-only role.list fixture.",
+                    group: "role",
+                    locus: Locus::Semantic,
+                    binders: vec![Binder {
+                        name: "presets",
+                        kind: BinderKind::Flag,
+                        optional: true,
+                    }],
+                    stability: Stability::Shipped,
+                    journal_raw_input: true,
+                },
+            )
+            .expect("test fixture registers cleanly");
+        dispatcher.attach(
+            id,
+            Arc::new(|_args| {
+                Outcome::Value(OutcomeValue::List(vec![OutcomeValue::Record(vec![
+                    ("id".to_string(), OutcomeValue::Text("r1".to_string())),
+                    (
+                        "display_name".to_string(),
+                        OutcomeValue::Text("Coder".to_string()),
+                    ),
+                ])]))
+            }),
+        );
+
+        let Projection::Available(office) = dispatch_office(&registry, &dispatcher) else {
+            panic!("expected an available office");
+        };
+        assert_eq!(office.agents.len(), 1);
+        assert_eq!(office.agents[0].agent, "Coder");
+        assert_eq!(
+            office.agents[0].task, "",
+            "no live task-tracking exists in the domain layer yet — an honest absence"
+        );
     }
 
     #[test]

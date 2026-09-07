@@ -125,6 +125,57 @@ pub fn focus_border_style(focused: bool) -> Style {
     }
 }
 
+// ── Panel availability ──────────────────────────────────────────────────────
+
+/// A core-supplied panel projection: obtained, or not (INV-6). `Unavailable`
+/// carries why, so the two states stay distinguishable **in the view model
+/// itself** — a panel whose projection could not be obtained must not render
+/// the same way as one whose projection is legitimately empty, and the
+/// distinction has to be a value the code carries, not a formatting
+/// accident downstream of it.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum Projection<T> {
+    /// The projection was obtained — `T` may still be legitimately empty.
+    Available(T),
+    /// The projection could not be obtained, and why.
+    Unavailable { reason: String },
+}
+
+impl<T: Default> Default for Projection<T> {
+    /// The neutral starting point before any snapshot has arrived: a
+    /// genuine absence of data to report yet, not a failure to obtain it —
+    /// the same state a fresh, empty projection would report once obtained.
+    fn default() -> Self {
+        Projection::Available(T::default())
+    }
+}
+
+/// Render one panel's bordered block, then either `render_available` (over
+/// the block's interior) for `Available`, or the unavailable reason for
+/// `Unavailable` — the one place that fallback rendering lives, so it is not
+/// restated with four slightly different wordings across the four panels.
+fn render_panel<T>(
+    area: Rect,
+    buf: &mut Buffer,
+    title: &'static str,
+    focused: bool,
+    projection: &Projection<T>,
+    render_available: impl FnOnce(Rect, &mut Buffer, &T),
+) {
+    let block = Block::bordered()
+        .title(title)
+        .border_style(focus_border_style(focused));
+    let inner = block.inner(area);
+    block.render(area, buf);
+
+    match projection {
+        Projection::Available(value) => render_available(inner, buf, value),
+        Projection::Unavailable { reason } => {
+            Paragraph::new(format!("unavailable: {reason}")).render(inner, buf);
+        }
+    }
+}
+
 // ── Board projection ────────────────────────────────────────────────────────
 
 /// The Kanban columns the board renders, in pipeline order.
@@ -210,27 +261,23 @@ pub fn board_columns(inner: Rect) -> [Rect; 7] {
 }
 
 /// Render the Board panel: a bordered block whose interior splits into the seven
-/// columns, each listing its cards. Pure function of the [`BoardView`].
-pub fn render_board(area: Rect, buf: &mut Buffer, board: &BoardView, focused: bool) {
-    let block = Block::bordered()
-        .title("Board")
-        .border_style(focus_border_style(focused));
-    let inner = block.inner(area);
-    block.render(area, buf);
-
-    let columns = board_columns(inner);
-    for (column, column_area) in BoardColumn::ALL.iter().zip(columns) {
-        let mut lines = vec![Line::from(column.short()).bold()];
-        for card in board.cards_in(*column) {
-            let label = if card.title.is_empty() {
-                card.id.clone()
-            } else {
-                format!("{} {}", card.id, card.title)
-            };
-            lines.push(Line::from(label));
+/// columns, each listing its cards. Pure function of the [`Projection<BoardView>`].
+pub fn render_board(area: Rect, buf: &mut Buffer, board: &Projection<BoardView>, focused: bool) {
+    render_panel(area, buf, "Board", focused, board, |inner, buf, board| {
+        let columns = board_columns(inner);
+        for (column, column_area) in BoardColumn::ALL.iter().zip(columns) {
+            let mut lines = vec![Line::from(column.short()).bold()];
+            for card in board.cards_in(*column) {
+                let label = if card.title.is_empty() {
+                    card.id.clone()
+                } else {
+                    format!("{} {}", card.id, card.title)
+                };
+                lines.push(Line::from(label));
+            }
+            Paragraph::new(lines).render(column_area, buf);
         }
-        Paragraph::new(lines).render(column_area, buf);
-    }
+    });
 }
 
 // ── Office projection ───────────────────────────────────────────────────────
@@ -252,43 +299,60 @@ pub struct OfficeView {
 }
 
 /// Render the Office panel: an `agent → task` line per active agent.
-pub fn render_office(area: Rect, buf: &mut Buffer, office: &OfficeView, focused: bool) {
-    let block = Block::bordered()
-        .title("Office")
-        .border_style(focus_border_style(focused));
-    let inner = block.inner(area);
-    block.render(area, buf);
-
-    let lines: Vec<Line> = office
-        .agents
-        .iter()
-        .map(|a| {
-            let task = if a.task.is_empty() { "idle" } else { &a.task };
-            Line::from(format!("{} → {}", a.agent, task))
-        })
-        .collect();
-    Paragraph::new(lines).render(inner, buf);
+pub fn render_office(area: Rect, buf: &mut Buffer, office: &Projection<OfficeView>, focused: bool) {
+    render_panel(
+        area,
+        buf,
+        "Office",
+        focused,
+        office,
+        |inner, buf, office| {
+            let lines: Vec<Line> = office
+                .agents
+                .iter()
+                .map(|a| {
+                    let task = if a.task.is_empty() { "idle" } else { &a.task };
+                    Line::from(format!("{} → {}", a.agent, task))
+                })
+                .collect();
+            Paragraph::new(lines).render(inner, buf);
+        },
+    );
 }
 
 // ── Status panel ────────────────────────────────────────────────────────────
+
+/// Version + status line, as the Status panel shows it. Wrapped in
+/// [`Projection`] like every other panel (structural INV-6 compliance): the
+/// panel's own doc comment already anticipates richer, potentially fallible
+/// position/progress/blockers fields later, and the distinction belongs in
+/// the view model before that lands, not retrofitted onto it once it does.
+#[derive(Debug, Clone, PartialEq, Eq, Default)]
+pub struct StatusView {
+    pub version: String,
+    pub status: String,
+}
 
 /// Render the Status panel: a mirror of the core `status` capability snapshot.
 ///
 /// Today the capability surface is a single status line plus the version; the
 /// panel renders both. Richer position/progress/blockers fields extend this once
 /// the core exposes them.
-pub fn render_status(area: Rect, buf: &mut Buffer, version: &str, status: &str, focused: bool) {
-    let block = Block::bordered()
-        .title("Status")
-        .border_style(focus_border_style(focused));
-    let inner = block.inner(area);
-    block.render(area, buf);
-
-    let lines = vec![
-        Line::from(format!("version {version}")),
-        Line::from(status.to_string()),
-    ];
-    Paragraph::new(lines).render(inner, buf);
+pub fn render_status(area: Rect, buf: &mut Buffer, status: &Projection<StatusView>, focused: bool) {
+    render_panel(
+        area,
+        buf,
+        "Status",
+        focused,
+        status,
+        |inner, buf, status| {
+            let lines = vec![
+                Line::from(format!("version {}", status.version)),
+                Line::from(status.status.clone()),
+            ];
+            Paragraph::new(lines).render(inner, buf);
+        },
+    );
 }
 
 // ── Sessions / log projection ───────────────────────────────────────────────
@@ -328,21 +392,29 @@ impl SessionsView {
 
 /// Render the Sessions/Log panel: the most recent activity lines that fit,
 /// oldest of the visible window at the top and newest at the bottom.
-pub fn render_sessions(area: Rect, buf: &mut Buffer, sessions: &SessionsView, focused: bool) {
-    let block = Block::bordered()
-        .title("Sessions")
-        .border_style(focus_border_style(focused));
-    let inner = block.inner(area);
-    block.render(area, buf);
-
-    let height = inner.height as usize;
-    let entries = sessions.entries();
-    let start = entries.len().saturating_sub(height);
-    let lines: Vec<Line> = entries[start..]
-        .iter()
-        .map(|e| Line::from(e.clone()))
-        .collect();
-    Paragraph::new(lines).render(inner, buf);
+pub fn render_sessions(
+    area: Rect,
+    buf: &mut Buffer,
+    sessions: &Projection<SessionsView>,
+    focused: bool,
+) {
+    render_panel(
+        area,
+        buf,
+        "Sessions",
+        focused,
+        sessions,
+        |inner, buf, sessions| {
+            let height = inner.height as usize;
+            let entries = sessions.entries();
+            let start = entries.len().saturating_sub(height);
+            let lines: Vec<Line> = entries[start..]
+                .iter()
+                .map(|e| Line::from(e.clone()))
+                .collect();
+            Paragraph::new(lines).render(inner, buf);
+        },
+    );
 }
 
 #[cfg(test)]
@@ -445,7 +517,7 @@ mod tests {
 
     fn render_board_buffer(board: &BoardView, area: Rect) -> Buffer {
         let mut buf = Buffer::empty(area);
-        render_board(area, &mut buf, board, false);
+        render_board(area, &mut buf, &Projection::Available(board.clone()), false);
         buf
     }
 
@@ -519,7 +591,7 @@ mod tests {
         };
         let area = Rect::new(0, 0, 40, 6);
         let mut buf = Buffer::empty(area);
-        render_office(area, &mut buf, &office, false);
+        render_office(area, &mut buf, &Projection::Available(office), false);
 
         let inner = Block::bordered().inner(area);
         assert!(
@@ -541,7 +613,11 @@ mod tests {
     fn status_sessions_render_status_mirrors_snapshot() {
         let area = Rect::new(0, 0, 50, 6);
         let mut buf = Buffer::empty(area);
-        render_status(area, &mut buf, "0.1.0", "running | progress 60%", false);
+        let status = Projection::Available(StatusView {
+            version: "0.1.0".to_string(),
+            status: "running | progress 60%".to_string(),
+        });
+        render_status(area, &mut buf, &status, false);
 
         let inner = Block::bordered().inner(area);
         assert!(
@@ -563,7 +639,7 @@ mod tests {
 
         let area = Rect::new(0, 0, 30, 8);
         let mut buf = Buffer::empty(area);
-        render_sessions(area, &mut buf, &sessions, false);
+        render_sessions(area, &mut buf, &Projection::Available(sessions), false);
 
         let inner = Block::bordered().inner(area);
         let first = row_of(&buf, inner, "first").expect("first present");
@@ -590,5 +666,106 @@ mod tests {
             sessions.entries().last().unwrap(),
             &format!("e{}", MAX_SESSION_LINES + 49)
         );
+    }
+
+    // ── Unavailable vs. empty (INV-6) ───────────────────────────────────────
+    //
+    // Each panel gets its own positive proof — an `Unavailable` projection
+    // renders its reason — plus one shared negative proof that a genuinely
+    // *empty* `Available` projection never renders that same word, so the
+    // two states are checked as distinguishable, not merely rendered
+    // separately from each other by coincidence.
+
+    #[test]
+    fn render_board_shows_the_reason_when_unavailable() {
+        let area = Rect::new(0, 0, 40, 6);
+        let mut buf = Buffer::empty(area);
+        let board = Projection::Unavailable {
+            reason: "kanban store unreadable".to_string(),
+        };
+        render_board(area, &mut buf, &board, false);
+
+        let inner = Block::bordered().inner(area);
+        assert!(area_contains(
+            &buf,
+            inner,
+            "unavailable: kanban store unreadable"
+        ));
+    }
+
+    #[test]
+    fn render_office_shows_the_reason_when_unavailable() {
+        let area = Rect::new(0, 0, 40, 6);
+        let mut buf = Buffer::empty(area);
+        let office = Projection::Unavailable {
+            reason: "role roster unreadable".to_string(),
+        };
+        render_office(area, &mut buf, &office, false);
+
+        let inner = Block::bordered().inner(area);
+        assert!(area_contains(
+            &buf,
+            inner,
+            "unavailable: role roster unreadable"
+        ));
+    }
+
+    #[test]
+    fn render_status_shows_the_reason_when_unavailable() {
+        let area = Rect::new(0, 0, 40, 6);
+        let mut buf = Buffer::empty(area);
+        let status = Projection::Unavailable {
+            reason: "core status unreachable".to_string(),
+        };
+        render_status(area, &mut buf, &status, false);
+
+        let inner = Block::bordered().inner(area);
+        assert!(area_contains(
+            &buf,
+            inner,
+            "unavailable: core status unreachable"
+        ));
+    }
+
+    #[test]
+    fn render_sessions_shows_the_reason_when_unavailable() {
+        let area = Rect::new(0, 0, 40, 6);
+        let mut buf = Buffer::empty(area);
+        let sessions = Projection::Unavailable {
+            reason: "activity log unreachable".to_string(),
+        };
+        render_sessions(area, &mut buf, &sessions, false);
+
+        let inner = Block::bordered().inner(area);
+        assert!(area_contains(
+            &buf,
+            inner,
+            "unavailable: activity log unreachable"
+        ));
+    }
+
+    /// The distinguishing half: a genuinely empty `Available` projection —
+    /// the state every panel starts in before any real data has arrived —
+    /// never renders the word "unavailable" on any of the four panels. An
+    /// `Unavailable` reason and an empty `Available` value must be visibly
+    /// different states in the view model, never the same rendering by
+    /// coincidence.
+    #[test]
+    fn an_empty_available_projection_never_renders_as_unavailable() {
+        let area = Rect::new(0, 0, 80, 24);
+        let panels = layout(area);
+        let mut buf = Buffer::empty(area);
+
+        render_board(panels.board, &mut buf, &Projection::default(), false);
+        render_office(panels.office, &mut buf, &Projection::default(), false);
+        render_status(panels.status, &mut buf, &Projection::default(), false);
+        render_sessions(panels.sessions, &mut buf, &Projection::default(), false);
+
+        for panel in [panels.board, panels.office, panels.status, panels.sessions] {
+            assert!(
+                !area_contains(&buf, panel, "unavailable"),
+                "an empty Available projection must never render as unavailable: {panel:?}"
+            );
+        }
     }
 }
