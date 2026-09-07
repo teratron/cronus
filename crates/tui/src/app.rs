@@ -8,6 +8,13 @@
 //! INV-5 (view-only): [`App`] holds nothing but a [`ViewModel`] snapshot and a
 //! view-local quit flag. All durable state lives in the core and is read through
 //! the [`SnapshotSource`] seam — the loop never mutates domain state.
+//!
+//! Command dispatch (`crate::dispatch`) goes through the real, shared
+//! `cronus_core::invocable::Dispatcher` — the same one every surface uses —
+//! never a local re-implementation. `App` holds the registry and dispatcher
+//! directly rather than behind a trait object: there is exactly one dispatch
+//! mechanism now, not a swappable one, so the indirection a trait bought
+//! before this migration buys nothing here.
 
 use std::io::{self, Stdout};
 use std::time::Duration;
@@ -19,9 +26,11 @@ use ratatui::layout::Rect;
 use ratatui::widgets::{Paragraph, Widget};
 
 use crate::command::{self, CommandOutcome, CommandSpec, SlashCommand};
+use crate::dispatch;
 use crate::terminal::{CrosstermBackend, Key, TermEvent, TerminalBackend, Tui};
 use crate::view::{self, BoardView, Focus, OfficeView, SessionsView};
 use cronus_contract::Invocable;
+use cronus_core::invocable::{Dispatcher, InvocableRegistry};
 use cronus_domain::{Capabilities, Engine};
 
 /// How long the loop blocks for input before ticking again. Bounds redraw
@@ -101,15 +110,19 @@ pub struct TickResult {
 }
 
 /// The render loop's state: the view-model, a quit flag, and the command-dispatch
-/// machinery. Still no domain state — the dispatcher reaches the core only through
-/// its capability surface, and its output is masked before display.
+/// machinery. Still no domain state — the registry/dispatcher pair reaches the
+/// core only through the same public composition door every surface uses, and
+/// redaction happens once, inside the shared dispatcher (INV-7), never here.
 pub struct App {
     view: ViewModel,
     should_quit: bool,
     /// A command submitted this tick, awaiting dispatch by the loop.
     pending_dispatch: Option<SlashCommand>,
-    /// Runs recognized commands against the core (masking secrets in output).
-    dispatcher: Box<dyn Dispatcher>,
+    /// The shared invocable catalog — resolves a slash command's candidate
+    /// identity and its declared binders before dispatch.
+    registry: InvocableRegistry,
+    /// Runs a resolved invocation for real, masking secrets at the boundary.
+    dispatcher: Dispatcher,
     /// The slash-command catalog, built once at construction from the core's
     /// invocable registry (`command::build_catalog`) — never a hand-maintained
     /// list. Held on `App` rather than re-derived per keystroke, since it
@@ -118,23 +131,23 @@ pub struct App {
 }
 
 impl App {
-    /// Construct an app with a no-op dispatcher: commands parse and resolve but
-    /// invoke nothing. Used where dispatch behavior is irrelevant.
-    pub fn new(initial: ViewModel, catalog: Vec<CommandSpec>) -> Self {
-        Self::with_dispatcher(initial, NoopDispatcher, catalog)
-    }
-
-    /// Construct an app with an explicit command dispatcher and catalog.
-    pub fn with_dispatcher(
+    /// Construct an app over a real (or test-constructed) registry/dispatcher
+    /// pair and catalog. An empty registry with nothing attached is a valid,
+    /// inert choice for scenarios where dispatch behavior is irrelevant —
+    /// every slash command then resolves to `Dispatched::Unknown`, exactly
+    /// as a genuinely unbound verb would.
+    pub fn new(
         initial: ViewModel,
-        dispatcher: impl Dispatcher + 'static,
+        registry: InvocableRegistry,
+        dispatcher: Dispatcher,
         catalog: Vec<CommandSpec>,
     ) -> Self {
         Self {
             view: initial,
             should_quit: false,
             pending_dispatch: None,
-            dispatcher: Box::new(dispatcher),
+            registry,
+            dispatcher,
             catalog,
         }
     }
@@ -173,11 +186,16 @@ impl App {
             }
         }
 
-        // 1b) Dispatch a submitted command against the core. The dispatcher returns
-        //     render-ready output with secrets already masked (INV-7), so no raw
-        //     secret value reaches the view-model or the screen buffer.
+        // 1b) Dispatch a submitted command through the shared registry/dispatcher.
+        //     Resolution, binding, dispatch, and INV-7 masking all happen inside
+        //     `dispatch::dispatch_command` — no raw secret value reaches the
+        //     view-model or the screen buffer.
         if let Some(command) = self.pending_dispatch.take() {
-            self.view.command_feedback = Some(self.dispatcher.dispatch(&command));
+            self.view.command_feedback = Some(dispatch::dispatch_command(
+                &self.registry,
+                &self.dispatcher,
+                &command,
+            ));
             needs_redraw = true;
         }
 
@@ -252,7 +270,7 @@ impl App {
 
     /// Classify the current command line. Help and errors resolve inline; a
     /// recognized command is queued for the loop to dispatch (the loop holds the
-    /// dispatcher and performs the core call + masking).
+    /// registry/dispatcher and performs the real call + masking).
     fn submit_command(&mut self) {
         let line = format!("/{}", self.view.command_input);
         match command::classify(&line, &self.catalog) {
@@ -266,57 +284,6 @@ impl App {
             CommandOutcome::Error(message) => self.view.command_feedback = Some(message),
         }
         self.view.command_input.clear();
-    }
-}
-
-/// Runs a recognized slash command against the core, returning render-ready
-/// output. Implementations MUST mask secret values before returning (INV-7).
-pub trait Dispatcher {
-    /// Execute `command` and return its already-masked output.
-    fn dispatch(&mut self, command: &SlashCommand) -> String;
-}
-
-/// A dispatcher that runs nothing and returns no output — used where command
-/// dispatch is irrelevant (e.g. view-only test scenarios).
-pub struct NoopDispatcher;
-
-impl Dispatcher for NoopDispatcher {
-    fn dispatch(&mut self, _command: &SlashCommand) -> String {
-        String::new()
-    }
-}
-
-/// Production [`Dispatcher`] over the core capability surface.
-///
-/// Routes a verb to the matching core capability (today: `status`; other verbs
-/// are recognized but their core binding is not yet surfaced through the thin TUI
-/// capability), then masks known secret values in the output via the shared core
-/// redaction path — the TUI never re-implements redaction (INV-7).
-pub struct CapabilityDispatcher<C: Capabilities> {
-    core: C,
-    secrets: Vec<String>,
-}
-
-impl<C: Capabilities> CapabilityDispatcher<C> {
-    /// Wrap a core handle and the secret values to mask in dispatched output.
-    pub fn new(core: C, secrets: Vec<String>) -> Self {
-        Self { core, secrets }
-    }
-
-    /// Route a verb to its core capability, producing raw (unmasked) output.
-    fn route(&self, command: &SlashCommand) -> String {
-        match command.verb.as_str() {
-            "status" => self.core.status(),
-            other => format!("/{other}: recognized; core binding not yet surfaced in the TUI"),
-        }
-    }
-}
-
-impl<C: Capabilities> Dispatcher for CapabilityDispatcher<C> {
-    fn dispatch(&mut self, command: &SlashCommand) -> String {
-        let raw = self.route(command);
-        let secret_refs: Vec<&str> = self.secrets.iter().map(String::as_str).collect();
-        cronus_domain::redact::redact(&raw, &secret_refs)
     }
 }
 
@@ -424,12 +391,12 @@ pub fn render_view(area: Rect, buf: &mut Buffer, view: &ViewModel) {
 
 /// Run the TUI against the real terminal and the live engine.
 pub fn run() -> io::Result<()> {
-    // The registry this surface's catalog is derived from — the same public
-    // composition door every surface uses (`invocable_bootstrap::bootstrap`),
-    // never a private construction path. Only the registry half is consumed
-    // here; the paired `Dispatcher` this call also returns is unused until
-    // dispatch itself is wired through it.
-    let (registry, _dispatcher) =
+    // The same public composition door every surface uses
+    // (`invocable_bootstrap::bootstrap`) — no private construction path.
+    // Secret values to mask are loaded from the core secrets store once that
+    // binding lands; the dispatcher is left with none for now, the same
+    // disclosed residual the sibling CLI frontend's own composition carries.
+    let (registry, dispatcher) =
         cronus_core::invocable_bootstrap::bootstrap(cronus_core::Engine::new());
     let invocables: Vec<&Invocable> = registry.all().collect();
     let catalog = command::build_catalog(&invocables);
@@ -438,37 +405,38 @@ pub fn run() -> io::Result<()> {
         CrosstermBackend::new(),
         CapabilitySource::new(Engine::new()),
         RatatuiRenderer::new()?,
-        // Secret values to mask are loaded from the core secrets store once that
-        // binding lands; the redaction path is already wired (INV-7).
-        CapabilityDispatcher::new(Engine::new(), Vec::new()),
+        registry,
+        dispatcher,
         catalog,
     )
 }
 
-/// Run the loop against injected backend / source / renderer / dispatcher.
+/// Run the loop against injected backend / source / renderer / registry /
+/// dispatcher.
 ///
 /// The terminal lifecycle is RAII-guarded by [`Tui`], so any exit path — normal,
 /// `?` error, or panic — restores the terminal.
-pub fn run_with<B, S, R, D>(
+pub fn run_with<B, S, R>(
     backend: B,
     mut source: S,
     mut renderer: R,
-    dispatcher: D,
+    registry: InvocableRegistry,
+    dispatcher: Dispatcher,
     catalog: Vec<CommandSpec>,
 ) -> io::Result<()>
 where
     B: TerminalBackend,
     S: SnapshotSource,
     R: Renderer,
-    D: Dispatcher + 'static,
 {
     let mut tui = Tui::new(backend)?;
     let (cols, rows) = tui.size()?;
-    let mut app = App::with_dispatcher(
+    let mut app = App::new(
         ViewModel {
             size: (cols, rows),
             ..Default::default()
         },
+        registry,
         dispatcher,
         catalog,
     );
@@ -493,45 +461,13 @@ where
 #[cfg(test)]
 mod tests {
     use super::*;
-    use std::cell::RefCell;
     use std::collections::VecDeque;
-    use std::rc::Rc;
+    use std::sync::Arc;
 
-    /// A [`Capabilities`] core that records which capability methods were called,
-    /// so dispatch parity can be asserted. `calls` is shared via `Rc` so the test
-    /// can inspect it after the core is moved into a dispatcher.
-    struct RecordingCore {
-        calls: Rc<RefCell<Vec<&'static str>>>,
-        status_out: String,
-    }
-
-    impl RecordingCore {
-        fn new(status_out: &str) -> Self {
-            Self {
-                calls: Rc::new(RefCell::new(Vec::new())),
-                status_out: status_out.to_string(),
-            }
-        }
-    }
-
-    impl Capabilities for RecordingCore {
-        fn version(&self) -> &str {
-            self.calls.borrow_mut().push("version");
-            "0.0.0"
-        }
-
-        fn status(&self) -> String {
-            self.calls.borrow_mut().push("status");
-            self.status_out.clone()
-        }
-    }
-
-    fn status_command() -> SlashCommand {
-        SlashCommand {
-            verb: "status".to_string(),
-            args: Vec::new(),
-        }
-    }
+    use cronus_contract::{
+        ArgValue, Binder, BinderKind, InvocableId, Locus, Outcome, OutcomeValue, Stability,
+    };
+    use cronus_core::invocable::Registrant;
 
     /// A scripted [`SnapshotSource`]: returns each queued value in turn, so tests
     /// can model "new snapshot ready" (`Some`) and "slow call in flight" (`None`).
@@ -574,25 +510,132 @@ mod tests {
         }
     }
 
-    /// A minimal catalog naming `status` as a known verb — used only by tests
-    /// exercising dispatch *wiring* (does a recognized command reach the
-    /// dispatcher, does secret-masking work), not by anything asserting on
-    /// catalog derivation itself (see `command.rs`'s own `build_catalog`
-    /// tests for that). `status` here is an arbitrary catalog string with no
-    /// connection to the real `core:status` invocable (which is
-    /// `Installation`-locus and therefore never appears in this surface's
-    /// real, registry-derived catalog) — it is meaningful only because
-    /// `CapabilityDispatcher::route` still special-cases that literal verb.
+    /// An empty registry/dispatcher pair — a valid, inert choice for tests
+    /// where dispatch behavior is irrelevant: any slash command resolves to
+    /// `Dispatched::Unknown`, exactly as a genuinely unbound verb would.
+    fn empty_registry_and_dispatcher() -> (InvocableRegistry, Dispatcher) {
+        (InvocableRegistry::new(), Dispatcher::new())
+    }
+
+    /// A minimal catalog naming `test` as a known verb — used by tests
+    /// exercising dispatch *wiring* end to end (does a recognized command
+    /// reach the registry, bind its args, and dispatch for real), not by
+    /// anything asserting on catalog derivation itself (see `command.rs`'s
+    /// own `build_catalog` tests for that).
     fn test_catalog() -> Vec<CommandSpec> {
         vec![CommandSpec {
-            name: "status",
+            name: "test",
             summary: "test-only catalog entry".to_string(),
         }]
     }
 
+    /// A real, test-registered `core:test.probe` invocable, one required
+    /// `Text` binder, echoing it back as `probe: {value}` — proves dispatch
+    /// wiring end to end without depending on any real domain subsystem.
+    fn registry_with_probe() -> (InvocableRegistry, Dispatcher) {
+        let mut registry = InvocableRegistry::new();
+        let mut dispatcher = Dispatcher::new();
+        let id = InvocableId::new("core:test.probe").expect("well-formed test id");
+        registry
+            .register(
+                &Registrant::core(),
+                Invocable {
+                    id: id.clone(),
+                    name: "Probe",
+                    summary: "Test-only probe invocable.",
+                    group: "test",
+                    locus: Locus::Semantic,
+                    binders: vec![Binder {
+                        name: "value",
+                        kind: BinderKind::Text,
+                        optional: false,
+                    }],
+                    stability: Stability::Shipped,
+                    journal_raw_input: true,
+                },
+            )
+            .expect("test fixture registers cleanly");
+        dispatcher.attach(
+            id,
+            Arc::new(|args| {
+                let echoed = match args.get("value") {
+                    Some(ArgValue::Text(s)) => s.clone(),
+                    _ => String::new(),
+                };
+                Outcome::Value(OutcomeValue::Text(format!("probe: {echoed}")))
+            }),
+        );
+        (registry, dispatcher)
+    }
+
+    /// The same probe invocable, taking no arguments and echoing back a
+    /// value containing `secret` in its raw, unmasked output — the
+    /// dispatcher's own secret list (set via `set_secrets`) is what should
+    /// mask it, never anything in this crate.
+    fn registry_with_secret_probe(secret: &str) -> (InvocableRegistry, Dispatcher) {
+        let mut registry = InvocableRegistry::new();
+        let mut dispatcher = Dispatcher::new();
+        let id = InvocableId::new("core:test.probe").expect("well-formed test id");
+        registry
+            .register(
+                &Registrant::core(),
+                Invocable {
+                    id: id.clone(),
+                    name: "Probe",
+                    summary: "Test-only probe invocable.",
+                    group: "test",
+                    locus: Locus::Semantic,
+                    binders: Vec::new(),
+                    stability: Stability::Shipped,
+                    journal_raw_input: true,
+                },
+            )
+            .expect("test fixture registers cleanly");
+        let secret_owned = secret.to_string();
+        dispatcher.attach(
+            id,
+            Arc::new(move |_args| {
+                Outcome::Value(OutcomeValue::Text(format!("key={secret_owned}")))
+            }),
+        );
+        dispatcher.set_secrets(vec![secret.to_string()]);
+        (registry, dispatcher)
+    }
+
+    /// The same probe identity, declaring one required binder but never
+    /// attaching a handler for it — dispatch always rejects before any
+    /// handler could run, letting a test drive a real `Rejected` outcome
+    /// end to end through the app's tick loop.
+    fn registry_with_required_binder() -> (InvocableRegistry, Dispatcher) {
+        let mut registry = InvocableRegistry::new();
+        let dispatcher = Dispatcher::new();
+        let id = InvocableId::new("core:test.probe").expect("well-formed test id");
+        registry
+            .register(
+                &Registrant::core(),
+                Invocable {
+                    id,
+                    name: "Probe",
+                    summary: "Test-only probe invocable.",
+                    group: "test",
+                    locus: Locus::Semantic,
+                    binders: vec![Binder {
+                        name: "value",
+                        kind: BinderKind::Text,
+                        optional: false,
+                    }],
+                    stability: Stability::Shipped,
+                    journal_raw_input: true,
+                },
+            )
+            .expect("test fixture registers cleanly");
+        (registry, dispatcher)
+    }
+
     #[test]
     fn render_loop_state_change_schedules_exactly_one_redraw() {
-        let mut app = App::new(ViewModel::default(), Vec::new());
+        let (registry, dispatcher) = empty_registry_and_dispatcher();
+        let mut app = App::new(ViewModel::default(), registry, dispatcher, Vec::new());
         let mut source = ScriptedSource::new(vec![Some(snap("running"))]);
         let mut renderer = RecordingRenderer::default();
 
@@ -607,7 +650,8 @@ mod tests {
 
     #[test]
     fn render_loop_unchanged_snapshot_does_not_redraw() {
-        let mut app = App::new(ViewModel::default(), Vec::new());
+        let (registry, dispatcher) = empty_registry_and_dispatcher();
+        let mut app = App::new(ViewModel::default(), registry, dispatcher, Vec::new());
         // Same snapshot delivered twice across two ticks.
         let mut source = ScriptedSource::new(vec![Some(snap("idle")), Some(snap("idle"))]);
         let mut renderer = RecordingRenderer::default();
@@ -622,7 +666,8 @@ mod tests {
 
     #[test]
     fn render_loop_stays_responsive_while_core_call_is_slow() {
-        let mut app = App::new(ViewModel::default(), Vec::new());
+        let (registry, dispatcher) = empty_registry_and_dispatcher();
+        let mut app = App::new(ViewModel::default(), registry, dispatcher, Vec::new());
         // `None` models a snapshot still being produced — a slow core call.
         let mut source = ScriptedSource::new(vec![None]);
         let mut renderer = RecordingRenderer::default();
@@ -640,7 +685,8 @@ mod tests {
 
     #[test]
     fn render_loop_resize_updates_view_and_redraws_without_snapshot() {
-        let mut app = App::new(ViewModel::default(), Vec::new());
+        let (registry, dispatcher) = empty_registry_and_dispatcher();
+        let mut app = App::new(ViewModel::default(), registry, dispatcher, Vec::new());
         let mut source = ScriptedSource::new(vec![None]);
         let mut renderer = RecordingRenderer::default();
 
@@ -655,7 +701,8 @@ mod tests {
 
     #[test]
     fn layout_focus_tab_key_advances_focus_and_redraws() {
-        let mut app = App::new(ViewModel::default(), Vec::new());
+        let (registry, dispatcher) = empty_registry_and_dispatcher();
+        let mut app = App::new(ViewModel::default(), registry, dispatcher, Vec::new());
         let mut source = ScriptedSource::new(vec![None]);
         let mut renderer = RecordingRenderer::default();
 
@@ -673,46 +720,51 @@ mod tests {
         assert_eq!(app.view().focus, Focus::Board, "Shift+Tab steps focus back");
     }
 
+    /// Types `/test probe hello`, submits it, and asserts the feedback is
+    /// exactly the real, registered invocable's own `Outcome` rendered —
+    /// end to end through the app's tick loop, the real registry, and the
+    /// real dispatcher, not a stub.
     #[test]
-    fn command_parse_bar_typing_then_enter_dispatches_known_command() {
-        let mut app = App::with_dispatcher(
-            ViewModel {
-                focus: Focus::CommandBar,
-                ..Default::default()
-            },
-            CapabilityDispatcher::new(Engine::new(), Vec::new()),
-            test_catalog(),
-        );
-        let mut source = ScriptedSource::new(vec![]);
-        let mut renderer = RecordingRenderer::default();
-
-        for c in "status".chars() {
-            app.tick(&[TermEvent::Key(Key::Char(c))], &mut source, &mut renderer)
-                .unwrap();
-        }
-        assert_eq!(app.view().command_input, "status");
-
-        app.tick(&[TermEvent::Key(Key::Enter)], &mut source, &mut renderer)
-            .unwrap();
-        assert_eq!(app.view().command_input, "", "input clears on submit");
-        // Feedback is the dispatched core output (the engine status line).
-        assert!(
-            app.view()
-                .command_feedback
-                .as_deref()
-                .unwrap()
-                .contains("Cronus core"),
-            "the recognized command dispatched to the core"
-        );
-    }
-
-    #[test]
-    fn command_parse_bar_unknown_errors_and_esc_cancels_without_quitting() {
+    fn command_parse_bar_typing_then_enter_dispatches_a_real_registered_invocable() {
+        let (registry, dispatcher) = registry_with_probe();
         let mut app = App::new(
             ViewModel {
                 focus: Focus::CommandBar,
                 ..Default::default()
             },
+            registry,
+            dispatcher,
+            test_catalog(),
+        );
+        let mut source = ScriptedSource::new(vec![]);
+        let mut renderer = RecordingRenderer::default();
+
+        for c in "test probe hello".chars() {
+            app.tick(&[TermEvent::Key(Key::Char(c))], &mut source, &mut renderer)
+                .unwrap();
+        }
+        assert_eq!(app.view().command_input, "test probe hello");
+
+        app.tick(&[TermEvent::Key(Key::Enter)], &mut source, &mut renderer)
+            .unwrap();
+        assert_eq!(app.view().command_input, "", "input clears on submit");
+        assert_eq!(
+            app.view().command_feedback.as_deref(),
+            Some("probe: hello"),
+            "feedback is exactly the dispatched invocable's own rendered Outcome"
+        );
+    }
+
+    #[test]
+    fn command_parse_bar_unknown_errors_and_esc_cancels_without_quitting() {
+        let (registry, dispatcher) = empty_registry_and_dispatcher();
+        let mut app = App::new(
+            ViewModel {
+                focus: Focus::CommandBar,
+                ..Default::default()
+            },
+            registry,
+            dispatcher,
             Vec::new(),
         );
         let mut source = ScriptedSource::new(vec![]);
@@ -746,13 +798,15 @@ mod tests {
         // same event/snapshot script end in identical view-models.
         let script = || ScriptedSource::new(vec![Some(snap("a")), Some(snap("b"))]);
 
-        let mut app1 = App::new(ViewModel::default(), Vec::new());
+        let (r1, d1) = empty_registry_and_dispatcher();
+        let mut app1 = App::new(ViewModel::default(), r1, d1, Vec::new());
         let mut r1 = RecordingRenderer::default();
         let mut s1 = script();
         app1.tick(&[], &mut s1, &mut r1).unwrap();
         app1.tick(&[], &mut s1, &mut r1).unwrap();
 
-        let mut app2 = App::new(ViewModel::default(), Vec::new());
+        let (r2, d2) = empty_registry_and_dispatcher();
+        let mut app2 = App::new(ViewModel::default(), r2, d2, Vec::new());
         let mut r2 = RecordingRenderer::default();
         let mut s2 = script();
         app2.tick(&[], &mut s2, &mut r2).unwrap();
@@ -767,52 +821,59 @@ mod tests {
         assert_eq!(app1.view().snapshot, snap("b"));
     }
 
+    /// Proves a `Rejected` outcome's binder and mode reach the view state,
+    /// not a bare, undifferentiated
+    /// string — driven end to end through the app's tick loop over a real
+    /// registered invocable whose one required binder is never supplied.
     #[test]
-    fn command_dispatch_invokes_the_matching_core_capability() {
-        let core = RecordingCore::new("all green");
-        let calls = core.calls.clone();
-        let mut dispatcher = CapabilityDispatcher::new(core, Vec::new());
-
-        let out = dispatcher.dispatch(&status_command());
-
-        assert_eq!(out, "all green", "output is the core status capability");
-        assert!(
-            calls.borrow().contains(&"status"),
-            "/status invoked the status capability the CLI verb also binds"
-        );
-    }
-
-    #[test]
-    fn command_dispatch_masks_secret_values_in_output() {
-        // The core output carries a secret; the dispatcher must mask it (INV-7).
-        let core = RecordingCore::new("token=sk-LIVE-9 ok");
-        let mut dispatcher = CapabilityDispatcher::new(core, vec!["sk-LIVE-9".to_string()]);
-
-        let out = dispatcher.dispatch(&status_command());
-
-        assert!(
-            !out.contains("sk-LIVE-9"),
-            "no secret value reaches the output"
-        );
-        assert!(out.contains("***"), "the secret is masked");
-        assert!(out.contains("ok"), "non-secret content is preserved");
-    }
-
-    #[test]
-    fn command_dispatch_through_the_bar_never_leaks_a_secret_to_the_view() {
-        let core = RecordingCore::new("key=sk-LIVE-7");
-        let mut app = App::with_dispatcher(
+    fn command_dispatch_a_rejected_outcomes_binder_and_mode_reach_the_view_state() {
+        let (registry, dispatcher) = registry_with_required_binder();
+        let mut app = App::new(
             ViewModel {
                 focus: Focus::CommandBar,
                 ..Default::default()
             },
-            CapabilityDispatcher::new(core, vec!["sk-LIVE-7".to_string()]),
+            registry,
+            dispatcher,
             test_catalog(),
         );
         let mut source = ScriptedSource::new(vec![]);
         let mut renderer = RecordingRenderer::default();
 
-        for c in "status".chars() {
+        for c in "test probe".chars() {
+            app.tick(&[TermEvent::Key(Key::Char(c))], &mut source, &mut renderer)
+                .unwrap();
+        }
+        app.tick(&[TermEvent::Key(Key::Enter)], &mut source, &mut renderer)
+            .unwrap();
+
+        let feedback = app.view().command_feedback.as_deref().unwrap();
+        assert!(
+            feedback.contains("value"),
+            "the offending binder's own name must reach the view: {feedback:?}"
+        );
+        assert!(
+            feedback.contains("Absent"),
+            "the rejection mode must reach the view, not be flattened away: {feedback:?}"
+        );
+    }
+
+    #[test]
+    fn command_dispatch_through_the_bar_never_leaks_a_secret_to_the_view() {
+        let (registry, dispatcher) = registry_with_secret_probe("sk-LIVE-7");
+        let mut app = App::new(
+            ViewModel {
+                focus: Focus::CommandBar,
+                ..Default::default()
+            },
+            registry,
+            dispatcher,
+            test_catalog(),
+        );
+        let mut source = ScriptedSource::new(vec![]);
+        let mut renderer = RecordingRenderer::default();
+
+        for c in "test probe".chars() {
             app.tick(&[TermEvent::Key(Key::Char(c))], &mut source, &mut renderer)
                 .unwrap();
         }
@@ -903,20 +964,21 @@ mod tests {
 
     #[test]
     fn mask_secrets_dispatched_value_never_reaches_the_buffer() {
-        let core = RecordingCore::new("token=sk-LIVE-42");
-        let mut app = App::with_dispatcher(
+        let (registry, dispatcher) = registry_with_secret_probe("sk-LIVE-42");
+        let mut app = App::new(
             ViewModel {
                 focus: Focus::CommandBar,
                 size: (80, 24),
                 ..Default::default()
             },
-            CapabilityDispatcher::new(core, vec!["sk-LIVE-42".to_string()]),
+            registry,
+            dispatcher,
             test_catalog(),
         );
         let mut source = ScriptedSource::new(vec![]);
         let mut renderer = RecordingRenderer::default();
 
-        for c in "status".chars() {
+        for c in "test probe".chars() {
             app.tick(&[TermEvent::Key(Key::Char(c))], &mut source, &mut renderer)
                 .unwrap();
         }
