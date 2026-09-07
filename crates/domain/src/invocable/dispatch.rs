@@ -71,6 +71,8 @@ fn matches_kind(value: &ArgValue, kind: cronus_contract::BinderKind) -> bool {
             // `ArgValue::Text` — only its command-line binding style
             // differs from a positional `Text`, not its runtime shape.
             | (ArgValue::Text(_), BinderKind::NamedText)
+            | (ArgValue::Float(_), BinderKind::Float)
+            | (ArgValue::List(_), BinderKind::RepeatableNamedText)
     )
 }
 
@@ -554,6 +556,55 @@ mod tests {
             bind(&descriptor, &wrong_shape).map(|r| r.mode),
             Some(RejectionMode::IllShaped),
             "a NamedText binder must still reject a genuinely wrong-shaped value"
+        );
+    }
+
+    /// Same discipline as the `NamedText` test above, for the `Float` and
+    /// `RepeatableNamedText` kinds: neither arm is compiler-enforced
+    /// (`matches_kind` is a `matches!` over a tuple, not an exhaustive match
+    /// on `BinderKind` alone), so a dropped arm fails silently — every value
+    /// of that kind would reject as ill-shaped — unless a test proves it.
+    #[test]
+    fn a_float_binder_accepts_a_float_value_and_a_repeatable_binder_accepts_a_list() {
+        let float_descriptor = Invocable {
+            binders: vec![Binder {
+                name: "limit",
+                kind: BinderKind::Float,
+                optional: false,
+            }],
+            ..card_add_descriptor()
+        };
+        let mut float_args = ArgValues::new();
+        float_args.insert("limit", ArgValue::Float(12.5));
+        assert_eq!(bind(&float_descriptor, &float_args), None);
+
+        let mut float_wrong_shape = ArgValues::new();
+        float_wrong_shape.insert("limit", ArgValue::Integer(12));
+        assert_eq!(
+            bind(&float_descriptor, &float_wrong_shape).map(|r| r.mode),
+            Some(RejectionMode::IllShaped)
+        );
+
+        let list_descriptor = Invocable {
+            binders: vec![Binder {
+                name: "collection",
+                kind: BinderKind::RepeatableNamedText,
+                optional: false,
+            }],
+            ..card_add_descriptor()
+        };
+        let mut list_args = ArgValues::new();
+        list_args.insert(
+            "collection",
+            ArgValue::List(vec!["a".to_string(), "b".to_string()]),
+        );
+        assert_eq!(bind(&list_descriptor, &list_args), None);
+
+        let mut list_wrong_shape = ArgValues::new();
+        list_wrong_shape.insert("collection", ArgValue::Text("a".to_string()));
+        assert_eq!(
+            bind(&list_descriptor, &list_wrong_shape).map(|r| r.mode),
+            Some(RejectionMode::IllShaped)
         );
     }
 

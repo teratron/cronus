@@ -98,6 +98,16 @@ pub(crate) fn arg_for(binder: &Binder) -> Arg {
         // same way `Flag` already is (by its own name, not by position),
         // but carrying a value rather than a presence bit.
         BinderKind::NamedText => arg.long(binder.name).required(!binder.optional),
+        BinderKind::Float => arg
+            .required(!binder.optional)
+            .value_parser(clap::value_parser!(f64)),
+        // Repeatable: `--collection a --collection b` accumulates, rather
+        // than each occurrence overwriting the last — the one binder kind
+        // whose action is `Append` instead of `Set`.
+        BinderKind::RepeatableNamedText => arg
+            .long(binder.name)
+            .required(!binder.optional)
+            .action(ArgAction::Append),
     }
 }
 
@@ -190,6 +200,12 @@ pub fn invocation_from_matches<'a>(
             BinderKind::NamedText => verb_matches
                 .get_one::<String>(binder.name)
                 .map(|value| ArgValue::Text(value.clone())),
+            BinderKind::Float => verb_matches
+                .get_one::<f64>(binder.name)
+                .map(|value| ArgValue::Float(*value)),
+            BinderKind::RepeatableNamedText => verb_matches
+                .get_many::<String>(binder.name)
+                .map(|values| ArgValue::List(values.cloned().collect())),
         };
         if let Some(value) = value {
             args.insert(binder.name, value);

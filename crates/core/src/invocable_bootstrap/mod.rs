@@ -19,13 +19,21 @@ use cronus_domain::Engine;
 use cronus_domain::invocable::{Dispatcher, InvocableRegistry};
 
 mod agent;
+mod board;
+mod budget;
 mod check;
 mod codegraph;
 mod exec;
+mod knowledge;
 mod learn;
+// Not `loop` — a reserved word. The group this registers into is still the
+// plain string `"loop"`; only the Rust module file needs a different name.
+mod loop_group;
 mod memory;
 mod role;
+mod schedule;
 mod status;
+mod workflow;
 
 /// Assemble the facade's invocable registry and dispatcher around `engine`,
 /// with every core invocable registered through the public door.
@@ -42,6 +50,12 @@ pub fn bootstrap(engine: Engine) -> (InvocableRegistry, Dispatcher) {
     exec::register(&mut registry, &mut dispatcher);
     check::register(&mut registry, &mut dispatcher);
     learn::register(&mut registry, &mut dispatcher);
+    board::register(&mut registry, &mut dispatcher);
+    schedule::register(&mut registry, &mut dispatcher);
+    budget::register(&mut registry, &mut dispatcher);
+    loop_group::register(&mut registry, &mut dispatcher);
+    workflow::register(&mut registry, &mut dispatcher);
+    knowledge::register(&mut registry, &mut dispatcher);
 
     (registry, dispatcher)
 }
@@ -81,4 +95,24 @@ fn opt_text_arg<'a>(args: &'a ArgValues, name: &str) -> Option<&'a str> {
 /// required, so this never needs to distinguish "absent" from "false".
 fn flag_arg(args: &ArgValues, name: &str) -> bool {
     matches!(args.get(name), Some(ArgValue::Flag))
+}
+
+/// Read one required, already-bound `Float` argument. Same IB-2 guarantee
+/// `text_arg` relies on — a miss here is a bug in this file, not a caller
+/// condition.
+fn float_arg(args: &ArgValues, name: &str) -> f64 {
+    match args.get(name) {
+        Some(ArgValue::Float(value)) => *value,
+        _ => 0.0,
+    }
+}
+
+/// Read one `RepeatableNamedText` argument as the list it collected —
+/// empty when the binder was declared optional and the caller supplied
+/// none.
+fn list_arg(args: &ArgValues, name: &str) -> Vec<String> {
+    match args.get(name) {
+        Some(ArgValue::List(values)) => values.clone(),
+        _ => Vec::new(),
+    }
 }

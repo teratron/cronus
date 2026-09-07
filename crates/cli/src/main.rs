@@ -211,6 +211,87 @@ fn render(dispatched: Dispatched, ctx: &output::Context) -> i32 {
 }
 
 fn render_value(value: OutcomeValue, ctx: &output::Context) -> i32 {
+    // `core:loop.run`: kept as its own bespoke arm — `cli_smoke.rs`'s own
+    // end-to-end test extracts the run id straight out of this exact text
+    // shape (`"loop {run_id}: done (...)"`.`strip_prefix("loop
+    // ").split(':')`) to drive a real `log`/`show` round trip, so this is
+    // real, tested, shipped output, not free to reshape the way the
+    // general fallback below reshapes everything else.
+    if let OutcomeValue::Record(fields) = &value {
+        let get_text = |key: &str| {
+            fields
+                .iter()
+                .find(|(name, _)| name == key)
+                .and_then(|(_, v)| match v {
+                    OutcomeValue::Text(s) => Some(s.as_str()),
+                    _ => None,
+                })
+        };
+        if let (Some(run_id), Some(status)) = (get_text("run_id"), get_text("status")) {
+            return match status {
+                "done" => {
+                    let iterations = fields
+                        .iter()
+                        .find(|(name, _)| name == "iterations")
+                        .and_then(|(_, v)| match v {
+                            OutcomeValue::Integer(n) => Some(*n),
+                            _ => None,
+                        })
+                        .unwrap_or(0);
+                    if ctx.is_json() {
+                        println!(
+                            "{{\"outcome\":\"done\",\"run_id\":\"{}\",\"iterations\":{iterations}}}",
+                            json_escape(run_id)
+                        );
+                    } else {
+                        println!("loop {run_id}: done ({iterations} iteration(s))");
+                    }
+                    0
+                }
+                _ => {
+                    let reason = get_text("reason").unwrap_or("");
+                    if ctx.is_json() {
+                        println!(
+                            "{{\"outcome\":\"{}\",\"reason\":\"{}\",\"run_id\":\"{}\"}}",
+                            json_escape(status),
+                            json_escape(reason),
+                            json_escape(run_id)
+                        );
+                    } else {
+                        println!("loop {run_id}: {status} ({reason})");
+                    }
+                    1
+                }
+            };
+        }
+    }
+    // `core:workflow.run`: a Record naming its own
+    // "status" — the one shape among the migrated verbs whose success is
+    // not uniformly exit 0 (a loop can stop instead of finishing; a
+    // workflow run can fail, abort, or pause). Recognized by field name
+    // rather than by verb identity, so any future verb needing the same
+    // property gets it for free rather than needing its own renderer arm.
+    // "failed"/"aborted"/"stopped"/"paused" all become the general
+    // ran-and-refused exit (1) — the pre-migration 3-way scheme
+    // (`workflow run`'s Paused got its own exit 2) collapses to 2-way
+    // here, disclosed rather than silently kept or silently dropped: no
+    // test locks the finer distinction, and inventing a second renderer
+    // convention for that one case was not worth it under this task's
+    // scope.
+    if let OutcomeValue::Record(fields) = &value
+        && let Some(OutcomeValue::Text(status)) = fields
+            .iter()
+            .find(|(name, _)| name == "status")
+            .map(|(_, v)| v)
+        && matches!(status.as_str(), "failed" | "aborted" | "stopped" | "paused")
+    {
+        if ctx.is_json() {
+            println!("{}", render_json(&value));
+        } else {
+            println!("{}", render_text_line(&value));
+        }
+        return 1;
+    }
     match &value {
         // `core:memory.store` / `core:memory.forget` / `core:role.fire` /
         // `core:exec.create|finalize|discard`: a one-field Record naming

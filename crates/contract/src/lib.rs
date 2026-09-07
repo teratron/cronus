@@ -2096,6 +2096,13 @@ pub enum BinderKind {
     /// missing optional one is read back as `None` by whatever handler
     /// wants a default, the same way an absent `Text` binder already is.
     NamedText,
+    /// A floating-point value, bound positionally — the one shape `Integer`
+    /// cannot carry (`budget set <limit>`, a dollar amount).
+    Float,
+    /// `--name <value>`, repeatable (`--collection a --collection b`),
+    /// collected in declared order. The one shape `NamedText` cannot carry
+    /// — everything else this kind set expresses is single-valued.
+    RepeatableNamedText,
 }
 
 /// One argument an invocable declares, in order (IB-1). This is the single
@@ -2388,16 +2395,27 @@ pub enum Surface {
 }
 
 /// One argument value, shaped like the [`BinderKind`] it binds.
-#[derive(Debug, Clone, PartialEq, Eq)]
+///
+/// `PartialEq` only, not `Eq`: `Float` carries `f64`, which has no total
+/// equality (`NaN != NaN`) — the same reason `f64` itself is `PartialEq`
+/// and not `Eq`. Nothing in this crate ever put an `ArgValue`/`ArgValues`
+/// in a `HashSet`/`HashMap` key position (neither derives `Hash`), so
+/// dropping `Eq` costs no real capability, only the derive.
+#[derive(Debug, Clone, PartialEq)]
 pub enum ArgValue {
     Text(String),
     Integer(i64),
     Boolean(bool),
     Flag,
+    Float(f64),
+    /// Bound by a [`BinderKind::RepeatableNamedText`] binder, in the order
+    /// supplied.
+    List(Vec<String>),
 }
 
 /// The caller-supplied arguments for one invocation, keyed by binder name.
-#[derive(Debug, Clone, Default, PartialEq, Eq)]
+/// `PartialEq` only — see [`ArgValue`]'s own doc comment on why.
+#[derive(Debug, Clone, Default, PartialEq)]
 pub struct ArgValues(HashMap<String, ArgValue>);
 
 impl ArgValues {
@@ -2414,8 +2432,10 @@ impl ArgValues {
     }
 }
 
-/// A runtime call against one invocable.
-#[derive(Debug, Clone, PartialEq, Eq)]
+/// A runtime call against one invocable. `PartialEq` only — carries
+/// `ArgValues`, which carries `ArgValue::Float(f64)`; see `ArgValue`'s own
+/// doc comment.
+#[derive(Debug, Clone, PartialEq)]
 pub struct Invocation {
     pub id: InvocableId,
     pub args: ArgValues,
