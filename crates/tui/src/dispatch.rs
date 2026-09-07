@@ -19,28 +19,45 @@ use cronus_core::invocable::{Dispatcher, InvocableRegistry};
 use crate::command::SlashCommand;
 
 /// Resolve and dispatch one recognized slash command, returning the text the
-/// command bar shows afterward.
+/// command bar shows afterward — or `None` when the line is ordinary input,
+/// not a command to report anything about.
 ///
 /// `command.verb` is a catalog **group** (a discovery-level noun, derived
 /// from the registry rather than hand-maintained); `command.args[0]`, if
 /// present, is the CLI-style verb within that group — together they name a
 /// candidate `core:{group}.{verb}` identity, never asserted to exist ahead
-/// of dispatch (an unresolved slash line is ordinary input, not a
-/// construction-time error, per this frontend's own spec — this function's
-/// own `Unknown` text below is a placeholder a later pass replaces with that
-/// treatment, not settled here). Every remaining raw argument binds against
-/// that candidate's own declared binders (`bind_args`) before the real,
-/// shared `Dispatcher` is ever called.
+/// of dispatch. Every remaining raw argument binds against that candidate's
+/// own declared binders (`bind_args`) before the real, shared `Dispatcher`
+/// is ever called.
+///
+/// A slash-shaped line naming no invocable is not an error (l2-tui's own
+/// v1.2.0 clause): resolution answers `Dispatched::Unknown` separately from
+/// any outcome (SP-13), and this surface's response is to treat the line as
+/// ordinary input — `None` here, rendering nothing at all — rather than
+/// fabricate a failure. Folding that answer into a rendered error would make
+/// every message beginning with a slash-shaped token an error, which is
+/// wrong for a surface whose primary input is free text; the sibling CLI
+/// frontend renders the identical resolution answer as a usage error
+/// instead, correctly, because a one-shot invocation has nothing else to
+/// fall through to — one resolution result, two correct and opposite
+/// renderings. This is distinct from the two early returns above it in this
+/// function (an incomplete line with no verb at all, or one whose verb
+/// cannot even form a well-formed identity): those never reach resolution,
+/// so they are not the case this clause is about, and keep their usage-hint
+/// text.
 pub fn dispatch_command(
     registry: &InvocableRegistry,
     dispatcher: &Dispatcher,
     command: &SlashCommand,
-) -> String {
+) -> Option<String> {
     let Some(sub_verb) = command.args.first() else {
-        return format!("usage: /{} <verb> [args…]", command.verb);
+        return Some(format!("usage: /{} <verb> [args…]", command.verb));
     };
     let Ok(id) = InvocableId::new(format!("core:{}.{sub_verb}", command.verb)) else {
-        return format!("unknown command: /{} {sub_verb} (try /help)", command.verb);
+        return Some(format!(
+            "unknown command: /{} {sub_verb} (try /help)",
+            command.verb
+        ));
     };
 
     let empty: &[Binder] = &[];
@@ -50,7 +67,7 @@ pub fn dispatch_command(
     };
     let args = match bind_args(binders, &command.args[1..]) {
         Ok(args) => args,
-        Err(rejection) => return render_outcome(Outcome::Rejected(rejection)),
+        Err(rejection) => return Some(render_outcome(Outcome::Rejected(rejection))),
     };
 
     let invocation = Invocation {
@@ -59,11 +76,8 @@ pub fn dispatch_command(
         caller: Surface::Tui,
     };
     match dispatcher.dispatch(registry, &invocation) {
-        // Placeholder text — a later pass replaces this with ordinary-input
-        // treatment (no rendered failure at all) for the specific case of a
-        // slash line naming no invocable.
-        Dispatched::Unknown => format!("unknown command: /{} {sub_verb} (try /help)", command.verb),
-        Dispatched::Ran(outcome) => render_outcome(outcome),
+        Dispatched::Unknown => None,
+        Dispatched::Ran(outcome) => Some(render_outcome(outcome)),
     }
 }
 
@@ -348,5 +362,70 @@ mod tests {
             ]),
         )])));
         assert_eq!(rendered, "cards: a, b");
+    }
+
+    /// The literal Verify criterion this task names: a slash line whose
+    /// candidate identity resolves to nothing (`Dispatched::Unknown`) is
+    /// ordinary input, not a rendered failure — `dispatch_command` returns
+    /// `None`, never an "unknown command" string. Proven against a real,
+    /// empty registry/dispatcher pair — not a stub — so this is the actual
+    /// resolution path, the same one a genuinely bound verb goes through.
+    #[test]
+    fn dispatch_command_treats_an_unresolved_identity_as_ordinary_input() {
+        let registry = InvocableRegistry::new();
+        let dispatcher = Dispatcher::new();
+        let command = SlashCommand {
+            verb: "board".to_string(),
+            args: strings(&["frobnicate"]),
+        };
+        assert_eq!(
+            dispatch_command(&registry, &dispatcher, &command),
+            None,
+            "an unresolved candidate identity must render nothing, not an error string"
+        );
+    }
+
+    /// The other half of the same criterion: a genuinely `Rejected` outcome
+    /// — the candidate identity *does* resolve, but binding fails — is still
+    /// rendered as a refusal, proving the two are distinguishable rather
+    /// than both silently swallowed.
+    #[test]
+    fn dispatch_command_still_renders_a_genuine_rejection() {
+        let mut registry = InvocableRegistry::new();
+        let dispatcher = Dispatcher::new();
+        let id = InvocableId::new("core:test.probe").expect("well-formed test id");
+        registry
+            .register(
+                &cronus_core::invocable::Registrant::core(),
+                cronus_contract::Invocable {
+                    id,
+                    name: "Probe",
+                    summary: "Test-only probe invocable.",
+                    group: "test",
+                    locus: cronus_contract::Locus::Semantic,
+                    binders: vec![Binder {
+                        name: "value",
+                        kind: BinderKind::Text,
+                        optional: false,
+                    }],
+                    stability: cronus_contract::Stability::Shipped,
+                    journal_raw_input: true,
+                },
+            )
+            .expect("test fixture registers cleanly");
+        let command = SlashCommand {
+            verb: "test".to_string(),
+            args: strings(&["probe"]),
+        };
+        let rendered = dispatch_command(&registry, &dispatcher, &command)
+            .expect("a resolved-but-rejected invocation must still render something");
+        assert!(
+            rendered.contains("value"),
+            "the offending binder must be named: {rendered:?}"
+        );
+        assert!(
+            rendered.contains("Absent"),
+            "the rejection mode must reach the rendered text: {rendered:?}"
+        );
     }
 }

@@ -189,13 +189,13 @@ impl App {
         // 1b) Dispatch a submitted command through the shared registry/dispatcher.
         //     Resolution, binding, dispatch, and INV-7 masking all happen inside
         //     `dispatch::dispatch_command` — no raw secret value reaches the
-        //     view-model or the screen buffer.
+        //     view-model or the screen buffer. `None` means the line resolved
+        //     to no invocable (`Dispatched::Unknown`) — ordinary input, not a
+        //     rendered failure (l2-tui v1.2.0), so feedback is cleared exactly
+        //     as it would be for any other line with nothing to report.
         if let Some(command) = self.pending_dispatch.take() {
-            self.view.command_feedback = Some(dispatch::dispatch_command(
-                &self.registry,
-                &self.dispatcher,
-                &command,
-            ));
+            self.view.command_feedback =
+                dispatch::dispatch_command(&self.registry, &self.dispatcher, &command);
             needs_redraw = true;
         }
 
@@ -821,12 +821,15 @@ mod tests {
         assert_eq!(app1.view().snapshot, snap("b"));
     }
 
-    /// Proves a `Rejected` outcome's binder and mode reach the view state,
-    /// not a bare, undifferentiated
-    /// string — driven end to end through the app's tick loop over a real
-    /// registered invocable whose one required binder is never supplied.
+    /// Both halves of the same criterion, driven end to end through the
+    /// app's tick loop over one real, registered invocable: an unresolved
+    /// slash line renders **no** feedback at all — ordinary input, not a
+    /// rendered failure (l2-tui v1.2.0) — and a genuinely `Rejected` outcome
+    /// (the identity resolves; its one required binder is never supplied)
+    /// still renders as a legible refusal. Proven together so the two stay
+    /// distinguishable rather than both silently swallowed.
     #[test]
-    fn command_dispatch_a_rejected_outcomes_binder_and_mode_reach_the_view_state() {
+    fn command_dispatch_distinguishes_an_unresolved_line_from_a_genuine_rejection() {
         let (registry, dispatcher) = registry_with_required_binder();
         let mut app = App::new(
             ViewModel {
@@ -840,6 +843,24 @@ mod tests {
         let mut source = ScriptedSource::new(vec![]);
         let mut renderer = RecordingRenderer::default();
 
+        // "test" is a known catalog group, but "frobnicate" resolves to no
+        // registered invocable — an unresolved candidate identity, not a
+        // failure to render anything about.
+        for c in "test frobnicate".chars() {
+            app.tick(&[TermEvent::Key(Key::Char(c))], &mut source, &mut renderer)
+                .unwrap();
+        }
+        app.tick(&[TermEvent::Key(Key::Enter)], &mut source, &mut renderer)
+            .unwrap();
+        assert_eq!(
+            app.view().command_feedback,
+            None,
+            "an unresolved identity must render no feedback at all, not an error string"
+        );
+
+        // "test probe" resolves to a real invocable whose one required
+        // binder is never supplied — a genuine Rejected outcome, which must
+        // still render, distinguishing it from the unresolved case above.
         for c in "test probe".chars() {
             app.tick(&[TermEvent::Key(Key::Char(c))], &mut source, &mut renderer)
                 .unwrap();
