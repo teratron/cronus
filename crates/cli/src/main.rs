@@ -117,8 +117,9 @@ fn main() -> std::process::ExitCode {
             args,
             caller: cronus_contract::Surface::Cli,
         };
-        let code = render(dispatcher.dispatch(&registry, &invocation), &ctx);
-        return exit_code(code);
+        let rendered = render(dispatcher.dispatch(&registry, &invocation), &ctx);
+        rendered.print();
+        return exit_code(rendered.exit_code);
     }
 
     // Not a registry-generated group and not an installation verb — the
@@ -174,43 +175,93 @@ fn compose(
     Ok((registry, dispatcher))
 }
 
-/// Render a dispatched semantic invocation and return its process exit
-/// code. Bespoke per invocable for now — the migrated verbs' own handlers
-/// return structured `Outcome`s, but no shared, format-uniform renderer
-/// exists yet (that is a separate, later task); this reproduces each
-/// migrated verb's exact prior text/JSON shape until that renderer replaces
-/// it. `Dispatched::Unknown` cannot occur here: this function is only ever
-/// called after `invocation_from_matches` already resolved a real
-/// descriptor from the same registry `dispatch` immediately consults.
-fn render(dispatched: Dispatched, ctx: &output::Context) -> i32 {
+/// What a render pass produced: the lines to print on each stream, in
+/// order, and the process exit code — a value, not a side effect. Every
+/// rendering function below is a pure function of `Outcome`/`OutcomeValue`
+/// plus the requested [`output::Context`]: nothing in this module writes to
+/// `stdout`/`stderr` directly except [`Rendered::print`] itself. This is
+/// what makes "rendering is one function of `Outcome` and the requested
+/// format, not a per-command decision" a checkable property rather than a
+/// description — a test can call `render`, inspect the `Rendered` value for
+/// both formats, and assert on it without spawning a subprocess or
+/// capturing real `stdout`.
+#[derive(Debug, Default, PartialEq)]
+struct Rendered {
+    stdout: Vec<String>,
+    stderr: Vec<String>,
+    exit_code: i32,
+}
+
+impl Rendered {
+    fn stdout_only(line: String, exit_code: i32) -> Self {
+        Rendered {
+            stdout: vec![line],
+            exit_code,
+            ..Default::default()
+        }
+    }
+
+    fn stderr_only(line: String, exit_code: i32) -> Self {
+        Rendered {
+            stderr: vec![line],
+            exit_code,
+            ..Default::default()
+        }
+    }
+
+    /// The one place this module ever calls `println!`/`eprintln!` —
+    /// everything above this point only ever builds a value.
+    fn print(&self) {
+        for line in &self.stdout {
+            println!("{line}");
+        }
+        for line in &self.stderr {
+            eprintln!("{line}");
+        }
+    }
+}
+
+/// Render a dispatched semantic invocation into what to print and its
+/// process exit code. `Dispatched::Unknown` cannot occur on the call site
+/// this module actually uses: it is only ever invoked after
+/// `invocation_from_matches` already resolved a real descriptor from the
+/// same registry `dispatch` immediately consults — handled here anyway
+/// (rather than asserted away) because this function is also the one a
+/// test drives directly, without going through that resolution step first.
+fn render(dispatched: Dispatched, ctx: &output::Context) -> Rendered {
     let outcome = match dispatched {
         Dispatched::Ran(outcome) => outcome,
         Dispatched::Unknown => {
-            eprintln!("error: internal: dispatched an invocable the registry does not know");
-            return 1;
+            return Rendered::stderr_only(
+                "error: internal: dispatched an invocable the registry does not know".to_string(),
+                1,
+            );
         }
     };
+    // Every rejection/unavailability path renders as plain diagnostic prose
+    // to `stderr` regardless of the requested format — a deliberate,
+    // project-wide convention (the installation half's own handlers follow
+    // it identically): `--format` governs the success payload a
+    // programmatic consumer parses off `stdout`, not the human-readable
+    // diagnostic a failure writes to `stderr`.
     match outcome {
-        Outcome::Rejected(rejection) => {
-            eprintln!(
+        Outcome::Rejected(rejection) => Rendered::stderr_only(
+            format!(
                 "error: {} ({:?}): {}",
                 rejection.binder, rejection.mode, rejection.detail
-            );
-            2
-        }
-        Outcome::Unavailable { reason } => {
-            eprintln!("error: {reason}");
-            1
-        }
-        Outcome::Stream(_) => {
-            eprintln!("error: internal: a stream outcome has no renderer on this surface yet");
-            1
-        }
+            ),
+            2,
+        ),
+        Outcome::Unavailable { reason } => Rendered::stderr_only(format!("error: {reason}"), 1),
+        Outcome::Stream(_) => Rendered::stderr_only(
+            "error: internal: a stream outcome has no renderer on this surface yet".to_string(),
+            1,
+        ),
         Outcome::Value(value) => render_value(value, ctx),
     }
 }
 
-fn render_value(value: OutcomeValue, ctx: &output::Context) -> i32 {
+fn render_value(value: OutcomeValue, ctx: &output::Context) -> Rendered {
     // `core:loop.run`: kept as its own bespoke arm — `cli_smoke.rs`'s own
     // end-to-end test extracts the run id straight out of this exact text
     // shape (`"loop {run_id}: done (...)"`.`strip_prefix("loop
@@ -238,46 +289,42 @@ fn render_value(value: OutcomeValue, ctx: &output::Context) -> i32 {
                             _ => None,
                         })
                         .unwrap_or(0);
-                    if ctx.is_json() {
-                        println!(
+                    let line = if ctx.is_json() {
+                        format!(
                             "{{\"outcome\":\"done\",\"run_id\":\"{}\",\"iterations\":{iterations}}}",
                             json_escape(run_id)
-                        );
+                        )
                     } else {
-                        println!("loop {run_id}: done ({iterations} iteration(s))");
-                    }
-                    0
+                        format!("loop {run_id}: done ({iterations} iteration(s))")
+                    };
+                    Rendered::stdout_only(line, 0)
                 }
                 _ => {
                     let reason = get_text("reason").unwrap_or("");
-                    if ctx.is_json() {
-                        println!(
+                    let line = if ctx.is_json() {
+                        format!(
                             "{{\"outcome\":\"{}\",\"reason\":\"{}\",\"run_id\":\"{}\"}}",
                             json_escape(status),
                             json_escape(reason),
                             json_escape(run_id)
-                        );
+                        )
                     } else {
-                        println!("loop {run_id}: {status} ({reason})");
-                    }
-                    1
+                        format!("loop {run_id}: {status} ({reason})")
+                    };
+                    Rendered::stdout_only(line, 1)
                 }
             };
         }
     }
-    // `core:workflow.run`: a Record naming its own
-    // "status" — the one shape among the migrated verbs whose success is
-    // not uniformly exit 0 (a loop can stop instead of finishing; a
-    // workflow run can fail, abort, or pause). Recognized by field name
-    // rather than by verb identity, so any future verb needing the same
-    // property gets it for free rather than needing its own renderer arm.
-    // "failed"/"aborted"/"stopped"/"paused" all become the general
-    // ran-and-refused exit (1) — the pre-migration 3-way scheme
+    // A Record naming its own "status" among "failed"/"aborted"/
+    // "stopped"/"paused" (`core:workflow.run` today) is the one shape
+    // among the shipped verbs whose success is not uniformly exit 0.
+    // Recognized by field name rather than by verb identity, so any
+    // future verb needing the same property gets it for free rather than
+    // needing its own renderer arm. The pre-migration 3-way scheme
     // (`workflow run`'s Paused got its own exit 2) collapses to 2-way
     // here, disclosed rather than silently kept or silently dropped: no
-    // test locks the finer distinction, and inventing a second renderer
-    // convention for that one case was not worth it under this task's
-    // scope.
+    // test locks the finer distinction.
     if let OutcomeValue::Record(fields) = &value
         && let Some(OutcomeValue::Text(status)) = fields
             .iter()
@@ -285,56 +332,61 @@ fn render_value(value: OutcomeValue, ctx: &output::Context) -> i32 {
             .map(|(_, v)| v)
         && matches!(status.as_str(), "failed" | "aborted" | "stopped" | "paused")
     {
-        if ctx.is_json() {
-            println!("{}", render_json(&value));
+        let line = if ctx.is_json() {
+            render_json(&value)
         } else {
-            println!("{}", render_text_line(&value));
-        }
-        return 1;
+            render_text_line(&value)
+        };
+        return Rendered::stdout_only(line, 1);
     }
     match &value {
         // `core:memory.store` / `core:memory.forget` / `core:role.fire` /
         // `core:exec.create|finalize|discard`: a one-field Record naming
         // the affected entry's id — kept as its own arm since "Ok: <id>"
         // reads better than the generic `id: <id>` the fallback below
-        // would produce, and several migrated verbs share this exact
+        // would produce, and several shipped verbs share this exact
         // shape.
         OutcomeValue::Record(fields) if fields.len() == 1 && fields[0].0 == "id" => {
             let id = match &fields[0].1 {
                 OutcomeValue::Text(id) => id.as_str(),
                 _ => "",
             };
-            if ctx.is_json() {
-                println!("{{\"result\":\"ok\",\"id\":\"{}\"}}", json_escape(id));
+            let line = if ctx.is_json() {
+                format!("{{\"result\":\"ok\",\"id\":\"{}\"}}", json_escape(id))
             } else {
-                println!("Ok: {id}");
-            }
+                format!("Ok: {id}")
+            };
+            Rendered::stdout_only(line, 0)
         }
         OutcomeValue::List(items) if ctx.is_json() => {
             let rendered: Vec<String> = items.iter().map(render_json).collect();
-            println!("[{}]", rendered.join(","));
+            Rendered::stdout_only(format!("[{}]", rendered.join(",")), 0)
         }
-        OutcomeValue::List(items) if items.is_empty() => println!("No results."),
-        OutcomeValue::List(items) => {
-            for item in items {
-                println!("{}", render_text_line(item));
-            }
+        OutcomeValue::List(items) if items.is_empty() => {
+            Rendered::stdout_only("No results.".to_string(), 0)
         }
-        OutcomeValue::Text(text) if ctx.is_json() => println!("\"{}\"", json_escape(text)),
-        OutcomeValue::Text(text) => println!("{text}"),
+        OutcomeValue::List(items) => Rendered {
+            stdout: items.iter().map(render_text_line).collect(),
+            exit_code: 0,
+            ..Default::default()
+        },
+        OutcomeValue::Text(text) if ctx.is_json() => {
+            Rendered::stdout_only(format!("\"{}\"", json_escape(text)), 0)
+        }
+        OutcomeValue::Text(text) => Rendered::stdout_only(text.clone(), 0),
         // Every other shape — an arbitrary `Record` (`core:codegraph.index`'s
-        // `{path, symbols}`, `core:check.run`'s `{card, language}`, …),
-        // a bare `Integer`/`Boolean`, or `Empty` — has no per-verb bespoke
+        // `{path, symbols}`, `core:check.run`'s `{card, language}`, …), a
+        // bare `Integer`/`Boolean`, or `Empty` — has no per-verb bespoke
         // format to preserve (none was ever shipped for these shapes), so
-        // it renders through the general mapping below rather than
-        // through a hand-written arm per verb: the mapping this whole
-        // renderer stays a genuine bridge, not an ever-growing pile of
-        // special cases, until the uniform renderer replaces it outright.
-        OutcomeValue::Empty => {}
-        other if ctx.is_json() => println!("{}", render_json(other)),
-        other => println!("{}", render_text_line(other)),
+        // it renders through the general recursive mapping below rather
+        // than through a hand-written arm per verb.
+        OutcomeValue::Empty => Rendered {
+            exit_code: 0,
+            ..Default::default()
+        },
+        other if ctx.is_json() => Rendered::stdout_only(render_json(other), 0),
+        other => Rendered::stdout_only(render_text_line(other), 0),
     }
-    0
 }
 
 /// A general JSON projection of any `OutcomeValue` shape — recursive, so a
@@ -399,5 +451,277 @@ fn exit_code(code: i32) -> std::process::ExitCode {
         std::process::ExitCode::SUCCESS
     } else {
         std::process::ExitCode::FAILURE
+    }
+}
+
+#[cfg(test)]
+mod render_tests {
+    use std::collections::BTreeSet;
+
+    use cronus_contract::{Locus, Rejection, RejectionMode, Stability};
+
+    use super::*;
+    use output::{Context, OutputFormat};
+
+    fn text() -> Context {
+        Context::new(OutputFormat::Text)
+    }
+
+    fn json() -> Context {
+        Context::new(OutputFormat::Json)
+    }
+
+    fn value(outcome_value: OutcomeValue) -> Dispatched {
+        Dispatched::Ran(Outcome::Value(outcome_value))
+    }
+
+    /// A minimal, dependency-free JSON-shape probe — not a parser, just
+    /// enough to distinguish "this is JSON-shaped" from "this is plain
+    /// prose that ignored the format flag". Cheap enough to avoid pulling
+    /// a JSON crate into this test alone.
+    fn looks_like_json(s: &str) -> bool {
+        let t = s.trim();
+        t.starts_with('{')
+            || t.starts_with('[')
+            || t.starts_with('"')
+            || t == "true"
+            || t == "false"
+            || t == "null"
+            || t.parse::<f64>().is_ok()
+    }
+
+    /// The literal Verify criterion this task names: every `OutcomeValue`
+    /// shape the shared renderer distinguishes — the closed set any shipped
+    /// invocable's handler can produce — is exercised through both output
+    /// formats, and the requested one is honoured every time. Exhaustive
+    /// over the *type* rather than sampled from today's call sites, which
+    /// is the stronger property: a future invocable returning any of these
+    /// shapes inherits the guarantee for free, without a renderer change.
+    #[test]
+    fn every_outcome_value_shape_honors_the_requested_format() {
+        let cases: Vec<(&str, OutcomeValue, i32)> = vec![
+            ("empty", OutcomeValue::Empty, 0),
+            (
+                "bare text",
+                OutcomeValue::Text("hello world".to_string()),
+                0,
+            ),
+            ("bare integer", OutcomeValue::Integer(42), 0),
+            ("bare boolean", OutcomeValue::Boolean(true), 0),
+            ("empty list", OutcomeValue::List(Vec::new()), 0),
+            (
+                "nonempty list of records",
+                OutcomeValue::List(vec![
+                    OutcomeValue::Record(vec![(
+                        "id".to_string(),
+                        OutcomeValue::Text("a".to_string()),
+                    )]),
+                    OutcomeValue::Record(vec![(
+                        "id".to_string(),
+                        OutcomeValue::Text("b".to_string()),
+                    )]),
+                ]),
+                0,
+            ),
+            (
+                "single-id record",
+                OutcomeValue::Record(vec![(
+                    "id".to_string(),
+                    OutcomeValue::Text("x-1".to_string()),
+                )]),
+                0,
+            ),
+            (
+                "generic multi-field record",
+                OutcomeValue::Record(vec![
+                    (
+                        "path".to_string(),
+                        OutcomeValue::Text("a.nodus".to_string()),
+                    ),
+                    ("symbols".to_string(), OutcomeValue::Integer(7)),
+                ]),
+                0,
+            ),
+            (
+                "nested record with a list field",
+                OutcomeValue::Record(vec![(
+                    "errors".to_string(),
+                    OutcomeValue::List(vec![OutcomeValue::Text("boom".to_string())]),
+                )]),
+                0,
+            ),
+            (
+                "loop run: done",
+                OutcomeValue::Record(vec![
+                    (
+                        "run_id".to_string(),
+                        OutcomeValue::Text("run-1".to_string()),
+                    ),
+                    ("status".to_string(), OutcomeValue::Text("done".to_string())),
+                    ("iterations".to_string(), OutcomeValue::Integer(3)),
+                ]),
+                0,
+            ),
+            (
+                "loop run: stopped",
+                OutcomeValue::Record(vec![
+                    (
+                        "run_id".to_string(),
+                        OutcomeValue::Text("run-2".to_string()),
+                    ),
+                    (
+                        "status".to_string(),
+                        OutcomeValue::Text("stopped".to_string()),
+                    ),
+                    (
+                        "reason".to_string(),
+                        OutcomeValue::Text("MaxIterations".to_string()),
+                    ),
+                ]),
+                1,
+            ),
+            (
+                "workflow run: failed (no run_id)",
+                OutcomeValue::Record(vec![(
+                    "status".to_string(),
+                    OutcomeValue::Text("failed".to_string()),
+                )]),
+                1,
+            ),
+        ];
+
+        for (label, shape, expected_exit) in cases {
+            let text_rendered = render(value(shape.clone()), &text());
+            let json_rendered = render(value(shape.clone()), &json());
+
+            assert_eq!(
+                text_rendered.exit_code, expected_exit,
+                "{label}: text-format exit code"
+            );
+            assert_eq!(
+                json_rendered.exit_code, expected_exit,
+                "{label}: json-format exit code"
+            );
+
+            let text_out = text_rendered.stdout.join("\n");
+            let json_out = json_rendered.stdout.join("\n");
+
+            if shape == OutcomeValue::Empty {
+                assert!(
+                    text_out.is_empty() && json_out.is_empty(),
+                    "{label}: an empty value prints nothing in either format"
+                );
+                continue;
+            }
+
+            assert!(
+                !json_out.is_empty(),
+                "{label}: json format must not discard the value"
+            );
+            assert!(
+                looks_like_json(&json_out),
+                "{label}: json format did not look like JSON: {json_out:?}"
+            );
+            // A bare `Integer`/`Boolean` legitimately renders as the same
+            // literal in both formats (`42`, `true`) — Rust's `Display` and
+            // JSON's number/bool syntax coincide there, so identical output
+            // is the *correct* honouring of format, not a sign format was
+            // ignored. Every shape with actual structure (quoting,
+            // brackets, `key: value` vs. `"key":value`) must genuinely
+            // differ, which is the real signal a site silently reused one
+            // format's text for the other.
+            if !matches!(shape, OutcomeValue::Integer(_) | OutcomeValue::Boolean(_)) {
+                assert_ne!(
+                    text_out, json_out,
+                    "{label}: text and json format must render differently — identical output \
+                     means the format flag was consulted by neither, or discarded by one"
+                );
+            }
+        }
+    }
+
+    /// A rejected/unavailable/unresolved dispatch renders as plain
+    /// diagnostic prose on `stderr`, deliberately identical in both
+    /// formats — `--format` governs the success payload on `stdout`, not a
+    /// failure's human-readable diagnostic (the same convention every
+    /// installation-half handler already follows). Locked in explicitly so
+    /// this reads as a decision the shape test above does not otherwise
+    /// exercise, not an oversight.
+    #[test]
+    fn failure_outcomes_render_identical_diagnostic_prose_regardless_of_format() {
+        let cases: Vec<Dispatched> = vec![
+            Dispatched::Unknown,
+            Dispatched::Ran(Outcome::Unavailable {
+                reason: "boom".to_string(),
+            }),
+            Dispatched::Ran(Outcome::Rejected(Rejection {
+                binder: "id",
+                mode: RejectionMode::Absent,
+                detail: "missing".to_string(),
+            })),
+        ];
+        for dispatched in cases {
+            let a = render(dispatched.clone(), &text());
+            let b = render(dispatched, &json());
+            assert_eq!(
+                a, b,
+                "a failure outcome must render identically in both formats"
+            );
+            assert!(
+                a.stdout.is_empty(),
+                "a failure outcome must print nothing to stdout"
+            );
+            assert!(
+                !a.stderr.is_empty(),
+                "a failure outcome must print its diagnostic to stderr"
+            );
+        }
+    }
+
+    /// Ties the shape coverage above to the actual shipped surface: every
+    /// `Semantic`+`Shipped` group this renderer is reached for still
+    /// exists, by name — catching a group silently vanishing (or
+    /// reclassifying) from the surface this renderer serves. Deliberately
+    /// does not dispatch these invocables for real: several resolve a
+    /// real, un-overridable OS state directory or a live network
+    /// dependency (`knowledge query`'s embedding backend, absent in this
+    /// environment — the same reason `cli_smoke.rs` never exercises that
+    /// group), and the renderer under test is provably decoupled from
+    /// invocable identity — its `match` operates on `OutcomeValue` shape
+    /// alone, so the shape-exhaustive test above already proves
+    /// format-honouring for anything any of these invocables could ever
+    /// return.
+    #[test]
+    fn every_shipped_semantic_group_this_renderer_serves_still_exists() {
+        let (registry, _dispatcher) =
+            cronus_core::invocable_bootstrap::bootstrap(cronus_core::Engine::new());
+        let groups: BTreeSet<&str> = registry
+            .all()
+            .filter(|i| {
+                matches!(i.locus, Locus::Semantic) && matches!(i.stability, Stability::Shipped)
+            })
+            .map(|i| i.group)
+            .collect();
+        let expected: BTreeSet<&str> = [
+            "memory",
+            "codegraph",
+            "agent",
+            "role",
+            "exec",
+            "check",
+            "learn",
+            "board",
+            "schedule",
+            "budget",
+            "loop",
+            "workflow",
+            "knowledge",
+        ]
+        .into_iter()
+        .collect();
+        assert_eq!(
+            groups, expected,
+            "the shipped semantic surface this renderer serves must be exactly the known set"
+        );
     }
 }
