@@ -27,9 +27,10 @@ use ratatui::widgets::{Paragraph, Widget};
 
 use crate::command::{self, CommandOutcome, CommandSpec, SlashCommand};
 use crate::dispatch;
+use crate::pane_actions::{self, PaneAction};
 use crate::terminal::{CrosstermBackend, Key, TermEvent, TerminalBackend, Tui};
 use crate::view::{self, BoardView, Focus, OfficeView, SessionsView};
-use cronus_contract::Invocable;
+use cronus_contract::{ArgValues, Dispatched, Invocable, Invocation, Surface};
 use cronus_core::invocable::{Dispatcher, InvocableRegistry};
 use cronus_domain::{Capabilities, Engine};
 
@@ -222,22 +223,51 @@ impl App {
     /// Route a key press by the focused region; returns whether a redraw is
     /// needed. Tab / Shift+Tab cycle focus from anywhere. Outside the command
     /// bar, Esc quits; inside it, keys edit the command line (Esc cancels).
+    ///
+    /// Which key triggers which action is decided right here — key bindings
+    /// stay local presentation (l2-tui.md §4.4 v1.2.0 Notes). What does NOT
+    /// stay local is what each action *is*: every one of these is a real
+    /// `ClientLocal` invocable ([`pane_actions`]), and this match only ever
+    /// names which one a key requests, never what running it does.
     fn handle_key(&mut self, key: Key) -> bool {
         match key {
-            Key::Tab => {
-                self.view.focus = self.view.focus.next();
-                true
-            }
-            Key::BackTab => {
-                self.view.focus = self.view.focus.prev();
-                true
-            }
+            Key::Tab => self.dispatch_pane_action(PaneAction::FocusNext),
+            Key::BackTab => self.dispatch_pane_action(PaneAction::FocusPrev),
             _ if self.view.focus == Focus::CommandBar => self.handle_command_key(key),
-            Key::Esc => {
-                self.should_quit = true;
-                false
-            }
+            Key::Esc => self.dispatch_pane_action(PaneAction::Quit),
             _ => false,
+        }
+    }
+
+    /// Dispatch one of this surface's own actions through the shared
+    /// registry/dispatcher — the only path from a key press to a view
+    /// mutation. `action` is applied only once the real dispatch answers
+    /// `Dispatched::Ran`; an action that never registered (or lost its
+    /// handler) answers `Dispatched::Unknown`, exactly like a genuinely
+    /// unbound verb, and nothing happens here — there is no second,
+    /// key-code-to-behaviour path that could run anyway.
+    fn dispatch_pane_action(&mut self, action: PaneAction) -> bool {
+        let invocation = Invocation {
+            id: action.id(),
+            args: ArgValues::new(),
+            caller: Surface::Tui,
+        };
+        match self.dispatcher.dispatch(&self.registry, &invocation) {
+            Dispatched::Unknown => false,
+            Dispatched::Ran(_outcome) => match action {
+                PaneAction::FocusNext => {
+                    self.view.focus = self.view.focus.next();
+                    true
+                }
+                PaneAction::FocusPrev => {
+                    self.view.focus = self.view.focus.prev();
+                    true
+                }
+                PaneAction::Quit => {
+                    self.should_quit = true;
+                    false
+                }
+            },
         }
     }
 
@@ -396,8 +426,12 @@ pub fn run() -> io::Result<()> {
     // Secret values to mask are loaded from the core secrets store once that
     // binding lands; the dispatcher is left with none for now, the same
     // disclosed residual the sibling CLI frontend's own composition carries.
-    let (registry, dispatcher) =
+    let (mut registry, mut dispatcher) =
         cronus_core::invocable_bootstrap::bootstrap(cronus_core::Engine::new());
+    // This surface's own actions register through the same door, before the
+    // catalog is built from the result — so `/pane` is a real discoverable
+    // group, not a parallel mechanism the catalog never learns about.
+    pane_actions::register(&mut registry, &mut dispatcher);
     let invocables: Vec<&Invocable> = registry.all().collect();
     let catalog = command::build_catalog(&invocables);
 
@@ -515,6 +549,16 @@ mod tests {
     /// `Dispatched::Unknown`, exactly as a genuinely unbound verb would.
     fn empty_registry_and_dispatcher() -> (InvocableRegistry, Dispatcher) {
         (InvocableRegistry::new(), Dispatcher::new())
+    }
+
+    /// The real pane-action registration production `run()` performs — used
+    /// by every test that drives Tab/BackTab/Esc and needs the real dispatch
+    /// path behind them to actually resolve, not merely the key press.
+    fn registry_with_pane_actions() -> (InvocableRegistry, Dispatcher) {
+        let mut registry = InvocableRegistry::new();
+        let mut dispatcher = Dispatcher::new();
+        pane_actions::register(&mut registry, &mut dispatcher);
+        (registry, dispatcher)
     }
 
     /// A minimal catalog naming `test` as a known verb — used by tests
@@ -666,7 +710,7 @@ mod tests {
 
     #[test]
     fn render_loop_stays_responsive_while_core_call_is_slow() {
-        let (registry, dispatcher) = empty_registry_and_dispatcher();
+        let (registry, dispatcher) = registry_with_pane_actions();
         let mut app = App::new(ViewModel::default(), registry, dispatcher, Vec::new());
         // `None` models a snapshot still being produced — a slow core call.
         let mut source = ScriptedSource::new(vec![None]);
@@ -680,6 +724,27 @@ mod tests {
         assert!(
             result.quit,
             "input must be handled even when no snapshot is ready"
+        );
+    }
+
+    /// The other half of the same criterion pane dispatch introduces: with
+    /// no pane actions registered at all, Esc must NOT quit — there is no
+    /// second, direct key-code-to-behaviour path that could run once the
+    /// real dispatch answers `Dispatched::Unknown`.
+    #[test]
+    fn an_unregistered_quit_action_never_quits_the_app() {
+        let (registry, dispatcher) = empty_registry_and_dispatcher();
+        let mut app = App::new(ViewModel::default(), registry, dispatcher, Vec::new());
+        let mut source = ScriptedSource::new(vec![None]);
+        let mut renderer = RecordingRenderer::default();
+
+        let result = app
+            .tick(&[TermEvent::Key(Key::Esc)], &mut source, &mut renderer)
+            .expect("tick succeeds");
+
+        assert!(
+            !result.quit,
+            "quit must go through a real dispatch, never a hardcoded key match"
         );
     }
 
@@ -701,7 +766,7 @@ mod tests {
 
     #[test]
     fn layout_focus_tab_key_advances_focus_and_redraws() {
-        let (registry, dispatcher) = empty_registry_and_dispatcher();
+        let (registry, dispatcher) = registry_with_pane_actions();
         let mut app = App::new(ViewModel::default(), registry, dispatcher, Vec::new());
         let mut source = ScriptedSource::new(vec![None]);
         let mut renderer = RecordingRenderer::default();
@@ -718,6 +783,25 @@ mod tests {
         app.tick(&[TermEvent::Key(Key::BackTab)], &mut source2, &mut renderer)
             .unwrap();
         assert_eq!(app.view().focus, Focus::Board, "Shift+Tab steps focus back");
+    }
+
+    /// The registry, not the key match, decides whether focus moves at all:
+    /// with no pane actions registered, Tab must leave focus exactly where
+    /// it was and request no redraw — proving `handle_key` really resolves
+    /// through dispatch rather than mutating `view.focus` unconditionally.
+    #[test]
+    fn an_unregistered_focus_action_never_moves_focus() {
+        let (registry, dispatcher) = empty_registry_and_dispatcher();
+        let mut app = App::new(ViewModel::default(), registry, dispatcher, Vec::new());
+        let mut source = ScriptedSource::new(vec![None]);
+        let mut renderer = RecordingRenderer::default();
+
+        let result = app
+            .tick(&[TermEvent::Key(Key::Tab)], &mut source, &mut renderer)
+            .unwrap();
+
+        assert!(!result.redrawn, "no dispatch ran, so nothing changed");
+        assert_eq!(app.view().focus, Focus::Board, "focus must not move");
     }
 
     /// Types `/test probe hello`, submits it, and asserts the feedback is

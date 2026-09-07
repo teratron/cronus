@@ -54,6 +54,22 @@ pub struct CommandSpec {
     pub summary: String,
 }
 
+/// Whether this surface projects `invocable` at all: `Semantic` (the shared
+/// vocabulary INV-3 parity binds) plus `ClientLocal` (this surface's own
+/// pane/panel actions) — never `Installation` or `HostOnly`, which belong to
+/// the command line and the host respectively — and only `Shipped` stability
+/// (INV-9): a retired or unshipped invocable is unrepresentable here, not
+/// merely undiscoverable.
+///
+/// The single predicate [`build_catalog`] and this surface's conformance
+/// registration both consume, so "what does this surface expose" is decided
+/// in exactly one place — restating it a second time is the same class of
+/// duplicated derivation the deleted hand-copied catalog mirror was.
+pub fn is_projected(invocable: &Invocable) -> bool {
+    matches!(invocable.locus, Locus::Semantic | Locus::ClientLocal)
+        && matches!(invocable.stability, Stability::Shipped)
+}
+
 /// Build the slash-command catalog from the core's invocable registry.
 ///
 /// One entry per **group**, not per invocable: this surface's slash form
@@ -64,13 +80,6 @@ pub struct CommandSpec {
 /// pair resolves to a specific invocable; this catalog is the discovery
 /// layer above that, exactly as `/board` (not `/board.list`) is what a user
 /// discovers before typing `list`.
-///
-/// Filtered to what this surface actually projects: `Semantic` (the shared
-/// vocabulary INV-3 parity binds) plus `ClientLocal` (this surface's own
-/// pane/panel actions) — never `Installation` or `HostOnly`, which belong to
-/// the command line and the host respectively. Only `Shipped` stability
-/// enters the catalog (INV-9): a retired or unshipped group is
-/// unrepresentable here, not merely undiscoverable.
 ///
 /// `help` is prepended as this surface's own discovery affordance — it has
 /// no registry counterpart (the CLI uses `--help` instead), matching the
@@ -87,10 +96,7 @@ pub struct CommandSpec {
 pub fn build_catalog(invocables: &[&Invocable]) -> Vec<CommandSpec> {
     let mut groups: Vec<&'static str> = invocables
         .iter()
-        .filter(|invocable| {
-            matches!(invocable.locus, Locus::Semantic | Locus::ClientLocal)
-                && matches!(invocable.stability, Stability::Shipped)
-        })
+        .filter(|invocable| is_projected(invocable))
         .map(|invocable| invocable.group)
         .collect();
     groups.sort_unstable();

@@ -10,7 +10,10 @@
 
 pub mod app;
 pub mod command;
+#[cfg(test)]
+mod conformance_registration;
 pub mod dispatch;
+pub mod pane_actions;
 pub mod terminal;
 pub mod view;
 
@@ -22,6 +25,7 @@ pub use command::{
     CommandOutcome, CommandSpec, ParseError, SlashCommand, build_catalog, classify, parse,
 };
 pub use dispatch::{bind_args, dispatch_command, render_outcome};
+pub use pane_actions::PaneAction;
 pub use terminal::{CrosstermBackend, Key, TermEvent, TerminalBackend, Tui};
 pub use view::{
     AgentActivity, BoardCard, BoardColumn, BoardView, Focus, OfficeView, PanelAreas, SessionsView,

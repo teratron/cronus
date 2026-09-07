@@ -706,6 +706,7 @@ dependencies = [
 name = "cronus-tui"
 version = "0.1.0"
 dependencies = [
+ "cronus-conformance",
  "cronus-contract",
  "cronus-core",
  "cronus-domain",
