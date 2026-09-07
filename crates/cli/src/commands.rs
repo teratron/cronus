@@ -318,6 +318,11 @@ pub(crate) mod backup_cmd {
 
     fn list_at(backups_dir: &Path, ctx: &Context) -> i32 {
         match backup::list(backups_dir) {
+            // Known residual, not fixed here: the empty case ignores
+            // `--format json` and always prints prose, unlike the
+            // non-empty branch just below — corrected separately, after
+            // convergence, alongside the same defect at every other site
+            // that discards the requested format.
             Ok(backups) if backups.is_empty() => {
                 println!("no backups found");
                 0
@@ -761,6 +766,11 @@ pub(crate) mod ext {
                 println!("No extensions registered.");
             }
         } else {
+            // Known residual, not fixed here: unlike the empty-list branch
+            // above, this one ignores `--format json` entirely and always
+            // prints prose — corrected separately, after convergence,
+            // alongside the same defect at every other site that discards
+            // the requested format.
             for (m, _s) in &all {
                 println!("{}: {} ({})", m.id, m.name, m.version);
             }
@@ -805,6 +815,10 @@ pub(crate) mod ext {
         1
     }
 
+    // Known residual, not fixed here: `ctx` is accepted but never
+    // consulted, so `--format json` is silently discarded — corrected
+    // separately, after convergence, alongside the same defect at every
+    // other site that discards the requested format.
     pub(crate) fn scan(path: PathBuf, _ctx: &Context) -> i32 {
         let content = match std::fs::read_to_string(&path) {
             Ok(s) => s,
@@ -828,6 +842,11 @@ pub(crate) mod ext {
         match registry.transition(&id, ExtensionState::Active) {
             Ok(()) => {
                 if ctx.is_json() {
+                    // Known residual, not fixed here: `id` is
+                    // interpolated into a hand-built JSON literal without
+                    // escaping — a `"` or `\` in an extension id would
+                    // emit invalid JSON. Corrected separately, after
+                    // convergence, by real `Outcome` serialization.
                     println!("{{\"result\":\"activated\",\"id\":\"{id}\"}}");
                 } else {
                     println!("Activated: {id}");
@@ -846,6 +865,8 @@ pub(crate) mod ext {
         match registry.transition(&id, ExtensionState::Inactive) {
             Ok(()) => {
                 if ctx.is_json() {
+                    // Known residual, not fixed here: same unescaped
+                    // interpolation as `activate` above.
                     println!("{{\"result\":\"deactivated\",\"id\":\"{id}\"}}");
                 } else {
                     println!("Deactivated: {id}");
@@ -1232,6 +1253,10 @@ pub(crate) mod registry {
         0
     }
 
+    // Known residual, not fixed here: `ctx` is accepted but never
+    // consulted, so `--format json` is silently discarded — corrected
+    // separately, after convergence, alongside the same defect at every
+    // other site that discards the requested format.
     pub(crate) fn show(name: String, _ctx: &Context) -> i32 {
         let registry = AgentRegistry::new();
         match registry.resolve(&name) {
@@ -1254,6 +1279,11 @@ pub(crate) mod registry {
         let def_name = def.name.clone();
         registry.register_custom(def);
         if ctx.is_json() {
+            // Known residual, not fixed here: `def_name` is interpolated
+            // into a hand-built JSON literal without escaping — a `"` or
+            // `\` in an agent name would emit invalid JSON. Corrected
+            // separately, after convergence, by real `Outcome`
+            // serialization.
             println!("{{\"result\":\"created\",\"name\":\"{def_name}\"}}");
         } else {
             println!("Created: {def_name}");
@@ -1265,6 +1295,8 @@ pub(crate) mod registry {
         let mut registry = AgentRegistry::new();
         registry.apply_user_config(&name, true, None);
         if ctx.is_json() {
+            // Known residual, not fixed here: same unescaped interpolation
+            // as `create` above.
             println!("{{\"result\":\"disabled\",\"name\":\"{name}\"}}");
         } else {
             println!("Disabled: {name}");
@@ -1276,6 +1308,8 @@ pub(crate) mod registry {
         let mut registry = AgentRegistry::new();
         registry.apply_user_config(&name, false, None);
         if ctx.is_json() {
+            // Known residual, not fixed here: same unescaped interpolation
+            // as `create` above.
             println!("{{\"result\":\"enabled\",\"name\":\"{name}\"}}");
         } else {
             println!("Enabled: {name}");
@@ -1418,6 +1452,10 @@ pub(crate) mod activation_cmd {
                 return 1;
             }
             EnableGate::CancelledByUser => {
+                // Known residual, not fixed here: ignores `--format json`
+                // and always prints prose — corrected separately, after
+                // convergence, alongside the same defect at every other
+                // site that discards the requested format.
                 println!("cancelled — activation not changed");
                 return 1;
             }
@@ -1435,6 +1473,11 @@ pub(crate) mod activation_cmd {
                 0
             }
             Ok(TransitionOutcome::RequiresApproval(m)) => {
+                // Known residual, not fixed here: unlike the `Activated`
+                // arm just above, this one ignores `--format json` and
+                // always prints prose — corrected separately, after
+                // convergence, alongside the same defect at every other
+                // site that discards the requested format.
                 println!(
                     "registered ({}), but the OS requires your approval before it will run — \
                      see your system's background-items settings",
@@ -1544,6 +1587,10 @@ pub(crate) mod archetype_cmd {
             .filter(|s| !s.is_empty())
     }
 
+    // Known residual, not fixed here: this handler takes no `Context` at
+    // all, so `--format json` is silently discarded — corrected
+    // separately, after convergence, alongside the same defect at every
+    // other site that discards the requested format.
     pub(crate) fn list(_catalog: bool, active: bool) -> i32 {
         let catalog = ArchetypeCatalog::program();
         if active {
@@ -1569,6 +1616,8 @@ pub(crate) mod archetype_cmd {
         0
     }
 
+    // Known residual, not fixed here: same missing `Context` as `list`
+    // above — `--format json` is silently discarded.
     pub(crate) fn info(id: &str, deviations: bool) -> i32 {
         let catalog = ArchetypeCatalog::program();
         if let Some(def) = catalog.get(id) {
@@ -1648,6 +1697,8 @@ pub(crate) mod archetype_cmd {
         0
     }
 
+    // Known residual, not fixed here: same missing `Context` as `list`/
+    // `info` above — `--format json` is silently discarded.
     pub(crate) fn create(name: &str, from: &str) -> i32 {
         let catalog = ArchetypeCatalog::program();
         match catalog.create_from_preset(&state_dir(), name, from) {

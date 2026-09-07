@@ -1,21 +1,43 @@
 ---
 phase: 27
 name: "Invocable Registry & CLI Derivation"
-status: Todo
+status: Done
 subsystem: "crates/contract · crates/domain · crates/core · crates/cli"
 requires: []
-provides: []
+provides:
+  - "one runtime invocable registry (crates/domain/src/invocable): qualified identity over a reserved core namespace, bind-before-invoke dispatch, four located rejection modes, contribution safety (panic containment, grant gate, projection-derived attribution), redaction at the single dispatch boundary"
+  - "the command line's parser generated at startup from Semantic/Shipped descriptors (crates/cli/src/generated.rs) — 18 real semantic groups plus the installation half's own closed, hand-declared grammar (11 groups, crates/cli/src/installation.rs) covering flat/nested/named-value-flag/sub-nested shapes"
+  - "one renderer over the structured Outcome, format-honoring by construction (crates/cli/src/main.rs's Rendered value) — computation split from I/O so the property is provable without a subprocess"
+  - "shipped-surface honesty: five behaviorless stub groups deleted outright (no descriptor ⇒ unrepresentable), not merely hidden"
+  - "the shared conformance corpus (crates/conformance) with its first real registered consumer — the command line's own SurfaceProjection — and a finding inventory (F-1…F-8) with its first genuinely repaid finding (F-3)"
 key_files:
-  created: []
-  modified: []
-patterns_established: []
+  created:
+    - "crates/domain/src/invocable/mod.rs"
+    - "crates/domain/src/invocable/registry.rs"
+    - "crates/domain/src/invocable/dispatch.rs"
+    - "crates/core/src/invocable_bootstrap/mod.rs"
+    - "crates/core/src/invocable_bootstrap/{status,memory,codegraph,agent,role,exec,check,learn,board,schedule,budget,loop_group,workflow,knowledge}.rs"
+    - "crates/cli/src/generated.rs"
+    - "crates/cli/src/installation.rs"
+    - "crates/cli/src/conformance_registration.rs"
+    - "crates/conformance/src/{lib,fixtures,harness,report,projection,findings}.rs"
+  modified:
+    - "crates/contract/src/lib.rs"
+    - "crates/cli/src/{main,cli,commands}.rs"
+    - "crates/cli/tests/cli_smoke.rs"
+patterns_established:
+  - "a command surface as a runtime projection of a registry, never a compile-time enum — generated at startup from descriptors, so a verb an extension contributes becomes reachable without a rebuild and an unshipped one is structurally unrepresentable (INV-9)"
+  - "the `.N` sub-task split as the standard response to a track proving larger than planned mid-execution, re-verified against the source before each split rather than estimated — five real splits this phase (T-27D01.1.2, T-27D01.1.2.2, T-27D01.2, T-27D01.2.2), each closing cleanly, none needed twice"
+  - "the existing, unmodified end-to-end smoke suite as the primary behaviour-preservation oracle during a structural migration — caught real, pre-ship defects (a cross-group verb collision, two binder-binding-style mismatches) that new unit tests, written by the same hand that wrote the bugs, did not"
+  - "split a renderer's computation from its I/O (a `Rendered` value plus one `print()` method) specifically to make a format-uniformity property testable in-process, without a subprocess or captured stdout"
+  - "a shared conformance corpus as a library plus harness every surface's own test target drives against its real projection — proven decoupled from invocable identity by testing the shape space a renderer/schema-checker distinguishes, not by re-executing every real call site"
 duration_minutes: ~
 ---
 
 # Stage 27 Tasks — Invocable Registry & CLI Derivation
 
 **Phase:** 27
-**Status:** Todo
+**Status:** Done
 **Strategic Goal:** Mint one runtime invocable registry in the core, dispatch every action through it once, and move the command line onto it as a **projection** — so command parity stops being a property that is asserted and becomes one that is structural, and a verb contributed by an extension becomes reachable at all.
 
 ## Phase Notes
@@ -68,8 +90,8 @@ None of these are behaviour changes and none of them touch a *product* behaviour
 - [x] [T-27D01.2.2] Migrate the remaining six semantic groups needing a `Binder` extension
 - [x] [T-27D02] One renderer over the structured outcome; uniform output-format handling
 - [x] [T-27D03] Shipped-surface honesty: the five unbound groups leave the default surface; corpus registration
-- [ ] [T-27T01] Corpus first run — convert failures into findings before fixing anything
-- [ ] [T-27T02] Behaviour-preservation proof and full quality gates
+- [x] [T-27T01] Corpus first run — convert failures into findings before fixing anything
+- [x] [T-27T02] Behaviour-preservation proof and full quality gates
 
 ## Detailed Tracking
 
@@ -308,12 +330,24 @@ None of these are behaviour changes and none of them touch a *product* behaviour
 
 - **Goal:** Run the corpus against the migrated command-line surface and treat the output as the initial inventory.
 - **Method:** Execute the harness; expect it to fail immediately and unflatteringly. **Convert every failure into a finding record first**, then decide what is repaid in this phase and what is carried. Fixing on sight produces repairs that are rediscovered later as duplicates.
-- **Verify:** Every corpus failure is either a closed finding with all four SP-4 conditions met, or an entry in the shrink-only debt ledger with a stated reason. No failure is silently fixed and unrecorded.
-- **Status:** Todo
+- **Verify:** Every corpus failure is either a closed finding with all four SP-4 conditions met, or an entry in the shrink-only debt ledger with a stated reason. No failure is silently fixed and unrecorded. **Satisfied**: the command line's real corpus run (its own registration test) reports exactly two divergences, both already-seeded findings; `cargo test -p cronus-conformance` and the workspace at large stay green.
+- **Status:** Done
+- **Outcome:** The "first run" already happened as an inherent, provable consequence of the command line's own registration (a prior task) — `crates/cli/src/conformance_registration.rs`'s test drives the real harness and asserts its result precisely, so this task's own job reduces to **auditing that result against the finding inventory and updating it where the audit changes something real**, not re-running anything. The audit found exactly what the seed inventory already predicted (F-5's residual: `secret-bearing`/`boundary-crossing` diverge because this dispatcher's secret list is empty, exactly like every other surface's) — zero new failures, zero new findings needed. It also found one finding the registration event genuinely closes: **F-3 is now fully repaid.** F-3's one named site is the command line's own hand-maintained parity table — already deleted and tombstoned before this phase's code work began, with the surface-set assertion family as its fixture; the only remaining SP-4 condition, a real consumer registered against the corpus, closed the moment the command line's own test started running it for real. This is the corpus's first genuine finding closure, not merely a tracked one. `no_finding_is_recorded_as_repaid_by_accident` — the test whose own purpose is to make a repaid transition visible rather than silent — was rewritten (not merely relaxed) into `exactly_f3_reads_as_repaid_after_the_command_lines_registration`, asserting F-3 specifically and every other finding's continued open status by name. **F-1/F-2/F-5/F-8 were deliberately left untouched**, each checked against its own `sites` field rather than assumed: F-1 and F-5 each name three surfaces (command line, terminal UI, desktop) and only one has registered, so "every consumer... that runs it" (SP-4) does not yet hold; F-2 names the terminal UI's own stale mirror specifically, a site the command line's registration cannot touch at all; F-8 is preemptive, about a surface that does not exist yet, and the command line already existed when this finding was seeded. `crates/conformance/src/findings.rs`'s ledger-baseline tests (which gate `tombstones()`/`accepted_debt()` specifically, not `seed_inventory()`'s repayment fields) are unaffected by the F-3 flip — no tombstone or debt entry changed, so no baseline edit was needed alongside it. `cargo test -p cronus-conformance --all-targets` 16/16; full `cargo test --workspace --exclude cronus-desktop -j 2` green; `clippy`/`fmt --check` clean workspace-wide. Containment self-check clean on `findings.rs`.
 
 ### [T-27T02] Behaviour-preservation proof and full quality gates
 
 - **Goal:** Prove the migration changed structure and not behaviour, and that the phase meets the project's definition of done.
 - **Method:** Assert pre-existing command-line tests pass **unmodified**; confirm the four known residuals are recorded at their owning invocables and still behave as before; run the workspace gates.
-- **Verify:** `cargo fmt --all --check`, `cargo clippy --all-targets -- -D warnings` (zero), `cargo test --workspace` green across consecutive full runs; `crates/cli/tests/cli_smoke.rs` unmodified and passing; no `unwrap()`/`panic!()` introduced on production paths.
-- **Status:** Todo
+- **Verify:** `cargo fmt --all --check`, `cargo clippy --all-targets -- -D warnings` (zero), `cargo test --workspace` green across consecutive full runs; `crates/cli/tests/cli_smoke.rs` unmodified and passing; no `unwrap()`/`panic!()` introduced on production paths. **Satisfied, with one wording correction below.**
+- **Status:** Done
+- **Decision (recorded, not asked — corrects this Verify line's own stale wording):** "`cli_smoke.rs` unmodified" was written before T-27D03 existed as a scoped task, and T-27D03's own Verify line explicitly, deliberately did **not** ask for that file to stay unmodified — its whole point is a disclosed behaviour *removal* (INV-9's five deleted stub groups), not a migration, and thirteen tests exercising deleted behaviour cannot keep passing unmodified by definition. Read "unmodified" here as "unmodified beyond T-27D03's own already-disclosed, already-recorded edit" — the correct, load-bearing baseline is the suite's **current** 28 tests, which this task confirms pass, not the pre-T-27D03 41. Recorded here rather than silently reinterpreted, matching the discipline this whole phase has held to for every other over-specified or stale Verify line it hit.
+- **Findings:**
+  - **Pre-existing tests pass at their current, disclosed baseline.** `crates/cli/tests/cli_smoke.rs` (28 tests, post-T-27D03) passes unmodified by this task; every other integration/unit suite across the workspace is unmodified by this task and passes.
+  - **The four known residuals, audited and — where missing — now recorded inline at their owning site, not merely in this file's prose:**
+    1. *Store failure rendered as an empty, success-shaped result*: already documented inline at `board.rs`/`schedule.rs`/`role.rs` (T-27D01.2/T-27D01.2.2) — confirmed still present, unchanged.
+    2. *Output format discarded*: the phase's own audit (T-27D02) named nine sites, all in the installation half; this task added an inline "known residual, not fixed here" comment at each of the nine (`archetype_cmd::list`/`info`/`create`, `ext::scan`, `registry::show`, `activation_cmd::enable`'s `RequiresApproval` and `CancelledByUser` branches, `ext::list`'s non-empty branch, `backup_cmd::list_at`'s empty branch) — none had one before. Confirmed unchanged: none of the nine reads `ctx.is_json()` any differently than before this task touched only their comments.
+    3. *Structured output hand-built and unescaped*: never itemized by file before this task. Audited the current (post-migration) `commands.rs` for every hand-built `println!("{{...")` JSON literal, filtered to the ones interpolating genuinely free user-supplied text (excluding ones using a validated id, a fixed enum label, or an already-escaped value) — found exactly five: `ext::activate`/`deactivate` (an extension id) and `registry::create`/`disable`/`enable` (an agent name). Matches the original audit's own count. Added an inline residual comment at each; confirmed unchanged behavior.
+    4. *Redaction fed an empty secret list*: confirmed via T-27D03's own conformance-registration test that this dispatcher never calls `set_secrets`; added the residual comment at the actual composition point, `crates/core/src/invocable_bootstrap/mod.rs`'s `bootstrap()`, where it was previously undocumented despite being exercised by every surface built from this facade.
+  - **No `unwrap()`/`panic!()` introduced on a production path.** Audited every file this phase created or substantially modified (`crates/contract/src/lib.rs`, `crates/domain/src/invocable/*.rs`, `crates/core/src/invocable_bootstrap/*.rs`, `crates/cli/src/{main,cli,commands,generated,installation,conformance_registration}.rs`). Every bare `.unwrap()` found is inside a `#[cfg(test)]` module. Every `.expect(...)` on a production path is on a compile-time-literal value this file itself authored (`InvocableId::new("core:…").expect(…)` and equivalents) — the same disclosed, precedented pattern every `*_bootstrap.rs` file in this facade already uses, matching CLAUDE.md's own "reserve panics for truly unrecoverable invariants" carve-out, not a new exception invented here.
+  - **A phase-wide containment re-sweep** (not just this task's own touched files) across `crates/contract/src/lib.rs`, `crates/domain/src/invocable/`, `crates/core/src/invocable_bootstrap/`, `crates/cli/src/`, `crates/conformance/src/` found zero SDD-reference leaks.
+- **Changes:** `crates/cli/src/commands.rs`: fourteen inline residual comments added (nine format-discarding, five unescaped-output) — comments only, zero logic changed. `crates/core/src/invocable_bootstrap/mod.rs`: one residual comment on `bootstrap()`'s own doc comment, documenting the empty secret list. `cargo test --workspace --exclude cronus-desktop -j 2` run **twice consecutively**, identical green result both times (no flaky/order-dependent test found); `clippy --workspace --exclude cronus-desktop --all-targets -- -D warnings` and `cargo fmt --all -- --check` clean. Containment self-check clean, phase-wide.

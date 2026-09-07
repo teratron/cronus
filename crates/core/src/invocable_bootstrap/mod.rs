@@ -37,6 +37,12 @@ mod workflow;
 
 /// Assemble the facade's invocable registry and dispatcher around `engine`,
 /// with every core invocable registered through the public door.
+///
+/// Known residual, not fixed here: this `Dispatcher` is never given a
+/// secret list (no `set_secrets` call below), so the redaction boundary
+/// every dispatch already passes through masks nothing — every surface
+/// built from this composition inherits the same inert masking until a
+/// real secret store is wired in as a separate, disclosed change.
 pub fn bootstrap(engine: Engine) -> (InvocableRegistry, Dispatcher) {
     let mut registry = InvocableRegistry::new();
     let mut dispatcher = Dispatcher::new();

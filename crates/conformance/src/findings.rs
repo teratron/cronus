@@ -106,16 +106,23 @@ pub fn seed_inventory() -> Vec<Finding> {
             divergence: "the table listed verbs the product did not have and omitted every group it did",
             class: FindingClass::Observed,
             primitive: "a catalog projection, never a maintained table",
+            // `[CLOSED]` The command line — this finding's one named site —
+            // registered against the corpus, driving its real projection
+            // through the harness with a zero-report surface-set/schema
+            // result (the only reports that run produced were the two
+            // already-accepted F-5 outcome-family fixtures, unrelated to
+            // this finding). All four SP-4 conditions now hold: the table
+            // was already deleted (`copies_deleted`) and pinned
+            // (`deletion_pinned`) before this phase's code work began; the
+            // surface-set family is its fixture (`fixture_landed`); and the
+            // one surface this finding names has now registered and run it
+            // (`consumer_registered`). The first finding this corpus
+            // actually closes, not merely tracks.
             repayment: Repayment {
-                // Already removed, ahead of this phase's code work — the
-                // table's own maintainer deleted it once the registry
-                // design made clear no table should exist at all.
                 copies_deleted: true,
                 deletion_pinned: true,
                 fixture_landed: true,
-                // No surface has registered against the corpus yet — the
-                // command line does that in a later track of this phase.
-                consumer_registered: false,
+                consumer_registered: true,
             },
             residual: None,
         },
@@ -315,17 +322,26 @@ mod tests {
     }
 
     #[test]
-    fn no_finding_is_recorded_as_repaid_by_accident() {
-        // Repayment requires all four SP-4 conditions; this seed run has
-        // deleted and pinned exactly one thing (F-3) and registered no
-        // consumer against the corpus yet, so nothing should read as fully
-        // repaid. A finding flipping to "repaid" is a real event this test
-        // exists to make visible, not something that happens silently.
+    fn exactly_f3_reads_as_repaid_after_the_command_lines_registration() {
+        // Repayment requires all four SP-4 conditions. F-3's one named site
+        // is the command line's own table, deleted and pinned before this
+        // phase's code work began — its remaining condition
+        // (`consumer_registered`) closed the moment the command line ran
+        // the corpus for real. Every other finding names at least one site
+        // this project has not built or registered yet (the terminal UI, the
+        // desktop shell, or a still-open residual), so none of them should
+        // read as repaid. A finding flipping to "repaid" is a real event
+        // this test exists to make visible, not something that happens
+        // silently — this assertion is the visible record of the one that
+        // already has, and a guard against any other flipping unnoticed.
         for finding in seed_inventory() {
-            assert!(
-                !finding.repayment.is_repaid(),
-                "{} reads as repaid — is that actually true yet?",
-                finding.id
+            let expected_repaid = finding.id == "F-3";
+            assert_eq!(
+                finding.repayment.is_repaid(),
+                expected_repaid,
+                "{} reads as repaid={}, expected={expected_repaid} — is that actually true?",
+                finding.id,
+                finding.repayment.is_repaid(),
             );
         }
     }
