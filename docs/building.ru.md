@@ -19,7 +19,7 @@
 | Rust | `1.98.0` (закреплён в `rust-toolchain.toml`) | `rustc --version` |
 | компоненты Rust | `rustfmt`, `clippy` | `cargo fmt --version`, `cargo clippy --version` |
 | Node.js | `>= 22` | `node --version` |
-| pnpm | `11.25.0` (поле `packageManager`) | `pnpm --version` |
+| pnpm | `12.3.4` (поле `packageManager`) | `pnpm --version` |
 | C-тулчейн | MinGW-w64 GCC (сборка идёт под `x86_64-pc-windows-gnu`) | `gcc --version` **в PowerShell** |
 | WebView2 Runtime | входит в Windows 10/11 | — |
 
@@ -35,7 +35,7 @@ pnpm проще всего включить через corepack (идёт с Nod
 
 ```powershell
 corepack enable
-corepack prepare pnpm@11.25.0 --activate
+corepack prepare pnpm@12.3.4 --activate
 ```
 
 ### Системные зависимости Tauri
