@@ -280,6 +280,30 @@ fn top_level_help_lists_tui() {
     );
 }
 
+/// Every flat installation verb (its own id-tail equal to its group name)
+/// must reach its real handler through `dispatch`, never fall into
+/// `dispatch`'s "matched with no verb subcommand" internal-error branch —
+/// a real, latent bug this task's own manual verification of `cronus tui`
+/// caught: `dispatch` used to unconditionally expect a nested subcommand,
+/// which no flat group's own matches ever have, so every one of them
+/// (`status`, `doctor`, `tui`, …) failed the moment it was actually run
+/// rather than merely `--help`'d. Deliberately real subprocess calls with
+/// no `--fix`/mutating flag, so this is safe to run against whatever real
+/// state this host happens to have — the property checked is independent
+/// of that state.
+#[test]
+fn every_flat_installation_verb_reaches_its_real_handler_not_an_internal_routing_error() {
+    for verb in ["status", "doctor"] {
+        let output = bin().arg(verb).output().expect("failed to spawn binary");
+        let stderr = String::from_utf8_lossy(&output.stderr);
+        assert!(
+            !stderr.contains("matched with no verb subcommand"),
+            "{verb}: a flat group's own matches must resolve directly, not assume a nested \
+             subcommand exists: {stderr}"
+        );
+    }
+}
+
 #[test]
 fn activation_enable_without_acknowledgement_refuses_when_noninteractive() {
     // `status`/`observe` reads the real OS (read-only, harmless); `enable`

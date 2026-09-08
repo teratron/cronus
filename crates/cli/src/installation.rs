@@ -597,6 +597,22 @@ pub fn format_arg() -> Arg {
         .default_value("text")
 }
 
+/// Launch the terminal UI and map its result to a process exit code — the
+/// one function both spellings of "start the terminal UI" call: `cronus tui`
+/// through [`dispatch_leaf`]'s own `"tui"` arm, and a bare invocation (LH-4's
+/// default composition) directly from `main`, before any composition of
+/// this launcher's own tree runs. One function, two callers, rather than the
+/// same `cronus_tui::run()` call and error mapping written out twice.
+pub fn launch_tui() -> i32 {
+    match cronus_tui::run() {
+        Ok(()) => 0,
+        Err(e) => {
+            eprintln!("error: tui: {e}");
+            1
+        }
+    }
+}
+
 /// Resolve `group`'s own matched subcommand and dispatch it directly to its
 /// already-proven handler in [`crate::commands`] — no shared
 /// `Dispatcher`/`Outcome` indirection, for the reason the module doc gives.
@@ -609,11 +625,22 @@ pub fn format_arg() -> Arg {
 /// to reach the leaf verb, and resolving both levels here — rather than
 /// asking every caller to know which groups nest how deep — keeps that
 /// knowledge in the one place [`build_installation_tree`] already has it.
+///
+/// `[FIXED]` A **flat** group (its one verb's id-tail equals its own group
+/// name — `build_installation_tree`'s own flat-shape rule) carries that
+/// verb's args directly on the group's own `Command`, with nothing nested
+/// under it at all: `group_matches.subcommand()` is genuinely `None` for
+/// one, not a caller error. This was a real, latent bug — every flat verb
+/// (`init`/`status`/`doctor`/`restore`/`tui`) fell straight into the
+/// internal-error branch below the moment it was actually run (not merely
+/// `--help`'d), undiscovered because no end-to-end test had ever invoked
+/// one without `--help` until this task's own manual verification did.
 pub fn dispatch(group: &str, group_matches: &ArgMatches, ctx: &Context) -> i32 {
     let Some((first, first_matches)) = group_matches.subcommand() else {
-        return application_error(&format!(
-            "internal: {group} matched with no verb subcommand — a bug in this module's own tree, not a caller condition"
-        ));
+        // No nested subcommand at all means this is a flat group: its own
+        // top-level matches ARE the one verb's matches, and that verb's
+        // name is the group's own name.
+        return dispatch_leaf(group, group, group_matches, ctx);
     };
     // A verb never has a subcommand of its own (every verb's own arguments
     // are positional/named `Arg`s, never further subcommands) — so a
@@ -624,11 +651,6 @@ pub fn dispatch(group: &str, group_matches: &ArgMatches, ctx: &Context) -> i32 {
         None => (first.to_string(), first_matches),
     };
     dispatch_leaf(group, &verb, matches, ctx)
-}
-
-fn application_error(message: &str) -> i32 {
-    eprintln!("error: {message}");
-    1
 }
 
 fn dispatch_leaf(group: &str, verb: &str, matches: &ArgMatches, ctx: &Context) -> i32 {
@@ -809,13 +831,7 @@ fn dispatch_leaf(group: &str, verb: &str, matches: &ArgMatches, ctx: &Context) -
             let skill_id = matches.get_one::<String>("id").cloned();
             crate::commands::ext::skill::status(skill_id, ctx)
         }
-        ("tui", _) => match cronus_tui::run() {
-            Ok(()) => 0,
-            Err(e) => {
-                eprintln!("error: tui: {e}");
-                1
-            }
-        },
+        ("tui", _) => launch_tui(),
         _ => {
             eprintln!(
                 "error: internal: no installation handler wired for {group} {verb} — a bug in this module's own dispatch table, not a caller condition"
@@ -847,6 +863,31 @@ mod tests {
             "a flat group must carry its one verb's args directly, not nest a same-named subcommand"
         );
         assert!(groups[0].get_arguments().any(|a| a.get_id() == "fix"));
+    }
+
+    /// The structural assumption `dispatch`'s flat-group fix depends on: a
+    /// flat group's own matches carry no nested subcommand at all — proven
+    /// against a real parse, not assumed from `build_installation_tree`'s
+    /// own tree shape alone. This was the actual, latent bug: `dispatch`
+    /// used to unconditionally require a subcommand here and fell into its
+    /// internal-error branch for every flat verb the moment one was
+    /// actually run, not merely `--help`'d.
+    #[test]
+    fn a_flat_groups_own_matches_have_no_subcommand_to_find() {
+        let invocables = declared_invocables();
+        let refs: Vec<&Invocable> = invocables.iter().filter(|i| i.group == "doctor").collect();
+        let (groups, _) = build_installation_tree(&refs);
+        let tree = Command::new("cronus").subcommand(groups.into_iter().next().unwrap());
+
+        let matches = tree
+            .try_get_matches_from(["cronus", "doctor", "--fix"])
+            .expect("doctor --fix must parse");
+        let (_, group_matches) = matches.subcommand().unwrap();
+        assert!(
+            group_matches.subcommand().is_none(),
+            "a flat group's own matches must carry no nested subcommand"
+        );
+        assert!(group_matches.get_flag("fix"));
     }
 
     #[test]

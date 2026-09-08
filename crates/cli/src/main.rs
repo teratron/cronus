@@ -11,54 +11,94 @@ use cronus_contract::{Dispatched, Invocable, Outcome, OutcomeValue};
 use cronus_core::invocable::Registrant;
 use output::OutputFormat;
 
+/// Which of the launcher's top-level modes a raw `argv` resolves to,
+/// decided before any composition or I/O runs — a pure function of the
+/// argument list, so the routing decision itself is testable without
+/// spawning a process or a terminal (LH-4's default composition made this
+/// split worth making explicit rather than leaving it as an inline
+/// boolean).
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum LaunchMode {
+    /// No arguments at all — the default composition (LH-4).
+    DefaultComposition,
+    /// A request addressed to the whole surface (`--help`, `--version`, a
+    /// bare `help`, …) — answered from the full composition, never from
+    /// this frontend's own installation grammar (LH-3).
+    FullSurfaceRequest,
+    /// Everything else — tried against the installation half first, with
+    /// no composition at all (LH-1/LH-5).
+    Verb,
+}
+
+fn launch_mode(args: &[String]) -> LaunchMode {
+    let Some(first) = args.get(1) else {
+        return LaunchMode::DefaultComposition;
+    };
+    if matches!(
+        first.as_str(),
+        "--help" | "-h" | "help" | "--version" | "-V"
+    ) {
+        return LaunchMode::FullSurfaceRequest;
+    }
+    LaunchMode::Verb
+}
+
 fn main() -> std::process::ExitCode {
     let installation_invocables = installation::declared_invocables();
     let installation_refs: Vec<&Invocable> = installation_invocables.iter().collect();
 
     let args: Vec<String> = std::env::args().collect();
-    // A bare invocation or a request addressed to the whole surface
-    // (`--help`/`-h`/`help`, `--version`/`-V`) is answered from the full
-    // composition — this frontend's own installation grammar only owns its
-    // *own* help (LH-3), not the top-level listing. Everything else is
-    // tried against the installation half first, with no composition at all
-    // (LH-1/LH-5): an installation verb must stay answerable even when the
-    // composition it would configure is exactly what failed to come up.
-    let wants_full_surface = args.len() < 2
-        || matches!(
-            args[1].as_str(),
-            "--help" | "-h" | "help" | "--version" | "-V"
-        );
 
-    if !wants_full_surface {
-        let (installation_groups, installation_group_names) =
-            installation::build_installation_tree(&installation_refs);
-        let pre = pre_composition_command(installation_groups);
+    match launch_mode(&args) {
+        // A bare invocation is the default composition (LH-4, l2-tui.md
+        // §4.4 v1.2.0): meeting the product by typing its name brings up the
+        // terminal UI, exactly as `cronus tui` names the same composition
+        // explicitly. Answered with the same zero-composition property
+        // every installation verb already has (LH-1/LH-5) —
+        // `cronus_tui::run()` composes its own registry/dispatcher
+        // internally the moment it starts, so this launcher never builds
+        // one first just to hand off to it.
+        LaunchMode::DefaultComposition => return exit_code(installation::launch_tui()),
+        // A request addressed to the whole surface falls through to the
+        // full composition below — this frontend's own installation
+        // grammar only owns its *own* help (LH-3), not the top-level
+        // listing.
+        LaunchMode::FullSurfaceRequest => {}
+        // Everything else is tried against the installation half first,
+        // with no composition at all (LH-1/LH-5): an installation verb
+        // must stay answerable even when the composition it would
+        // configure is exactly what failed to come up.
+        LaunchMode::Verb => {
+            let (installation_groups, installation_group_names) =
+                installation::build_installation_tree(&installation_refs);
+            let pre = pre_composition_command(installation_groups);
 
-        match pre.try_get_matches_from(&args) {
-            Ok(pre_matches) => {
-                if let Some((name, sub_matches)) = pre_matches.subcommand()
-                    && installation_group_names.contains(name)
-                {
-                    let format = pre_matches
-                        .get_one::<OutputFormat>("format")
-                        .copied()
-                        .unwrap_or(OutputFormat::Text);
-                    let ctx = output::Context::new(format);
-                    return exit_code(installation::dispatch(name, sub_matches, &ctx));
+            match pre.try_get_matches_from(&args) {
+                Ok(pre_matches) => {
+                    if let Some((name, sub_matches)) = pre_matches.subcommand()
+                        && installation_group_names.contains(name)
+                    {
+                        let format = pre_matches
+                            .get_one::<OutputFormat>("format")
+                            .copied()
+                            .unwrap_or(OutputFormat::Text);
+                        let ctx = output::Context::new(format);
+                        return exit_code(installation::dispatch(name, sub_matches, &ctx));
+                    }
+                    // Matched nothing this half owns (an external subcommand,
+                    // under `allow_external_subcommands` below) — fall through
+                    // to the full composition to resolve it.
                 }
-                // Matched nothing this half owns (an external subcommand,
-                // under `allow_external_subcommands` below) — fall through
-                // to the full composition to resolve it.
-            }
-            Err(e) => {
-                // `allow_external_subcommands` means an error here can only
-                // come from a *recognized* installation verb's own args (or
-                // its own `--help`) — never from an unrecognized top-level
-                // name, which is swallowed as an external subcommand
-                // instead. This is therefore always a genuine usage failure
-                // scoped to this half's own grammar (LH-7): nothing below
-                // this line has run, no session opened, nothing journaled.
-                e.exit();
+                Err(e) => {
+                    // `allow_external_subcommands` means an error here can only
+                    // come from a *recognized* installation verb's own args (or
+                    // its own `--help`) — never from an unrecognized top-level
+                    // name, which is swallowed as an external subcommand
+                    // instead. This is therefore always a genuine usage failure
+                    // scoped to this half's own grammar (LH-7): nothing below
+                    // this line has run, no session opened, nothing journaled.
+                    e.exit();
+                }
             }
         }
     }
@@ -90,9 +130,13 @@ fn main() -> std::process::ExitCode {
     // registered verb becomes visible in `--help` without a rebuild.
     // `subcommand_required` is set explicitly here rather than left to
     // derive-macro inference (INV-9: `Cli` itself declares no subcommand
-    // field for a compile-time enum to imply it from) — a bare invocation
-    // with neither half's verbs to fall back on must still refuse cleanly,
-    // the same usage failure it always has.
+    // field for a compile-time enum to imply it from). `[MODIFIED]` A truly
+    // bare invocation no longer reaches this line at all — it is now the
+    // default composition (LH-4), answered above before composition even
+    // runs. What this still refuses is the narrower case a bare invocation
+    // used to stand in for: a global flag with no verb at all (`cronus
+    // --format json`), which stays a genuine usage failure, not a spelling
+    // of "launch the default."
     let mut command = cli::Cli::command().subcommand_required(true);
     for group in installation_groups {
         command = command.subcommand(group);
@@ -459,6 +503,55 @@ fn exit_code(code: i32) -> std::process::ExitCode {
         std::process::ExitCode::SUCCESS
     } else {
         std::process::ExitCode::FAILURE
+    }
+}
+
+#[cfg(test)]
+mod launch_mode_tests {
+    use super::*;
+
+    fn argv(rest: &[&str]) -> Vec<String> {
+        std::iter::once("cronus".to_string())
+            .chain(rest.iter().map(|s| s.to_string()))
+            .collect()
+    }
+
+    /// The literal Verify criterion this task names: running the binary
+    /// with no arguments resolves to the default composition, never a
+    /// usage error.
+    #[test]
+    fn no_arguments_resolves_to_the_default_composition() {
+        assert_eq!(launch_mode(&argv(&[])), LaunchMode::DefaultComposition);
+    }
+
+    #[test]
+    fn every_full_surface_request_falls_through_to_the_full_composition() {
+        for spelling in ["--help", "-h", "help", "--version", "-V"] {
+            assert_eq!(
+                launch_mode(&argv(&[spelling])),
+                LaunchMode::FullSurfaceRequest,
+                "{spelling} must resolve to FullSurfaceRequest"
+            );
+        }
+    }
+
+    #[test]
+    fn a_real_verb_is_tried_against_the_installation_half_first() {
+        assert_eq!(launch_mode(&argv(&["tui"])), LaunchMode::Verb);
+        assert_eq!(launch_mode(&argv(&["board", "list"])), LaunchMode::Verb);
+    }
+
+    /// A flag with no verb (`cronus --format json`) is deliberately **not**
+    /// the default composition — it stays the narrower, pre-existing usage
+    /// question `subcommand_required(true)` already answers, unchanged by
+    /// this task's own scoping decision.
+    #[test]
+    fn a_bare_flag_with_no_verb_is_not_the_default_composition() {
+        assert_eq!(
+            launch_mode(&argv(&["--format", "json"])),
+            LaunchMode::Verb,
+            "a flag alone must not be treated as a bare invocation"
+        );
     }
 }
 
