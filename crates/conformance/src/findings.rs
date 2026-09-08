@@ -94,17 +94,24 @@ pub fn seed_inventory() -> Vec<Finding> {
             divergence: "a parity check compared a stale copy of the thing under test against itself, and stayed green while the surfaces differed by eight verbs — a check that cannot fail",
             class: FindingClass::Observed,
             primitive: "a corpus driven through real projections",
-            // `copies_deleted`/`deletion_pinned` close here: the mirror
-            // constant and its self-comparing parity test are gone, and the
-            // deletion is pinned in the tombstone ledger above, in the same
-            // change. `consumer_registered` stays open — this surface has
-            // not yet registered against the corpus from its own test
-            // target, which is a later, separate task.
+            // `[CLOSED]` The terminal UI — this finding's one named site —
+            // registered against the corpus, driving its real projection
+            // (a real registry, a real dispatcher, real handlers) through
+            // the harness. The only reports that run produced are the two
+            // already-accepted F-5 outcome-family fixtures (the
+            // empty-secret-list residual every surface carries), unrelated
+            // to this finding. All four SP-4 conditions now hold: the
+            // mirror constant and its self-comparing parity test were
+            // already deleted (`copies_deleted`) and pinned
+            // (`deletion_pinned`); the surface-set/schema/outcome families
+            // are its fixture (`fixture_landed`); and the one surface this
+            // finding names has now registered and run it
+            // (`consumer_registered`).
             repayment: Repayment {
                 copies_deleted: true,
                 deletion_pinned: true,
                 fixture_landed: true,
-                consumer_registered: false,
+                consumer_registered: true,
             },
             residual: None,
         },
@@ -342,20 +349,23 @@ mod tests {
     }
 
     #[test]
-    fn exactly_f3_reads_as_repaid_after_the_command_lines_registration() {
+    fn exactly_f2_and_f3_read_as_repaid_after_both_surfaces_own_registration() {
         // Repayment requires all four SP-4 conditions. F-3's one named site
         // is the command line's own table, deleted and pinned before this
         // phase's code work began — its remaining condition
         // (`consumer_registered`) closed the moment the command line ran
-        // the corpus for real. Every other finding names at least one site
-        // this project has not built or registered yet (the terminal UI, the
-        // desktop shell, or a still-open residual), so none of them should
-        // read as repaid. A finding flipping to "repaid" is a real event
-        // this test exists to make visible, not something that happens
-        // silently — this assertion is the visible record of the one that
-        // already has, and a guard against any other flipping unnoticed.
+        // the corpus for real. F-2's one named site is the terminal UI's own
+        // mirror, closed the same way once *that* surface registered and
+        // ran the corpus for real (this phase). Every other finding names
+        // at least one site this project has not built or registered yet
+        // (the desktop shell, or a still-open residual), so none of them
+        // should read as repaid. A finding flipping to "repaid" is a real
+        // event this test exists to make visible, not something that
+        // happens silently — this assertion is the visible record of the
+        // two that already have, and a guard against any other flipping
+        // unnoticed.
         for finding in seed_inventory() {
-            let expected_repaid = finding.id == "F-3";
+            let expected_repaid = matches!(finding.id, "F-2" | "F-3");
             assert_eq!(
                 finding.repayment.is_repaid(),
                 expected_repaid,

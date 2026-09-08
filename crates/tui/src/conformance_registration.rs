@@ -250,4 +250,50 @@ mod tests {
         let projection = TuiProjection::new();
         assert_eq!(check_surface_set(&projection, &data, &[]), Vec::new());
     }
+
+    /// This surface registers against the full corpus (§4.5) — every
+    /// assertion family, not only the surface-set family the two tests
+    /// above prove. The harness is expected to fail on any real surface's
+    /// first run (§4.4's own callout); this test makes that expectation
+    /// precise rather than vague: this dispatcher is built exactly like
+    /// production's own `run()`, which never calls `Dispatcher::set_secrets`
+    /// — the already-disclosed, project-wide residual that every surface's
+    /// redaction is fed an empty secret list (accepted debt, seeded finding
+    /// F-5). The two fixtures that residual affects (`secret-bearing`,
+    /// `boundary-crossing`) are therefore the *only* divergence this run may
+    /// report; anything else is a genuine, previously-unknown finding this
+    /// test must catch, not wave through as "the corpus is expected to
+    /// fail". This is finding F-2's own `consumer_registered` condition,
+    /// satisfied by a real, running consumer.
+    #[test]
+    fn this_surface_registers_against_the_full_shared_conformance_corpus() {
+        let data = corpus();
+        let projection = TuiProjection::new();
+        let reports = cronus_conformance::run(&projection, &data, &[]);
+
+        let disclosed_residual = |report: &ConformanceReport| {
+            matches!(
+                report,
+                ConformanceReport::Outcome {
+                    fixture: "secret-bearing" | "boundary-crossing",
+                    ..
+                }
+            )
+        };
+        let unexpected: Vec<&ConformanceReport> = reports
+            .iter()
+            .filter(|report| !disclosed_residual(report))
+            .collect();
+        assert!(
+            unexpected.is_empty(),
+            "conformance divergence beyond the two disclosed redaction-residual fixtures: \
+             {unexpected:#?}"
+        );
+        assert_eq!(
+            reports.len(),
+            2,
+            "expected exactly the two disclosed redaction-residual fixtures to diverge, got: \
+             {reports:#?}"
+        );
+    }
 }
