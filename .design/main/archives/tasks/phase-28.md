@@ -1,21 +1,47 @@
 ---
 phase: 28
 name: "Terminal Surface Derivation & Single Entry Point"
-status: Todo
+status: Done
 subsystem: "crates/tui · crates/cli"
 requires: [27]
-provides: []
+provides:
+  - "the terminal UI's slash catalog and discovery generated at startup from the registry (crates/tui/src/command.rs's build_catalog), the hand-copied verb mirror deleted and tombstoned — finding F-2 fully repaid"
+  - "real dispatch through the shared cronus_core::invocable::Dispatcher (crates/tui/src/dispatch.rs) — raw-argument binding, INV-7 masking at the boundary, an unresolved slash line rendered as ordinary input rather than a fabricated failure (SP-13)"
+  - "pane/panel actions (focus-next, focus-prev, quit) as real ClientLocal invocables through the shared registry door (crates/tui/src/pane_actions.rs), replacing a private key-to-behaviour table"
+  - "the two surfaces' locus difference (Semantic+ClientLocal here, Semantic+Installation on the command line) declared via DeclaredExclusion and proven load-bearing, not merely asserted in prose"
+  - "panel projections (Board, Office, Status, Sessions) distinguishing unavailable from empty (view::Projection<T>); Board and Office now read real data through core:board.list/core:role.list instead of an always-empty placeholder"
+  - "a single entry point: cronus tui as a verb of the one binary, the standalone cronus-tui executable retired; a bare invocation brings up the default composition (LH-4)"
+  - "the terminal UI's own conformance registration — the corpus's second real consumer — with findings F-2 and F-3 both fully repaid"
 key_files:
-  created: []
-  modified: []
-patterns_established: []
+  created:
+    - "crates/tui/src/dispatch.rs"
+    - "crates/tui/src/pane_actions.rs"
+    - "crates/tui/src/conformance_registration.rs"
+  modified:
+    - "crates/tui/src/{app,command,lib,view}.rs"
+    - "crates/tui/Cargo.toml"
+    - "crates/tui/README.md"
+    - "crates/cli/src/{main,installation}.rs"
+    - "crates/cli/Cargo.toml"
+    - "crates/cli/tests/cli_smoke.rs"
+    - "crates/conformance/src/findings.rs"
+    - "Cargo.toml"
+    - "CONTRIBUTING.md"
+    - "docs/building.ru.md"
+  deleted:
+    - "crates/tui/src/main.rs"
+patterns_established:
+  - "Projection<T> (Available(T) / Unavailable{reason}) as the standard shape for a panel's core-supplied data, applied uniformly across every panel a spec names — even one whose current producer is infallible — since the type is what the invariant requires structurally, not a claim every branch is reachable yet"
+  - "a frontend never opens a domain store directly to answer its own internal read — it dispatches the same registry-generated invocable every surface uses, even for a poll no user ever typed; the alternative was checked and found to replicate a named, already-tracked finding's exact defect on a second surface"
+  - "a flat installation verb's own matches carry no subcommand — the shape the tree-builder's own construction rule already implies, made symmetric on the dispatch side after a real, latent bug (every flat verb erroring the moment it was actually run, not merely `--help`'d) went undiscovered for a full phase because no test had ever exercised one without `--help`"
+  - "a real, disclosed departure (a shipped executable, a shipped default) is retired at the places a user would actually look for it — README, contributor docs, build docs — not merely deleted; the precedent for a different class of departure (an unbound stub) is checked for fit before being reused, never assumed to transfer"
 duration_minutes: ~
 ---
 
 # Stage 28 Tasks — Terminal Surface Derivation & Single Entry Point
 
 **Phase:** 28
-**Status:** Todo
+**Status:** Done
 **Strategic Goal:** Carry the terminal surface onto the registry the prior phase minted — its slash catalog becomes a projection and the hand-copied verb mirror is **deleted and tombstoned**, not regenerated — and collapse the two executables into one, so the product is a single command with a default composition rather than two things to install.
 
 ## Phase Notes
@@ -49,7 +75,7 @@ duration_minutes: ~
 - [x] [T-28D01] `cronus tui` becomes a verb of the one binary; the standalone executable is retired
 - [x] [T-28D02] A bare invocation brings up the default composition
 - [x] [T-28T01] Corpus registration from this crate's own test target; finding F-2 repaid
-- [ ] [T-28T02] Behaviour-preservation proof and full quality gates
+- [x] [T-28T02] Behaviour-preservation proof and full quality gates
 
 ## Detailed Tracking
 
@@ -163,6 +189,8 @@ duration_minutes: ~
 
 - **Goal:** Prove the migration changed structure and not behaviour, except where this phase's own tasks changed behaviour deliberately and said so.
 - **Method:** Confirm every intentional behaviour change is recorded at its own task (the shrunk slash catalog, the reversed bare-invocation default, the retired executable name, panels distinguishing unavailable from empty) and that nothing else moved. Confirm the residuals this phase does **not** own still behave as before and remain recorded at their owning sites. Run the workspace gates.
-- **Verify:** `cargo fmt --all -- --check`, `cargo clippy --workspace --all-targets -- -D warnings` (zero), `cargo test --workspace --exclude cronus-desktop` green across **two consecutive full runs**; no `unwrap()`/`panic!()` introduced on production paths (audit every file this phase created or substantially modified, `#[cfg(test)]` modules excluded); containment self-check clean across every touched file.
-- **Status:** Todo
+- **Verify:** `cargo fmt --all -- --check`, `cargo clippy --workspace --all-targets -- -D warnings` (zero), `cargo test --workspace --exclude cronus-desktop` green across **two consecutive full runs**; no `unwrap()`/`panic!()` introduced on production paths (audit every file this phase created or substantially modified, `#[cfg(test)]` modules excluded); containment self-check clean across every touched file. **Satisfied**: all gates run and green, twice consecutively for the full test suite; audit results below.
+- **Status:** Done
 - **Notes:** The prior phase's closing task found that three of its four named residuals had never actually been recorded *inline at their owning sites*, only in planning prose — check this phase's own new residuals the same way rather than trusting the write-ups.
+- **Decision (recorded, not asked):** **Every intentional behaviour change this phase made is traced to its own task, with nothing else found to have moved**: the shrunk slash catalog (T-28A01), the ordinary-input-not-error unresolved line (T-28A03), Board/Office now reading real data instead of always-empty placeholders (T-28C01, a real, disclosed behaviour change beyond the unavailable/empty structural work — this crate's panels genuinely did nothing before this phase), the retired standalone executable (T-28D01), the reversed bare-invocation default (T-28D02). **The Notes' own warning was checked directly, not assumed satisfied**: every residual this phase's own tasks named (board.list's missing `task_ref`, Office's absent task field, Sessions' missing backing, Status's currently-unreachable `Unavailable` branch, the shared empty-secret-list residual) was grepped for and confirmed present as an inline comment at its owning code site, not only in `STATE.md`/phase-file prose — unlike Phase 27's own closing audit, which found three of its four named residuals had never actually landed inline. **`unwrap()`/`panic!()` audit**: every production-path hit across all 18 phase-touched files is one of two already-precedented, literal-identity `.expect()` calls (`app.rs`'s `dispatch_projection` binding a compile-time-constant invocable id; `pane_actions.rs`'s `PaneAction::id()`/`register()`) — the same class every `*_bootstrap.rs`/`installation.rs` `id()` helper in this codebase already uses, panic-worthy only on a literal typo a test would catch immediately, never a caller condition. No new class of risk introduced. **A real, latent bug this phase found (T-28D02's flat-verb dispatch fix) is a correction, not a preserved residual** — it restores behaviour Phase 27 shipped broken and nobody had exercised, so SP-10's preserve-then-correct rule does not apply to it (there was nothing working to preserve); recorded plainly as a fix in its own task, not folded into this audit's residual list.
+- **Changes:** No source changed by this task — it is a proof-and-gate pass over the phase's existing work. `cargo fmt --all -- --check` clean; `cargo clippy --workspace --all-targets -- -D warnings` clean; `cargo test --workspace --exclude cronus-desktop` green across two consecutive full runs, no flake; `cargo metadata` confirms exactly one workspace `bin` target (`cronus`). Containment self-check clean across all 18 phase-touched files (`crates/tui/**`, `crates/cli/src/{main,installation}.rs`, `crates/cli/tests/cli_smoke.rs`, `crates/conformance/src/findings.rs`, `Cargo.toml`, `CONTRIBUTING.md`, `docs/building.ru.md`, `crates/tui/README.md`). **Phase 28 (Terminal Surface Derivation & Single Entry Point) is complete — 10/10 tasks, all five tracks closed.**

@@ -1,0 +1,111 @@
+---
+phase: 29
+name: "Desktop Generic Dispatch"
+status: Todo
+subsystem: "apps/desktop/tauri · packages/ui"
+requires: [27, 28]
+provides: []
+key_files:
+  created: []
+  modified: []
+patterns_established: []
+duration_minutes: ~
+---
+
+# Stage 29 Tasks — Desktop Generic Dispatch
+
+**Phase:** 29
+**Status:** Todo
+**Strategic Goal:** Carry the desktop shell onto the registry the prior two phases proved — one generic `invoke`/`catalog` IPC pair replaces the per-capability handler list (finding F-1's third site), the shell's own action registry sources every `Semantic` action from the catalog by identity (AS-6), and the shared conformance corpus proves itself runnable from a genuinely **detached** Cargo workspace for the first time (F-7 repaid, F-1 fully closed).
+
+## Phase Notes
+
+**This phase was renarrowed at planning time, and the correction is recorded in `PLAN.md`, not only here.** Its inherited strategic draft claimed "the four residual corrections" as this phase's own closing work. Grounding against the real source before decomposition — the same discipline that renarrowed T-27D01 mid-Phase-27 — found none of the four are reachable from this phase's own subsystem: "unavailability as emptiness" owns ~15 sites in `crates/core/src/invocable_bootstrap/*.rs`, shared identically by all three frontends; the output-format flag and unescaped structured output are CLI-only (`l2-surface-conformance.md` finding F-6 names its sites as exclusively `crates/cli`); and the empty-secret-list fix needs a project-wide secret-*enumeration* primitive (`crates/domain/src/secrets.rs` currently offers only a single-key `get`) that does not exist yet for any surface to consume. All four stay recorded exactly where they already are — `l2-surface-conformance.md` §4.7 and the accepted-debt ledger — open, with their reasons stated, owned by whichever later phase actually touches their real sites. This phase's own real scope is the generic-dispatch bridge collapse, the action-registry locus split, and the corpus's first cross-workspace registration.
+
+**A second, disclosed exception surfaced during the same grounding pass.** `core:version` and `core:status` are `Locus::Installation` (`crates/core/src/invocable_bootstrap/status.rs`; `status` itself lives only in the command line's own installation grammar). Installation is a third locus this surface — like the terminal UI — does not project; neither of `l2-application-shell.md` §4.3's two admission classes (`Semantic` via `invoke()`, `HostOnly` via its own method) covers it as currently classified. The shell's existing bespoke `capability_version`/`capability_status` bridge methods (`apps/desktop/tauri/src/bridge.rs`) stay exactly as they are, untouched by Track A — a disclosed exception this phase does not resolve, not a silent regression and not a locus reclassification this phase is positioned to decide (that is `/magic.spec` scope, if it is ever decided at all).
+
+**The shape this phase exists to prove is structural, not behavioural.** `apps/desktop/tauri` already depends on `cronus-core` (a real path dependency, confirmed in its `Cargo.toml`) and already declares its own detached `[workspace]` table. `cronus_core::invocable_bootstrap::bootstrap()` — the identical composition door CLI and TUI each call — is therefore already reachable; Track A's own work is wiring a registry+dispatcher pair into the existing `Bridge`, not inventing a new door. The genuinely new structural fact is Track C: `cronus-conformance` has never been linked from *outside* the main `crates/` workspace before, and `l2-surface-conformance.md`'s own stated reason the corpus is shaped as a library rather than one central suite (§2, §4.4) has never actually been exercised until this phase proves it.
+
+**Behaviour-preservation oracle carries an environmental caveat, stated up front rather than discovered mid-task.** Phase 26's own closing record found `cargo test settings` cannot *run* on this windows-gnu host (`STATUS_ENTRYPOINT_NOT_FOUND` at test-binary load via the WebView2Loader import chain) even though it compiles cleanly — confirmed pre-existing and environmental, not a code defect. `bridge.rs`'s own existing unit tests (`version_passes_through_the_core_value`, `status_masks_known_secrets_via_core_redaction`, `production_bridge_reports_the_embedded_core_status`) are plain Rust `#[test]` functions with no Tauri mock-runtime dependency, so they are expected to *run*, not merely compile — new tests this phase adds to `bridge.rs` should follow that same shape. Any test that would need Tauri's own mock IPC round-trip stays a compile-only proof on this host, exactly as `bridge.rs`'s own module doc already discloses for command *registration* itself (verified at compile time via `tauri::generate_handler!`).
+
+**Critical path.** Track A is the foundation: B sources actions from the catalog A projects, C proves the corpus against A's real dispatch path. Land A behind its own tests before opening B or C.
+
+## Atomic Checklist
+
+- [ ] [T-29A01] The bridge composes the shared registry and dispatcher; local redaction gives way to the boundary
+- [ ] [T-29A02] The TypeScript client gains `catalog()`/`invoke()`; the executable face cannot cross the seam
+- [ ] [T-29A03] A stale local catalog refreshes on `Unknown`, rather than rendering a failure
+- [ ] [T-29B01] The action registry sources `Semantic` actions from the catalog by identity
+- [ ] [T-29B02] The palette's semantic entries render from the catalog projection, not a hand-written list
+- [ ] [T-29C01] Corpus registration from the detached workspace; findings F-1 and F-7 close
+- [ ] [T-29T01] Behaviour-preservation proof and full quality gates
+
+## Detailed Tracking
+
+### [T-29A01] The bridge composes the shared registry and dispatcher; local redaction gives way to the boundary
+
+- **Spec:** l2-application-shell.md §4.3, §3 (AS-6, INV-7)
+- **Status:** Todo
+- **Assignment:** Agent
+- **Scope:** `apps/desktop/tauri/src/bridge.rs`'s `Bridge<C>` composes via `cronus_core::invocable_bootstrap::bootstrap()`, holding an `InvocableRegistry`/`Dispatcher` pair — the identical composition door the CLI and TUI already use, no private path. Two new Tauri commands, `capability_catalog` (→ every `Semantic`+`ClientLocal`+`Shipped` descriptor, serialized) and `capability_invoke` (→ dispatch one `Invocation`, masked `Outcome` back). `Bridge::mask`'s own local redaction call is removed in favour of the shared dispatcher boundary — the same INV-7 asymmetry TUI's own T-28A02 already closed. `capability_version`/`capability_status` are untouched (the disclosed exception the Phase Notes name) — do not fold them into `invoke()`, and do not remove them.
+- **Verify:** `cargo build -p cronus-desktop` (PowerShell, per the project's own native-build discipline) succeeds. A new `cargo test -p cronus-desktop` unit test (plain `#[test]`, no Tauri mock runtime, matching `bridge.rs`'s existing shape) drives a real registered fixture invocable through `capability_invoke`'s underlying function and asserts the returned `Outcome` is masked exactly like the pre-existing `status_masks_known_secrets_via_core_redaction` test already proves for `status()`. `rg 'redact::redact' apps/desktop/tauri/src/bridge.rs` shows no local masking call remaining outside the shared dispatcher's own boundary.
+- **Handoff:** T-29A02, T-29A03, T-29B01, T-29C01.
+- **Notes:** `capability_version`/`capability_status` keep their own existing tests unchanged — this task adds to `bridge.rs`, it does not touch those two.
+
+### [T-29A02] The TypeScript client gains `catalog()`/`invoke()`; the executable face cannot cross the seam
+
+- **Spec:** l2-application-shell.md §4.3, §4.3.1 (SP-12)
+- **Status:** Todo
+- **Assignment:** Agent
+- **Scope:** `packages/ui/src/shared/bridge.ts`'s `CoreClient` gains `catalog(): Promise<Invocable[]>` and `invoke(invocation): Promise<Outcome>`, forwarding to the two new Tauri commands T-29A01 adds. `version()`/`status()`/`settings` stay exactly as they are. The descriptor type these methods carry is data-only by construction (identity, name, summary, group, locus, binders, stability) — no field through which a host handle or a closure could travel — so §4.3.1's guarantee is a property of the TypeScript type itself, not a runtime check this task adds.
+- **Verify:** `pnpm -C packages/ui test` green, including a new test asserting the TypeScript `Invocable`/`Outcome` shape the client decodes carries no field capable of holding a function, a handle, or anything beyond JSON-serializable data — a type-level assertion proven by construction, matching how `l2-application-shell.md` itself frames SP-12 here. `pnpm -C packages/ui build` (`tsc --noEmit && vite build`) succeeds.
+- **Handoff:** T-29A03, T-29B01, T-29C01.
+- **Notes:** This is marshalling only (INV-2) — no business logic. If a richer typed `Outcome`/`Invocable` mirror does not already exist on the TypeScript side, add the minimal shape this task actually needs; do not import a generated-from-Rust type pipeline that does not exist yet.
+
+### [T-29A03] A stale local catalog refreshes on `Unknown`, rather than rendering a failure
+
+- **Spec:** l2-application-shell.md §4.3.2 (SP-13)
+- **Status:** Todo
+- **Assignment:** Agent
+- **Scope:** This surface's own catalog copy can go stale between an extension activating/deactivating in the core and the next delivery. Dispatching an id the local copy no longer recognises must resolve to the registry's real `Unknown` answer (not a fabricated failure), and this surface's correct response is to refresh its catalog cache, not render an error to the user. Land the catalog as a small cached store (matching the shape `l2-application-shell.md` §4.2's projection stores already establish) with a `refresh()` the `Unknown` path calls.
+- **Verify:** `pnpm -C packages/ui test` green, including a test that dispatches an id absent from a stale cached catalog, asserts no error surface is rendered, and asserts the catalog store's `refresh()` was called exactly once — proving the ordinary-input-not-a-failure property this task names, the desktop's own equivalent of the terminal UI's T-28A03.
+- **Handoff:** T-29T01.
+- **Notes:** The registry's own change-announcement mechanism (`l2-invocable-registry.md` §4.9) is the primary refresh trigger in production; `Unknown` is explicitly the backstop for the delivery window between a change and its announcement, not the only path — this task only needs to prove the backstop, not build the announcement subscription if it does not already exist on this seam.
+
+### [T-29B01] The action registry sources `Semantic` actions from the catalog by identity
+
+- **Spec:** l2-application-shell.md §3 (AS-6), §4.4
+- **Status:** Todo
+- **Assignment:** Agent
+- **Scope:** `packages/ui/src/shell/actions.ts`'s `ActionRegistry` (or whatever composes it today) stops being populated from a hand-written list for anything that is a real core capability. `Semantic` actions are built from `catalog()`'s own descriptors (id, label, binding); `ClientLocal` actions (pane focus, dock toggles, layout moves) stay declared locally, exactly as `l2-tui.md`'s own T-28B01 precedent already established for the terminal surface. `bound` (INV-9) reflects whether the id is actually present in the current catalog snapshot, never a hardcoded assumption.
+- **Verify:** `pnpm -C packages/ui test` green, including a test proving the registry is **not a second catalog**: a `Semantic` action present in a fed-in catalog fixture is `bound()`/`live()`-visible without being separately declared, and one absent from that fixture is not visible at all — the same property `command::build_catalog`'s own T-28A01 test proves on the terminal surface, expressed here for the action registry instead of a slash catalog.
+- **Handoff:** T-29B02, T-29C01.
+- **Notes:** Depends on T-29A02's `catalog()` existing. Where the current action list already hand-declares an id that turns out to be `Semantic` (a real core capability), removing the hand-declaration is the point, not an incidental cleanup — check every existing entry against the real registry rather than assuming the current split is already correct.
+
+### [T-29B02] The palette's semantic entries render from the catalog projection, not a hand-written list
+
+- **Spec:** l2-application-shell.md §4.6 (AS-10), l2-invocable-registry.md §4.2 (finding F-7)
+- **Status:** Todo
+- **Assignment:** Agent
+- **Scope:** The command palette's registered-actions source (`packages/ui/src/shell/command-palette.tsx` or wherever it reads from today) draws its `Semantic` rows from T-29B01's catalog-sourced registry, closing finding F-7 (the WebView's hand-written client, before it becomes the fourth divergent copy) alongside T-29C01's registration.
+- **Verify:** `pnpm -C packages/ui test` green, including a test that a `Semantic` action fixture fed through the real registry appears as a palette row with the catalog's own label, and one absent from the catalog does not appear — proven through the palette's own delegate source (`SelectionDelegate`, §4.6), not by re-testing the registry itself (T-29B01 already does that).
+- **Handoff:** T-29C01.
+- **Notes:** Small by construction if T-29B01 landed correctly — this task is the palette *consuming* the already-correct registry, not re-deriving anything.
+
+### [T-29C01] Corpus registration from the detached workspace; findings F-1 and F-7 close
+
+- **Spec:** l2-surface-conformance.md §4.4, §4.5 (F-1, F-7)
+- **Status:** Todo
+- **Assignment:** Agent
+- **Scope:** `apps/desktop/tauri/Cargo.toml` gains `cronus-conformance` as a dev-dependency (`path = "../../../crates/conformance"`) — the first time this crate is linked from outside the main `crates/` workspace, the shape `l2-surface-conformance.md` §2/§4.4 names as the reason the corpus is a library rather than one central suite. Implement `SurfaceProjection` over the desktop's **real** bridge (the same `InvocableRegistry`/`Dispatcher` pair T-29A01 built), following the CLI's and TUI's own registration shape as precedent (isolated fixture registry, real handlers, `#[cfg(test)]`-only). Drive the full corpus from this crate's own test target. Then re-audit F-1's four SP-4 conditions (all three sites now registered) and F-7's (the generated client from T-29B02 landed) against what is now true, updating `seed_inventory()` accordingly.
+- **Verify:** `cargo test -p cronus-desktop --all-targets` includes a corpus run whose reports are **exactly** the already-accepted residual set (the two redaction fixtures, the same empty-secret-list reason every surface carries, per the Phase Notes' own disclosed exception) and nothing else — anything further is a genuine new finding, recorded before it is fixed, not fixed under this task's own pressure. If F-1's fourth site (all three surfaces registered) and F-7 (generated client landed) both now hold, both read repaid and the test that makes a repaid transition visible names it explicitly, as it already does for F-2 and F-3.
+- **Handoff:** T-29T01.
+- **Notes:** This is the phase's own replacement oracle, the same role T-28T01 played for the terminal UI — not a formality. If `cargo test -p cronus-desktop`'s test binary fails to *load* on this host for reasons unrelated to this task's own code (the documented `STATUS_ENTRYPOINT_NOT_FOUND` class), record that as a disclosed environmental limitation rather than treating a compile-clean, run-blocked test as failure — but confirm first that this specific new test target is actually affected, rather than assuming it from the unrelated `settings` binary's own history.
+
+### [T-29T01] Behaviour-preservation proof and full quality gates
+
+- **Goal:** Prove the migration changed structure and not behaviour, except where this phase's own tasks changed behaviour deliberately and said so — and confirm the Phase Notes' own renarrowing (no residual corrections claimed) held all the way through execution.
+- **Method:** Confirm every intentional behaviour change is recorded at its own task. Confirm the two disclosed exceptions (`version`/`status` untouched; the empty secret list unfixed) still hold and remain recorded at their owning sites, not only in planning prose. Run the workspace gates for both the Rust and the TypeScript halves.
+- **Verify:** `cargo fmt --all -- --check`, `cargo clippy --workspace --all-targets -- -D warnings` (zero) for the main workspace; `cargo build -p cronus-desktop` and `cargo test -p cronus-desktop --all-targets` (PowerShell) for the detached one; `pnpm -C packages/ui test`, `pnpm -C packages/ui build`, and `fallow audit --changed-since <base>` for the frontend; no `unwrap()`/`panic!()` introduced on Rust production paths across every file this phase created or substantially modified (`#[cfg(test)]` excluded); containment self-check clean across every touched file, Rust and TypeScript alike.
+- **Status:** Todo
+- **Notes:** Same discipline T-28T02 already established for the terminal surface — audit residuals against `rg`, not against what the write-ups claim. This phase's own biggest risk is claiming a residual was preserved when it was actually silently touched by an adjacent edit; check `capability_version`/`capability_status` and `core_bridge()`'s secret list explicitly, by name, not by trusting that Track A's own scope line was honoured.
