@@ -5,6 +5,8 @@
 //! commands in [`bridge`].
 
 pub mod bridge;
+#[cfg(test)]
+mod conformance_registration;
 pub mod instance;
 pub mod mcp;
 pub mod overlay;

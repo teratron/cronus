@@ -29,6 +29,14 @@ cronus-core = { path = "../../../crates/core" }
 # itself for exactly this reason.
 cronus-contract = { path = "../../../crates/contract", features = ["serde"] }
 
+[dev-dependencies]
+# The shared conformance corpus, linked from outside the main `crates/`
+# workspace for the first time — the corpus is shaped as a library rather
+# than one central suite specifically so a detached workspace could pull it
+# in; this shell's own detached workspace has never proven it can until now.
+# Test-only: never affects the shipped binary's own dependency graph.
+cronus-conformance = { path = "../../../crates/conformance" }
+
 # Detach from the repo's Rust workspace (crates/*): the desktop shell builds
 # independently of the core engine workspace and must not pull webview deps into it.
 [workspace]

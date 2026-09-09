@@ -806,6 +806,13 @@ dependencies = [
 ]
 
 [[package]]
+name = "cronus-conformance"
+version = "0.1.0"
+dependencies = [
+ "cronus-contract",
+]
+
+[[package]]
 name = "cronus-contract"
 version = "0.1.0"
 dependencies = [
@@ -832,6 +839,7 @@ dependencies = [
 name = "cronus-desktop"
 version = "0.1.0"
 dependencies = [
+ "cronus-conformance",
  "cronus-contract",
  "cronus-core",
  "serde",

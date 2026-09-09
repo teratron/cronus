@@ -2457,6 +2457,16 @@ impl ArgValues {
     pub fn get(&self, binder: &str) -> Option<&ArgValue> {
         self.0.get(binder)
     }
+
+    /// Every bound argument by name, in no particular order. No in-process
+    /// caller ever needed this — `bind()` and every handler read by name —
+    /// so it did not exist until a caller crossing a real wire boundary
+    /// (a corpus registration driving a real IPC bridge's own `invoke()`,
+    /// which takes the wire's flat map shape, not this type) needed to
+    /// enumerate a full set rather than look up one name at a time.
+    pub fn iter(&self) -> impl Iterator<Item = (&str, &ArgValue)> {
+        self.0.iter().map(|(name, value)| (name.as_str(), value))
+    }
 }
 
 /// A runtime call against one invocable. `PartialEq` only — carries
@@ -2617,6 +2627,32 @@ mod dispatch_tests {
         args.insert("id", ArgValue::Text("card-1".to_string()));
         assert_eq!(args.get("id"), Some(&ArgValue::Text("card-1".to_string())));
         assert_eq!(args.get("missing"), None);
+    }
+
+    #[test]
+    fn arg_values_iter_visits_every_bound_argument_exactly_once() {
+        let mut args = ArgValues::new();
+        args.insert("id", ArgValue::Text("card-1".to_string()));
+        args.insert("count", ArgValue::Integer(3));
+
+        let mut seen: Vec<(String, ArgValue)> = args
+            .iter()
+            .map(|(name, value)| (name.to_string(), value.clone()))
+            .collect();
+        seen.sort_by(|a, b| a.0.cmp(&b.0));
+
+        assert_eq!(
+            seen,
+            vec![
+                ("count".to_string(), ArgValue::Integer(3)),
+                ("id".to_string(), ArgValue::Text("card-1".to_string())),
+            ]
+        );
+    }
+
+    #[test]
+    fn arg_values_iter_is_empty_for_a_fresh_instance() {
+        assert_eq!(ArgValues::new().iter().count(), 0);
     }
 
     #[test]

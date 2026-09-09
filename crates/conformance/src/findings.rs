@@ -80,11 +80,30 @@ pub fn seed_inventory() -> Vec<Finding> {
             divergence: "the three describe different verb sets: twenty-nine command-line groups, twenty-one terminal-UI verbs, four desktop capabilities",
             class: FindingClass::Observed,
             primitive: "the invocable registry",
+            // `[CLOSED]` All three named sites now derive their verb set
+            // from the registry instead of restating it by hand. The
+            // command line's own compile-time enum and the terminal UI's
+            // own slash-catalog constant were each already deleted (in the
+            // work that migrated those two surfaces) but had never
+            // actually been tombstoned under this finding's own id — a
+            // real gap in the record this audit closes, not a new deletion
+            // this task performed. The desktop's own per-capability IPC
+            // list stopped being the surface's only way to reach a core
+            // capability (the generic `capability_catalog`/
+            // `capability_invoke` pair now carries the whole
+            // `Semantic`/`ClientLocal` surface; the handful of remaining
+            // bespoke commands are each individually justified outside
+            // that surface, not a restatement of it) — its own tombstone
+            // is added here for the first time. `fixture_landed` was
+            // already true (the corpus's surface-set family is this
+            // finding's own fixture). `consumer_registered` closes now
+            // that all three named sites have a real, running consumer —
+            // the desktop's own registration is the last of the three.
             repayment: Repayment {
-                // The registry and its dispatch exist; the corpus's
-                // surface-set family is exactly this finding's fixture.
+                copies_deleted: true,
+                deletion_pinned: true,
                 fixture_landed: true,
-                ..Repayment::open()
+                consumer_registered: true,
             },
             residual: None,
         },
@@ -186,7 +205,29 @@ pub fn seed_inventory() -> Vec<Finding> {
             divergence: "a hand-written client mirroring the IPC command list would be a fourth restatement of the same mapping, arriving the moment anyone hand-adds a capability to it",
             class: FindingClass::Preemptive,
             primitive: "a client generated from the catalog",
-            repayment: Repayment::open(),
+            // `[CLOSED]` The one named site now has a real generated
+            // client: the TypeScript bridge's own `catalog()`/`invoke()`
+            // pair, the action registry deriving `Semantic` entries from
+            // that catalog by identity, and the command palette consuming
+            // that registry — checked directly against the real source,
+            // not assumed. Unlike a finding whose risk already
+            // materialized, there was never a hand-written copy to
+            // physically delete here (the whole point of catching it
+            // pre-emptively); `copies_deleted`/`deletion_pinned` read true
+            // because the absence of a copy is now structural, proven by a
+            // dedicated regression test (an id present in a fed-in catalog
+            // is registry-visible with no separate declaration, and one
+            // absent is not visible at all), not because an artifact was
+            // removed. `fixture_landed`: the corpus's own run against this
+            // shell's real projection is this finding's fixture.
+            // `consumer_registered`: this shell is now a real, running
+            // consumer.
+            repayment: Repayment {
+                copies_deleted: true,
+                deletion_pinned: true,
+                fixture_landed: true,
+                consumer_registered: true,
+            },
             residual: None,
         },
         Finding {
@@ -226,6 +267,18 @@ pub fn tombstones() -> Vec<Tombstone> {
         Tombstone {
             finding: "F-2",
             location: "the terminal UI's own hand-copied verb-mirror constant and its self-comparing parity test",
+        },
+        Tombstone {
+            finding: "F-1",
+            location: "the command line's own compile-time subcommand enum enumerating every verb by hand",
+        },
+        Tombstone {
+            finding: "F-1",
+            location: "the terminal UI's own hand-declared slash-command catalog constant",
+        },
+        Tombstone {
+            finding: "F-1",
+            location: "the desktop shell's own per-capability IPC command list as the surface's only way to reach a core capability",
         },
     ]
 }
@@ -280,6 +333,18 @@ mod ledger_baseline {
             Tombstone {
                 finding: "F-2",
                 location: "the terminal UI's own hand-copied verb-mirror constant and its self-comparing parity test",
+            },
+            Tombstone {
+                finding: "F-1",
+                location: "the command line's own compile-time subcommand enum enumerating every verb by hand",
+            },
+            Tombstone {
+                finding: "F-1",
+                location: "the terminal UI's own hand-declared slash-command catalog constant",
+            },
+            Tombstone {
+                finding: "F-1",
+                location: "the desktop shell's own per-capability IPC command list as the surface's only way to reach a core capability",
             },
         ]
     }
@@ -349,23 +414,29 @@ mod tests {
     }
 
     #[test]
-    fn exactly_f2_and_f3_read_as_repaid_after_both_surfaces_own_registration() {
+    fn exactly_f1_f2_f3_and_f7_read_as_repaid_after_the_desktop_shells_own_registration() {
         // Repayment requires all four SP-4 conditions. F-3's one named site
         // is the command line's own table, deleted and pinned before this
         // phase's code work began — its remaining condition
         // (`consumer_registered`) closed the moment the command line ran
         // the corpus for real. F-2's one named site is the terminal UI's own
-        // mirror, closed the same way once *that* surface registered and
-        // ran the corpus for real (this phase). Every other finding names
-        // at least one site this project has not built or registered yet
-        // (the desktop shell, or a still-open residual), so none of them
-        // should read as repaid. A finding flipping to "repaid" is a real
-        // event this test exists to make visible, not something that
-        // happens silently — this assertion is the visible record of the
-        // two that already have, and a guard against any other flipping
-        // unnoticed.
+        // mirror, closed the same way once that surface registered and ran
+        // the corpus for real. F-1 names all three surfaces collectively —
+        // its own compile-time-enum and slash-catalog sites were already
+        // gone, newly tombstoned by this audit rather than left
+        // unrecorded, and its remaining desktop site closes now that the
+        // desktop shell has registered too, completing the set. F-7's one
+        // named site (the desktop WebView's client) closes the same way:
+        // a real generated client now exists there, checked directly
+        // against the real source, not assumed. Every other finding names
+        // a site or residual this project has not yet built or resolved,
+        // so none of them should read as repaid. A finding flipping to
+        // "repaid" is a real event this test exists to make visible, not
+        // something that happens silently — this assertion is the visible
+        // record of the four that already have, and a guard against any
+        // other flipping unnoticed.
         for finding in seed_inventory() {
-            let expected_repaid = matches!(finding.id, "F-2" | "F-3");
+            let expected_repaid = matches!(finding.id, "F-1" | "F-2" | "F-3" | "F-7");
             assert_eq!(
                 finding.repayment.is_repaid(),
                 expected_repaid,
