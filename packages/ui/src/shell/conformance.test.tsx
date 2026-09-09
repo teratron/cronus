@@ -127,12 +127,16 @@ describe("Phase 24 · spec conformance", () => {
     const reg = createActionRegistry([
       {
         id: "file.open",
-        labelKey: "menu.file.open",
+        label: {
+          key: "menu.file.open",
+        },
         run: () => {},
       },
       {
         id: "file.exit",
-        labelKey: "menu.file.exit",
+        label: {
+          key: "menu.file.exit",
+        },
         run: () => {},
         bound: false,
       },

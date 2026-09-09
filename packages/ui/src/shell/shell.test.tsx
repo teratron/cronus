@@ -38,7 +38,9 @@ describe("L0 BuildingFrame + application menu (NV-7, INV-9)", () => {
       "help.about",
     ].map((id) => ({
       id,
-      labelKey: "menu.file" as const,
+      label: {
+        key: "menu.file" as const,
+      },
       run: noop,
     })),
   );
@@ -75,12 +77,16 @@ describe("L0 BuildingFrame + application menu (NV-7, INV-9)", () => {
     const partial = createActionRegistry([
       {
         id: "file.open",
-        labelKey: "menu.file.open",
+        label: {
+          key: "menu.file.open",
+        },
         run: noop,
       },
       {
         id: "file.settings",
-        labelKey: "menu.file.settings",
+        label: {
+          key: "menu.file.settings",
+        },
         run: noop,
         bound: false,
       },
@@ -97,7 +103,9 @@ describe("L0 BuildingFrame + application menu (NV-7, INV-9)", () => {
     const reg = createActionRegistry([
       {
         id: "file.open",
-        labelKey: "menu.file.open",
+        label: {
+          key: "menu.file.open",
+        },
         run,
       },
     ]);

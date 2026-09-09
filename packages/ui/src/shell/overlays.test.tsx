@@ -1,5 +1,8 @@
 import { fireEvent, render, screen } from "@testing-library/react";
 import { describe, expect, it, vi } from "vitest";
+import type { Invocable } from "../shared/bridge";
+import type { ContextStack } from "../shared/keymap";
+import { actionsFromCatalog, createActionRegistry, resolveLabel } from "./actions";
 import { CommandPalette } from "./command-palette";
 import { GlobalSettingsOverlay } from "./global-settings-overlay";
 import { type FileNode, RightDock } from "./right-dock";
@@ -95,6 +98,71 @@ describe("command palette (AS-10 delegated selection surface)", () => {
       },
     });
     expect(screen.getByTestId("selection-empty")).toBeInTheDocument();
+  });
+});
+
+/**
+ * `actions.test.ts` already proves a `Semantic` action is `bound()`/`live()`-
+ * visible on the registry without a separate declaration. This suite proves
+ * the palette's own consumption of that same pipeline (registry → `.live()`
+ * → `commandPaletteDelegate`'s `actions` group) end to end through the real
+ * rendered component — not by re-testing the registry, and guarding against
+ * the risk that this palette's own action source drifts into a hand-written
+ * restatement of the same mapping.
+ */
+describe("command palette — its actions group renders from the catalog projection (AS-10, F-7)", () => {
+  const NOWHERE: ContextStack = [];
+
+  const boardList: Invocable = {
+    id: "core:board.list",
+    name: "List cards",
+    summary: "List every card on the board",
+    group: "board",
+    locus: "Semantic",
+    binders: [],
+    stability: "Shipped",
+  };
+
+  /** The same mapping `building-shell.tsx` performs, reused here rather than
+   *  re-derived, so this test proves the palette's own consumption and not a
+   *  second, parallel plumbing this suite invented for itself. */
+  function paletteActionsFrom(catalog: readonly Invocable[], dispatch: (id: string) => void) {
+    const registry = createActionRegistry(actionsFromCatalog(catalog, dispatch));
+    return registry.live(NOWHERE).map((a) => ({
+      id: a.id,
+      label: resolveLabel(() => {
+        throw new Error("a catalog-sourced action's label never needs an i18n lookup");
+      }, a.label),
+      binding: a.binding,
+      run: a.run,
+    }));
+  }
+
+  it("a Semantic descriptor in the catalog appears as a palette row bearing its own name", () => {
+    const dispatch = vi.fn();
+    render(
+      <CommandPalette
+        open={true}
+        actions={paletteActionsFrom(
+          [
+            boardList,
+          ],
+          dispatch,
+        )}
+      />,
+    );
+
+    const row = screen.getByTestId("selection-item-action:core:board.list");
+    expect(row).toHaveTextContent("List cards");
+
+    fireEvent.click(row);
+    expect(dispatch).toHaveBeenCalledWith("core:board.list");
+  });
+
+  it("a descriptor absent from the catalog produces no row at all", () => {
+    render(<CommandPalette open={true} actions={paletteActionsFrom([], vi.fn())} />);
+
+    expect(screen.queryByTestId("selection-item-action:core:board.list")).toBeNull();
   });
 });
 

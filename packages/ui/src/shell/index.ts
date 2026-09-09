@@ -1,9 +1,12 @@
 /** The application shell frame — L0…L3 chrome, overlays, and composers; presentation only. */
 
 export {
+  type ActionLabel,
   type ActionRegistry,
+  actionsFromCatalog,
   createActionRegistry,
   isBound,
+  resolveLabel,
   type ShellAction,
 } from "./actions";
 export { BuildingFrame, type BuildingFrameProps } from "./building-frame";

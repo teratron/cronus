@@ -5,7 +5,8 @@ import * as ui from "./index";
 // updates this list in the same commit; anything else is a regression. The list
 // was trimmed from 46 to 43 when the two earlier composer roots and the surface
 // catalog they alone fed were retired, leaving exactly one exported application
-// root (`BuildingShell`); the status rail then added `StatusBar` (44).
+// root (`BuildingShell`); the status rail then added `StatusBar` (44); the action
+// registry's catalog-derivation seam added `actionsFromCatalog`/`resolveLabel` (46).
 const PUBLIC_API = [
   "BuildingFrame",
   "BuildingShell",
@@ -30,6 +31,7 @@ const PUBLIC_API = [
   "SubsystemSidebar",
   "SurfacePlaceholder",
   "SurfaceRouter",
+  "actionsFromCatalog",
   "commandPaletteDelegate",
   "composeSidebar",
   "createActionRegistry",
@@ -41,6 +43,7 @@ const PUBLIC_API = [
   "isClosable",
   "isUnloadable",
   "registerScheme",
+  "resolveLabel",
   "resolveScheme",
   "resolveTheme",
   "schemeCatalog",

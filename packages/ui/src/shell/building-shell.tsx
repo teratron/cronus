@@ -27,7 +27,12 @@ import type { Projection } from "../shared/projection";
 import { useStore } from "../shared/store";
 import { surfaceAttributes, type Theme } from "../shared/theme";
 import type { DashboardProjection, OfficeProjection } from "../surfaces";
-import { type ActionRegistry, createActionRegistry, type ShellAction } from "./actions";
+import {
+  type ActionRegistry,
+  createActionRegistry,
+  resolveLabel,
+  type ShellAction,
+} from "./actions";
 import { BuildingFrame } from "./building-frame";
 import { CommandPalette } from "./command-palette";
 import { type FloorTab, FloorTabBar } from "./floor-tab-bar";
@@ -197,7 +202,9 @@ export function BuildingShell({
   const registry: ActionRegistry = useMemo(() => {
     const openSettings: ShellAction = {
       id: "file.settings",
-      labelKey: "menu.file.settings",
+      label: {
+        key: "menu.file.settings",
+      },
       binding: "Ctrl ,",
       run: () =>
         view.dispatch({
@@ -207,7 +214,9 @@ export function BuildingShell({
     };
     const newProject: ShellAction = {
       id: "file.new-project",
-      labelKey: "menu.file.new-project",
+      label: {
+        key: "menu.file.new-project",
+      },
       binding: "Ctrl N",
       run: () => onCreateFloor?.(),
     };
@@ -224,7 +233,7 @@ export function BuildingShell({
 
   const paletteActions = registry.live(CONTEXT_STACK).map((a) => ({
     id: a.id,
-    label: msg(a.labelKey),
+    label: resolveLabel(msg, a.label),
     binding: a.binding,
     run: a.run,
   }));
