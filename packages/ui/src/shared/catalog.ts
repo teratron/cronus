@@ -8,10 +8,10 @@
  * id the local copy no longer recognises resolves to the registry's real
  * `Unknown` answer (`null`, SP-13) — never a fabricated failure — and the
  * correct response here is to refresh the cache, not render an error. The
- * registry's own change-announcement mechanism (l2-invocable-registry.md
- * §4.9) is the primary refresh trigger in production; `Unknown` is the
- * backstop for the delivery window between a change and its announcement,
- * not the only path — this module only builds the backstop.
+ * registry's own change-announcement mechanism (§4.9) is the primary refresh
+ * trigger in production; `Unknown` is the backstop for the delivery window
+ * between a change and its announcement, not the only path — this module
+ * only builds the backstop.
  */
 
 import type { CoreClient, Invocable, Invocation, Outcome } from "./bridge";

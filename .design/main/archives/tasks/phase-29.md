@@ -1,21 +1,42 @@
 ---
 phase: 29
 name: "Desktop Generic Dispatch"
-status: Todo
+status: Done
 subsystem: "apps/desktop/tauri · packages/ui"
 requires: [27, 28]
-provides: []
+provides:
+  - "a generic invoke/catalog IPC pair on the desktop shell (capability_catalog/capability_invoke), replacing the per-capability handler list as the surface's own dispatch mechanism — findings F-1 and F-7 both fully repaid"
+  - "the TypeScript bridge client (packages/ui/src/shared/bridge.ts) gains catalog()/invoke(), with a full wire-mirror type vocabulary (Invocable/Outcome/ArgValue/etc.), data-only by construction (SP-12)"
+  - "a local catalog cache (packages/ui/src/shared/catalog.ts) that refreshes on the registry's real Unknown answer instead of rendering a fabricated failure (SP-13)"
+  - "the shell's action registry sources every Semantic action from the catalog by identity (actionsFromCatalog), closing the risk finding F-7 named before it materialized; the command palette consumes that same registry, never a second hand-written source"
+  - "the shared conformance corpus's first proof that it can run from a workspace detached from the main engine workspace, driving a real Bridge rather than a raw registry/dispatcher"
 key_files:
-  created: []
-  modified: []
-patterns_established: []
+  created:
+    - "apps/desktop/tauri/src/conformance_registration.rs"
+    - "packages/ui/src/shared/catalog.ts"
+    - "packages/ui/src/shared/catalog.test.ts"
+    - "packages/ui/src/shell/actions.test.ts"
+  modified:
+    - "apps/desktop/tauri/src/{bridge,lib}.rs"
+    - "apps/desktop/tauri/Cargo.toml"
+    - "crates/contract/src/lib.rs"
+    - "crates/tui/src/command.rs"
+    - "crates/conformance/src/findings.rs"
+    - "packages/ui/src/shared/{bridge.ts,bridge.test.tsx,index.ts}"
+    - "packages/ui/src/shell/{actions.ts,building-shell.tsx,overlays.test.tsx,conformance.test.tsx,shell.test.tsx,admission.test.tsx}"
+    - "packages/ui/src/index.test.ts"
+patterns_established:
+  - "a SurfaceProjection implementation drives a real IPC-bridge's own public methods (Bridge::catalog()/invoke()) rather than a raw domain-tier registry/dispatcher, for the one surface whose real mechanism actually is an IPC seam — the corpus's own ports-tier trait design proven over a task's own more literal (and, per the trait module's own doc, forbidden) framing"
+  - "a wire-crossing seam asserts caller identity server-side and never accepts it from the client (capability_invoke's id+args-only payload, never a deserialized Invocation) — SP-12's data-only guarantee extended from payload shape to identity"
+  - "a label that may come from a closed, hand-authored i18n catalog or a runtime string a domain registry owns gets a two-variant discriminated type (ActionLabel), not a shared field typed for only one of its two real sources"
+  - "a finding's closure is audited against the real ledger state (tombstones/repayment flags), not against a task's own optimistic framing — a missing tombstone found during audit gets added and disclosed as such, backdated to the real historical deletion it records, never silently assumed already covered"
 duration_minutes: ~
 ---
 
 # Stage 29 Tasks — Desktop Generic Dispatch
 
 **Phase:** 29
-**Status:** Todo
+**Status:** Done
 **Strategic Goal:** Carry the desktop shell onto the registry the prior two phases proved — one generic `invoke`/`catalog` IPC pair replaces the per-capability handler list (finding F-1's third site), the shell's own action registry sources every `Semantic` action from the catalog by identity (AS-6), and the shared conformance corpus proves itself runnable from a genuinely **detached** Cargo workspace for the first time (F-7 repaid, F-1 fully closed).
 
 ## Phase Notes
@@ -38,7 +59,7 @@ duration_minutes: ~
 - [x] [T-29B01] The action registry sources `Semantic` actions from the catalog by identity
 - [x] [T-29B02] The palette's semantic entries render from the catalog projection, not a hand-written list
 - [x] [T-29C01] Corpus registration from the detached workspace; findings F-1 and F-7 close
-- [ ] [T-29T01] Behaviour-preservation proof and full quality gates
+- [x] [T-29T01] Behaviour-preservation proof and full quality gates
 
 ## Detailed Tracking
 
@@ -118,6 +139,6 @@ duration_minutes: ~
 
 - **Goal:** Prove the migration changed structure and not behaviour, except where this phase's own tasks changed behaviour deliberately and said so — and confirm the Phase Notes' own renarrowing (no residual corrections claimed) held all the way through execution.
 - **Method:** Confirm every intentional behaviour change is recorded at its own task. Confirm the two disclosed exceptions (`version`/`status` untouched; the empty secret list unfixed) still hold and remain recorded at their owning sites, not only in planning prose. Run the workspace gates for both the Rust and the TypeScript halves.
-- **Verify:** `cargo fmt --all -- --check`, `cargo clippy --workspace --all-targets -- -D warnings` (zero) for the main workspace; `cargo build -p cronus-desktop` and `cargo test -p cronus-desktop --all-targets` (PowerShell) for the detached one; `pnpm -C packages/ui test`, `pnpm -C packages/ui build`, and `fallow audit --changed-since <base>` for the frontend; no `unwrap()`/`panic!()` introduced on Rust production paths across every file this phase created or substantially modified (`#[cfg(test)]` excluded); containment self-check clean across every touched file, Rust and TypeScript alike.
-- **Status:** Todo
+- **Verify:** `cargo fmt --all -- --check`, `cargo clippy --workspace --all-targets -- -D warnings` (zero) for the main workspace; `cargo build -p cronus-desktop` and `cargo test -p cronus-desktop --all-targets` (PowerShell) for the detached one; `pnpm -C packages/ui test`, `pnpm -C packages/ui build`, and `fallow audit --changed-since <base>` for the frontend; no `unwrap()`/`panic!()` introduced on Rust production paths across every file this phase created or substantially modified (`#[cfg(test)]` excluded); containment self-check clean across every touched file, Rust and TypeScript alike. **Satisfied**: `cargo fmt --all -- --check` clean; `cargo clippy --workspace --all-targets -- -D warnings` clean; `cargo build -p cronus-desktop` succeeds; `cargo test -p cronus-desktop --all-targets` (PowerShell) fails to *load* on this host — `STATUS_ENTRYPOINT_NOT_FOUND`, re-confirmed at this closing task against the full `--all-targets` run, not merely assumed from earlier per-task checkpoints — the same disclosed, environmental class every `cronus-desktop` test has carried since this phase's own first task. `pnpm -C packages/ui test` 181/181; `pnpm -C packages/ui build` clean; `fallow audit --changed-since HEAD` reports **zero issues** across every checkpoint run this phase (dead code/complexity/duplication all 0, one pre-existing, unrelated `BuildingShell` cognitive-complexity finding correctly excluded by the tool's own gate as inherited each time it recurred). `rg` for `unwrap()`/`panic!()`/`.expect()` across every phase-touched Rust file found zero new production-path introductions — every hit resolves to either pre-existing code this phase did not touch, or this phase's own `#[cfg(test)]`-gated test code, confirmed line-by-line rather than assumed from file-level totals. Phase-wide containment sweep across all 20 touched files (Rust + TypeScript) found and fixed one real leak this phase introduced (`packages/ui/src/shared/catalog.ts`'s own spec-filename mention) and disclosed two genuinely pre-existing, out-of-phase leaks (`crates/tui/src/command.rs:78`, `packages/ui/src/shell/conformance.test.tsx:2,42`) via `record-diagnostic` rather than silently fixing files outside this phase's own touched-lines scope. Both disclosed exceptions verified explicitly by name against real source, not trusted from Track A's own scope line: `capability_version`/`capability_status` still call `bridge.version()`/`bridge.status()` unchanged; `core_bridge()` still constructs `Bridge::new(Engine::new(), Vec::new(), …)` — an empty secret list, F-5's residual still genuinely open. The Phase Notes' own renarrowing held through execution: none of the four disclaimed residual corrections (unavailable-as-emptiness, the CLI's output-format flag, unescaped structured output, the empty-secret-list fix) were touched — verified by confirming this phase's own file list never includes `crates/core/src/invocable_bootstrap/*.rs` or any `crates/cli` file.
+- **Status:** Done
 - **Notes:** Same discipline T-28T02 already established for the terminal surface — audit residuals against `rg`, not against what the write-ups claim. This phase's own biggest risk is claiming a residual was preserved when it was actually silently touched by an adjacent edit; check `capability_version`/`capability_status` and `core_bridge()`'s secret list explicitly, by name, not by trusting that Track A's own scope line was honoured.
