@@ -1,5 +1,12 @@
 import { describe, expect, it, vi } from "vitest";
-import { type ChannelEvent, createCoreClient, type InvokeFn, type ListenFn } from "./bridge";
+import {
+  type ChannelEvent,
+  createCoreClient,
+  type Invocable,
+  type InvokeFn,
+  type ListenFn,
+  type Outcome,
+} from "./bridge";
 
 describe("core bridge client", () => {
   it("marshals status to the capability_status IPC command", async () => {
@@ -18,6 +25,177 @@ describe("core bridge client", () => {
     expect(invoke).toHaveBeenCalledWith("capability_version");
   });
 
+  it("marshals catalog to the capability_catalog IPC command", async () => {
+    const descriptor: Invocable = {
+      id: "core:board.list",
+      name: "List cards",
+      summary: "List every card on the board",
+      group: "board",
+      locus: "Semantic",
+      binders: [],
+      stability: "Shipped",
+    };
+    const invoke = vi.fn().mockResolvedValue([
+      descriptor,
+    ]);
+    const client = createCoreClient(invoke as InvokeFn);
+
+    await expect(client.catalog()).resolves.toEqual([
+      descriptor,
+    ]);
+    expect(invoke).toHaveBeenCalledWith("capability_catalog");
+  });
+
+  it("marshals invoke to the capability_invoke IPC command with id and args", async () => {
+    const outcome: Outcome = {
+      Value: {
+        Text: "card-1",
+      },
+    };
+    const invoke = vi.fn().mockResolvedValue(outcome);
+    const client = createCoreClient(invoke as InvokeFn);
+
+    await expect(
+      client.invoke({
+        id: "core:board.add",
+        args: {
+          title: {
+            Text: "Ship it",
+          },
+        },
+      }),
+    ).resolves.toEqual(outcome);
+    expect(invoke).toHaveBeenCalledWith("capability_invoke", {
+      id: "core:board.add",
+      args: {
+        title: {
+          Text: "Ship it",
+        },
+      },
+    });
+  });
+
+  it("marshals invoke with no args as an empty object, not undefined", async () => {
+    const invoke = vi.fn().mockResolvedValue(null);
+    const client = createCoreClient(invoke as InvokeFn);
+
+    await client.invoke({
+      id: "core:pane.focus-next",
+    });
+    expect(invoke).toHaveBeenCalledWith("capability_invoke", {
+      id: "core:pane.focus-next",
+      args: {},
+    });
+  });
+
+  it("invoke resolves to null for the registry's real Unknown answer, never a fabricated Outcome", async () => {
+    const invoke = vi.fn().mockResolvedValue(null);
+    const client = createCoreClient(invoke as InvokeFn);
+
+    await expect(
+      client.invoke({
+        id: "core:not-registered",
+      }),
+    ).resolves.toBeNull();
+  });
+});
+
+describe("core bridge — wire types carry no field beyond JSON-serializable data (SP-12)", () => {
+  it("an Invocable exercising every Locus/Stability shape round-trips through JSON unchanged", () => {
+    const descriptors: Invocable[] = [
+      {
+        id: "core:board.list",
+        name: "List cards",
+        summary: "List every card on the board",
+        group: "board",
+        locus: "Semantic",
+        binders: [
+          {
+            name: "id",
+            kind: "Text",
+            optional: false,
+          },
+        ],
+        stability: "Shipped",
+      },
+      {
+        id: "core:pane.focus-next",
+        name: "Focus next",
+        summary: "Move keyboard focus to the next panel",
+        group: "pane",
+        locus: "ClientLocal",
+        binders: [],
+        stability: "Shipped",
+      },
+      {
+        id: "core:legacy.thing",
+        name: "Legacy thing",
+        summary: "Superseded by core:board.list",
+        group: "legacy",
+        locus: {
+          HostOnly: {
+            reason: "shell-owned marshalling, not core logic",
+          },
+        },
+        binders: [],
+        stability: {
+          Retired: {
+            superseded_by: "core:board.list",
+          },
+        },
+      },
+    ];
+
+    for (const descriptor of descriptors) {
+      const roundTripped = JSON.parse(JSON.stringify(descriptor)) as unknown;
+      expect(roundTripped).toEqual(descriptor);
+    }
+  });
+
+  it("every Outcome variant round-trips through JSON unchanged", () => {
+    const outcomes: Outcome[] = [
+      {
+        Value: "Empty",
+      },
+      {
+        Value: {
+          Record: [
+            [
+              "id",
+              {
+                Text: "card-1",
+              },
+            ],
+          ],
+        },
+      },
+      {
+        Stream: {
+          channel: "board.events",
+        },
+      },
+      {
+        Rejected: {
+          binder: "id",
+          mode: "Absent",
+          detail: "no id supplied",
+        },
+      },
+      {
+        Unavailable: {
+          reason: "store connection failed",
+        },
+      },
+    ];
+
+    for (const outcome of outcomes) {
+      const roundTripped = JSON.parse(JSON.stringify(outcome)) as unknown;
+      expect(roundTripped).toEqual(outcome);
+    }
+  });
+});
+
+describe("core bridge client — settings", () => {
   it("marshals settings.get to capability_settings_get", async () => {
     const slice = {
       theme: "dark",

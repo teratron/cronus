@@ -31,6 +31,10 @@ const HOME: FloorTab = {
 const ADMITTED: Record<string, string> = {
   version: "core capability (cronus_core::Capabilities::version; CLI/TUI bind it)",
   status: "core capability (cronus_core::Capabilities::status; CLI/TUI bind it)",
+  catalog:
+    "shared invocable registry (cronus_contract::Invocable; CLI/TUI project the same registry through their own catalogs)",
+  invoke:
+    "shared invocable dispatcher (cronus_contract::Outcome; CLI/TUI dispatch through the same Dispatcher)",
   settings: "host-owned facility (apps/desktop/tauri settings store; §4.3 1.0.1)",
   subscribe: "core event-channel class (§4.3 push edge; no channel emits yet)",
 };
