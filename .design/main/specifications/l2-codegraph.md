@@ -1,6 +1,6 @@
 # Code Graph
 
-**Version:** 1.3.0
+**Version:** 1.4.0
 **Status:** Stable
 **Layer:** implementation
 **Implements:** l1-code-intelligence.md
@@ -52,6 +52,9 @@ Mapping of every `l1-code-intelligence.md` invariant to this implementation. Cap
 | CI-15 Vocabulary-grounded query | **Roadmap.** Expand a natural-language query against the index's own symbol/label vocabulary before retrieval; navigable query surface (breadth/depth/shortest-path/explain) under a token budget on top of §4.14 traversal. |
 | CI-16 Resolution & indirect-edge synthesis | **Partial.** §4.1 extracts direct edges; framework/SQL relations present. **Roadmap:** a distinct resolution pass with synthesized dynamic-dispatch edges (callback/observer/event/framework-render/cross-language) carrying `provenance` + wiring site, surfaced inline; close-flow-end-to-end discipline. |
 | CI-17 Measured resolution coverage | **Roadmap.** Per-language/framework cross-file dependent coverage on benchmark repos with disclosed static-analysis frontier; never denominator-gamed. |
+| CI-18 Disposable local cache / shared wiring | **Partial.** `codegraph.db` is already state-tier, per-workspace, and rebuildable (§4.5/§4.10), and `CRONUS_CODEGRAPH_OUT` redirects it (§4.10). **Roadmap:** an explicit statement that the DB is git-ignored and never a committed artifact, and — if any host wiring is ever emitted for an external agent — that *that* wiring, not the DB, is the shared unit; plus a `.ignore`-style re-admit if the DB path is ever inside a search-tool's ignore scope. |
+| CI-19 Read-triggered freshness / working-tree bytes / read-only drift report | **Partial.** §4.5 already refreshes incrementally on first use per search call. **Roadmap:** define freshness against working-tree bytes explicitly (uncommitted/unstaged/staged alike; VCS selects the file set, not the key), offer a content-hash fingerprint mode alongside the mtime fast path (§4.5 currently mtime-only), and split a strictly read-only `cronus codegraph check` drift report from the mutating `index` path. |
+| CI-20 Context delivery mode (push vs. pull) | **Roadmap.** The §4.7 command surface is the pull surface; an eager `context(...)` bundle (CI-6) is the push surface. Expose both, document the tradeoff (push = lower latency, pull = higher correctness), and keep any eager bundle in the session live zone (`l1-cache-stable-context`), never the frozen prefix. |
 
 > Storage placement (formerly the parent contract): `codegraph.db` is state-tier mutable data over program-tier read-only source (STO-2) and uses durable WAL SQLite with transactional writes (STO-8) — see [l1-storage-model.md](l1-storage-model.md).
 
@@ -541,6 +544,7 @@ Operations:
 
 | Version | Change |
 | --- | --- |
+| 1.4.0 | Mapped new parent invariants CI-18 (disposable local cache / shared wiring — partial), CI-19 (read-triggered freshness against working-tree bytes; read-only drift report — partial), CI-20 (context delivery mode push vs. pull — roadmap) in §3; added the "graph as a folder of linked plain files, no store" alternative to §5 with the reason Cronus keeps the SQLite index |
 | 1.3.0 | Mapped new parent invariants CI-16 (resolution & indirect-edge synthesis w/ provenance — partial) and CI-17 (measured resolution coverage — roadmap) in §3 |
 | 1.2.0 | Mapped new parent invariants CI-14 (node summaries) and CI-15 (vocabulary-grounded query) as roadmap rows in §3 |
 | 1.1.0 | Re-parented from `l1-storage-model.md` to the new `l1-code-intelligence.md` concept; rewrote §3 to map CI-1…CI-13 (implemented vs roadmap); storage-model retained as a Related placement contract |
@@ -553,6 +557,7 @@ Operations:
 - **Grammar coverage**: less-common languages fall back to regex-based extraction (function/class name patterns only). Grammar plugins extend coverage without modifying core.
 - **Stale entries for deleted files**: if incremental update does not detect a deletion (e.g. file renamed outside tracked paths), stale symbols remain until full rebuild. Agents must validate that referenced files still exist before acting on symbol locations.
 - **Alternative — external language servers (LSP)**: richer analysis (type inference, cross-file resolution) but requires per-language server processes, complex lifecycle management, and IPC. The self-contained SQLite approach is more portable and embeddable in the Tauri context.
+- **Alternative — graph as a folder of linked plain files, no store**: a fourth code-graph engine surveyed for this concept keeps its concept-node graph as linked Markdown files the agent greps and opens with its ordinary file tools — no database, no query API required to *read* the graph, and the retrieval tool and the browsable artifact are the same bytes (so an agent that cannot reach the query surface degrades to `grep`, not to nothing). Cronus keeps the SQLite store because FTS5 + `sqlite-vec` fusion (§4.4) and incremental upsert (§4.5) need an index, and the memory store already depends on the same extension (shared pattern). The plain-files idea is still partially honoured: CI-12's vault/wiki export is a browsable projection, and CI-18's "the cache is just a file, git-ignored" framing is the same instinct one layer down.
 
 ## Canonical References
 

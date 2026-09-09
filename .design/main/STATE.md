@@ -4,7 +4,7 @@
 <!-- Maximum 100 lines. Agent updates AFTER each completed action. -->
 
 **Workspace:** main
-**Updated:** 2026-09-08 16:08
+**Updated:** 2026-09-09 05:43
 **Phase:** 29 — Desktop Generic Dispatch
 **Status:** Active
 
@@ -13,7 +13,7 @@
 - **Task:** `/magic.task main` Done: Phase 29 decomposed into **7 tasks / 4 tracks** (A generic dispatch bridge · B action-registry locus split · C corpus registration · T validation).
 - **Planning found real drift and corrected it, not silently absorbed it.** Pre-flight `ok:true` on every gate (290 specs, 290 Stable, 0 Draft; engine `.magic/.version` 2.1.80 == snapshot; Rules Parity RULES v1.6.0 == TASKS Based-on-RULES) — Pre-Planning Stabilization a genuine no-op. `l2-application-shell.md` is already Stable at **1.2.0** in the registry; `PLAN.md`'s own Phase 29 section still said "1.1.0" and claimed "the four residual corrections" as this phase's closing work — both corrected. **Grounded the residual claim against the real source** (`crates/core/src/invocable_bootstrap/*.rs`, `crates/cli/src/main.rs`, `crates/domain/src/secrets.rs`) and found none of the four reachable from `apps/desktop`/`packages/ui`: unavailable-as-emptiness is a ~15-site core-tier fix shared by all three frontends; the output-format flag and unescaped structured output are CLI-only (finding F-6's own sites); the empty-secret-list fix needs a project-wide secret-*enumeration* primitive that does not exist anywhere yet (`secrets.rs` has only a single-key `get`). All four stay recorded in `l2-surface-conformance.md` §4.7/accepted-debt, open, owned by a later phase — not claimed here and left undone, mirroring Phase 27's own T-27D01 renarrowing precedent exactly. **A second disclosed exception found**: `core:version`/`status` are `Locus::Installation` (confirmed in `invocable_bootstrap/status.rs`) — a third locus this surface does not project, with no admissible class under §4.3's own rule as currently classified — the bridge's existing bespoke methods for them stay untouched, recorded as a genuine spec gap this phase does not resolve, not silently papered over.
 - **Grounded the structural facts directly, not assumed**: `apps/desktop/tauri/Cargo.toml` already depends on `cronus-core` and already declares its own detached `[workspace]`; `bridge.rs`'s 4 per-capability commands and `actions.ts`'s un-populated generic registry confirm the desktop has genuinely built none of this yet. `cronus-conformance` has never been linked from outside the main `crates/` workspace — Track C proves that shape for the first time.
-- **Next Action:** Execute T-29A01 The bridge composes the shared registry and dispatcher; local redaction gives way to the boundary via /magic.run main
+- **Next Action:** Run /magic.task main to update the plan
 
 ## Progress
 
