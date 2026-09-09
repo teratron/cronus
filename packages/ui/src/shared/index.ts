@@ -9,6 +9,7 @@
 
 export * from "./bridge";
 export * from "./canvas";
+export * from "./catalog";
 export * from "./i18n";
 export * from "./keymap";
 export * from "./navigation";
