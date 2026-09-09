@@ -1,8 +1,8 @@
 # Implementation Plan
 
-**Version:** 2.70.0
+**Version:** 2.71.0
 **Generated:** 2026-09-05
-**Based on:** .design/main/INDEX.md v1.0.192
+**Based on:** .design/main/INDEX.md v1.0.193
 **Status:** Active
 
 ## Overview
@@ -17,6 +17,8 @@ Implementation plan for Cronus from the project registry (290 registered specs: 
 - **Hardening** = operational productionization — Phase 9.
 
 Execution mode: **Parallel** (C3); tracks grouped by file independence. Critical path runs through `crates/core` and the `crates/nodus` runtime it depends on.
+
+*Revision v2.71.0 — registry sync only (`**Based on:**` INDEX v1.0.192 → v1.0.193). Absorbs a `/reference-mining` delta pass over a fourth external code-graph engine: five already-`Stable` specs, all in completed phases, gained **additive minor-version invariants** — `l1-code-intelligence` 1.2.0 → 1.3.0 (CI-18 disposable local cache vs committed integration wiring, CI-19 read-triggered freshness against working-tree bytes with a read-only drift report, CI-20 push-vs-pull context delivery tradeoff, + CI-2/CI-8/CI-14/CI-15 refinements); `l2-codegraph` 1.3.0 → 1.4.0 (CI-18/19/20 mapped Partial/Roadmap in its §3, + the "graph as plain linked files" alternative); `l1-host-native-rendering` 1.0.0 → 1.1.0 (HNR-11 consent tiered by blast radius, HNR-8 marker-fenced own-region / durable opt-out); `l1-confidentiality-flow` 1.0.0 → 1.1.0 (CF-11 machine-enforced egress allowlist); `l1-evaluation-suites` 1.6.0 → 1.7.0 (ES-22 evidence tier + verifying the independent variable, ES-16 as-billed cost). **No phase, task, or Backlog change**: the three `concept-only` L1s (`host-native-rendering`, `confidentiality-flow`, `evaluation-suites`) carry no `Implements:` L2, so their new invariants are absorbed into the concept per C28; `l2-codegraph`'s new invariants are Roadmap in its own §3, not a build phase — the codegraph L2 shipped in Phase 4 and stays `Done`. The Backlog stays empty (it holds only non-`Stable` specs). Phase 29 (active) is untouched. The companion `/magic.task nodus` run absorbs the new `l1-nodus-graph` spec into the nodus workspace plan.*
 
 *Revision v2.68.0 — the Backlog cleared (`**Based on:**` INDEX v1.0.187 → v1.0.188). The three RFC `concept-only` L1s parked since v2.62.0 were reviewed RFC→Stable by `/magic.spec main` and are absorbed into **Phase 0** under C6: all three are Stable with no authored `Implements:` L2, so the auto-pull resolves to the concept caul and opens no build phase. The registry now holds **287 Stable, 0 RFC, 0 Draft** — the first time this workspace has had no non-Stable spec at all. Every build phase 1–26 stays `Done`; the plan still has no active phase, and now has no parked design debt either, so the next scope must be authored before it can be planned.*
 

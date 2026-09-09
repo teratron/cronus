@@ -1,6 +1,6 @@
 # Project Context
 
-**Generated:** 2026-09-05
+**Generated:** 2026-09-09
 
 ## Active Technologies
 
@@ -67,6 +67,7 @@
 │   ├── auth-local/
 │   ├── cli/
 │   ├── codegraph/
+│   ├── conformance/
 │   ├── contract/
 │   ├── core/
 │   ├── domain/

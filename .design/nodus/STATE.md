@@ -4,15 +4,15 @@
 <!-- Maximum 100 lines. Agent updates AFTER each completed action. -->
 
 **Workspace:** nodus
-**Updated:** 2026-09-05 14:07
+**Updated:** 2026-09-09 06:59
 **Phase:** — plan saturated: phases 1–33 Done, no active phase
 **Status:** Active
 
 ## Current Position
 
-- **Task:** T-33A01, T-33B01, T-33T01 (config-dup, macro-dup, tests: 490 passing, was 486)
-- **Spec:** INDEX v1.0.97 / PLAN v1.46.0 / TASKS v2.39.0 — all three in sync, pre-flight clean except the standing `DESIGN_DEBT_PENDING`. RULES v1.6.0 (unchanged, confirmed). 20 nodus specs Stable, 0 Draft, Phase 32 `Done (Archived)`, `tasks/` empty.
-- **Next Action:** No mechanical work remains in nodus. Pre-flight's sole warning is the standing DESIGN_DEBT_PENDING (3 parked Backlog items), and re-running /magic.task nodus is a confirmed no-op: PLAN v1.49.0 = INDEX v1.0.100, 20/20 Stable, 0 Draft, phases 1-33 all Done. All three Backlog items are blocked on a design decision rather than effort — the Backlog's own rule is that they advance via /magic.spec nodus only once a real need motivates one, never on backlog-clearing grounds. The next step is a direction chosen by a person.
+- **Task:** `/magic.spec nodus` (INDEX v1.0.102) — `l1-nodus-graph` Post-Update Review: spec-critic 5-lens Council + prompt-engineer, **PASS-WITH-REWRITES**, `Draft → RFC`. One real invariant-scope error fixed — **NG-7** deferred loop-bound *and* branch-exhaustiveness to NL-25/NL-26 for a generated-value guard, but NL-25 owns only *which arm*, not termination bounds; loop-bound (NG-3) now explicitly independent. Three clarity fixes (NG-4 entry defined + "structural companion" not "generalizes" NT-10; `calls`-cycle → advisory since recursive macro expansion is deferred; "output shape" → "binding surface"). **Held at RFC, not Stable** — one authoring + one adversarial pass; concept-only so nothing gated. Re-decided the 3 standing design-debt Backlog items against `l2-nodus-runtime` §3.1 / `l2-nodus-portability` §3.2: **nothing new buildable**; NL-25 recorded as nearer (`@err:` landing place now real; two `execute_switch` violation sites; NG-7 a new spec-layer consumer).
+- **Spec:** INDEX v1.0.102 / PLAN v1.51.0 / TASKS v2.44.0 — all three in sync. RULES v1.6.0 (unchanged). 21 nodus specs: 20 Stable, **1 RFC** (`l1-nodus-graph`). Phases 1–33 all Done. Pre-flight: `SPEC_STATUS` (the RFC — non-Stable) + standing `DESIGN_DEBT_PENDING` (Backlog 4 — the RFC stays parked per C6).
+- **Next Action:** Optional — run /magic.spec nodus again for a second l1-nodus-graph review (RFC → Stable) when a person wants it; not urgent, nothing depends on it. Otherwise the nodus plan is saturated and the design-debt items advance only when a real feature motivates one.
 
 ## Progress
 
