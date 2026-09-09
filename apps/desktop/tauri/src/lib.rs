@@ -44,6 +44,8 @@ pub fn run() {
         .invoke_handler(tauri::generate_handler![
             bridge::capability_version,
             bridge::capability_status,
+            bridge::capability_catalog,
+            bridge::capability_invoke,
             bridge::capability_settings_get,
             bridge::capability_settings_set
         ])

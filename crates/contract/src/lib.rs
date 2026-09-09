@@ -2166,6 +2166,24 @@ pub struct Invocable {
     pub journal_raw_input: bool,
 }
 
+impl Invocable {
+    /// Whether a frontend's own local discovery projection — a slash
+    /// catalog, an action registry, an IPC catalog command — should offer
+    /// this descriptor at all (SP-11). The single predicate every surface's
+    /// catalog filter is defined in terms of, so no surface hand-rolls this
+    /// rule a second time: only a live, generically-dispatchable action
+    /// belongs on a discovery surface — `ClientLocal` because it is
+    /// per-surface by design, `Semantic` because it is the core's own
+    /// reachable-everywhere case; `HostOnly`/`Installation` are each
+    /// reachable by their own declared, non-generic path instead, and a
+    /// `Stability` other than `Shipped` is not yet (or no longer) meant for
+    /// a user to discover.
+    pub fn is_projected(&self) -> bool {
+        matches!(self.locus, Locus::Semantic | Locus::ClientLocal)
+            && matches!(self.stability, Stability::Shipped)
+    }
+}
+
 /// Whether an id names something the registry currently knows, asked and
 /// answered **before** dispatch (SP-13). Deliberately not `Option`: the two
 /// outcomes read as domain facts here (`Found`/`Unknown`), not as a generic
@@ -2401,7 +2419,16 @@ pub enum Surface {
 /// and not `Eq`. Nothing in this crate ever put an `ArgValue`/`ArgValues`
 /// in a `HashSet`/`HashMap` key position (neither derives `Hash`), so
 /// dropping `Eq` costs no real capability, only the derive.
+///
+/// This is the JS → Rust argument half of the desktop IPC seam
+/// (`capability_invoke`'s own `args` parameter): every field is owned data
+/// (no `&'static str`), so unlike [`Invocable`] there is no per-instance
+/// leak to avoid deriving `Deserialize`. `Serialize` travels alongside it —
+/// no production call site in this crate sends an `ArgValue` back out, but
+/// deriving it costs nothing here and is what lets this module's own test
+/// prove a real round trip rather than asserting against hand-built JSON.
 #[derive(Debug, Clone, PartialEq)]
+#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 pub enum ArgValue {
     Text(String),
     Integer(i64),
@@ -2638,15 +2665,22 @@ mod dispatch_tests {
 #[cfg(all(test, feature = "serde"))]
 mod serde_tests {
     //! `Invocable`/`Outcome` cross the desktop IPC seam Rust → JS only (the
-    //! shell's `catalog()` and the return half of `invoke()`); the argument
-    //! half (`Invocation`, JS → Rust) is a different type and out of this
-    //! crate's current scope. So these types derive `Serialize` and
-    //! deliberately not `Deserialize` — `&'static str` fields (declared
-    //! literals, not owned data) cannot honestly be reconstructed from
-    //! arbitrary wire input without leaking memory per instance, and the
-    //! real data flow never asks them to. A true round-trip is not the
-    //! property to test here; that a shipped descriptor and every `Outcome`
-    //! variant serialize to the expected JSON shape is.
+    //! shell's `catalog()` and the return half of `invoke()`). So these types
+    //! derive `Serialize` and deliberately not `Deserialize` — `&'static str`
+    //! fields (declared literals, not owned data) cannot honestly be
+    //! reconstructed from arbitrary wire input without leaking memory per
+    //! instance, and the real data flow never asks them to. A true
+    //! round-trip is not the property to test here; that a shipped
+    //! descriptor and every `Outcome` variant serialize to the expected JSON
+    //! shape is.
+    //!
+    //! The argument half (JS → Rust) is `ArgValue` alone, not the whole
+    //! `Invocation` — it derives both directions (see its own doc comment)
+    //! and is tested for a real round-trip below, since unlike `Invocable`
+    //! it owns every field. `Invocation.caller: Surface` deliberately does NOT
+    //! travel the wire at all: the bridge asserts `Surface::Desktop` itself
+    //! rather than deserializing a caller identity a script could otherwise
+    //! forge, so `Invocation`/`Surface` carry no serde derive here.
 
     use super::*;
 
@@ -2703,6 +2737,27 @@ mod serde_tests {
         for outcome in variants {
             let json = serde_json::to_string(&outcome).expect("serialize");
             assert!(seen.insert(json), "two variants serialized identically");
+        }
+    }
+
+    /// `ArgValue` is the one type in this module tested for a real
+    /// round-trip (JS → Rust is the direction it actually travels) — every
+    /// variant, not only `Text`, since a wire payload can name any binder
+    /// shape.
+    #[test]
+    fn every_arg_value_variant_round_trips_from_json() {
+        let variants = vec![
+            ArgValue::Text("card-1".to_string()),
+            ArgValue::Integer(42),
+            ArgValue::Boolean(true),
+            ArgValue::Flag,
+            ArgValue::Float(1.5),
+            ArgValue::List(vec!["a".to_string(), "b".to_string()]),
+        ];
+        for value in variants {
+            let json = serde_json::to_string(&value).expect("serialize");
+            let round_tripped: ArgValue = serde_json::from_str(&json).expect("deserialize");
+            assert_eq!(value, round_tripped);
         }
     }
 }

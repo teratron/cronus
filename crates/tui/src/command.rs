@@ -8,7 +8,7 @@
 //! ever consumes an already-fetched `&[&Invocable]` slice, the same shape data
 //! the sibling CLI frontend's own `generated.rs` consumes.
 
-use cronus_contract::{Invocable, Locus, Stability};
+use cronus_contract::Invocable;
 
 /// A parsed slash command: the verb plus its whitespace-separated arguments.
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -61,13 +61,14 @@ pub struct CommandSpec {
 /// (INV-9): a retired or unshipped invocable is unrepresentable here, not
 /// merely undiscoverable.
 ///
-/// The single predicate [`build_catalog`] and this surface's conformance
-/// registration both consume, so "what does this surface expose" is decided
-/// in exactly one place — restating it a second time is the same class of
-/// duplicated derivation the deleted hand-copied catalog mirror was.
+/// Delegates to [`Invocable::is_projected`] — the same predicate the desktop
+/// shell's own IPC catalog now consumes, so "what does a frontend expose"
+/// stays decided in exactly one place (the contract crate) rather than each
+/// surface hand-rolling the rule again. This free function stays as the
+/// name [`build_catalog`] and this surface's conformance registration both
+/// already call.
 pub fn is_projected(invocable: &Invocable) -> bool {
-    matches!(invocable.locus, Locus::Semantic | Locus::ClientLocal)
-        && matches!(invocable.stability, Stability::Shipped)
+    invocable.is_projected()
 }
 
 /// Build the slash-command catalog from the core's invocable registry.
@@ -162,7 +163,7 @@ pub fn classify(input: &str, catalog: &[CommandSpec]) -> CommandOutcome {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use cronus_contract::{InvocableId, Stability};
+    use cronus_contract::{InvocableId, Locus, Stability};
 
     #[test]
     fn command_parse_extracts_verb_and_args() {
