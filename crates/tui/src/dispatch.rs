@@ -139,6 +139,15 @@ pub fn bind_args(binders: &[Binder], args: &[String]) -> Result<ArgValues, Rejec
                     values.insert(binder.name, ArgValue::Text(raw.to_string()));
                 }
             }
+            BinderKind::EnumText(allowed) => {
+                if let Some(raw) = positionals.next() {
+                    if allowed.contains(&raw) {
+                        values.insert(binder.name, ArgValue::Text(raw.to_string()));
+                    } else {
+                        return Err(malformed(binder.name, raw));
+                    }
+                }
+            }
             BinderKind::Integer => {
                 if let Some(raw) = positionals.next() {
                     match raw.parse::<i64>() {

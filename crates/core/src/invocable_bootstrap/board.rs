@@ -171,7 +171,7 @@ fn register_move(registry: &mut InvocableRegistry, dispatcher: &mut Dispatcher) 
             },
             Binder {
                 name: "state",
-                kind: BinderKind::Text,
+                kind: BinderKind::EnumText(CardState::NAMES),
                 optional: false,
             },
             Binder {

@@ -2103,6 +2103,11 @@ pub enum BinderKind {
     /// collected in declared order. The one shape `NamedText` cannot carry
     /// — everything else this kind set expresses is single-valued.
     RepeatableNamedText,
+    /// A positional string restricted to a fixed set of values (`board move
+    /// <state>`). Advertised as `[possible values: …]` and enforced as a
+    /// usage failure, so a bad value is rejected before dispatch rather than
+    /// as an application error. Bound and read back exactly like `Text`.
+    EnumText(&'static [&'static str]),
 }
 
 /// One argument an invocable declares, in order (IB-1). This is the single

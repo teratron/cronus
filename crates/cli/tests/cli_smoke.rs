@@ -211,19 +211,33 @@ fn workflow_scaffold_writes_the_named_path_and_it_validates() {
     let _ = std::fs::remove_dir_all(&dir);
 }
 
-/// `board move` names the valid states when the one given is not recognised,
-/// so the vocabulary is discoverable without reading source.
+/// `board move <state>` is a closed set: `--help` lists the values and an
+/// unrecognised one is a usage failure (exit 2), rejected before dispatch.
 #[test]
-fn board_move_with_an_unknown_state_lists_the_valid_ones() {
-    let output = bin()
+fn board_move_state_is_a_closed_value_set() {
+    let help = bin()
+        .args(["board", "move", "--help"])
+        .output()
+        .expect("failed to spawn binary");
+    let help_out = String::from_utf8_lossy(&help.stdout);
+    assert!(
+        help_out.contains("[possible values:") && help_out.contains("triage"),
+        "board move --help must list the valid states: {help_out}"
+    );
+
+    let bad = bin()
         .args(["board", "move", "no-such-card", "sideways"])
         .output()
         .expect("failed to spawn binary");
-    assert!(!output.status.success());
-    let stderr = String::from_utf8_lossy(&output.stderr);
+    assert_eq!(
+        bad.status.code(),
+        Some(2),
+        "an unknown state is a usage failure (exit 2)"
+    );
+    let stderr = String::from_utf8_lossy(&bad.stderr);
     assert!(
-        stderr.contains("valid:") && stderr.contains("triage") && stderr.contains("done"),
-        "the error must enumerate the valid states: {stderr}"
+        stderr.contains("triage") && stderr.contains("done"),
+        "the rejection must enumerate the valid states: {stderr}"
     );
 }
 

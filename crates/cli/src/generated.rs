@@ -80,6 +80,11 @@ pub(crate) fn arg_for(binder: &Binder) -> Arg {
     let arg = Arg::new(binder.name);
     match binder.kind {
         BinderKind::Text => arg.required(!binder.optional),
+        // A closed set of positional values: clap lists them in `--help` and
+        // rejects anything else as a usage error (exit 2) before dispatch.
+        BinderKind::EnumText(values) => arg
+            .required(!binder.optional)
+            .value_parser(clap::builder::PossibleValuesParser::new(values)),
         BinderKind::Integer => arg
             .required(!binder.optional)
             .value_parser(clap::value_parser!(i64)),
@@ -220,7 +225,7 @@ pub fn invocation_from_matches<'a>(
     let mut args = ArgValues::new();
     for binder in &invocable.binders {
         let value = match binder.kind {
-            BinderKind::Text => verb_matches
+            BinderKind::Text | BinderKind::EnumText(_) => verb_matches
                 .get_one::<String>(binder.name)
                 .map(|value| ArgValue::Text(value.clone())),
             BinderKind::Integer => verb_matches

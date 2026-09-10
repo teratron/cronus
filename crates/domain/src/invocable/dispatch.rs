@@ -61,6 +61,12 @@ pub const CONTRIBUTION_TIME_BOUND: Duration = Duration::from_secs(5);
 /// Checks one supplied value against one binder's declared kind.
 fn matches_kind(value: &ArgValue, kind: cronus_contract::BinderKind) -> bool {
     use cronus_contract::BinderKind;
+    // A closed value set: the runtime shape is a string, and the string must
+    // be one of the declared values — enforced here too, not only at the
+    // command line, so a direct dispatch caller cannot bypass it.
+    if let (ArgValue::Text(s), BinderKind::EnumText(allowed)) = (value, kind) {
+        return allowed.contains(&s.as_str());
+    }
     matches!(
         (value, kind),
         (ArgValue::Text(_), BinderKind::Text)
