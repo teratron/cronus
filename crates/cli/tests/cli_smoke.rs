@@ -781,3 +781,34 @@ fn init_reports_a_path_without_the_windows_verbatim_prefix() {
 
     let _ = std::fs::remove_dir_all(&dir);
 }
+
+/// `cronus completion <shell>` prints a script for the composed command tree.
+#[test]
+fn completion_emits_a_script_per_shell() {
+    for (shell, needle) in [
+        ("bash", "_cronus()"),
+        ("zsh", "#compdef cronus"),
+        ("fish", "complete -c cronus"),
+        ("powershell", "Register-ArgumentCompleter"),
+    ] {
+        let output = bin()
+            .args(["completion", shell])
+            .output()
+            .expect("failed to spawn binary");
+        assert!(output.status.success(), "completion {shell} must exit 0");
+        let stdout = String::from_utf8_lossy(&output.stdout);
+        assert!(
+            stdout.contains(needle),
+            "completion {shell} output missing {needle:?}: {}",
+            &stdout[..stdout.len().min(200)]
+        );
+        // The script covers the real surface — a semantic and an installation group.
+        assert!(stdout.contains("board") && stdout.contains("workspace"));
+    }
+
+    let bad = bin()
+        .args(["completion", "smalltalk"])
+        .output()
+        .expect("failed to spawn binary");
+    assert!(!bad.status.success(), "an unknown shell must fail");
+}

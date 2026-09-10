@@ -36,8 +36,11 @@ fn launch_mode(args: &[String]) -> LaunchMode {
     };
     if matches!(
         first.as_str(),
-        "--help" | "-h" | "help" | "--version" | "-V"
+        "--help" | "-h" | "help" | "--version" | "-V" | "completion"
     ) {
+        // `completion` joins the full-surface requests: it renders a script
+        // from the whole composed command tree, so it cannot be answered from
+        // the installation half's pre-composition grammar alone.
         return LaunchMode::FullSurfaceRequest;
     }
     LaunchMode::Verb
@@ -149,13 +152,20 @@ fn main() -> std::process::ExitCode {
     for group in all_groups {
         command = command.subcommand(group);
     }
-    let matches = command.get_matches();
+    // `completion` is served from this composed tree directly: it needs the
+    // whole `clap::Command` (every group, every verb, including contributed
+    // ones), which `installation::dispatch`'s per-verb handlers do not have.
+    let matches = command.clone().get_matches();
 
     let format = matches
         .get_one::<OutputFormat>("format")
         .copied()
         .unwrap_or(OutputFormat::Text);
     let ctx = output::Context::new(format);
+
+    if let Some(("completion", sub_matches)) = matches.subcommand() {
+        return exit_code(installation::emit_completion(sub_matches, &mut command));
+    }
 
     if let Some((name, sub_matches)) = matches.subcommand()
         && installation_group_names.contains(name)

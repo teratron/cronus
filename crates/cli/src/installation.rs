@@ -470,6 +470,22 @@ pub fn declared_invocables() -> Vec<Invocable> {
             stability: Stability::Shipped,
             journal_raw_input: true,
         },
+        // `Installation`: shell completion is asked far more often than the
+        // product runs and must be answerable from this frontend's own
+        // grammar. The generated script is emitted from the composed command
+        // tree once, at install time — the script itself does the
+        // per-keystroke work without calling back (LH-6's pre-composition
+        // artifact refinement is future work; this verb still composes once).
+        Invocable {
+            id: id("completion"),
+            name: "Completion",
+            summary: "Print a shell completion script (bash, zsh, fish, powershell, elvish)",
+            group: "completion",
+            locus: Locus::Installation,
+            binders: vec![text("shell", false)],
+            stability: Stability::Shipped,
+            journal_raw_input: true,
+        },
     ]
 }
 
@@ -622,6 +638,35 @@ pub fn launch_tui() -> i32 {
             1
         }
     }
+}
+
+/// Write a shell completion script for the composed command tree to stdout.
+///
+/// `command` is the *whole* tree — every installation and semantic group,
+/// including anything an extension contributed — so the emitted script is a
+/// faithful, static snapshot of the current surface. It is generated once (at
+/// install time); the script itself does the per-keystroke work without
+/// re-invoking `cronus`.
+pub fn emit_completion(matches: &ArgMatches, command: &mut Command) -> i32 {
+    let shell_arg = matches
+        .get_one::<String>("shell")
+        .map(String::as_str)
+        .unwrap_or_default();
+    let shell = match shell_arg {
+        "bash" => clap_complete::Shell::Bash,
+        "zsh" => clap_complete::Shell::Zsh,
+        "fish" => clap_complete::Shell::Fish,
+        "powershell" | "pwsh" => clap_complete::Shell::PowerShell,
+        "elvish" => clap_complete::Shell::Elvish,
+        other => {
+            eprintln!(
+                "error: unknown shell {other:?} (expected: bash, zsh, fish, powershell, elvish)"
+            );
+            return 2;
+        }
+    };
+    clap_complete::generate(shell, command, "cronus", &mut std::io::stdout());
+    0
 }
 
 /// Resolve `group`'s own matched subcommand and dispatch it directly to its
