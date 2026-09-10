@@ -27,7 +27,7 @@ Build: PowerShell, `cargo <cmd> -p cronus-cli -j 2` (rusqlite bundled needs C to
 - [x] R11 new cronus_domain::io_message::describe (ErrorKind -> English phrase + os code, never OS locale). Wired: workflow validate/run/transpile "cannot read", loop_group persist + read_report/read_spec (NotFound -> "run 'X' not found"). Helper reusable for future sites. unit test asserts ASCII/English.
 - [~] R12 SCOPED: added CardState::NAMES; board move unknown-state error now lists valid states; move summary names them. [possible values] in --help + exit-2 still needs BinderKind::EnumText contract extension (deferred - moderate ripple: generated.rs x2, tui/dispatch.rs, conformance_registration.rs).
 - [x] R13 added OutcomeValue::Float(f64) to contract; render_json emits bare number (finite-guarded), render_text + tui render arms added, redact catch-all covers it. budget show/set + nodus_value_to_outcome now use Float. render test extended (bare float + record-with-float, both parse as f64).
-- [~] R14 exec create takes ws_id+card_id; kanban sanitization (R1) covers card ids; exec ws_id path handling not separately audited (low risk, no per-ws file keyed by raw ws_id found).
+- [x] R14  exec_workspace::create now validates ws_id AND card_id as safe single path segments (ExecError::InvalidId) — the slug `<ws_id>-<card_id>-<ts>` becomes a directory name under the exec root, so `../` in either was an arbitrary-directory-create. unit test.
 
 ## Tranche 3 — debt & polish
 

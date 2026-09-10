@@ -42,6 +42,11 @@ pub enum ExecError {
     NotFound(String),
     RemoteGitForbidden,
     GateNotPassed,
+    /// A `ws_id` or `card_id` that is not a safe single path segment. The
+    /// slug `<ws_id>-<card_id>-<ts>` becomes a directory name under the exec
+    /// root, so a `..` or a separator would let a caller create a directory
+    /// anywhere the process can write.
+    InvalidId(String),
     Io(std::io::Error),
 }
 
@@ -54,9 +59,28 @@ impl std::fmt::Display for ExecError {
                 write!(f, "remote git operations are forbidden in exec workspaces")
             }
             ExecError::GateNotPassed => write!(f, "cannot finalize: quality gates have not passed"),
+            ExecError::InvalidId(s) => {
+                write!(f, "invalid id {s:?}: must be a single path segment")
+            }
             ExecError::Io(e) => write!(f, "I/O error: {e}"),
         }
     }
+}
+
+/// Reject an id that would not stay inside the exec root as part of a
+/// directory name — empty, `.`/`..`, or containing `/`, `\`, a NUL/control
+/// byte, or a `..` run.
+fn safe_segment(id: &str) -> bool {
+    !id.is_empty()
+        && id != "."
+        && id != ".."
+        && !id.contains('/')
+        && !id.contains('\\')
+        && !id.contains('\0')
+        && !id.contains("..")
+        && !id.chars().any(|c| c.is_control())
+        && std::path::Path::new(id).components().count() == 1
+        && !std::path::Path::new(id).is_absolute()
 }
 
 impl std::error::Error for ExecError {}
@@ -91,6 +115,12 @@ impl ExecWorkspaceManager {
         base_dir: &Path,
         now: u64,
     ) -> Result<ExecWorkspace> {
+        if !safe_segment(ws_id) {
+            return Err(ExecError::InvalidId(ws_id.to_string()));
+        }
+        if !safe_segment(card_id) {
+            return Err(ExecError::InvalidId(card_id.to_string()));
+        }
         let slug = make_slug(ws_id, card_id, now);
         if self.workspaces.iter().any(|w| w.slug == slug) {
             return Err(ExecError::AlreadyExists(slug));
@@ -165,5 +195,52 @@ impl ExecWorkspaceManager {
         }
         ws.state = ExecState::Discarded;
         Ok(())
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn tmp() -> PathBuf {
+        std::env::temp_dir().join(format!(
+            "cronus-execws-test-{}-{}",
+            std::process::id(),
+            std::time::SystemTime::now()
+                .duration_since(std::time::UNIX_EPOCH)
+                .map(|d| d.as_nanos())
+                .unwrap_or(0)
+        ))
+    }
+
+    #[test]
+    fn create_rejects_traversal_ids_and_writes_nothing_outside_the_root() {
+        let root = tmp();
+        std::fs::create_dir_all(&root).unwrap();
+        let base = root.join("exec");
+        let mut mgr = ExecWorkspaceManager::new();
+
+        for (ws, card) in [
+            ("../../../../pwned", "c"),
+            ("ws", "../../pwned"),
+            ("a/b", "c"),
+            ("a\\b", "c"),
+            ("", "c"),
+            ("..", "c"),
+        ] {
+            let err = mgr.create(ws, card, &base, 1).unwrap_err();
+            assert!(
+                matches!(err, ExecError::InvalidId(_)),
+                "{ws:?}/{card:?} must be rejected, got {err:?}"
+            );
+        }
+        assert!(
+            !root.parent().unwrap().join("pwned-c-1").exists(),
+            "a traversal id must not create a directory outside the exec root"
+        );
+
+        // A clean pair still works.
+        assert!(mgr.create("ws-1", "card-1", &base, 1).is_ok());
+        let _ = std::fs::remove_dir_all(&root);
     }
 }
