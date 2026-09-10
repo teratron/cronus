@@ -94,6 +94,21 @@ impl Paths {
     }
 }
 
+/// Render a path for human output, dropping the Windows `\\?\` (and `\\?\UNC\`)
+/// verbatim/extended-length prefix that `Path::canonicalize` adds. `cronus init`
+/// and `workflow scaffold` reported `\\?\C:\Users\...`, which is technically the
+/// same path but reads as noise and does not match what a user would type back.
+pub fn display_clean(path: &std::path::Path) -> String {
+    let s = path.display().to_string();
+    if let Some(rest) = s.strip_prefix(r"\\?\UNC\") {
+        format!(r"\\{rest}")
+    } else if let Some(rest) = s.strip_prefix(r"\\?\") {
+        rest.to_string()
+    } else {
+        s
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -104,6 +119,20 @@ mod tests {
         for root in [Root::Program, Root::State, Root::Cache, Root::Logs] {
             assert!(paths.resolve(root).starts_with("/tmp/cronus-portable"));
         }
+    }
+
+    #[test]
+    fn display_clean_strips_the_windows_verbatim_prefix() {
+        use std::path::Path;
+        assert_eq!(display_clean(Path::new(r"\\?\C:\Users\a")), r"C:\Users\a");
+        assert_eq!(
+            display_clean(Path::new(r"\\?\UNC\server\share")),
+            r"\\server\share"
+        );
+        assert_eq!(
+            display_clean(Path::new("/plain/unix/path")),
+            "/plain/unix/path"
+        );
     }
 
     #[test]

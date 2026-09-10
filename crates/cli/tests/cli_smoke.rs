@@ -27,6 +27,43 @@ fn unknown_command_exits_2() {
     assert_eq!(status.code(), Some(2), "unknown command must exit 2");
 }
 
+/// A command group named with no verb is a *usage* failure — clap answers it
+/// with the group's help and exit code 2, exactly like an unknown verb — never
+/// an application failure exit 1, and never the "error: internal: …" message
+/// that both halves of the launcher used to print. Covers a semantic group, a
+/// multi-verb installation group, and the one sub-nested installation group.
+#[test]
+fn a_group_with_no_verb_is_a_usage_failure_not_an_internal_error() {
+    for args in [
+        &["memory"][..],
+        &["board"][..],
+        &["workspace"][..],
+        &["registry"][..],
+        &["ext"][..],
+        &["ext", "skill"][..],
+    ] {
+        let output = bin().args(args).output().expect("failed to spawn binary");
+        let stderr = String::from_utf8_lossy(&output.stderr);
+        assert_eq!(
+            output.status.code(),
+            Some(2),
+            "`cronus {}` must exit 2 (usage), got {:?} — stderr: {stderr}",
+            args.join(" "),
+            output.status.code()
+        );
+        assert!(
+            !stderr.contains("error: internal:"),
+            "`cronus {}` must not print an internal error: {stderr}",
+            args.join(" ")
+        );
+        assert!(
+            stderr.contains("Usage:"),
+            "`cronus {}` must print a usage line: {stderr}",
+            args.join(" ")
+        );
+    }
+}
+
 #[test]
 fn workflow_validate_clean_exits_0() {
     let dir = std::env::temp_dir().join(format!("cronus-smoke-val-ok-{}", std::process::id()));
@@ -134,6 +171,60 @@ fn workflow_transpile_outputs_nonempty() {
     );
 
     let _ = std::fs::remove_dir_all(&dir);
+}
+
+/// `workflow scaffold` writes the file the caller named. Passing a `.nodus`
+/// path used to append a second `.nodus`, so the reported path and a later
+/// `workflow validate <path>` disagreed. Now `scaffold X.nodus` writes exactly
+/// `X.nodus` and that file validates clean.
+#[test]
+fn workflow_scaffold_writes_the_named_path_and_it_validates() {
+    let dir = std::env::temp_dir().join(format!("cronus-smoke-scaffold-{}", std::process::id()));
+    std::fs::create_dir_all(&dir).unwrap();
+    let file = dir.join("my_flow.nodus");
+
+    let scaffold = bin()
+        .args(["workflow", "scaffold"])
+        .arg(&file)
+        .output()
+        .expect("failed to spawn binary");
+    assert!(scaffold.status.success(), "scaffold must exit 0");
+    assert!(
+        file.is_file(),
+        "scaffold must write exactly the named file, not <name>.nodus.nodus"
+    );
+    assert!(
+        !dir.join("my_flow.nodus.nodus").exists(),
+        "scaffold must not double-append the extension"
+    );
+
+    let validate = bin()
+        .args(["workflow", "validate"])
+        .arg(&file)
+        .status()
+        .expect("failed to spawn binary");
+    assert!(
+        validate.success(),
+        "the scaffolded file must validate clean at its own path"
+    );
+
+    let _ = std::fs::remove_dir_all(&dir);
+}
+
+/// `board move` names the valid states when the one given is not recognised,
+/// so the vocabulary is discoverable without reading source.
+#[test]
+fn board_move_with_an_unknown_state_lists_the_valid_ones() {
+    let output = bin()
+        .args(["board", "move", "no-such-card", "sideways"])
+        .output()
+        .expect("failed to spawn binary");
+    assert!(!output.status.success());
+    let stderr = String::from_utf8_lossy(&output.stderr);
+    assert!(
+        stderr.contains("valid:") && stderr.contains("triage") && stderr.contains("done"),
+        "the error must enumerate the valid states: {stderr}"
+    );
 }
 
 // ── Command smoke tests ───────────────────────────────────────────────────────
@@ -586,4 +677,138 @@ fn workspace_delete_refuses_the_reserved_dev_office_id() {
     );
     let stderr = String::from_utf8_lossy(&output.stderr);
     assert!(stderr.contains("reserved"), "stderr: {stderr}");
+}
+
+/// `--format json` is honoured across the installation half too — several
+/// verbs used to print prose regardless. Each output line here must parse as
+/// JSON (checked structurally: starts with `{` or `[`, balanced, no bare
+/// backslash outside a `\` escape).
+#[test]
+fn installation_verbs_emit_valid_json_for_the_json_format() {
+    fn looks_like_json(s: &str) -> bool {
+        let t = s.trim();
+        if !(t.starts_with('{') || t.starts_with('[')) {
+            return false;
+        }
+        // every backslash must be part of a recognised escape
+        let bytes: Vec<char> = t.chars().collect();
+        let mut i = 0;
+        while i < bytes.len() {
+            if bytes[i] == '\\' {
+                match bytes.get(i + 1) {
+                    Some('"') | Some('\\') | Some('/') | Some('n') | Some('r') | Some('t')
+                    | Some('b') | Some('f') | Some('u') => i += 2,
+                    _ => return false,
+                }
+            } else {
+                i += 1;
+            }
+        }
+        true
+    }
+
+    for args in [
+        &["archetype", "list", "--format", "json"][..],
+        &["archetype", "list", "--active", "--format", "json"][..],
+        &["backup", "list", "--format", "json"][..],
+        &["dev", "status", "--format", "json"][..],
+    ] {
+        let output = bin().args(args).output().expect("failed to spawn binary");
+        assert!(
+            output.status.success(),
+            "`cronus {}` must exit 0",
+            args.join(" ")
+        );
+        let stdout = String::from_utf8_lossy(&output.stdout);
+        for line in stdout.lines().filter(|l| !l.trim().is_empty()) {
+            assert!(
+                looks_like_json(line),
+                "`cronus {}` produced a non-JSON / badly-escaped line: {line:?}",
+                args.join(" ")
+            );
+        }
+    }
+}
+
+/// `--help` lists command groups in one alphabetical run, not two (the
+/// installation/semantic split is internal). Checked by confirming the
+/// group-name column is sorted.
+#[test]
+fn top_level_help_lists_groups_in_one_sorted_run() {
+    let output = bin()
+        .arg("--help")
+        .output()
+        .expect("failed to spawn binary");
+    let stdout = String::from_utf8_lossy(&output.stdout);
+    let names: Vec<String> = stdout
+        .lines()
+        .skip_while(|l| !l.trim_start().starts_with("Commands:"))
+        .skip(1)
+        .take_while(|l| l.starts_with("  ") && !l.trim().is_empty())
+        .filter_map(|l| l.split_whitespace().next().map(str::to_string))
+        .filter(|n| n != "help")
+        .collect();
+    assert!(
+        names.len() > 10,
+        "expected the full group list, got {names:?}"
+    );
+    let mut sorted = names.clone();
+    sorted.sort();
+    assert_eq!(
+        names, sorted,
+        "command groups must appear in one alphabetical run"
+    );
+}
+
+/// `init` reports a clean path — no Windows `\?\` verbatim prefix.
+#[test]
+fn init_reports_a_path_without_the_windows_verbatim_prefix() {
+    let dir = std::env::temp_dir().join(format!("cronus-smoke-init-disp-{}", std::process::id()));
+    let _ = std::fs::remove_dir_all(&dir);
+    std::fs::create_dir_all(&dir).unwrap();
+
+    let output = bin()
+        .args(["init"])
+        .arg(&dir)
+        .output()
+        .expect("failed to spawn binary");
+    assert!(output.status.success());
+    let stdout = String::from_utf8_lossy(&output.stdout);
+    assert!(
+        !stdout.contains(r"\\?\"),
+        "init output must not contain the verbatim-path prefix: {stdout}"
+    );
+
+    let _ = std::fs::remove_dir_all(&dir);
+}
+
+/// `cronus completion <shell>` prints a script for the composed command tree.
+#[test]
+fn completion_emits_a_script_per_shell() {
+    for (shell, needle) in [
+        ("bash", "_cronus()"),
+        ("zsh", "#compdef cronus"),
+        ("fish", "complete -c cronus"),
+        ("powershell", "Register-ArgumentCompleter"),
+    ] {
+        let output = bin()
+            .args(["completion", shell])
+            .output()
+            .expect("failed to spawn binary");
+        assert!(output.status.success(), "completion {shell} must exit 0");
+        let stdout = String::from_utf8_lossy(&output.stdout);
+        assert!(
+            stdout.contains(needle),
+            "completion {shell} output missing {needle:?}: {}",
+            &stdout[..stdout.len().min(200)]
+        );
+        // The script covers the real surface — a semantic and an installation group.
+        assert!(stdout.contains("board") && stdout.contains("workspace"));
+    }
+
+    let bad = bin()
+        .args(["completion", "smalltalk"])
+        .output()
+        .expect("failed to spawn binary");
+    assert!(!bad.status.success(), "an unknown shell must fail");
 }

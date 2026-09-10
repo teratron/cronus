@@ -470,6 +470,22 @@ pub fn declared_invocables() -> Vec<Invocable> {
             stability: Stability::Shipped,
             journal_raw_input: true,
         },
+        // `Installation`: shell completion is asked far more often than the
+        // product runs and must be answerable from this frontend's own
+        // grammar. The generated script is emitted from the composed command
+        // tree once, at install time — the script itself does the
+        // per-keystroke work without calling back (LH-6's pre-composition
+        // artifact refinement is future work; this verb still composes once).
+        Invocable {
+            id: id("completion"),
+            name: "Completion",
+            summary: "Print a shell completion script (bash, zsh, fish, powershell, elvish)",
+            group: "completion",
+            locus: Locus::Installation,
+            binders: vec![text("shell", false)],
+            stability: Stability::Shipped,
+            journal_raw_input: true,
+        },
     ]
 }
 
@@ -530,7 +546,15 @@ pub fn build_installation_tree(invocables: &[&Invocable]) -> (Vec<Command>, Hash
         let about = group_about(group)
             .map(str::to_string)
             .unwrap_or_else(|| format!("{group} operations"));
-        let mut nested = Command::new(group.to_string()).about(about);
+        // A nested group with no verb is a usage failure (clap prints its help
+        // and exits 2), never an application failure: `dispatch`'s
+        // `dispatch_leaf(group, group, ...)` fallback — which produced the
+        // "no installation handler wired for <g> <g>" internal error — is
+        // reached only for a genuinely flat group now.
+        let mut nested = Command::new(group.to_string())
+            .about(about)
+            .subcommand_required(true)
+            .arg_required_else_help(true);
 
         // A verb tail itself containing a dot (`skill.import`) names one
         // sub-group, one level deeper than every other verb in this group
@@ -566,7 +590,10 @@ pub fn build_installation_tree(invocables: &[&Invocable]) -> (Vec<Command>, Hash
             let about = group_about(subgroup)
                 .map(str::to_string)
                 .unwrap_or_else(|| format!("{subgroup} operations"));
-            let mut sub_command = Command::new(subgroup.to_string()).about(about);
+            let mut sub_command = Command::new(subgroup.to_string())
+                .about(about)
+                .subcommand_required(true)
+                .arg_required_else_help(true);
             for (leaf, invocable) in &subgroups[subgroup] {
                 let mut verb = Command::new((*leaf).to_string()).about(invocable.summary);
                 for binder in &invocable.binders {
@@ -611,6 +638,35 @@ pub fn launch_tui() -> i32 {
             1
         }
     }
+}
+
+/// Write a shell completion script for the composed command tree to stdout.
+///
+/// `command` is the *whole* tree — every installation and semantic group,
+/// including anything an extension contributed — so the emitted script is a
+/// faithful, static snapshot of the current surface. It is generated once (at
+/// install time); the script itself does the per-keystroke work without
+/// re-invoking `cronus`.
+pub fn emit_completion(matches: &ArgMatches, command: &mut Command) -> i32 {
+    let shell_arg = matches
+        .get_one::<String>("shell")
+        .map(String::as_str)
+        .unwrap_or_default();
+    let shell = match shell_arg {
+        "bash" => clap_complete::Shell::Bash,
+        "zsh" => clap_complete::Shell::Zsh,
+        "fish" => clap_complete::Shell::Fish,
+        "powershell" | "pwsh" => clap_complete::Shell::PowerShell,
+        "elvish" => clap_complete::Shell::Elvish,
+        other => {
+            eprintln!(
+                "error: unknown shell {other:?} (expected: bash, zsh, fish, powershell, elvish)"
+            );
+            return 2;
+        }
+    };
+    clap_complete::generate(shell, command, "cronus", &mut std::io::stdout());
+    0
 }
 
 /// Resolve `group`'s own matched subcommand and dispatch it directly to its
@@ -730,12 +786,12 @@ fn dispatch_leaf(group: &str, verb: &str, matches: &ArgMatches, ctx: &Context) -
         ("archetype", "list") => {
             let catalog = matches.get_flag("catalog");
             let active = matches.get_flag("active");
-            crate::commands::archetype_cmd::list(catalog, active)
+            crate::commands::archetype_cmd::list(catalog, active, ctx)
         }
         ("archetype", "info") => {
             let id = matches.get_one::<String>("id").cloned().unwrap_or_default();
             let deviations = matches.get_flag("deviations");
-            crate::commands::archetype_cmd::info(&id, deviations)
+            crate::commands::archetype_cmd::info(&id, deviations, ctx)
         }
         ("archetype", "set") => {
             let id = matches.get_one::<String>("id").cloned();
@@ -751,7 +807,7 @@ fn dispatch_leaf(group: &str, verb: &str, matches: &ArgMatches, ctx: &Context) -
                 .get_one::<String>("from")
                 .cloned()
                 .unwrap_or_default();
-            crate::commands::archetype_cmd::create(&name, &from)
+            crate::commands::archetype_cmd::create(&name, &from, ctx)
         }
         ("registry", "list") => crate::commands::registry::list(ctx),
         ("registry", "show") => {

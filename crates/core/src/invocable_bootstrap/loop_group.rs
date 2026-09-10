@@ -3,6 +3,7 @@ use std::time::{SystemTime, UNIX_EPOCH};
 
 use cronus_contract::{Binder, BinderKind, Invocable, Locus, Outcome, OutcomeValue, Stability};
 use cronus_domain::invocable::{Dispatcher, InvocableRegistry, Registrant};
+use cronus_domain::io_message;
 use cronus_domain::loop_runner::{LoopOutcome, run_execution};
 
 use crate::loop_bootstrap::{
@@ -87,12 +88,12 @@ fn register_run(registry: &mut InvocableRegistry, dispatcher: &mut Dispatcher) {
 
             if let Err(e) = write_report(&run_id, &report) {
                 return Outcome::Unavailable {
-                    reason: format!("failed to persist ledger: {e}"),
+                    reason: format!("failed to persist ledger: {}", io_message::describe(&e)),
                 };
             }
             if let Err(e) = write_spec(&run_id, &spec) {
                 return Outcome::Unavailable {
-                    reason: format!("failed to persist spec: {e}"),
+                    reason: format!("failed to persist spec: {}", io_message::describe(&e)),
                 };
             }
 
@@ -181,8 +182,11 @@ fn register_log(registry: &mut InvocableRegistry, dispatcher: &mut Dispatcher) {
             let run_id = text_arg(args, "run_id");
             match read_report(run_id) {
                 Ok(text) => Outcome::Value(OutcomeValue::Text(text)),
+                Err(e) if e.kind() == std::io::ErrorKind::NotFound => Outcome::Unavailable {
+                    reason: format!("run '{run_id}' not found"),
+                },
                 Err(e) => Outcome::Unavailable {
-                    reason: e.to_string(),
+                    reason: io_message::describe(&e),
                 },
             }
         }),
@@ -214,8 +218,11 @@ fn register_show(registry: &mut InvocableRegistry, dispatcher: &mut Dispatcher) 
             let run_id = text_arg(args, "run_id");
             match read_spec(run_id) {
                 Ok(text) => Outcome::Value(OutcomeValue::Text(text)),
+                Err(e) if e.kind() == std::io::ErrorKind::NotFound => Outcome::Unavailable {
+                    reason: format!("run '{run_id}' not found"),
+                },
                 Err(e) => Outcome::Unavailable {
-                    reason: e.to_string(),
+                    reason: io_message::describe(&e),
                 },
             }
         }),

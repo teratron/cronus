@@ -36,8 +36,11 @@ fn launch_mode(args: &[String]) -> LaunchMode {
     };
     if matches!(
         first.as_str(),
-        "--help" | "-h" | "help" | "--version" | "-V"
+        "--help" | "-h" | "help" | "--version" | "-V" | "completion"
     ) {
+        // `completion` joins the full-surface requests: it renders a script
+        // from the whole composed command tree, so it cannot be answered from
+        // the installation half's pre-composition grammar alone.
         return LaunchMode::FullSurfaceRequest;
     }
     LaunchMode::Verb
@@ -138,19 +141,31 @@ fn main() -> std::process::ExitCode {
     // --format json`), which stays a genuine usage failure, not a spelling
     // of "launch the default."
     let mut command = cli::Cli::command().subcommand_required(true);
-    for group in installation_groups {
+    // One alphabetical list, not two: the installation/semantic split is an
+    // internal build-order distinction (§4.1.1), not something a user reading
+    // `--help` should see as `workspace` … `agent` … `board`.
+    let mut all_groups: Vec<Command> = installation_groups
+        .into_iter()
+        .chain(semantic_groups)
+        .collect();
+    all_groups.sort_by(|a, b| a.get_name().cmp(b.get_name()));
+    for group in all_groups {
         command = command.subcommand(group);
     }
-    for group in semantic_groups {
-        command = command.subcommand(group);
-    }
-    let matches = command.get_matches();
+    // `completion` is served from this composed tree directly: it needs the
+    // whole `clap::Command` (every group, every verb, including contributed
+    // ones), which `installation::dispatch`'s per-verb handlers do not have.
+    let matches = command.clone().get_matches();
 
     let format = matches
         .get_one::<OutputFormat>("format")
         .copied()
         .unwrap_or(OutputFormat::Text);
     let ctx = output::Context::new(format);
+
+    if let Some(("completion", sub_matches)) = matches.subcommand() {
+        return exit_code(installation::emit_completion(sub_matches, &mut command));
+    }
 
     if let Some((name, sub_matches)) = matches.subcommand()
         && installation_group_names.contains(name)
@@ -448,6 +463,8 @@ fn render_json(value: &OutcomeValue) -> String {
         OutcomeValue::Empty => "null".to_string(),
         OutcomeValue::Text(s) => format!("\"{}\"", json_escape(s)),
         OutcomeValue::Integer(n) => n.to_string(),
+        OutcomeValue::Float(n) if n.is_finite() => format!("{n}"),
+        OutcomeValue::Float(_) => "null".to_string(),
         OutcomeValue::Boolean(b) => b.to_string(),
         OutcomeValue::List(items) => {
             format!(
@@ -484,6 +501,7 @@ fn render_text_inline(value: &OutcomeValue) -> String {
         OutcomeValue::Empty => "(empty)".to_string(),
         OutcomeValue::Text(s) => s.clone(),
         OutcomeValue::Integer(n) => n.to_string(),
+        OutcomeValue::Float(n) => format!("{n}"),
         OutcomeValue::Boolean(b) => b.to_string(),
         OutcomeValue::List(items) => items
             .iter()
@@ -608,6 +626,12 @@ mod render_tests {
                 0,
             ),
             ("bare integer", OutcomeValue::Integer(42), 0),
+            ("bare float", OutcomeValue::Float(1.5), 0),
+            (
+                "record with a float field",
+                OutcomeValue::Record(vec![("limit".to_string(), OutcomeValue::Float(100.0))]),
+                0,
+            ),
             ("bare boolean", OutcomeValue::Boolean(true), 0),
             ("empty list", OutcomeValue::List(Vec::new()), 0),
             (
@@ -731,11 +755,21 @@ mod render_tests {
             // brackets, `key: value` vs. `"key":value`) must genuinely
             // differ, which is the real signal a site silently reused one
             // format's text for the other.
-            if !matches!(shape, OutcomeValue::Integer(_) | OutcomeValue::Boolean(_)) {
+            if !matches!(
+                shape,
+                OutcomeValue::Integer(_) | OutcomeValue::Boolean(_) | OutcomeValue::Float(_)
+            ) {
                 assert_ne!(
                     text_out, json_out,
                     "{label}: text and json format must render differently — identical output \
                      means the format flag was consulted by neither, or discarded by one"
+                );
+            }
+            // A float must reach JSON as a bare number, never a quoted string.
+            if matches!(shape, OutcomeValue::Float(_)) {
+                assert!(
+                    json_out.parse::<f64>().is_ok(),
+                    "{label}: a float must render as a bare JSON number, got {json_out:?}"
                 );
             }
         }

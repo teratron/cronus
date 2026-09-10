@@ -5,7 +5,7 @@ pub(crate) mod init {
 
     use cronus_core::state;
 
-    use crate::output::Context;
+    use crate::output::{Context, json_escape};
 
     pub fn run(path: Option<PathBuf>, ctx: &Context) -> i32 {
         let target =
@@ -28,11 +28,14 @@ pub(crate) mod init {
                     let abs = target
                         .canonicalize()
                         .unwrap_or_else(|_| target.to_path_buf());
+                    let shown = cronus_core::paths::display_clean(&abs);
                     if ctx.is_json() {
-                        let p = json_escape(&abs.display().to_string());
-                        println!("{{\"result\":\"initialized\",\"path\":\"{p}\"}}");
+                        println!(
+                            "{{\"result\":\"initialized\",\"path\":\"{}\"}}",
+                            json_escape(&shown)
+                        );
                     } else {
-                        println!("Initialized: {}", abs.display());
+                        println!("Initialized: {shown}");
                     }
                 }
                 0
@@ -42,10 +45,6 @@ pub(crate) mod init {
                 1
             }
         }
-    }
-
-    fn json_escape(s: &str) -> String {
-        s.replace('\\', "\\\\").replace('"', "\\\"")
     }
 
     #[cfg(test)]
@@ -87,17 +86,42 @@ pub(crate) mod init {
 
 // ─── status ───────────────────────────────────────────────────────────────────
 
+/// The workspace root a read-side verb (`status`, `doctor`) reports on: the
+/// nearest ancestor of the current directory that `cronus init` scaffolded
+/// (`init` seeds `app.json` there), falling back to the OS state tier for a
+/// globally-initialised install. `init` writes to the current directory, so
+/// these verbs must look where `init` wrote — not only at the OS state tier,
+/// which the CLI's `init` never populates.
+pub(crate) fn resolve_workspace_root() -> std::path::PathBuf {
+    let cwd = std::env::current_dir().ok();
+    let fallback = cronus_core::paths::Paths::os_native().resolve(cronus_core::paths::Root::State);
+    resolve_workspace_root_from(cwd.as_deref(), fallback)
+}
+
+/// Pure resolver: the first ancestor of `start` that holds `app.json`, else
+/// `fallback`. Split out so it is testable without mutating the process
+/// working directory.
+pub(crate) fn resolve_workspace_root_from(
+    start: Option<&std::path::Path>,
+    fallback: std::path::PathBuf,
+) -> std::path::PathBuf {
+    if let Some(start) = start {
+        for ancestor in start.ancestors() {
+            if ancestor.join("app.json").is_file() {
+                return ancestor.to_path_buf();
+            }
+        }
+    }
+    fallback
+}
+
 pub(crate) mod status {
     use std::path::Path;
-
-    use cronus_core::paths::{Paths, Root};
 
     use crate::output::Context;
 
     pub fn run(ctx: &Context) -> i32 {
-        let paths = Paths::os_native();
-        let root = paths.resolve(Root::State);
-        run_at(&root, ctx)
+        run_at(&crate::commands::resolve_workspace_root(), ctx)
     }
 
     fn run_at(state_root: &Path, ctx: &Context) -> i32 {
@@ -111,7 +135,10 @@ pub(crate) mod status {
             .unwrap_or("default")
             .to_owned();
         if ctx.is_json() {
-            println!("{{\"workspace\":\"{workspace}\",\"phase\":\"ready\"}}");
+            println!(
+                "{{\"workspace\":\"{}\",\"phase\":\"ready\"}}",
+                crate::output::json_escape(&workspace)
+            );
         } else {
             println!("workspace: {workspace}");
             println!("phase:     ready");
@@ -153,6 +180,59 @@ pub(crate) mod status {
                 "status must exit 1 when not initialized"
             );
         }
+
+        /// `init` scaffolds the current directory (or a `--path`),
+        /// not the OS state tier — so `status`, resolving from that directory
+        /// or any descendant, must find that `app.json` rather than reporting
+        /// "No workspace initialized" forever.
+        #[test]
+        fn status_resolves_an_initialized_ancestor_over_the_fallback() {
+            use crate::commands::resolve_workspace_root_from as resolve_root_from;
+
+            let root = std::env::temp_dir().join(format!(
+                "cronus-status-anc-{}-{}",
+                std::process::id(),
+                std::time::SystemTime::now()
+                    .duration_since(std::time::UNIX_EPOCH)
+                    .map(|d| d.as_nanos())
+                    .unwrap_or(0)
+            ));
+            let nested = root.join("a").join("b");
+            fs::create_dir_all(&nested).unwrap();
+            fs::write(root.join("app.json"), "{}\n").unwrap();
+            let fallback = root.join("nonexistent-state-tier");
+
+            let resolved = resolve_root_from(Some(&nested), fallback.clone());
+            assert_eq!(
+                resolved, root,
+                "must resolve the ancestor holding app.json, not the fallback"
+            );
+
+            // A start dir with no app.json in any ancestor -> the fallback.
+            let bare = std::env::temp_dir().join(format!(
+                "cronus-status-bare-{}-{}",
+                std::process::id(),
+                std::time::SystemTime::now()
+                    .duration_since(std::time::UNIX_EPOCH)
+                    .map(|d| d.as_nanos())
+                    .unwrap_or(0)
+            ));
+            fs::create_dir_all(&bare).unwrap();
+            assert_eq!(
+                resolve_root_from(Some(&bare), fallback.clone()),
+                fallback,
+                "with no app.json in any ancestor, resolve to the fallback"
+            );
+            let _ = fs::remove_dir_all(&bare);
+
+            let ctx = Context::new(OutputFormat::Text);
+            assert_eq!(
+                run_at(&root, &ctx),
+                0,
+                "status must exit 0 for the resolved initialized root"
+            );
+            let _ = fs::remove_dir_all(&root);
+        }
     }
 }
 
@@ -162,14 +242,11 @@ pub(crate) mod doctor {
     use std::path::Path;
 
     use cronus_core::doctor::{self, Disposition};
-    use cronus_core::paths::{Paths, Root};
 
     use crate::output::Context;
 
     pub fn run(fix: bool, ctx: &Context) -> i32 {
-        let paths = Paths::os_native();
-        let root = paths.resolve(Root::State);
-        run_at(&root, fix, ctx)
+        run_at(&crate::commands::resolve_workspace_root(), fix, ctx)
     }
 
     /// Config validity is checked against the real workspace state root;
@@ -262,7 +339,7 @@ pub(crate) mod backup_cmd {
     use cronus_core::backup::{self, BackupOptions};
     use cronus_core::paths::{Paths, Root};
 
-    use crate::output::Context;
+    use crate::output::{Context, json_escape};
 
     fn state_root_and_backups_dir() -> (PathBuf, PathBuf) {
         let paths = Paths::os_native();
@@ -297,8 +374,8 @@ pub(crate) mod backup_cmd {
                 if ctx.is_json() {
                     println!(
                         "{{\"id\":\"{}\",\"path\":\"{}\"}}",
-                        backup_ref.id,
-                        backup_ref.path.display()
+                        json_escape(&backup_ref.id),
+                        json_escape(&backup_ref.path.display().to_string())
                     );
                 } else {
                     println!(
@@ -318,27 +395,32 @@ pub(crate) mod backup_cmd {
 
     fn list_at(backups_dir: &Path, ctx: &Context) -> i32 {
         match backup::list(backups_dir) {
-            // Known residual, not fixed here: the empty case ignores
-            // `--format json` and always prints prose, unlike the
-            // non-empty branch just below — corrected separately, after
-            // convergence, alongside the same defect at every other site
-            // that discards the requested format.
             Ok(backups) if backups.is_empty() => {
-                println!("no backups found");
+                if ctx.is_json() {
+                    println!("[]");
+                } else {
+                    println!("no backups found");
+                }
+                0
+            }
+            Ok(backups) if ctx.is_json() => {
+                let rows: Vec<String> = backups
+                    .iter()
+                    .map(|b| {
+                        format!(
+                            "{{\"id\":\"{}\",\"path\":\"{}\",\"created_at\":{}}}",
+                            json_escape(&b.id),
+                            json_escape(&b.path.display().to_string()),
+                            b.created_at_unix
+                        )
+                    })
+                    .collect();
+                println!("[{}]", rows.join(","));
                 0
             }
             Ok(backups) => {
                 for backup_ref in &backups {
-                    if ctx.is_json() {
-                        println!(
-                            "{{\"id\":\"{}\",\"path\":\"{}\",\"created_at\":{}}}",
-                            backup_ref.id,
-                            backup_ref.path.display(),
-                            backup_ref.created_at_unix
-                        );
-                    } else {
-                        println!("{}\t{}", backup_ref.id, backup_ref.path.display());
-                    }
+                    println!("{}\t{}", backup_ref.id, backup_ref.path.display());
                 }
                 0
             }
@@ -504,7 +586,10 @@ pub(crate) mod workspace {
         match mgr.create(&ws_id, ws_name, &ws_path, WorkspaceTemplate::Default) {
             Ok(ws) => {
                 if ctx.is_json() {
-                    println!("{{\"result\":\"created\",\"id\":\"{}\"}}", ws.id);
+                    println!(
+                        "{{\"result\":\"created\",\"id\":\"{}\"}}",
+                        crate::output::json_escape(&ws.id.to_string())
+                    );
                 } else {
                     println!("Created workspace: {} ({})", ws.id, ws.name);
                 }
@@ -535,14 +620,14 @@ pub(crate) mod workspace {
                             let is_active = active.as_ref().map(|a| a == &w.id).unwrap_or(false);
                             format!(
                                 "{{\"id\":\"{}\",\"name\":\"{}\",\"active\":{is_active}}}",
-                                w.id,
+                                json_escape(&w.id.to_string()),
                                 json_escape(&w.name)
                             )
                         })
                         .collect();
                     println!("[{}]", items.join(","));
                 } else if workspaces.is_empty() {
-                    println!("No workspaces.");
+                    println!("No results.");
                 } else {
                     for w in &workspaces {
                         let marker = if active.as_ref().map(|a| a == &w.id).unwrap_or(false) {
@@ -580,7 +665,10 @@ pub(crate) mod workspace {
         match mgr.set_active(&ws_id) {
             Ok(()) => {
                 if ctx.is_json() {
-                    println!("{{\"result\":\"switched\",\"id\":\"{ws_id}\"}}");
+                    println!(
+                        "{{\"result\":\"switched\",\"id\":\"{}\"}}",
+                        crate::output::json_escape(&ws_id.to_string())
+                    );
                 } else {
                     println!("Active workspace: {ws_id}");
                 }
@@ -615,7 +703,10 @@ pub(crate) mod workspace {
         match mgr.delete(&ws_id) {
             Ok(true) => {
                 if ctx.is_json() {
-                    println!("{{\"result\":\"deleted\",\"id\":\"{ws_id}\"}}");
+                    println!(
+                        "{{\"result\":\"deleted\",\"id\":\"{}\"}}",
+                        crate::output::json_escape(&ws_id.to_string())
+                    );
                 } else {
                     println!("Deleted workspace: {ws_id}");
                 }
@@ -847,7 +938,10 @@ pub(crate) mod ext {
                     // escaping — a `"` or `\` in an extension id would
                     // emit invalid JSON. Corrected separately, after
                     // convergence, by real `Outcome` serialization.
-                    println!("{{\"result\":\"activated\",\"id\":\"{id}\"}}");
+                    println!(
+                        "{{\"result\":\"activated\",\"id\":\"{}\"}}",
+                        crate::output::json_escape(&id)
+                    );
                 } else {
                     println!("Activated: {id}");
                 }
@@ -865,9 +959,10 @@ pub(crate) mod ext {
         match registry.transition(&id, ExtensionState::Inactive) {
             Ok(()) => {
                 if ctx.is_json() {
-                    // Known residual, not fixed here: same unescaped
-                    // interpolation as `activate` above.
-                    println!("{{\"result\":\"deactivated\",\"id\":\"{id}\"}}");
+                    println!(
+                        "{{\"result\":\"deactivated\",\"id\":\"{}\"}}",
+                        crate::output::json_escape(&id)
+                    );
                 } else {
                     println!("Deactivated: {id}");
                 }
@@ -1237,7 +1332,7 @@ pub(crate) mod registry {
     // so no `RegistryCommand`-shaped wrapper is needed here any more.
 
     pub(crate) fn list(ctx: &Context) -> i32 {
-        let registry = AgentRegistry::new();
+        let registry = AgentRegistry::load();
         let agents = registry.list_active();
         if ctx.is_json() {
             let items: Vec<String> = agents
@@ -1258,7 +1353,7 @@ pub(crate) mod registry {
     // separately, after convergence, alongside the same defect at every
     // other site that discards the requested format.
     pub(crate) fn show(name: String, _ctx: &Context) -> i32 {
-        let registry = AgentRegistry::new();
+        let registry = AgentRegistry::load();
         match registry.resolve(&name) {
             Ok(a) => {
                 println!("name:        {}", a.name);
@@ -1274,17 +1369,24 @@ pub(crate) mod registry {
     }
 
     pub(crate) fn create(name: String, description: String, ctx: &Context) -> i32 {
-        let mut registry = AgentRegistry::new();
+        let mut registry = AgentRegistry::load();
         let def = AgentRegistry::generate_from_description(&name, &description);
         let def_name = def.name.clone();
         registry.register_custom(def);
+        if let Err(e) = registry.save() {
+            eprintln!("error: could not persist the agent registry: {e}");
+            return 1;
+        }
         if ctx.is_json() {
             // Known residual, not fixed here: `def_name` is interpolated
             // into a hand-built JSON literal without escaping — a `"` or
             // `\` in an agent name would emit invalid JSON. Corrected
             // separately, after convergence, by real `Outcome`
             // serialization.
-            println!("{{\"result\":\"created\",\"name\":\"{def_name}\"}}");
+            println!(
+                "{{\"result\":\"created\",\"name\":\"{}\"}}",
+                crate::output::json_escape(&def_name)
+            );
         } else {
             println!("Created: {def_name}");
         }
@@ -1292,12 +1394,17 @@ pub(crate) mod registry {
     }
 
     pub(crate) fn disable(name: String, ctx: &Context) -> i32 {
-        let mut registry = AgentRegistry::new();
+        let mut registry = AgentRegistry::load();
         registry.apply_user_config(&name, true, None);
+        if let Err(e) = registry.save() {
+            eprintln!("error: could not persist the agent registry: {e}");
+            return 1;
+        }
         if ctx.is_json() {
-            // Known residual, not fixed here: same unescaped interpolation
-            // as `create` above.
-            println!("{{\"result\":\"disabled\",\"name\":\"{name}\"}}");
+            println!(
+                "{{\"result\":\"disabled\",\"name\":\"{}\"}}",
+                crate::output::json_escape(&name)
+            );
         } else {
             println!("Disabled: {name}");
         }
@@ -1305,12 +1412,17 @@ pub(crate) mod registry {
     }
 
     pub(crate) fn enable(name: String, ctx: &Context) -> i32 {
-        let mut registry = AgentRegistry::new();
+        let mut registry = AgentRegistry::load();
         registry.apply_user_config(&name, false, None);
+        if let Err(e) = registry.save() {
+            eprintln!("error: could not persist the agent registry: {e}");
+            return 1;
+        }
         if ctx.is_json() {
-            // Known residual, not fixed here: same unescaped interpolation
-            // as `create` above.
-            println!("{{\"result\":\"enabled\",\"name\":\"{name}\"}}");
+            println!(
+                "{{\"result\":\"enabled\",\"name\":\"{}\"}}",
+                crate::output::json_escape(&name)
+            );
         } else {
             println!("Enabled: {name}");
         }
@@ -1563,7 +1675,7 @@ pub(crate) mod archetype_cmd {
     use cronus_core::archetype::{ArchetypeCatalog, ValidationStatus};
     use cronus_core::paths::{Paths, Root};
 
-    use crate::output::Context;
+    use crate::output::{Context, json_escape};
 
     // Reached directly from `crate::installation::dispatch` now — the
     // installation half's own generated grammar owns the `archetype`
@@ -1587,17 +1699,57 @@ pub(crate) mod archetype_cmd {
             .filter(|s| !s.is_empty())
     }
 
-    // Known residual, not fixed here: this handler takes no `Context` at
-    // all, so `--format json` is silently discarded — corrected
-    // separately, after convergence, alongside the same defect at every
-    // other site that discards the requested format.
-    pub(crate) fn list(_catalog: bool, active: bool) -> i32 {
+    fn json_str_array(items: impl Iterator<Item = String>) -> String {
+        let inner: Vec<String> = items.map(|s| format!("\"{}\"", json_escape(&s))).collect();
+        format!("[{}]", inner.join(","))
+    }
+
+    pub(crate) fn list(catalog_only: bool, active: bool, ctx: &Context) -> i32 {
+        let _ = catalog_only;
         let catalog = ArchetypeCatalog::program();
         if active {
-            match read_active() {
-                Some(id) => println!("active archetype: {id}"),
-                None => println!("active archetype: (none — archetype-free)"),
+            let current = read_active();
+            if ctx.is_json() {
+                match &current {
+                    Some(id) => println!("{{\"active\":\"{}\"}}", json_escape(id)),
+                    None => println!("{{\"active\":null}}"),
+                }
+            } else {
+                match &current {
+                    Some(id) => println!("active archetype: {id}"),
+                    None => println!("active archetype: (none — archetype-free)"),
+                }
             }
+            return 0;
+        }
+        if ctx.is_json() {
+            let shipped = catalog
+                .shipped()
+                .iter()
+                .map(|def| {
+                    format!(
+                        "{{\"id\":\"{}\",\"domain\":\"{}\",\"roles\":{}}}",
+                        json_escape(&def.id),
+                        json_escape(&def.domain),
+                        def.pool.len()
+                    )
+                })
+                .collect::<Vec<_>>()
+                .join(",");
+            let blocked = catalog
+                .blocked()
+                .iter()
+                .map(|b| {
+                    format!(
+                        "{{\"id\":\"{}\",\"domain\":\"{}\",\"missing_roles\":{}}}",
+                        json_escape(&b.id),
+                        json_escape(&b.domain),
+                        json_str_array(b.missing_roles.iter().cloned())
+                    )
+                })
+                .collect::<Vec<_>>()
+                .join(",");
+            println!("{{\"shipped\":[{shipped}],\"blocked\":[{blocked}]}}");
             return 0;
         }
         println!("shipped:");
@@ -1616,11 +1768,27 @@ pub(crate) mod archetype_cmd {
         0
     }
 
-    // Known residual, not fixed here: same missing `Context` as `list`
-    // above — `--format json` is silently discarded.
-    pub(crate) fn info(id: &str, deviations: bool) -> i32 {
+    pub(crate) fn info(id: &str, deviations: bool, ctx: &Context) -> i32 {
         let catalog = ArchetypeCatalog::program();
         if let Some(def) = catalog.get(id) {
+            if ctx.is_json() {
+                let validation = if deviations {
+                    format!(",\"validation\":\"{:?}\"", ValidationStatus::Unvalidated)
+                } else {
+                    String::new()
+                };
+                println!(
+                    "{{\"id\":\"{}\",\"domain\":\"{}\",\"pool\":{},\"departments\":{},\
+                     \"grow_when\":\"{}\",\"seed\":{}{validation}}}",
+                    json_escape(&def.id),
+                    json_escape(&def.domain),
+                    json_str_array(def.pool.iter().cloned()),
+                    json_str_array(def.shape.departments.iter().cloned()),
+                    json_escape(&def.shape.grow_when),
+                    def.seed.len(),
+                );
+                return 0;
+            }
             println!("archetype: {}", def.id);
             println!("domain: {}", def.domain);
             println!("pool ({}): {}", def.pool.len(), def.pool.join(", "));
@@ -1635,6 +1803,15 @@ pub(crate) mod archetype_cmd {
             }
             0
         } else if let Some(b) = catalog.blocked_status(id) {
+            if ctx.is_json() {
+                println!(
+                    "{{\"id\":\"{}\",\"blocked\":true,\"domain\":\"{}\",\"missing_roles\":{}}}",
+                    json_escape(&b.id),
+                    json_escape(&b.domain),
+                    json_str_array(b.missing_roles.iter().cloned())
+                );
+                return 0;
+            }
             println!("archetype: {} (BLOCKED)", b.id);
             println!("domain: {}", b.domain);
             println!("missing roles: {}", b.missing_roles.join(", "));
@@ -1690,23 +1867,29 @@ pub(crate) mod archetype_cmd {
             return 1;
         }
         if ctx.is_json() {
-            println!("{{\"active\":\"{id}\"}}");
+            println!("{{\"active\":\"{}\"}}", json_escape(&id));
         } else {
             println!("archetype set: {id} (expectations re-scoped; staff unchanged)");
         }
         0
     }
 
-    // Known residual, not fixed here: same missing `Context` as `list`/
-    // `info` above — `--format json` is silently discarded.
-    pub(crate) fn create(name: &str, from: &str) -> i32 {
+    pub(crate) fn create(name: &str, from: &str, ctx: &Context) -> i32 {
         let catalog = ArchetypeCatalog::program();
         match catalog.create_from_preset(&state_dir(), name, from) {
             Ok(custom) => {
-                println!(
-                    "created custom archetype '{}' from preset '{}'",
-                    custom.definition.id, custom.derived_from
-                );
+                if ctx.is_json() {
+                    println!(
+                        "{{\"id\":\"{}\",\"derived_from\":\"{}\"}}",
+                        json_escape(&custom.definition.id),
+                        json_escape(&custom.derived_from)
+                    );
+                } else {
+                    println!(
+                        "created custom archetype '{}' from preset '{}'",
+                        custom.definition.id, custom.derived_from
+                    );
+                }
                 0
             }
             Err(e) => {

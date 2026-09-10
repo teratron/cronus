@@ -223,6 +223,7 @@ fn render_value(value: &OutcomeValue) -> String {
         OutcomeValue::Empty => "(empty)".to_string(),
         OutcomeValue::Text(s) => s.clone(),
         OutcomeValue::Integer(n) => n.to_string(),
+        OutcomeValue::Float(n) => format!("{n}"),
         OutcomeValue::Boolean(b) => b.to_string(),
         OutcomeValue::List(items) if items.is_empty() => "no results".to_string(),
         OutcomeValue::List(items) => items
