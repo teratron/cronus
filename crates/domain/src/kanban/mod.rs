@@ -16,9 +16,18 @@ use std::path::{Path, PathBuf};
 
 #[derive(Debug)]
 pub enum KanbanError {
-    InvalidTransition { from: CardState, to: CardState },
+    InvalidTransition {
+        from: CardState,
+        to: CardState,
+    },
     BlockedRequiresReason,
     CardNotFound(String),
+    /// The card id is not a safe single path segment (empty, or contains a
+    /// separator, a `..` component, a drive/root prefix, or a control byte).
+    /// Card ids are turned into `cards/<id>.json` filenames, so an id that
+    /// escapes that directory would let a caller write an arbitrary `.json`
+    /// file anywhere the process can reach.
+    InvalidCardId(String),
     Io(std::io::Error),
 }
 
@@ -30,9 +39,33 @@ impl fmt::Display for KanbanError {
             }
             KanbanError::BlockedRequiresReason => write!(f, "blocked state requires a reason"),
             KanbanError::CardNotFound(id) => write!(f, "card not found: {id}"),
+            KanbanError::InvalidCardId(id) => {
+                write!(f, "invalid card id {id:?}: must be a single path segment")
+            }
             KanbanError::Io(e) => write!(f, "I/O error: {e}"),
         }
     }
+}
+
+/// Reject any card id that would not stay inside `cards/` when turned into a
+/// `<id>.json` filename. Accepts a plain single segment; rejects empty ids,
+/// `.`/`..`, ids containing `/`, `\`, or a NUL/control byte, and anything the
+/// OS would treat as absolute or drive-qualified.
+fn validate_card_id(id: &str) -> Result<()> {
+    let bad = id.is_empty()
+        || id == "."
+        || id == ".."
+        || id.contains('/')
+        || id.contains('\\')
+        || id.contains('\0')
+        || id.contains("..")
+        || id.chars().any(|c| c.is_control())
+        || std::path::Path::new(id).components().count() != 1
+        || std::path::Path::new(id).is_absolute();
+    if bad {
+        return Err(KanbanError::InvalidCardId(id.to_string()));
+    }
+    Ok(())
 }
 
 impl std::error::Error for KanbanError {}
@@ -262,6 +295,7 @@ impl Board {
 
     /// Add a new card (starts in Triage).
     pub fn add_card(&self, id: &str, task_ref: &str, now: u64) -> Result<Card> {
+        validate_card_id(id)?;
         fs::create_dir_all(self.cards_dir())?;
         let card = Card::new(id, task_ref, now);
         self.save_card(&card)?;
@@ -277,6 +311,7 @@ impl Board {
 
     /// Load a card by ID.
     pub fn get_card(&self, id: &str) -> Result<Option<Card>> {
+        validate_card_id(id)?;
         let path = self.card_path(id);
         if !path.exists() {
             return Ok(None);
@@ -332,8 +367,16 @@ impl Board {
     }
 
     /// Append a line to the card's event log.
+    ///
+    /// Creates `events/` first — the same way [`Board::save_card`] creates
+    /// `cards/`. Without this, a board whose cards were added via
+    /// [`Board::add_card`] (which only creates `cards/`) has no `events/`
+    /// directory, so this open fails *after* [`Board::move_card`] has already
+    /// written the card in its new state: the transition takes effect but the
+    /// command still reports an I/O error.
     fn append_event(&self, card_id: &str, event: &str) -> Result<()> {
         use std::io::Write;
+        fs::create_dir_all(self.events_dir())?;
         let path = self.events_dir().join(format!("{card_id}.jsonl"));
         let mut file = fs::OpenOptions::new()
             .create(true)
@@ -452,4 +495,87 @@ fn extract_json_history(json: &str) -> Vec<TransitionRecord> {
         pos = abs_start + obj_end + 1;
     }
     records
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn tmp_board() -> (Board, std::path::PathBuf) {
+        let dir = std::env::temp_dir().join(format!(
+            "cronus-kanban-test-{}-{}",
+            std::process::id(),
+            now_nanos()
+        ));
+        let board = Board::new(dir.join("kanban"));
+        (board, dir)
+    }
+
+    fn now_nanos() -> u128 {
+        std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)
+            .map(|d| d.as_nanos())
+            .unwrap_or(0)
+    }
+
+    #[test]
+    fn add_card_rejects_path_traversal_and_separator_ids() {
+        let (board, root) = tmp_board();
+        for bad in [
+            "../../../../pwned",
+            "..\\..\\pwned",
+            "a/b",
+            "a\\b",
+            "..",
+            ".",
+            "",
+            "/abs",
+        ] {
+            let err = board.add_card(bad, "TASK", 1).unwrap_err();
+            assert!(
+                matches!(err, KanbanError::InvalidCardId(_)),
+                "id {bad:?} should be rejected as InvalidCardId, got {err:?}"
+            );
+        }
+        // Nothing escaped the board directory.
+        assert!(
+            !root.parent().unwrap().join("pwned.json").exists(),
+            "a traversal id must not have written a file outside the board"
+        );
+        // A plain id still works.
+        assert!(board.add_card("card-1", "TASK", 1).is_ok());
+        let _ = fs::remove_dir_all(&root);
+    }
+
+    #[test]
+    fn get_card_rejects_traversal_ids_too() {
+        let (board, root) = tmp_board();
+        let err = board.get_card("../../secret").unwrap_err();
+        assert!(matches!(err, KanbanError::InvalidCardId(_)));
+        let _ = fs::remove_dir_all(&root);
+    }
+
+    #[test]
+    fn move_card_does_not_partially_write_when_events_dir_is_absent() {
+        // A board whose card was added via `add_card` — which creates only
+        // `cards/`, never `events/`. `move_card` must still succeed end to end
+        // (create `events/`, append, return Ok) rather than save the card in
+        // its new state and then fail on the event append.
+        let (board, root) = tmp_board();
+        board.add_card("c1", "TASK", 1).unwrap();
+        assert!(!board.events_dir().exists(), "precondition: events/ absent");
+
+        let card = board
+            .move_card("c1", CardState::Todo, "tester", None, 2)
+            .expect("triage -> todo must succeed even with events/ absent");
+        assert_eq!(card.state, CardState::Todo);
+
+        // The transition and its event log are both persisted.
+        assert_eq!(
+            board.get_card("c1").unwrap().unwrap().state,
+            CardState::Todo
+        );
+        assert!(board.events_dir().join("c1.jsonl").exists());
+        let _ = fs::remove_dir_all(&root);
+    }
 }

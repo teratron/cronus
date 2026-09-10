@@ -100,84 +100,26 @@ fn dispatch_output_passes_through_the_shared_redaction_path() {
     }
 }
 
-/// The first real semantic migration (§4.1.1's generated-parser half):
-/// `memory.store`/`memory.search`/`memory.forget` registered through
-/// `bootstrap`, driven through the real dispatch path — a real store call,
-/// not a stand-in.
-///
-/// Each verb opens its own store independently, exactly preserving the
-/// pre-migration behavior: the handler this test drives calls
-/// `MemoryStore::open_in_memory()` fresh per dispatch, the identical
-/// pattern the CLI's old per-command `open_store()` used. This is why
-/// `search`/`forget` below do **not** find what `store` just wrote — an
-/// ephemeral, per-call store was already the shipped behavior before this
-/// migration, carried through unchanged rather than quietly "fixed" as a
-/// side effect of moving the dispatch path (SP-10).
+/// The `memory` verbs resolve and ship. Their store/search/forget round-trip
+/// lives in its own test binary (`tests/memory_dispatch.rs`): those handlers
+/// now open one persistent database under the state tier, so that test
+/// redirects `APPDATA`/`LOCALAPPDATA`, and a process-global env var must not be
+/// mutated from a test sharing its process with the disk-touching `exec` /
+/// `check` dispatch checks below.
 #[test]
-fn memory_store_returns_a_new_entry_id() {
-    let (registry, dispatcher) = bootstrap(Engine::new());
-    let mut args = cronus_contract::ArgValues::new();
-    args.insert("key", cronus_contract::ArgValue::Text("fact".to_string()));
-    args.insert(
-        "value",
-        cronus_contract::ArgValue::Text("the sky is blue".to_string()),
-    );
-    let invocation = cronus_contract::Invocation {
-        id: InvocableId::new("core:memory.store").expect("well-formed invocable id"),
-        args,
-        caller: cronus_contract::Surface::Cli,
-    };
-
-    match dispatcher.dispatch(&registry, &invocation) {
-        Dispatched::Ran(Outcome::Value(OutcomeValue::Record(fields))) => {
-            assert_eq!(fields[0].0, "id");
-            assert!(matches!(fields[0].1, OutcomeValue::Text(ref id) if !id.is_empty()));
-        }
-        other => panic!("expected a successful store Record, got {other:?}"),
-    }
-}
-
-#[test]
-fn memory_search_with_no_matches_is_a_zero_item_list_not_an_empty_result() {
-    let (registry, dispatcher) = bootstrap(Engine::new());
-    let mut args = cronus_contract::ArgValues::new();
-    args.insert(
-        "query",
-        cronus_contract::ArgValue::Text("nonexistent".to_string()),
-    );
-    let invocation = cronus_contract::Invocation {
-        id: InvocableId::new("core:memory.search").expect("well-formed invocable id"),
-        args,
-        caller: cronus_contract::Surface::Cli,
-    };
-
-    match dispatcher.dispatch(&registry, &invocation) {
-        Dispatched::Ran(Outcome::Value(OutcomeValue::List(items))) => {
-            assert!(items.is_empty());
-        }
-        other => panic!("expected an empty List, not Empty or anything else, got {other:?}"),
-    }
-}
-
-#[test]
-fn memory_forget_of_an_unknown_id_is_unavailable_not_a_silent_success() {
-    let (registry, dispatcher) = bootstrap(Engine::new());
-    let mut args = cronus_contract::ArgValues::new();
-    args.insert(
-        "id",
-        cronus_contract::ArgValue::Text("no-such-entry".to_string()),
-    );
-    let invocation = cronus_contract::Invocation {
-        id: InvocableId::new("core:memory.forget").expect("well-formed invocable id"),
-        args,
-        caller: cronus_contract::Surface::Cli,
-    };
-
-    match dispatcher.dispatch(&registry, &invocation) {
-        Dispatched::Ran(Outcome::Unavailable { reason }) => {
-            assert!(reason.contains("no-such-entry"));
-        }
-        other => panic!("expected Unavailable naming the missing id, got {other:?}"),
+fn memory_verbs_are_registered_and_resolve() {
+    let (registry, _dispatcher) = bootstrap(Engine::new());
+    for id in [
+        "core:memory.store",
+        "core:memory.search",
+        "core:memory.forget",
+    ] {
+        assert!(
+            registry
+                .all()
+                .any(|i| i.id.as_str() == id && matches!(i.stability, Stability::Shipped)),
+            "{id} must be registered and shipped"
+        );
     }
 }
 

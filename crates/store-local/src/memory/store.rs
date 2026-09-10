@@ -18,6 +18,29 @@ pub struct MemoryStore {
     conn: Connection,
 }
 
+/// Turn a caller-supplied search string into a safe FTS5 `MATCH` expression.
+///
+/// Raw input went straight into `memories_fts MATCH ?` before, so any FTS5
+/// query metacharacter broke it: a hyphen made `foo-123` parse as `foo` NOT
+/// column `123` (`no such column: 123`), and `"`, `*`, `:`, `(`, `)`, `^`,
+/// `AND`/`OR`/`NOT` all changed or errored the query. Each whitespace-separated
+/// token is now wrapped as a quoted FTS5 string (embedded `"` doubled) and the
+/// tokens are ANDed — `memory search` is a keyword search, so "every word
+/// appears, punctuation is literal" is the right contract. An all-punctuation
+/// or empty query yields `""`, which matches nothing rather than erroring.
+fn fts_match_expr(raw: &str) -> String {
+    let quoted: Vec<String> = raw
+        .split_whitespace()
+        .filter(|t| !t.is_empty())
+        .map(|t| format!("\"{}\"", t.replace('"', "\"\"")))
+        .collect();
+    if quoted.is_empty() {
+        "\"\"".to_string()
+    } else {
+        quoted.join(" ")
+    }
+}
+
 impl MemoryStore {
     pub fn open<P: AsRef<std::path::Path>>(path: P) -> Result<Self> {
         let conn = Connection::open(path)?;
@@ -137,11 +160,12 @@ impl MemoryStore {
     /// Full-text search over title+body. Filters entries below TRUST_MIN_SEARCH.
     pub fn search_fts(&self, query: &str, limit: usize) -> Result<Vec<MemoryEntry>> {
         // Step 1: collect matching memory IDs from the FTS index.
+        let match_expr = fts_match_expr(query);
         let mut fts_stmt = self
             .conn
             .prepare("SELECT memory_id FROM memories_fts WHERE memories_fts MATCH ?1 LIMIT ?2")?;
         let ids: Vec<String> = fts_stmt
-            .query_map(params![query, limit as i64], |row| row.get(0))?
+            .query_map(params![match_expr, limit as i64], |row| row.get(0))?
             .collect::<std::result::Result<_, _>>()?;
 
         if ids.is_empty() {
@@ -191,12 +215,13 @@ impl MemoryStore {
     pub fn search_ranked(&self, query: &str, limit: usize) -> Result<Vec<(MemoryEntry, f64)>> {
         // FTS5's own BM25 score (negative; a larger magnitude is a stronger
         // match). Map to a bounded, monotonically increasing (0, 1) score.
+        let match_expr = fts_match_expr(query);
         let mut fts_stmt = self.conn.prepare(
             "SELECT memory_id, bm25(memories_fts) FROM memories_fts
              WHERE memories_fts MATCH ?1 ORDER BY rank LIMIT ?2",
         )?;
         let hits: Vec<(String, f64)> = fts_stmt
-            .query_map(params![query, limit as i64], |row| {
+            .query_map(params![match_expr, limit as i64], |row| {
                 let id: String = row.get(0)?;
                 let bm25_raw: f64 = row.get(1)?;
                 let strength = -bm25_raw;

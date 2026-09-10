@@ -12,6 +12,31 @@ pub(super) fn register(registry: &mut InvocableRegistry, dispatcher: &mut Dispat
     register_forget(registry, dispatcher);
 }
 
+/// On-disk location of the memory database, under the state tier — the same
+/// resolution `board.rs` uses for the kanban store.
+fn memory_db_path() -> std::path::PathBuf {
+    cronus_domain::paths::Paths::os_native()
+        .resolve(cronus_domain::paths::Root::State)
+        .join("memory")
+        .join("memory.db")
+}
+
+/// Open the **persistent** memory store. Every `memory` verb used to open a
+/// fresh `open_in_memory()` database, so a `store` wrote into a database that
+/// was dropped when the handler returned and the next `search`/`forget` saw an
+/// empty one — the entry, and the id `store` handed back, were unreachable
+///. One file, opened by every verb, is what makes the round-trip
+/// work.
+fn open_memory_store() -> Result<MemoryStore, String> {
+    let path = memory_db_path();
+    if let Some(parent) = path.parent()
+        && let Err(e) = std::fs::create_dir_all(parent)
+    {
+        return Err(format!("cannot create memory directory: {e}"));
+    }
+    MemoryStore::open(&path).map_err(|e| e.to_string())
+}
+
 fn register_store(registry: &mut InvocableRegistry, dispatcher: &mut Dispatcher) {
     let id = core_id("memory.store");
     let invocable = Invocable {
@@ -43,13 +68,9 @@ fn register_store(registry: &mut InvocableRegistry, dispatcher: &mut Dispatcher)
         Arc::new(|args| {
             let key = text_arg(args, "key");
             let value = text_arg(args, "value");
-            let store = match MemoryStore::open_in_memory() {
+            let store = match open_memory_store() {
                 Ok(store) => store,
-                Err(e) => {
-                    return Outcome::Unavailable {
-                        reason: e.to_string(),
-                    };
-                }
+                Err(reason) => return Outcome::Unavailable { reason },
             };
             let entry = MemoryEntry::new(
                 MemoryKind::ProjectContext,
@@ -93,13 +114,9 @@ fn register_search(registry: &mut InvocableRegistry, dispatcher: &mut Dispatcher
         id,
         Arc::new(|args| {
             let query = text_arg(args, "query");
-            let store = match MemoryStore::open_in_memory() {
+            let store = match open_memory_store() {
                 Ok(store) => store,
-                Err(e) => {
-                    return Outcome::Unavailable {
-                        reason: e.to_string(),
-                    };
-                }
+                Err(reason) => return Outcome::Unavailable { reason },
             };
             // A zero-item list and a genuinely empty result are different
             // facts (§4.5's zero-count-list fixture guards exactly this):
@@ -149,13 +166,9 @@ fn register_forget(registry: &mut InvocableRegistry, dispatcher: &mut Dispatcher
         id,
         Arc::new(|args| {
             let entry_id = text_arg(args, "id");
-            let store = match MemoryStore::open_in_memory() {
+            let store = match open_memory_store() {
                 Ok(store) => store,
-                Err(e) => {
-                    return Outcome::Unavailable {
-                        reason: e.to_string(),
-                    };
-                }
+                Err(reason) => return Outcome::Unavailable { reason },
             };
             match store.delete(entry_id) {
                 Ok(true) => Outcome::Value(OutcomeValue::Record(vec![(

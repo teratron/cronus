@@ -530,7 +530,15 @@ pub fn build_installation_tree(invocables: &[&Invocable]) -> (Vec<Command>, Hash
         let about = group_about(group)
             .map(str::to_string)
             .unwrap_or_else(|| format!("{group} operations"));
-        let mut nested = Command::new(group.to_string()).about(about);
+        // A nested group with no verb is a usage failure (clap prints its help
+        // and exits 2), never an application failure: `dispatch`'s
+        // `dispatch_leaf(group, group, ...)` fallback — which produced the
+        // "no installation handler wired for <g> <g>" internal error — is
+        // reached only for a genuinely flat group now.
+        let mut nested = Command::new(group.to_string())
+            .about(about)
+            .subcommand_required(true)
+            .arg_required_else_help(true);
 
         // A verb tail itself containing a dot (`skill.import`) names one
         // sub-group, one level deeper than every other verb in this group
@@ -566,7 +574,10 @@ pub fn build_installation_tree(invocables: &[&Invocable]) -> (Vec<Command>, Hash
             let about = group_about(subgroup)
                 .map(str::to_string)
                 .unwrap_or_else(|| format!("{subgroup} operations"));
-            let mut sub_command = Command::new(subgroup.to_string()).about(about);
+            let mut sub_command = Command::new(subgroup.to_string())
+                .about(about)
+                .subcommand_required(true)
+                .arg_required_else_help(true);
             for (leaf, invocable) in &subgroups[subgroup] {
                 let mut verb = Command::new((*leaf).to_string()).about(invocable.summary);
                 for binder in &invocable.binders {

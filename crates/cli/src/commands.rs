@@ -88,16 +88,40 @@ pub(crate) mod init {
 // ─── status ───────────────────────────────────────────────────────────────────
 
 pub(crate) mod status {
-    use std::path::Path;
+    use std::path::{Path, PathBuf};
 
     use cronus_core::paths::{Paths, Root};
 
     use crate::output::Context;
 
     pub fn run(ctx: &Context) -> i32 {
-        let paths = Paths::os_native();
-        let root = paths.resolve(Root::State);
-        run_at(&root, ctx)
+        run_at(&resolve_root(), ctx)
+    }
+
+    /// The workspace `status` reports on: the nearest ancestor of the current
+    /// directory that `cronus init` has scaffolded (`init` seeds `app.json`
+    /// there), falling back to the OS state tier for a globally-initialised
+    /// install. `init` writes to the current directory, so `status` must look
+    /// where `init` wrote — not only at the OS state tier, which `init` from
+    /// the CLI never populates — a divergence this fix closes.
+    fn resolve_root() -> PathBuf {
+        let cwd = std::env::current_dir().ok();
+        let fallback = Paths::os_native().resolve(Root::State);
+        resolve_root_from(cwd.as_deref(), fallback)
+    }
+
+    /// Pure resolver: the first ancestor of `start` that holds `app.json`,
+    /// else `fallback`. Split out so it is testable without mutating the
+    /// process working directory.
+    fn resolve_root_from(start: Option<&Path>, fallback: PathBuf) -> PathBuf {
+        if let Some(start) = start {
+            for ancestor in start.ancestors() {
+                if ancestor.join("app.json").is_file() {
+                    return ancestor.to_path_buf();
+                }
+            }
+        }
+        fallback
     }
 
     fn run_at(state_root: &Path, ctx: &Context) -> i32 {
@@ -152,6 +176,59 @@ pub(crate) mod status {
                 1,
                 "status must exit 1 when not initialized"
             );
+        }
+
+        /// `init` scaffolds the current directory (or a `--path`),
+        /// not the OS state tier — so `status`, resolving from that directory
+        /// or any descendant, must find that `app.json` rather than reporting
+        /// "No workspace initialized" forever.
+        #[test]
+        fn status_resolves_an_initialized_ancestor_over_the_fallback() {
+            use super::resolve_root_from;
+
+            let root = std::env::temp_dir().join(format!(
+                "cronus-status-anc-{}-{}",
+                std::process::id(),
+                std::time::SystemTime::now()
+                    .duration_since(std::time::UNIX_EPOCH)
+                    .map(|d| d.as_nanos())
+                    .unwrap_or(0)
+            ));
+            let nested = root.join("a").join("b");
+            fs::create_dir_all(&nested).unwrap();
+            fs::write(root.join("app.json"), "{}\n").unwrap();
+            let fallback = root.join("nonexistent-state-tier");
+
+            let resolved = resolve_root_from(Some(&nested), fallback.clone());
+            assert_eq!(
+                resolved, root,
+                "must resolve the ancestor holding app.json, not the fallback"
+            );
+
+            // A start dir with no app.json in any ancestor -> the fallback.
+            let bare = std::env::temp_dir().join(format!(
+                "cronus-status-bare-{}-{}",
+                std::process::id(),
+                std::time::SystemTime::now()
+                    .duration_since(std::time::UNIX_EPOCH)
+                    .map(|d| d.as_nanos())
+                    .unwrap_or(0)
+            ));
+            fs::create_dir_all(&bare).unwrap();
+            assert_eq!(
+                resolve_root_from(Some(&bare), fallback.clone()),
+                fallback,
+                "with no app.json in any ancestor, resolve to the fallback"
+            );
+            let _ = fs::remove_dir_all(&bare);
+
+            let ctx = Context::new(OutputFormat::Text);
+            assert_eq!(
+                run_at(&root, &ctx),
+                0,
+                "status must exit 0 for the resolved initialized root"
+            );
+            let _ = fs::remove_dir_all(&root);
         }
     }
 }

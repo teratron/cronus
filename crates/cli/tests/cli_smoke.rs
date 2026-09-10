@@ -27,6 +27,43 @@ fn unknown_command_exits_2() {
     assert_eq!(status.code(), Some(2), "unknown command must exit 2");
 }
 
+/// A command group named with no verb is a *usage* failure — clap answers it
+/// with the group's help and exit code 2, exactly like an unknown verb — never
+/// an application failure exit 1, and never the "error: internal: …" message
+/// that both halves of the launcher used to print. Covers a semantic group, a
+/// multi-verb installation group, and the one sub-nested installation group.
+#[test]
+fn a_group_with_no_verb_is_a_usage_failure_not_an_internal_error() {
+    for args in [
+        &["memory"][..],
+        &["board"][..],
+        &["workspace"][..],
+        &["registry"][..],
+        &["ext"][..],
+        &["ext", "skill"][..],
+    ] {
+        let output = bin().args(args).output().expect("failed to spawn binary");
+        let stderr = String::from_utf8_lossy(&output.stderr);
+        assert_eq!(
+            output.status.code(),
+            Some(2),
+            "`cronus {}` must exit 2 (usage), got {:?} — stderr: {stderr}",
+            args.join(" "),
+            output.status.code()
+        );
+        assert!(
+            !stderr.contains("error: internal:"),
+            "`cronus {}` must not print an internal error: {stderr}",
+            args.join(" ")
+        );
+        assert!(
+            stderr.contains("Usage:"),
+            "`cronus {}` must print a usage line: {stderr}",
+            args.join(" ")
+        );
+    }
+}
+
 #[test]
 fn workflow_validate_clean_exits_0() {
     let dir = std::env::temp_dir().join(format!("cronus-smoke-val-ok-{}", std::process::id()));

@@ -130,7 +130,15 @@ pub fn build_semantic_tree(invocables: &[&Invocable]) -> (Vec<Command>, HashSet<
 
     for group in group_order {
         let members = &by_group[group];
-        let mut verb_command = Command::new(group.to_string()).about(format!("{group} operations"));
+        // A group with no verb is a usage failure, not an application failure:
+        // clap answers it with the group's own help and exit code 2, the same
+        // as an unknown verb — never reaching dispatch, so the "matched a
+        // subcommand neither half owns" internal-error path in `main` becomes
+        // genuinely unreachable for this shape.
+        let mut verb_command = Command::new(group.to_string())
+            .about(format!("{group} operations"))
+            .subcommand_required(true)
+            .arg_required_else_help(true);
         for invocable in members.iter() {
             let mut verb = Command::new(verb_of(invocable).to_string()).about(invocable.summary);
             for binder in &invocable.binders {

@@ -51,6 +51,28 @@ fn fts_search_finds_matching_entries() {
 }
 
 #[test]
+fn fts_search_tolerates_query_metacharacters() {
+    // Raw input used to go straight into `memories_fts MATCH ?`: a hyphen made
+    // FTS5 read `run-42` as `run` NOT column `42` and error `no such column: 42`.
+    // The query is now tokenised and each token quoted, so punctuation is
+    // literal and a metacharacter-only query matches nothing instead of erroring.
+    let s = store();
+    s.add(entry("run-42 report", "the pipeline finished"))
+        .unwrap();
+
+    let hit = s.search_fts("run-42", 10).unwrap();
+    assert_eq!(hit.len(), 1, "a hyphenated token must not error the search");
+    assert_eq!(hit[0].title, "run-42 report");
+
+    for weird in ["-", "\"", "*", "( )", "a AND", "b:c", "^", ""] {
+        let out = s
+            .search_fts(weird, 10)
+            .unwrap_or_else(|e| panic!("query {weird:?} must not error: {e}"));
+        assert!(out.is_empty(), "query {weird:?} should match nothing");
+    }
+}
+
+#[test]
 fn fts_search_filters_by_trust_score() {
     let s = store();
     let mut low_trust = entry("low trust entry", "secret knowledge");
