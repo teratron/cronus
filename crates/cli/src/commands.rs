@@ -8,9 +8,13 @@ pub(crate) mod init {
     use crate::output::{Context, json_escape};
 
     pub fn run(path: Option<PathBuf>, ctx: &Context) -> i32 {
-        let target =
+        let dir =
             path.unwrap_or_else(|| std::env::current_dir().unwrap_or_else(|_| PathBuf::from(".")));
-        run_at(&target, ctx)
+        // The workspace state skeleton lives in a single `.cronus/` directory,
+        // not scattered across the target directory's top level — running
+        // `cronus init` in an existing project must not drop `app.json`,
+        // `AGENTS.md`, `employees/`, `skills/` … next to the project's own files.
+        run_at(&dir.join(".cronus"), ctx)
     }
 
     fn run_at(target: &Path, ctx: &Context) -> i32 {
@@ -98,15 +102,20 @@ pub(crate) fn resolve_workspace_root() -> std::path::PathBuf {
     resolve_workspace_root_from(cwd.as_deref(), fallback)
 }
 
-/// Pure resolver: the first ancestor of `start` that holds `app.json`, else
-/// `fallback`. Split out so it is testable without mutating the process
-/// working directory.
+/// Pure resolver: the first ancestor of `start` whose `.cronus/` holds
+/// `app.json` (the shape `cronus init` writes), else the first that holds a
+/// bare `app.json` (the OS state tier's own shape), else `fallback`. Split
+/// out so it is testable without mutating the process working directory.
 pub(crate) fn resolve_workspace_root_from(
     start: Option<&std::path::Path>,
     fallback: std::path::PathBuf,
 ) -> std::path::PathBuf {
     if let Some(start) = start {
         for ancestor in start.ancestors() {
+            let dot = ancestor.join(".cronus");
+            if dot.join("app.json").is_file() {
+                return dot;
+            }
             if ancestor.join("app.json").is_file() {
                 return ancestor.to_path_buf();
             }

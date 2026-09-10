@@ -826,3 +826,39 @@ fn completion_emits_a_script_per_shell() {
         .expect("failed to spawn binary");
     assert!(!bad.status.success(), "an unknown shell must fail");
 }
+
+/// `cronus init` puts the workspace skeleton in a single `.cronus/` directory,
+/// not scattered across the target directory's top level.
+#[test]
+fn init_confines_the_skeleton_to_a_dot_cronus_directory() {
+    let dir = std::env::temp_dir().join(format!("cronus-smoke-init-dot-{}", std::process::id()));
+    let _ = std::fs::remove_dir_all(&dir);
+    std::fs::create_dir_all(&dir).unwrap();
+    std::fs::write(dir.join("existing-project-file.txt"), "keep me").unwrap();
+
+    let out = bin().args(["init"]).arg(&dir).output().expect("spawn");
+    assert!(out.status.success(), "init must exit 0");
+
+    assert!(
+        dir.join(".cronus").join("app.json").is_file(),
+        "init must write the skeleton under .cronus/"
+    );
+    assert!(
+        !dir.join("app.json").exists() && !dir.join("employees").exists(),
+        "init must not scatter files into the target directory's top level"
+    );
+    assert!(
+        dir.join("existing-project-file.txt").is_file(),
+        "init must not disturb the project's own files"
+    );
+
+    // `status` from the same directory finds it.
+    let status = std::process::Command::new(env!("CARGO_BIN_EXE_cronus"))
+        .current_dir(&dir)
+        .arg("status")
+        .status()
+        .expect("spawn");
+    assert!(status.success(), "status must find the .cronus workspace");
+
+    let _ = std::fs::remove_dir_all(&dir);
+}

@@ -31,7 +31,7 @@ Build: PowerShell, `cargo <cmd> -p cronus-cli -j 2` (rusqlite bundled needs C to
 
 ## Tranche 3 — debt & polish
 
-- [~] R15  DEFERRED (D5 product decision): init->.cronus/ changes layout + couples with the workspace-root resolver.
+- [x] R15  init now writes the state skeleton into <dir>/.cronus/ instead of scattering app.json/AGENTS.md/employees/... across the target dir top level. resolve_workspace_root_from checks .cronus/app.json first (returns the .cronus dir), then bare app.json (OS state tier shape), then fallback -- so status/doctor still work. smoke test: skeleton under .cronus/, project files untouched, status finds it.
 - [x] R16  paths::display_clean strips the Windows verbatim-path prefix; wired into init + workflow scaffold; unit test.
 - [x] R17  generated.rs semantic_group_about: curated one-liners for all 13 semantic groups.
 - [x] R18  workspace list empty -> "No results."; also escaped w.id in that JSON.
