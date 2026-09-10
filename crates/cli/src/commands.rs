@@ -1331,7 +1331,7 @@ pub(crate) mod registry {
     // so no `RegistryCommand`-shaped wrapper is needed here any more.
 
     pub(crate) fn list(ctx: &Context) -> i32 {
-        let registry = AgentRegistry::new();
+        let registry = AgentRegistry::load();
         let agents = registry.list_active();
         if ctx.is_json() {
             let items: Vec<String> = agents
@@ -1352,7 +1352,7 @@ pub(crate) mod registry {
     // separately, after convergence, alongside the same defect at every
     // other site that discards the requested format.
     pub(crate) fn show(name: String, _ctx: &Context) -> i32 {
-        let registry = AgentRegistry::new();
+        let registry = AgentRegistry::load();
         match registry.resolve(&name) {
             Ok(a) => {
                 println!("name:        {}", a.name);
@@ -1368,10 +1368,14 @@ pub(crate) mod registry {
     }
 
     pub(crate) fn create(name: String, description: String, ctx: &Context) -> i32 {
-        let mut registry = AgentRegistry::new();
+        let mut registry = AgentRegistry::load();
         let def = AgentRegistry::generate_from_description(&name, &description);
         let def_name = def.name.clone();
         registry.register_custom(def);
+        if let Err(e) = registry.save() {
+            eprintln!("error: could not persist the agent registry: {e}");
+            return 1;
+        }
         if ctx.is_json() {
             // Known residual, not fixed here: `def_name` is interpolated
             // into a hand-built JSON literal without escaping — a `"` or
@@ -1389,8 +1393,12 @@ pub(crate) mod registry {
     }
 
     pub(crate) fn disable(name: String, ctx: &Context) -> i32 {
-        let mut registry = AgentRegistry::new();
+        let mut registry = AgentRegistry::load();
         registry.apply_user_config(&name, true, None);
+        if let Err(e) = registry.save() {
+            eprintln!("error: could not persist the agent registry: {e}");
+            return 1;
+        }
         if ctx.is_json() {
             println!(
                 "{{\"result\":\"disabled\",\"name\":\"{}\"}}",
@@ -1403,8 +1411,12 @@ pub(crate) mod registry {
     }
 
     pub(crate) fn enable(name: String, ctx: &Context) -> i32 {
-        let mut registry = AgentRegistry::new();
+        let mut registry = AgentRegistry::load();
         registry.apply_user_config(&name, false, None);
+        if let Err(e) = registry.save() {
+            eprintln!("error: could not persist the agent registry: {e}");
+            return 1;
+        }
         if ctx.is_json() {
             println!(
                 "{{\"result\":\"enabled\",\"name\":\"{}\"}}",

@@ -4,8 +4,11 @@
 //! `model_ref` resolution falls back to run-default for unknown group names.
 
 use std::collections::HashMap;
+use std::path::PathBuf;
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+use serde::{Deserialize, Serialize};
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 pub enum AgentMode {
     Primary,
     SubAgent,
@@ -22,7 +25,7 @@ impl AgentMode {
     }
 }
 
-#[derive(Debug, Clone, Default)]
+#[derive(Debug, Clone, Default, Serialize, Deserialize)]
 pub struct Ruleset {
     pub entries: HashMap<String, String>,
 }
@@ -38,7 +41,7 @@ impl Ruleset {
     }
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct AgentDefinition {
     pub name: String,
     pub description: Option<String>,
@@ -174,6 +177,67 @@ impl AgentRegistry {
         self.agents.insert(def.name.clone(), def);
     }
 
+    /// State-tier file holding everything the built-in seed does not: custom
+    /// agents in full, plus any built-in carrying a user override (disabled,
+    /// `model_ref`, description).
+    pub fn persist_path() -> PathBuf {
+        crate::paths::Paths::os_native()
+            .resolve(crate::paths::Root::State)
+            .join("agents")
+            .join("registry.json")
+    }
+
+    /// Built-in seed with the persisted overlay applied on top. A missing or
+    /// unreadable file yields just the built-ins — the registry is always
+    /// usable, never blocked on its own store.
+    pub fn load() -> Self {
+        Self::load_from(&Self::persist_path())
+    }
+
+    /// [`AgentRegistry::load`] against an explicit path.
+    pub fn load_from(path: &std::path::Path) -> Self {
+        let mut reg = Self::new();
+        let Ok(text) = std::fs::read_to_string(path) else {
+            return reg;
+        };
+        let Ok(saved) = serde_json::from_str::<Vec<AgentDefinition>>(&text) else {
+            return reg;
+        };
+        for def in saved {
+            reg.agents.insert(def.name.clone(), def);
+        }
+        reg
+    }
+
+    /// Persist the overlay: every non-native agent, plus any native one that
+    /// diverges from its seeded shape (disabled, or a changed `model_ref`).
+    pub fn save(&self) -> std::io::Result<()> {
+        self.save_to(&Self::persist_path())
+    }
+
+    /// [`AgentRegistry::save`] against an explicit path.
+    pub fn save_to(&self, path: &std::path::Path) -> std::io::Result<()> {
+        let seeded: std::collections::HashSet<&str> =
+            BUILTIN_NAMES.iter().map(|(name, _, _)| *name).collect();
+        let mut overlay: Vec<&AgentDefinition> = self
+            .agents
+            .values()
+            .filter(|d| {
+                !d.native
+                    || d.disabled
+                    || d.model_ref.as_deref() != Some("default")
+                    || !seeded.contains(d.name.as_str())
+            })
+            .collect();
+        overlay.sort_by(|a, b| a.name.cmp(&b.name));
+        if let Some(parent) = path.parent() {
+            std::fs::create_dir_all(parent)?;
+        }
+        let json = serde_json::to_string_pretty(&overlay)
+            .map_err(|e| std::io::Error::new(std::io::ErrorKind::InvalidData, e))?;
+        std::fs::write(path, json)
+    }
+
     /// Generate a stub AgentDefinition from a description (seam; real LLM wiring deferred).
     pub fn generate_from_description(name: &str, description: &str) -> AgentDefinition {
         AgentDefinition {
@@ -195,5 +259,79 @@ impl AgentRegistry {
 impl Default for AgentRegistry {
     fn default() -> Self {
         Self::new()
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn tmp_file(tag: &str) -> PathBuf {
+        std::env::temp_dir().join(format!(
+            "cronus-agentreg-{tag}-{}-{}.json",
+            std::process::id(),
+            std::time::SystemTime::now()
+                .duration_since(std::time::UNIX_EPOCH)
+                .map(|d| d.as_nanos())
+                .unwrap_or(0)
+        ))
+    }
+
+    #[test]
+    fn a_created_custom_agent_survives_a_reload() {
+        let path = tmp_file("custom");
+        let _ = std::fs::remove_file(&path);
+
+        let mut reg = AgentRegistry::load_from(&path);
+        reg.register_custom(AgentRegistry::generate_from_description(
+            "reviewer",
+            "reviews diffs",
+        ));
+        reg.save_to(&path).unwrap();
+
+        let reloaded = AgentRegistry::load_from(&path);
+        let names: Vec<&str> = reloaded
+            .list_active()
+            .iter()
+            .map(|d| d.name.as_str())
+            .collect();
+        assert!(
+            names.contains(&"reviewer"),
+            "a custom agent must be visible after reload, got {names:?}"
+        );
+        // built-ins are still there too
+        assert!(names.contains(&"work"));
+
+        let _ = std::fs::remove_file(&path);
+    }
+
+    #[test]
+    fn disabling_a_builtin_persists_and_hides_it_from_the_active_list() {
+        let path = tmp_file("disable");
+        let _ = std::fs::remove_file(&path);
+
+        let mut reg = AgentRegistry::load_from(&path);
+        reg.apply_user_config("code", true, None);
+        reg.save_to(&path).unwrap();
+
+        let reloaded = AgentRegistry::load_from(&path);
+        assert!(
+            reloaded.resolve("code").is_err(),
+            "a persisted-disabled built-in must not resolve"
+        );
+        assert!(
+            !reloaded.list_active().iter().any(|d| d.name == "code"),
+            "a persisted-disabled built-in must be absent from the active list"
+        );
+
+        let _ = std::fs::remove_file(&path);
+    }
+
+    #[test]
+    fn an_absent_store_yields_exactly_the_builtins() {
+        let reg = AgentRegistry::load_from(std::path::Path::new(
+            "definitely-not-a-real-registry-file.json",
+        ));
+        assert_eq!(reg.list_active().len(), BUILTIN_NAMES.len());
     }
 }

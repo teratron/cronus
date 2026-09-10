@@ -680,6 +680,8 @@ dependencies = [
  "chrono",
  "cron",
  "cronus-contract",
+ "serde",
+ "serde_json",
 ]
 
 [[package]]
