@@ -173,6 +173,44 @@ fn workflow_transpile_outputs_nonempty() {
     let _ = std::fs::remove_dir_all(&dir);
 }
 
+/// `workflow scaffold` writes the file the caller named. Passing a `.nodus`
+/// path used to append a second `.nodus`, so the reported path and a later
+/// `workflow validate <path>` disagreed. Now `scaffold X.nodus` writes exactly
+/// `X.nodus` and that file validates clean.
+#[test]
+fn workflow_scaffold_writes_the_named_path_and_it_validates() {
+    let dir = std::env::temp_dir().join(format!("cronus-smoke-scaffold-{}", std::process::id()));
+    std::fs::create_dir_all(&dir).unwrap();
+    let file = dir.join("my_flow.nodus");
+
+    let scaffold = bin()
+        .args(["workflow", "scaffold"])
+        .arg(&file)
+        .output()
+        .expect("failed to spawn binary");
+    assert!(scaffold.status.success(), "scaffold must exit 0");
+    assert!(
+        file.is_file(),
+        "scaffold must write exactly the named file, not <name>.nodus.nodus"
+    );
+    assert!(
+        !dir.join("my_flow.nodus.nodus").exists(),
+        "scaffold must not double-append the extension"
+    );
+
+    let validate = bin()
+        .args(["workflow", "validate"])
+        .arg(&file)
+        .status()
+        .expect("failed to spawn binary");
+    assert!(
+        validate.success(),
+        "the scaffolded file must validate clean at its own path"
+    );
+
+    let _ = std::fs::remove_dir_all(&dir);
+}
+
 // ── Command smoke tests ───────────────────────────────────────────────────────
 
 #[test]

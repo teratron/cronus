@@ -70,15 +70,29 @@ fn register_scaffold(registry: &mut InvocableRegistry, dispatcher: &mut Dispatch
         id,
         Arc::new(|args| {
             let name = text_arg(args, "name");
-            let dest = opt_text_arg(args, "out")
-                .map(std::path::PathBuf::from)
-                .unwrap_or_else(|| std::path::PathBuf::from(format!("{name}.nodus")));
+            // `--out` wins. Otherwise the positional is the destination: if it
+            // already looks like a `.nodus` file (or a path to one) it is used
+            // verbatim, so `scaffold foo.nodus` writes `foo.nodus` rather than
+            // `foo.nodus.nodus` and the reported path is the one a later
+            // `workflow validate` would name. A bare identifier still becomes
+            // `<name>.nodus` in the current directory.
+            let dest = match opt_text_arg(args, "out") {
+                Some(out) => std::path::PathBuf::from(out),
+                None if name.ends_with(".nodus") => std::path::PathBuf::from(name),
+                None => std::path::PathBuf::from(format!("{name}.nodus")),
+            };
             if dest.exists() {
                 return Outcome::Unavailable {
                     reason: format!("file already exists: {}", dest.display()),
                 };
             }
-            let ast = workflows::scaffold(name);
+            // The workflow's own identity is the file stem, never the path.
+            let workflow_name = dest
+                .file_stem()
+                .and_then(|s| s.to_str())
+                .filter(|s| !s.is_empty())
+                .unwrap_or(name);
+            let ast = workflows::scaffold(workflow_name);
             let source = nodus::transpiler::Transpiler::to_nodus(&ast);
             match std::fs::write(&dest, &source) {
                 Ok(()) => {
