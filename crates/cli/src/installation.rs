@@ -46,7 +46,7 @@ use std::collections::HashSet;
 use clap::{Arg, ArgMatches, Command};
 use cronus_contract::{Binder, BinderKind, Invocable, InvocableId, Locus, Stability};
 
-use crate::generated::{arg_for, verb_of};
+use crate::generated::verb_of;
 use crate::output::Context;
 
 fn id(tail: &str) -> InvocableId {
@@ -537,7 +537,10 @@ pub fn build_installation_tree(invocables: &[&Invocable]) -> (Vec<Command>, Hash
         if members.len() == 1 && verb_of(members[0]) == group {
             let mut flat = Command::new(group.to_string()).about(members[0].summary);
             for binder in &members[0].binders {
-                flat = flat.arg(arg_for(binder));
+                flat = flat.arg(crate::generated::arg_for_with_help(
+                    binder,
+                    crate::generated::binder_help(members[0].id.as_str(), binder.name),
+                ));
             }
             groups.push(flat);
             continue;
@@ -579,7 +582,10 @@ pub fn build_installation_tree(invocables: &[&Invocable]) -> (Vec<Command>, Hash
         for invocable in plain_verbs {
             let mut verb = Command::new(verb_of(invocable).to_string()).about(invocable.summary);
             for binder in &invocable.binders {
-                verb = verb.arg(arg_for(binder));
+                verb = verb.arg(crate::generated::arg_for_with_help(
+                    binder,
+                    crate::generated::binder_help(invocable.id.as_str(), binder.name),
+                ));
             }
             nested = nested.subcommand(verb);
         }
@@ -597,7 +603,10 @@ pub fn build_installation_tree(invocables: &[&Invocable]) -> (Vec<Command>, Hash
             for (leaf, invocable) in &subgroups[subgroup] {
                 let mut verb = Command::new((*leaf).to_string()).about(invocable.summary);
                 for binder in &invocable.binders {
-                    verb = verb.arg(arg_for(binder));
+                    verb = verb.arg(crate::generated::arg_for_with_help(
+                        binder,
+                        crate::generated::binder_help(invocable.id.as_str(), binder.name),
+                    ));
                 }
                 sub_command = sub_command.subcommand(verb);
             }

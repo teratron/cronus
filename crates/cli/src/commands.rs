@@ -138,7 +138,14 @@ pub(crate) mod status {
             eprintln!("No workspace initialized. Run 'cronus init' first.");
             return 1;
         }
-        let workspace = state_root
+        // For a `.cronus` state directory the workspace's name is its parent
+        // (the project directory), not the literal ".cronus".
+        let name_source = if state_root.file_name().and_then(|n| n.to_str()) == Some(".cronus") {
+            state_root.parent().unwrap_or(state_root)
+        } else {
+            state_root
+        };
+        let workspace = name_source
             .file_name()
             .and_then(|n| n.to_str())
             .unwrap_or("default")

@@ -862,3 +862,21 @@ fn init_confines_the_skeleton_to_a_dot_cronus_directory() {
 
     let _ = std::fs::remove_dir_all(&dir);
 }
+
+/// Generated verbs carry per-argument `--help` text, not a blank column.
+#[test]
+fn generated_verb_args_have_help_text() {
+    for (args, needle) in [
+        (["memory", "store", "--help"], "entry key"),
+        (["board", "move", "--help"], "target state"),
+        (["role", "hire", "--help"], "preset role id"),
+    ] {
+        let out = bin().args(args).output().expect("spawn");
+        let stdout = String::from_utf8_lossy(&out.stdout);
+        assert!(
+            stdout.contains(needle),
+            "`cronus {}` --help must describe its arguments ({needle:?}): {stdout}",
+            args.join(" ")
+        );
+    }
+}

@@ -85,7 +85,7 @@ impl CliProjection {
     }
 }
 
-/// The inverse of `generated::arg_for`, read back from a real, generated
+/// The inverse of `generated::arg_for_with_help`, read back from a real, generated
 /// `clap::Arg` rather than from the `Binder` that produced it. Scoped to
 /// what the shared corpus actually exercises: every fixture's own binder is
 /// `Text` (`fixtures::corpus`'s `value`/`id`) or absent, so distinguishing

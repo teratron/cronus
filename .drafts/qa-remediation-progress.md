@@ -35,7 +35,7 @@ Build: PowerShell, `cargo <cmd> -p cronus-cli -j 2` (rusqlite bundled needs C to
 - [x] R16  paths::display_clean strips the Windows verbatim-path prefix; wired into init + workflow scaffold; unit test.
 - [x] R17  generated.rs semantic_group_about: curated one-liners for all 13 semantic groups.
 - [x] R18  workspace list empty -> "No results."; also escaped w.id in that JSON.
-- [~] R19  DEFERRED: needs a Binder about field (contract change + conformance ripple).
+- [x] R19  generated.rs binder_help(invocable_id, binder_name) -> Option<&'static str> (hand-kept map, mirrors semantic_group_about / group_about) wired via arg_for_with_help into every semantic + installation verb arg. No Binder contract change (side-table keeps it CLI-local). Also: status shows the .cronus parent dir name, not literal ".cronus" (R15 follow-on). smoke test.
 - [x] R20  main.rs merges+sorts installation+semantic groups before adding subcommands; smoke test.
 - [x] R21  root cause = doctor checked OS state tier not where init writes; shared resolve_workspace_root now used by status AND doctor.
 - [x] R22  roles::hire without custom name -> `<preset>-<n>` lowest free n (was wall-clock ms).

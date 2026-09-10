@@ -71,13 +71,113 @@ pub(crate) fn verb_of(invocable: &Invocable) -> &str {
         .unwrap_or(tail)
 }
 
+/// One-line `--help` text for a declared argument, keyed on the invocable's
+/// id and the binder's name. Descriptors carry a `summary` per verb but no
+/// per-argument text; a hand-kept map, mirroring `semantic_group_about` and
+/// the installation half's `group_about`. An unlisted `(id, name)` renders
+/// with just the argument name, as before.
+pub(crate) fn binder_help(invocable_id: &str, binder_name: &str) -> Option<&'static str> {
+    let tail = invocable_id.strip_prefix("core:").unwrap_or(invocable_id);
+    Some(match (tail, binder_name) {
+        ("board.show" | "board.move" | "board.block" | "board.done", "id") => "card id",
+        ("board.add", "id") => "id to give the new card",
+        ("board.add", "task_ref") => "task reference the card tracks",
+        ("board.move", "state") => "target state",
+        ("board.move" | "board.done", "actor") => "who is making the move (default: cli)",
+        ("board.block", "reason") => "why the card is blocked",
+        ("budget.set", "limit") => "monthly limit in USD",
+        ("check.run" | "check.show" | "check.history", "card_id") => "card id",
+        ("check.run", "path") => "path to check instead of the card's own tree",
+        ("codegraph.index", "path") => "directory or file to index",
+        ("codegraph.search" | "memory.search", "query") => "keyword query",
+        ("exec.create", "ws_id") => "workspace id",
+        ("exec.create", "card_id") => "card the execution workspace is for",
+        ("exec.finalize" | "exec.discard", "id") => "execution workspace id",
+        ("knowledge.collection-create", "id") => "collection id",
+        ("knowledge.collection-create" | "knowledge.add" | "knowledge.add-url", "name") => {
+            "human-readable name"
+        }
+        ("knowledge.add" | "knowledge.add-url" | "knowledge.query", "collection") => {
+            "collection id (repeatable for query)"
+        }
+        ("knowledge.add", "id") => "id for the ingested record",
+        ("knowledge.add", "text") => "record body",
+        ("knowledge.add-url", "id") => "id for the ingested page",
+        ("knowledge.add-url", "url") => "http:// URL to ingest",
+        ("knowledge.query", "text") => "the question to retrieve for",
+        ("knowledge.query", "top_k") => "max results to return",
+        ("learn.approve" | "learn.reject", "id") => "skill-proposal id",
+        ("loop.run", "file") => "unit file the oracle watches for",
+        ("loop.run", "max_iter") => "iteration ceiling",
+        ("loop.evolve", "harness_id") => "harness to evolve",
+        ("loop.log" | "loop.show", "run_id") => "loop run id",
+        ("memory.store", "key") => "entry key",
+        ("memory.store", "value") => "entry value",
+        ("memory.forget", "id") => "memory entry id",
+        ("role.list", "presets") => "list the preset catalog instead of hired instances",
+        ("role.hire", "preset") => "preset role id to hire",
+        ("role.hire", "name") => "custom name for the instance (default: <preset>-<n>)",
+        ("role.show" | "role.fire", "id") => "hired instance id",
+        ("role.create", "id") => "id for the custom role",
+        ("role.create", "display_name") => "display name for the custom role",
+        ("schedule.add", "id") => "schedule id",
+        ("schedule.add" | "schedule.run", "name") => "schedule name",
+        ("schedule.add", "preset") => "schedule preset",
+        ("schedule.delete" | "schedule.run", "id") => "schedule id",
+        ("schedule.run", "prompt") => "prompt to run the schedule with",
+        ("workflow.scaffold", "name") => "workflow name (or a path ending in .nodus)",
+        ("workflow.scaffold", "out") => "output path (defaults to <name>.nodus)",
+        ("workflow.validate" | "workflow.run" | "workflow.transpile", "file") => "workflow file",
+        ("workflow.run", "input") => "input JSON for the workflow",
+        ("workflow.transpile", "human") => "emit the human-readable form",
+        ("workflow.transpile", "compact") => "emit the compact form",
+        // Installation half.
+        ("init", "path") => "directory to initialise (default: current)",
+        ("doctor", "fix") => "apply safe repairs, not just report",
+        ("restore", "backup") => "backup id to restore",
+        (
+            "workspace.create" | "workspace.switch" | "workspace.delete" | "workspace.check",
+            "id",
+        ) => "workspace id",
+        ("workspace.create", "name") => "display name",
+        ("workspace.create", "path") => "workspace directory (default: derived from id)",
+        ("backup.create", "to") => "destination path for the archive",
+        ("backup.create", "include_logs") => "include the logs tier in the backup",
+        ("activation.enable", "mode") => "login or system",
+        ("activation.enable", "acknowledge_unattended_execution") => {
+            "confirm unattended execution (required non-interactively)"
+        }
+        ("archetype.list", "catalog") => "show the shipped catalog",
+        ("archetype.list", "active") => "show the office's active archetype",
+        ("archetype.info" | "archetype.set", "id") => "archetype id",
+        ("archetype.info", "deviations") => "also report prior-vs-observed deviations",
+        ("archetype.set", "clear") => "return to the archetype-free default",
+        ("archetype.create", "name") => "name for the custom archetype",
+        ("archetype.create", "from") => "preset to copy",
+        ("registry.show" | "registry.disable" | "registry.enable", "name") => "agent name",
+        ("registry.create", "name") => "name for the custom agent",
+        ("registry.create", "description") => "what the agent does",
+        ("ext.add" | "ext.scan" | "ext.skill.import", "path") => "manifest / package path",
+        ("ext.remove" | "ext.activate" | "ext.deactivate", "id") => "extension id",
+        ("ext.skill.create", "prompt") => "natural-language description of the skill",
+        ("ext.skill.status", "id") => "skill id (omit for all)",
+        ("completion", "shell") => "bash, zsh, fish, powershell, or elvish",
+        _ => return None,
+    })
+}
+
 /// Build one `clap::Arg` for `binder`, bound positionally in declared order
-/// (see the module doc on why every binder is positional for now).
+/// (see the module doc on why every binder is positional for now), with an
+/// optional one-line `--help` string for the argument.
 ///
 /// `pub(crate)`: the installation half's own tree builder binds the same
 /// `Binder` kinds the same way — one mapping, not two.
-pub(crate) fn arg_for(binder: &Binder) -> Arg {
+pub(crate) fn arg_for_with_help(binder: &Binder, help: Option<&'static str>) -> Arg {
     let arg = Arg::new(binder.name);
+    let arg = match help {
+        Some(h) => arg.help(h),
+        None => arg,
+    };
     match binder.kind {
         BinderKind::Text => arg.required(!binder.optional),
         // A closed set of positional values: clap lists them in `--help` and
@@ -172,7 +272,10 @@ pub fn build_semantic_tree(invocables: &[&Invocable]) -> (Vec<Command>, HashSet<
         for invocable in members.iter() {
             let mut verb = Command::new(verb_of(invocable).to_string()).about(invocable.summary);
             for binder in &invocable.binders {
-                verb = verb.arg(arg_for(binder));
+                verb = verb.arg(arg_for_with_help(
+                    binder,
+                    binder_help(invocable.id.as_str(), binder.name),
+                ));
             }
             verb_command = verb_command.subcommand(verb);
         }
