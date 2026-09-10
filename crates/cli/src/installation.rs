@@ -741,12 +741,12 @@ fn dispatch_leaf(group: &str, verb: &str, matches: &ArgMatches, ctx: &Context) -
         ("archetype", "list") => {
             let catalog = matches.get_flag("catalog");
             let active = matches.get_flag("active");
-            crate::commands::archetype_cmd::list(catalog, active)
+            crate::commands::archetype_cmd::list(catalog, active, ctx)
         }
         ("archetype", "info") => {
             let id = matches.get_one::<String>("id").cloned().unwrap_or_default();
             let deviations = matches.get_flag("deviations");
-            crate::commands::archetype_cmd::info(&id, deviations)
+            crate::commands::archetype_cmd::info(&id, deviations, ctx)
         }
         ("archetype", "set") => {
             let id = matches.get_one::<String>("id").cloned();
@@ -762,7 +762,7 @@ fn dispatch_leaf(group: &str, verb: &str, matches: &ArgMatches, ctx: &Context) -
                 .get_one::<String>("from")
                 .cloned()
                 .unwrap_or_default();
-            crate::commands::archetype_cmd::create(&name, &from)
+            crate::commands::archetype_cmd::create(&name, &from, ctx)
         }
         ("registry", "list") => crate::commands::registry::list(ctx),
         ("registry", "show") => {

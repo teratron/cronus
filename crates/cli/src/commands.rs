@@ -5,7 +5,7 @@ pub(crate) mod init {
 
     use cronus_core::state;
 
-    use crate::output::Context;
+    use crate::output::{Context, json_escape};
 
     pub fn run(path: Option<PathBuf>, ctx: &Context) -> i32 {
         let target =
@@ -42,10 +42,6 @@ pub(crate) mod init {
                 1
             }
         }
-    }
-
-    fn json_escape(s: &str) -> String {
-        s.replace('\\', "\\\\").replace('"', "\\\"")
     }
 
     #[cfg(test)]
@@ -135,7 +131,10 @@ pub(crate) mod status {
             .unwrap_or("default")
             .to_owned();
         if ctx.is_json() {
-            println!("{{\"workspace\":\"{workspace}\",\"phase\":\"ready\"}}");
+            println!(
+                "{{\"workspace\":\"{}\",\"phase\":\"ready\"}}",
+                crate::output::json_escape(&workspace)
+            );
         } else {
             println!("workspace: {workspace}");
             println!("phase:     ready");
@@ -339,7 +338,7 @@ pub(crate) mod backup_cmd {
     use cronus_core::backup::{self, BackupOptions};
     use cronus_core::paths::{Paths, Root};
 
-    use crate::output::Context;
+    use crate::output::{Context, json_escape};
 
     fn state_root_and_backups_dir() -> (PathBuf, PathBuf) {
         let paths = Paths::os_native();
@@ -374,8 +373,8 @@ pub(crate) mod backup_cmd {
                 if ctx.is_json() {
                     println!(
                         "{{\"id\":\"{}\",\"path\":\"{}\"}}",
-                        backup_ref.id,
-                        backup_ref.path.display()
+                        json_escape(&backup_ref.id),
+                        json_escape(&backup_ref.path.display().to_string())
                     );
                 } else {
                     println!(
@@ -395,27 +394,32 @@ pub(crate) mod backup_cmd {
 
     fn list_at(backups_dir: &Path, ctx: &Context) -> i32 {
         match backup::list(backups_dir) {
-            // Known residual, not fixed here: the empty case ignores
-            // `--format json` and always prints prose, unlike the
-            // non-empty branch just below — corrected separately, after
-            // convergence, alongside the same defect at every other site
-            // that discards the requested format.
             Ok(backups) if backups.is_empty() => {
-                println!("no backups found");
+                if ctx.is_json() {
+                    println!("[]");
+                } else {
+                    println!("no backups found");
+                }
+                0
+            }
+            Ok(backups) if ctx.is_json() => {
+                let rows: Vec<String> = backups
+                    .iter()
+                    .map(|b| {
+                        format!(
+                            "{{\"id\":\"{}\",\"path\":\"{}\",\"created_at\":{}}}",
+                            json_escape(&b.id),
+                            json_escape(&b.path.display().to_string()),
+                            b.created_at_unix
+                        )
+                    })
+                    .collect();
+                println!("[{}]", rows.join(","));
                 0
             }
             Ok(backups) => {
                 for backup_ref in &backups {
-                    if ctx.is_json() {
-                        println!(
-                            "{{\"id\":\"{}\",\"path\":\"{}\",\"created_at\":{}}}",
-                            backup_ref.id,
-                            backup_ref.path.display(),
-                            backup_ref.created_at_unix
-                        );
-                    } else {
-                        println!("{}\t{}", backup_ref.id, backup_ref.path.display());
-                    }
+                    println!("{}\t{}", backup_ref.id, backup_ref.path.display());
                 }
                 0
             }
@@ -581,7 +585,10 @@ pub(crate) mod workspace {
         match mgr.create(&ws_id, ws_name, &ws_path, WorkspaceTemplate::Default) {
             Ok(ws) => {
                 if ctx.is_json() {
-                    println!("{{\"result\":\"created\",\"id\":\"{}\"}}", ws.id);
+                    println!(
+                        "{{\"result\":\"created\",\"id\":\"{}\"}}",
+                        crate::output::json_escape(&ws.id.to_string())
+                    );
                 } else {
                     println!("Created workspace: {} ({})", ws.id, ws.name);
                 }
@@ -657,7 +664,10 @@ pub(crate) mod workspace {
         match mgr.set_active(&ws_id) {
             Ok(()) => {
                 if ctx.is_json() {
-                    println!("{{\"result\":\"switched\",\"id\":\"{ws_id}\"}}");
+                    println!(
+                        "{{\"result\":\"switched\",\"id\":\"{}\"}}",
+                        crate::output::json_escape(&ws_id.to_string())
+                    );
                 } else {
                     println!("Active workspace: {ws_id}");
                 }
@@ -692,7 +702,10 @@ pub(crate) mod workspace {
         match mgr.delete(&ws_id) {
             Ok(true) => {
                 if ctx.is_json() {
-                    println!("{{\"result\":\"deleted\",\"id\":\"{ws_id}\"}}");
+                    println!(
+                        "{{\"result\":\"deleted\",\"id\":\"{}\"}}",
+                        crate::output::json_escape(&ws_id.to_string())
+                    );
                 } else {
                     println!("Deleted workspace: {ws_id}");
                 }
@@ -924,7 +937,10 @@ pub(crate) mod ext {
                     // escaping — a `"` or `\` in an extension id would
                     // emit invalid JSON. Corrected separately, after
                     // convergence, by real `Outcome` serialization.
-                    println!("{{\"result\":\"activated\",\"id\":\"{id}\"}}");
+                    println!(
+                        "{{\"result\":\"activated\",\"id\":\"{}\"}}",
+                        crate::output::json_escape(&id)
+                    );
                 } else {
                     println!("Activated: {id}");
                 }
@@ -942,9 +958,10 @@ pub(crate) mod ext {
         match registry.transition(&id, ExtensionState::Inactive) {
             Ok(()) => {
                 if ctx.is_json() {
-                    // Known residual, not fixed here: same unescaped
-                    // interpolation as `activate` above.
-                    println!("{{\"result\":\"deactivated\",\"id\":\"{id}\"}}");
+                    println!(
+                        "{{\"result\":\"deactivated\",\"id\":\"{}\"}}",
+                        crate::output::json_escape(&id)
+                    );
                 } else {
                     println!("Deactivated: {id}");
                 }
@@ -1361,7 +1378,10 @@ pub(crate) mod registry {
             // `\` in an agent name would emit invalid JSON. Corrected
             // separately, after convergence, by real `Outcome`
             // serialization.
-            println!("{{\"result\":\"created\",\"name\":\"{def_name}\"}}");
+            println!(
+                "{{\"result\":\"created\",\"name\":\"{}\"}}",
+                crate::output::json_escape(&def_name)
+            );
         } else {
             println!("Created: {def_name}");
         }
@@ -1372,9 +1392,10 @@ pub(crate) mod registry {
         let mut registry = AgentRegistry::new();
         registry.apply_user_config(&name, true, None);
         if ctx.is_json() {
-            // Known residual, not fixed here: same unescaped interpolation
-            // as `create` above.
-            println!("{{\"result\":\"disabled\",\"name\":\"{name}\"}}");
+            println!(
+                "{{\"result\":\"disabled\",\"name\":\"{}\"}}",
+                crate::output::json_escape(&name)
+            );
         } else {
             println!("Disabled: {name}");
         }
@@ -1385,9 +1406,10 @@ pub(crate) mod registry {
         let mut registry = AgentRegistry::new();
         registry.apply_user_config(&name, false, None);
         if ctx.is_json() {
-            // Known residual, not fixed here: same unescaped interpolation
-            // as `create` above.
-            println!("{{\"result\":\"enabled\",\"name\":\"{name}\"}}");
+            println!(
+                "{{\"result\":\"enabled\",\"name\":\"{}\"}}",
+                crate::output::json_escape(&name)
+            );
         } else {
             println!("Enabled: {name}");
         }
@@ -1640,7 +1662,7 @@ pub(crate) mod archetype_cmd {
     use cronus_core::archetype::{ArchetypeCatalog, ValidationStatus};
     use cronus_core::paths::{Paths, Root};
 
-    use crate::output::Context;
+    use crate::output::{Context, json_escape};
 
     // Reached directly from `crate::installation::dispatch` now — the
     // installation half's own generated grammar owns the `archetype`
@@ -1664,17 +1686,57 @@ pub(crate) mod archetype_cmd {
             .filter(|s| !s.is_empty())
     }
 
-    // Known residual, not fixed here: this handler takes no `Context` at
-    // all, so `--format json` is silently discarded — corrected
-    // separately, after convergence, alongside the same defect at every
-    // other site that discards the requested format.
-    pub(crate) fn list(_catalog: bool, active: bool) -> i32 {
+    fn json_str_array(items: impl Iterator<Item = String>) -> String {
+        let inner: Vec<String> = items.map(|s| format!("\"{}\"", json_escape(&s))).collect();
+        format!("[{}]", inner.join(","))
+    }
+
+    pub(crate) fn list(catalog_only: bool, active: bool, ctx: &Context) -> i32 {
+        let _ = catalog_only;
         let catalog = ArchetypeCatalog::program();
         if active {
-            match read_active() {
-                Some(id) => println!("active archetype: {id}"),
-                None => println!("active archetype: (none — archetype-free)"),
+            let current = read_active();
+            if ctx.is_json() {
+                match &current {
+                    Some(id) => println!("{{\"active\":\"{}\"}}", json_escape(id)),
+                    None => println!("{{\"active\":null}}"),
+                }
+            } else {
+                match &current {
+                    Some(id) => println!("active archetype: {id}"),
+                    None => println!("active archetype: (none — archetype-free)"),
+                }
             }
+            return 0;
+        }
+        if ctx.is_json() {
+            let shipped = catalog
+                .shipped()
+                .iter()
+                .map(|def| {
+                    format!(
+                        "{{\"id\":\"{}\",\"domain\":\"{}\",\"roles\":{}}}",
+                        json_escape(&def.id),
+                        json_escape(&def.domain),
+                        def.pool.len()
+                    )
+                })
+                .collect::<Vec<_>>()
+                .join(",");
+            let blocked = catalog
+                .blocked()
+                .iter()
+                .map(|b| {
+                    format!(
+                        "{{\"id\":\"{}\",\"domain\":\"{}\",\"missing_roles\":{}}}",
+                        json_escape(&b.id),
+                        json_escape(&b.domain),
+                        json_str_array(b.missing_roles.iter().cloned())
+                    )
+                })
+                .collect::<Vec<_>>()
+                .join(",");
+            println!("{{\"shipped\":[{shipped}],\"blocked\":[{blocked}]}}");
             return 0;
         }
         println!("shipped:");
@@ -1693,11 +1755,27 @@ pub(crate) mod archetype_cmd {
         0
     }
 
-    // Known residual, not fixed here: same missing `Context` as `list`
-    // above — `--format json` is silently discarded.
-    pub(crate) fn info(id: &str, deviations: bool) -> i32 {
+    pub(crate) fn info(id: &str, deviations: bool, ctx: &Context) -> i32 {
         let catalog = ArchetypeCatalog::program();
         if let Some(def) = catalog.get(id) {
+            if ctx.is_json() {
+                let validation = if deviations {
+                    format!(",\"validation\":\"{:?}\"", ValidationStatus::Unvalidated)
+                } else {
+                    String::new()
+                };
+                println!(
+                    "{{\"id\":\"{}\",\"domain\":\"{}\",\"pool\":{},\"departments\":{},\
+                     \"grow_when\":\"{}\",\"seed\":{}{validation}}}",
+                    json_escape(&def.id),
+                    json_escape(&def.domain),
+                    json_str_array(def.pool.iter().cloned()),
+                    json_str_array(def.shape.departments.iter().cloned()),
+                    json_escape(&def.shape.grow_when),
+                    def.seed.len(),
+                );
+                return 0;
+            }
             println!("archetype: {}", def.id);
             println!("domain: {}", def.domain);
             println!("pool ({}): {}", def.pool.len(), def.pool.join(", "));
@@ -1712,6 +1790,15 @@ pub(crate) mod archetype_cmd {
             }
             0
         } else if let Some(b) = catalog.blocked_status(id) {
+            if ctx.is_json() {
+                println!(
+                    "{{\"id\":\"{}\",\"blocked\":true,\"domain\":\"{}\",\"missing_roles\":{}}}",
+                    json_escape(&b.id),
+                    json_escape(&b.domain),
+                    json_str_array(b.missing_roles.iter().cloned())
+                );
+                return 0;
+            }
             println!("archetype: {} (BLOCKED)", b.id);
             println!("domain: {}", b.domain);
             println!("missing roles: {}", b.missing_roles.join(", "));
@@ -1767,23 +1854,29 @@ pub(crate) mod archetype_cmd {
             return 1;
         }
         if ctx.is_json() {
-            println!("{{\"active\":\"{id}\"}}");
+            println!("{{\"active\":\"{}\"}}", json_escape(&id));
         } else {
             println!("archetype set: {id} (expectations re-scoped; staff unchanged)");
         }
         0
     }
 
-    // Known residual, not fixed here: same missing `Context` as `list`/
-    // `info` above — `--format json` is silently discarded.
-    pub(crate) fn create(name: &str, from: &str) -> i32 {
+    pub(crate) fn create(name: &str, from: &str, ctx: &Context) -> i32 {
         let catalog = ArchetypeCatalog::program();
         match catalog.create_from_preset(&state_dir(), name, from) {
             Ok(custom) => {
-                println!(
-                    "created custom archetype '{}' from preset '{}'",
-                    custom.definition.id, custom.derived_from
-                );
+                if ctx.is_json() {
+                    println!(
+                        "{{\"id\":\"{}\",\"derived_from\":\"{}\"}}",
+                        json_escape(&custom.definition.id),
+                        json_escape(&custom.derived_from)
+                    );
+                } else {
+                    println!(
+                        "created custom archetype '{}' from preset '{}'",
+                        custom.definition.id, custom.derived_from
+                    );
+                }
                 0
             }
             Err(e) => {

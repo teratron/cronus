@@ -624,3 +624,54 @@ fn workspace_delete_refuses_the_reserved_dev_office_id() {
     let stderr = String::from_utf8_lossy(&output.stderr);
     assert!(stderr.contains("reserved"), "stderr: {stderr}");
 }
+
+/// `--format json` is honoured across the installation half too — several
+/// verbs used to print prose regardless. Each output line here must parse as
+/// JSON (checked structurally: starts with `{` or `[`, balanced, no bare
+/// backslash outside a `\` escape).
+#[test]
+fn installation_verbs_emit_valid_json_for_the_json_format() {
+    fn looks_like_json(s: &str) -> bool {
+        let t = s.trim();
+        if !(t.starts_with('{') || t.starts_with('[')) {
+            return false;
+        }
+        // every backslash must be part of a recognised escape
+        let bytes: Vec<char> = t.chars().collect();
+        let mut i = 0;
+        while i < bytes.len() {
+            if bytes[i] == '\\' {
+                match bytes.get(i + 1) {
+                    Some('"') | Some('\\') | Some('/') | Some('n') | Some('r') | Some('t')
+                    | Some('b') | Some('f') | Some('u') => i += 2,
+                    _ => return false,
+                }
+            } else {
+                i += 1;
+            }
+        }
+        true
+    }
+
+    for args in [
+        &["archetype", "list", "--format", "json"][..],
+        &["archetype", "list", "--active", "--format", "json"][..],
+        &["backup", "list", "--format", "json"][..],
+        &["dev", "status", "--format", "json"][..],
+    ] {
+        let output = bin().args(args).output().expect("failed to spawn binary");
+        assert!(
+            output.status.success(),
+            "`cronus {}` must exit 0",
+            args.join(" ")
+        );
+        let stdout = String::from_utf8_lossy(&output.stdout);
+        for line in stdout.lines().filter(|l| !l.trim().is_empty()) {
+            assert!(
+                looks_like_json(line),
+                "`cronus {}` produced a non-JSON / badly-escaped line: {line:?}",
+                args.join(" ")
+            );
+        }
+    }
+}
