@@ -138,10 +138,15 @@ fn main() -> std::process::ExitCode {
     // --format json`), which stays a genuine usage failure, not a spelling
     // of "launch the default."
     let mut command = cli::Cli::command().subcommand_required(true);
-    for group in installation_groups {
-        command = command.subcommand(group);
-    }
-    for group in semantic_groups {
+    // One alphabetical list, not two: the installation/semantic split is an
+    // internal build-order distinction (§4.1.1), not something a user reading
+    // `--help` should see as `workspace` … `agent` … `board`.
+    let mut all_groups: Vec<Command> = installation_groups
+        .into_iter()
+        .chain(semantic_groups)
+        .collect();
+    all_groups.sort_by(|a, b| a.get_name().cmp(b.get_name()));
+    for group in all_groups {
         command = command.subcommand(group);
     }
     let matches = command.get_matches();

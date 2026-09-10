@@ -28,11 +28,14 @@ pub(crate) mod init {
                     let abs = target
                         .canonicalize()
                         .unwrap_or_else(|_| target.to_path_buf());
+                    let shown = cronus_core::paths::display_clean(&abs);
                     if ctx.is_json() {
-                        let p = json_escape(&abs.display().to_string());
-                        println!("{{\"result\":\"initialized\",\"path\":\"{p}\"}}");
+                        println!(
+                            "{{\"result\":\"initialized\",\"path\":\"{}\"}}",
+                            json_escape(&shown)
+                        );
                     } else {
-                        println!("Initialized: {}", abs.display());
+                        println!("Initialized: {shown}");
                     }
                 }
                 0
@@ -83,41 +86,42 @@ pub(crate) mod init {
 
 // ─── status ───────────────────────────────────────────────────────────────────
 
-pub(crate) mod status {
-    use std::path::{Path, PathBuf};
+/// The workspace root a read-side verb (`status`, `doctor`) reports on: the
+/// nearest ancestor of the current directory that `cronus init` scaffolded
+/// (`init` seeds `app.json` there), falling back to the OS state tier for a
+/// globally-initialised install. `init` writes to the current directory, so
+/// these verbs must look where `init` wrote — not only at the OS state tier,
+/// which the CLI's `init` never populates.
+pub(crate) fn resolve_workspace_root() -> std::path::PathBuf {
+    let cwd = std::env::current_dir().ok();
+    let fallback = cronus_core::paths::Paths::os_native().resolve(cronus_core::paths::Root::State);
+    resolve_workspace_root_from(cwd.as_deref(), fallback)
+}
 
-    use cronus_core::paths::{Paths, Root};
+/// Pure resolver: the first ancestor of `start` that holds `app.json`, else
+/// `fallback`. Split out so it is testable without mutating the process
+/// working directory.
+pub(crate) fn resolve_workspace_root_from(
+    start: Option<&std::path::Path>,
+    fallback: std::path::PathBuf,
+) -> std::path::PathBuf {
+    if let Some(start) = start {
+        for ancestor in start.ancestors() {
+            if ancestor.join("app.json").is_file() {
+                return ancestor.to_path_buf();
+            }
+        }
+    }
+    fallback
+}
+
+pub(crate) mod status {
+    use std::path::Path;
 
     use crate::output::Context;
 
     pub fn run(ctx: &Context) -> i32 {
-        run_at(&resolve_root(), ctx)
-    }
-
-    /// The workspace `status` reports on: the nearest ancestor of the current
-    /// directory that `cronus init` has scaffolded (`init` seeds `app.json`
-    /// there), falling back to the OS state tier for a globally-initialised
-    /// install. `init` writes to the current directory, so `status` must look
-    /// where `init` wrote — not only at the OS state tier, which `init` from
-    /// the CLI never populates — a divergence this fix closes.
-    fn resolve_root() -> PathBuf {
-        let cwd = std::env::current_dir().ok();
-        let fallback = Paths::os_native().resolve(Root::State);
-        resolve_root_from(cwd.as_deref(), fallback)
-    }
-
-    /// Pure resolver: the first ancestor of `start` that holds `app.json`,
-    /// else `fallback`. Split out so it is testable without mutating the
-    /// process working directory.
-    fn resolve_root_from(start: Option<&Path>, fallback: PathBuf) -> PathBuf {
-        if let Some(start) = start {
-            for ancestor in start.ancestors() {
-                if ancestor.join("app.json").is_file() {
-                    return ancestor.to_path_buf();
-                }
-            }
-        }
-        fallback
+        run_at(&crate::commands::resolve_workspace_root(), ctx)
     }
 
     fn run_at(state_root: &Path, ctx: &Context) -> i32 {
@@ -183,7 +187,7 @@ pub(crate) mod status {
         /// "No workspace initialized" forever.
         #[test]
         fn status_resolves_an_initialized_ancestor_over_the_fallback() {
-            use super::resolve_root_from;
+            use crate::commands::resolve_workspace_root_from as resolve_root_from;
 
             let root = std::env::temp_dir().join(format!(
                 "cronus-status-anc-{}-{}",
@@ -238,14 +242,11 @@ pub(crate) mod doctor {
     use std::path::Path;
 
     use cronus_core::doctor::{self, Disposition};
-    use cronus_core::paths::{Paths, Root};
 
     use crate::output::Context;
 
     pub fn run(fix: bool, ctx: &Context) -> i32 {
-        let paths = Paths::os_native();
-        let root = paths.resolve(Root::State);
-        run_at(&root, fix, ctx)
+        run_at(&crate::commands::resolve_workspace_root(), fix, ctx)
     }
 
     /// Config validity is checked against the real workspace state root;
@@ -619,14 +620,14 @@ pub(crate) mod workspace {
                             let is_active = active.as_ref().map(|a| a == &w.id).unwrap_or(false);
                             format!(
                                 "{{\"id\":\"{}\",\"name\":\"{}\",\"active\":{is_active}}}",
-                                w.id,
+                                json_escape(&w.id.to_string()),
                                 json_escape(&w.name)
                             )
                         })
                         .collect();
                     println!("[{}]", items.join(","));
                 } else if workspaces.is_empty() {
-                    println!("No workspaces.");
+                    println!("No results.");
                 } else {
                     for w in &workspaces {
                         let marker = if active.as_ref().map(|a| a == &w.id).unwrap_or(false) {

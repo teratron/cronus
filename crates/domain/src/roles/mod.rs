@@ -108,14 +108,31 @@ impl RoleManager {
             .find(|r| r.id == preset_id)
             .ok_or_else(|| RoleError::NotFound(preset_id.to_string()))?;
 
-        let instance_id = custom_name
-            .map(|n| n.to_string())
-            .unwrap_or_else(|| format!("{}-{}", preset_id, crate::tool_security::now_ms()));
-
-        let instance_dir = self.state_dir.join("employees").join(&instance_id);
-        if instance_dir.exists() {
-            return Err(RoleError::AlreadyHired(instance_id));
-        }
+        // Without a custom name, the id is `<preset>-<n>` for the lowest free
+        // `n` — deterministic given the state tier and readable, rather than a
+        // wall-clock millisecond stamp (which changed every run and could
+        // collide on a fast double-hire).
+        let (instance_id, instance_dir) = match custom_name {
+            Some(n) => {
+                let dir = self.state_dir.join("employees").join(n);
+                if dir.exists() {
+                    return Err(RoleError::AlreadyHired(n.to_string()));
+                }
+                (n.to_string(), dir)
+            }
+            None => {
+                let employees = self.state_dir.join("employees");
+                let mut n = 1u32;
+                loop {
+                    let id = format!("{preset_id}-{n}");
+                    let dir = employees.join(&id);
+                    if !dir.exists() {
+                        break (id, dir);
+                    }
+                    n += 1;
+                }
+            }
+        };
 
         fs::create_dir_all(&instance_dir)?;
         fs::create_dir_all(instance_dir.join("memory"))?;

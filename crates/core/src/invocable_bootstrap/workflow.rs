@@ -97,11 +97,11 @@ fn register_scaffold(registry: &mut InvocableRegistry, dispatcher: &mut Dispatch
                     let abs = dest.canonicalize().unwrap_or(dest);
                     Outcome::Value(OutcomeValue::Record(vec![(
                         "path".to_string(),
-                        OutcomeValue::Text(abs.display().to_string()),
+                        OutcomeValue::Text(cronus_domain::paths::display_clean(&abs)),
                     )]))
                 }
                 Err(e) => Outcome::Unavailable {
-                    reason: e.to_string(),
+                    reason: io_message::describe(&e),
                 },
             }
         }),

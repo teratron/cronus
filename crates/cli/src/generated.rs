@@ -117,6 +117,31 @@ pub(crate) fn arg_for(binder: &Binder) -> Arg {
 /// Returns the tree alongside the set of group names it owns, so a caller
 /// can tell a registry-generated group apart from one still on the old
 /// hand-declared enum without re-deriving the same set twice.
+/// A one-line description for a semantic group's top-level `--help` entry.
+/// A hand-kept map, mirroring the installation half's own `group_about` — the
+/// registry carries per-verb summaries but no group-level text, and
+/// `"<group> operations"` reads as a placeholder. An unlisted group (a new
+/// core group, an extension's) falls back to that generic form.
+fn semantic_group_about(group: &str) -> String {
+    match group {
+        "memory" => "Store, search, and forget key-value memory entries",
+        "codegraph" => "Index and query the code graph",
+        "agent" => "Inspect the running agent: identity files and session status",
+        "role" => "Hire, fire, and inspect role instances from the preset catalog",
+        "exec" => "Manage execution workspaces for cards",
+        "check" => "Run and inspect quality gates for a card",
+        "learn" => "Review pending skill proposals",
+        "board" => "Kanban board: add, move, block, and archive cards",
+        "schedule" => "Recurring schedules: add, list, run, delete",
+        "budget" => "Workspace budget: show usage, set a limit, reset counters",
+        "loop" => "Run execution/evolution loops and inspect their ledgers",
+        "workflow" => "Author, validate, transpile, and run workflow files",
+        "knowledge" => "Ingest documents and run hybrid retrieval over collections",
+        _ => return format!("{group} operations"),
+    }
+    .to_string()
+}
+
 pub fn build_semantic_tree(invocables: &[&Invocable]) -> (Vec<Command>, HashSet<String>) {
     let mut by_group: HashMap<&str, Vec<&Invocable>> = HashMap::new();
     for invocable in invocables {
@@ -136,7 +161,7 @@ pub fn build_semantic_tree(invocables: &[&Invocable]) -> (Vec<Command>, HashSet<
         // subcommand neither half owns" internal-error path in `main` becomes
         // genuinely unreachable for this shape.
         let mut verb_command = Command::new(group.to_string())
-            .about(format!("{group} operations"))
+            .about(semantic_group_about(group))
             .subcommand_required(true)
             .arg_required_else_help(true);
         for invocable in members.iter() {

@@ -729,3 +729,55 @@ fn installation_verbs_emit_valid_json_for_the_json_format() {
         }
     }
 }
+
+/// `--help` lists command groups in one alphabetical run, not two (the
+/// installation/semantic split is internal). Checked by confirming the
+/// group-name column is sorted.
+#[test]
+fn top_level_help_lists_groups_in_one_sorted_run() {
+    let output = bin()
+        .arg("--help")
+        .output()
+        .expect("failed to spawn binary");
+    let stdout = String::from_utf8_lossy(&output.stdout);
+    let names: Vec<String> = stdout
+        .lines()
+        .skip_while(|l| !l.trim_start().starts_with("Commands:"))
+        .skip(1)
+        .take_while(|l| l.starts_with("  ") && !l.trim().is_empty())
+        .filter_map(|l| l.split_whitespace().next().map(str::to_string))
+        .filter(|n| n != "help")
+        .collect();
+    assert!(
+        names.len() > 10,
+        "expected the full group list, got {names:?}"
+    );
+    let mut sorted = names.clone();
+    sorted.sort();
+    assert_eq!(
+        names, sorted,
+        "command groups must appear in one alphabetical run"
+    );
+}
+
+/// `init` reports a clean path — no Windows `\?\` verbatim prefix.
+#[test]
+fn init_reports_a_path_without_the_windows_verbatim_prefix() {
+    let dir = std::env::temp_dir().join(format!("cronus-smoke-init-disp-{}", std::process::id()));
+    let _ = std::fs::remove_dir_all(&dir);
+    std::fs::create_dir_all(&dir).unwrap();
+
+    let output = bin()
+        .args(["init"])
+        .arg(&dir)
+        .output()
+        .expect("failed to spawn binary");
+    assert!(output.status.success());
+    let stdout = String::from_utf8_lossy(&output.stdout);
+    assert!(
+        !stdout.contains(r"\\?\"),
+        "init output must not contain the verbatim-path prefix: {stdout}"
+    );
+
+    let _ = std::fs::remove_dir_all(&dir);
+}
