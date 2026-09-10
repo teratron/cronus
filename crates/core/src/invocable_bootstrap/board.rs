@@ -160,7 +160,7 @@ fn register_move(registry: &mut InvocableRegistry, dispatcher: &mut Dispatcher) 
     let invocable = Invocable {
         id: id.clone(),
         name: "Move",
-        summary: "Move a card to a new state.",
+        summary: "Move a card to a new state (triage, todo, ready, running, blocked, done).",
         group: "board",
         locus: Locus::Semantic,
         binders: vec![
@@ -199,7 +199,10 @@ fn register_move(registry: &mut InvocableRegistry, dispatcher: &mut Dispatcher) 
                 Some(s) => s,
                 None => {
                     return Outcome::Unavailable {
-                        reason: format!("unknown state '{state_str}'"),
+                        reason: format!(
+                            "unknown state '{state_str}' (valid: {})",
+                            CardState::NAMES.join(", ")
+                        ),
                     };
                 }
             };

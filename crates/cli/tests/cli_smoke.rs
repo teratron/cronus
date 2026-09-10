@@ -211,6 +211,22 @@ fn workflow_scaffold_writes_the_named_path_and_it_validates() {
     let _ = std::fs::remove_dir_all(&dir);
 }
 
+/// `board move` names the valid states when the one given is not recognised,
+/// so the vocabulary is discoverable without reading source.
+#[test]
+fn board_move_with_an_unknown_state_lists_the_valid_ones() {
+    let output = bin()
+        .args(["board", "move", "no-such-card", "sideways"])
+        .output()
+        .expect("failed to spawn binary");
+    assert!(!output.status.success());
+    let stderr = String::from_utf8_lossy(&output.stderr);
+    assert!(
+        stderr.contains("valid:") && stderr.contains("triage") && stderr.contains("done"),
+        "the error must enumerate the valid states: {stderr}"
+    );
+}
+
 // ── Command smoke tests ───────────────────────────────────────────────────────
 
 #[test]

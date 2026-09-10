@@ -101,6 +101,12 @@ impl CardState {
         }
     }
 
+    /// Every state token `parse` accepts, in canonical order — for help text
+    /// and "valid: …" error messages so the vocabulary is discoverable rather
+    /// than found by trial.
+    pub const NAMES: &'static [&'static str] =
+        &["triage", "todo", "ready", "running", "blocked", "done"];
+
     pub fn parse(s: &str) -> Option<Self> {
         match s {
             "triage" => Some(CardState::Triage),

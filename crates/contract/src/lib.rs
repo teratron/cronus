@@ -2500,6 +2500,10 @@ pub enum OutcomeValue {
     Empty,
     Text(String),
     Integer(i64),
+    /// A real number — rendered as a bare JSON number, never a quoted string.
+    /// Handlers with a fractional value (a budget amount, a confidence score)
+    /// use this rather than `Text(format!("{x:.4}"))`.
+    Float(f64),
     Boolean(bool),
     List(Vec<OutcomeValue>),
     Record(Vec<(String, OutcomeValue)>),

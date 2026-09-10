@@ -2,6 +2,7 @@ use std::sync::Arc;
 
 use cronus_contract::{Binder, BinderKind, Invocable, Locus, Outcome, OutcomeValue, Stability};
 use cronus_domain::invocable::{Dispatcher, InvocableRegistry, Registrant};
+use cronus_domain::io_message;
 use nodus::executor::{Status, Value};
 use nodus::validator::Severity;
 use nodus::workflows::{self, TranspileMode};
@@ -16,17 +17,14 @@ pub(super) fn register(registry: &mut InvocableRegistry, dispatcher: &mut Dispat
 }
 
 /// `nodus::executor::Value` is shaped exactly like `OutcomeValue` (Null,
-/// Bool, Int, Text, List, Map — the recursive collection kinds line up
-/// one-for-one with `Empty`/`Boolean`/`Integer`/`Text`/`List`/`Record`).
-/// `Float` is the one nodus carries that `OutcomeValue` does not — the same
-/// gap `learn`'s confidence field and `budget`'s handlers already work
-/// around, formatted as `Text` for the same reason.
+/// Bool, Int, Float, Text, List, Map — the kinds line up one-for-one with
+/// `Empty`/`Boolean`/`Integer`/`Float`/`Text`/`List`/`Record`).
 fn nodus_value_to_outcome(value: &Value) -> OutcomeValue {
     match value {
         Value::Null => OutcomeValue::Empty,
         Value::Bool(b) => OutcomeValue::Boolean(*b),
         Value::Int(n) => OutcomeValue::Integer(*n),
-        Value::Float(f) => OutcomeValue::Text(f.to_string()),
+        Value::Float(f) => OutcomeValue::Float(*f),
         Value::Text(s) => OutcomeValue::Text(s.clone()),
         Value::List(items) => {
             OutcomeValue::List(items.iter().map(nodus_value_to_outcome).collect())
@@ -137,7 +135,11 @@ fn register_validate(registry: &mut InvocableRegistry, dispatcher: &mut Dispatch
                 Ok(s) => s,
                 Err(e) => {
                     return Outcome::Unavailable {
-                        reason: format!("cannot read {}: {e}", file.display()),
+                        reason: format!(
+                            "cannot read {}: {}",
+                            file.display(),
+                            io_message::describe(&e)
+                        ),
                     };
                 }
             };
@@ -230,7 +232,11 @@ fn register_run(registry: &mut InvocableRegistry, dispatcher: &mut Dispatcher) {
                 Ok(s) => s,
                 Err(e) => {
                     return Outcome::Unavailable {
-                        reason: format!("cannot read {}: {e}", file.display()),
+                        reason: format!(
+                            "cannot read {}: {}",
+                            file.display(),
+                            io_message::describe(&e)
+                        ),
                     };
                 }
             };
@@ -416,7 +422,11 @@ fn register_transpile(registry: &mut InvocableRegistry, dispatcher: &mut Dispatc
                 Ok(s) => s,
                 Err(e) => {
                     return Outcome::Unavailable {
-                        reason: format!("cannot read {}: {e}", file.display()),
+                        reason: format!(
+                            "cannot read {}: {}",
+                            file.display(),
+                            io_message::describe(&e)
+                        ),
                     };
                 }
             };

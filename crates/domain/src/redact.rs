@@ -59,7 +59,7 @@ fn redact_value(value: OutcomeValue, secrets: &[&str]) -> OutcomeValue {
                 .map(|(k, v)| (k, redact_value(v, secrets)))
                 .collect(),
         ),
-        // Empty/Integer/Boolean carry no secret-bearing string.
+        // Empty/Integer/Float/Boolean carry no secret-bearing string.
         other => other,
     }
 }

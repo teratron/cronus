@@ -35,12 +35,9 @@ fn register_show(registry: &mut InvocableRegistry, dispatcher: &mut Dispatcher) 
             // preserved exactly rather than fixed here.
             let engine = BudgetEngine::new();
             let spent = engine.spent_for("default");
-            // No `OutcomeValue::Float` exists — the same gap `learn`'s
-            // confidence field already worked around; a displayed value
-            // needs no round-trip parse, so `Text` is fine.
             Outcome::Value(OutcomeValue::Record(vec![(
                 "spent".to_string(),
-                OutcomeValue::Text(format!("{spent:.4}")),
+                OutcomeValue::Float(spent),
             )]))
         }),
     );
@@ -74,7 +71,7 @@ fn register_set(registry: &mut InvocableRegistry, dispatcher: &mut Dispatcher) {
             engine.add_policy(policy);
             Outcome::Value(OutcomeValue::Record(vec![(
                 "limit".to_string(),
-                OutcomeValue::Text(format!("{limit:.4}")),
+                OutcomeValue::Float(limit),
             )]))
         }),
     );
