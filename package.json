@@ -20,7 +20,7 @@
     "typecheck": "tsc --noEmit"
   },
   "devDependencies": {
-    "@biomejs/biome": "^2.5.12",
-    "fallow": "^3.23.0"
+    "@biomejs/biome": "^2.5.13",
+    "fallow": "^3.24.1"
   }
 }
