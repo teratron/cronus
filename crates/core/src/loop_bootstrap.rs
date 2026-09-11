@@ -18,8 +18,6 @@ use cronus_domain::loop_runner::{
     Ceiling, ExecutionBackend, ExecutionReport, LoopClass, LoopOutcome, LoopSpec, Mutation,
     MutationManifest, Oracle, TurnResult, WorkspaceKind,
 };
-use cronus_domain::paths::{Paths, Root};
-
 /// A real `ExecutionBackend` whose deterministic oracle checks whether
 /// `target_path` exists. No mutations, no workspace write-back — a
 /// "trivial" unit proves the CLI/facade/domain wiring is real without
@@ -86,11 +84,13 @@ pub fn file_exists_spec(max_iterations: u32) -> LoopSpec {
     }
 }
 
-/// Where completed runs persist their ledger (`<run-id>.log`) — under the
-/// real state tier, not a scratch temp directory, so `log`/`show` remain
-/// readable across separate CLI invocations.
+/// Where completed runs persist their ledger (`<run-id>.log`) — not a
+/// scratch temp directory, so `log`/`show` remain readable across separate
+/// CLI invocations. A run operates on a specific project's unit file —
+/// resolves against the current workspace (F-02), same as every other
+/// project-scoped semantic verb.
 pub fn loop_log_dir() -> PathBuf {
-    Paths::os_native().resolve(Root::State).join("loops")
+    cronus_domain::paths::resolve_workspace_root().join("loops")
 }
 
 /// Render a completed run's ledger + outcome as plain text (one line per

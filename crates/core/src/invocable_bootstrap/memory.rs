@@ -12,11 +12,11 @@ pub(super) fn register(registry: &mut InvocableRegistry, dispatcher: &mut Dispat
     register_forget(registry, dispatcher);
 }
 
-/// On-disk location of the memory database, under the state tier — the same
-/// resolution `board.rs` uses for the kanban store.
+/// On-disk location of the memory database. A memory entry is notes about a
+/// specific project — resolves against the current workspace (F-02), the
+/// same resolution `board.rs` uses for the kanban store.
 fn memory_db_path() -> std::path::PathBuf {
-    cronus_domain::paths::Paths::os_native()
-        .resolve(cronus_domain::paths::Root::State)
+    cronus_domain::paths::resolve_workspace_root()
         .join("memory")
         .join("memory.db")
 }

@@ -180,6 +180,13 @@ impl AgentRegistry {
     /// State-tier file holding everything the built-in seed does not: custom
     /// agents in full, plus any built-in carrying a user override (disabled,
     /// `model_ref`, description).
+    ///
+    /// Deliberately kept at the OS-native state tier rather than scoped to
+    /// the current workspace (unlike `board`/`memory`/`knowledge`/`role`/
+    /// `schedule`, F-02): an agent *definition* is a reusable template a
+    /// user builds once and expects to have available in every project, not
+    /// data belonging to one of them — the same character the shipped
+    /// preset catalog already has.
     pub fn persist_path() -> PathBuf {
         crate::paths::Paths::os_native()
             .resolve(crate::paths::Root::State)

@@ -90,39 +90,14 @@ pub(crate) mod init {
 
 // ─── status ───────────────────────────────────────────────────────────────────
 
-/// The workspace root a read-side verb (`status`, `doctor`) reports on: the
-/// nearest ancestor of the current directory that `cronus init` scaffolded
-/// (`init` seeds `app.json` there), falling back to the OS state tier for a
-/// globally-initialised install. `init` writes to the current directory, so
-/// these verbs must look where `init` wrote — not only at the OS state tier,
-/// which the CLI's `init` never populates.
-pub(crate) fn resolve_workspace_root() -> std::path::PathBuf {
-    let cwd = std::env::current_dir().ok();
-    let fallback = cronus_core::paths::Paths::os_native().resolve(cronus_core::paths::Root::State);
-    resolve_workspace_root_from(cwd.as_deref(), fallback)
-}
-
-/// Pure resolver: the first ancestor of `start` whose `.cronus/` holds
-/// `app.json` (the shape `cronus init` writes), else the first that holds a
-/// bare `app.json` (the OS state tier's own shape), else `fallback`. Split
-/// out so it is testable without mutating the process working directory.
-pub(crate) fn resolve_workspace_root_from(
-    start: Option<&std::path::Path>,
-    fallback: std::path::PathBuf,
-) -> std::path::PathBuf {
-    if let Some(start) = start {
-        for ancestor in start.ancestors() {
-            let dot = ancestor.join(".cronus");
-            if dot.join("app.json").is_file() {
-                return dot;
-            }
-            if ancestor.join("app.json").is_file() {
-                return ancestor.to_path_buf();
-            }
-        }
-    }
-    fallback
-}
+/// The workspace root every verb — installation half (`status`, `doctor`)
+/// and every semantic invocable alike — resolves its state against: a thin
+/// re-export of the one shared resolver (`cronus_domain::paths`, F-02) so
+/// every surface scopes to the same project a user is actually standing in,
+/// never a second, locally-reinvented notion of "the workspace."
+pub(crate) use cronus_core::paths::resolve_workspace_root;
+#[cfg(test)]
+pub(crate) use cronus_core::paths::resolve_workspace_root_from;
 
 pub(crate) mod status {
     use std::path::Path;
@@ -269,11 +244,21 @@ pub(crate) mod doctor {
     /// the remaining check categories (board cards, sessions, disk, store,
     /// crash recovery) await their subsystem-projection wiring — the check
     /// engine itself already covers all six (see `cronus_core::doctor` tests).
+    ///
+    /// An `app.json` absent at the *resolved* root means no workspace was
+    /// ever initialized there (`resolve_workspace_root` already searched
+    /// every ancestor) — the same condition `status` reports, not a
+    /// "repairable" defect in a workspace that doesn't exist. Checked first
+    /// and reported the same way `status` does, before any doctor finding
+    /// is built: the only signal this handler ever wired into
+    /// `ConfigSignal::missing_defaults` *was* this same existence check, so
+    /// nothing downstream loses coverage by handling it here instead.
     fn run_at(state_root: &Path, fix: bool, ctx: &Context) -> i32 {
-        let mut inputs = doctor::DoctorInputs::default();
         if !state_root.join("app.json").exists() {
-            inputs.config.missing_defaults.push("app.json".to_string());
+            eprintln!("No workspace initialized. Run 'cronus init' first.");
+            return 1;
         }
+        let inputs = doctor::DoctorInputs::default();
 
         let report = if fix {
             doctor::repair(&inputs)
@@ -325,22 +310,28 @@ pub(crate) mod doctor {
             let _ = fs::remove_dir_all(&tmp);
         }
 
+        /// A directory with no `app.json` at the resolved root has no
+        /// workspace at all — `doctor` must say so (matching `status`'s own
+        /// message) rather than diagnose a "repairable" defect in a
+        /// workspace that was never initialized (F-11).
         #[test]
-        fn flags_missing_config_as_a_safe_repair_and_fix_resolves_it() {
+        fn reports_no_workspace_rather_than_a_repairable_defect_when_uninitialized() {
             let tmp =
                 std::env::temp_dir().join(format!("cronus-doctor-missing-{}", std::process::id()));
             let _ = fs::remove_dir_all(&tmp);
             fs::create_dir_all(&tmp).unwrap();
 
             let ctx = Context::new(OutputFormat::Text);
-            // A safe-repair-only finding never escalates, so the exit code stays 0
-            // even though something was flagged.
             assert_eq!(
                 run_at(&tmp, false, &ctx),
-                0,
-                "check-only still exits 0 (nothing escalated)"
+                1,
+                "no workspace here must exit 1, the same as status"
             );
-            assert_eq!(run_at(&tmp, true, &ctx), 0, "--fix applies the safe repair");
+            assert_eq!(
+                run_at(&tmp, true, &ctx),
+                1,
+                "--fix does not conjure a workspace into existence either"
+            );
 
             let _ = fs::remove_dir_all(&tmp);
         }
@@ -353,13 +344,18 @@ pub(crate) mod backup_cmd {
     use std::path::{Path, PathBuf};
 
     use cronus_core::backup::{self, BackupOptions};
-    use cronus_core::paths::{Paths, Root};
 
     use crate::output::{Context, json_escape};
 
+    /// What a backup snapshots: the resolved workspace root (F-02), the same
+    /// project-scoped state `board`/`memory`/`knowledge`/… now write to —
+    /// not the OS-native tier alone, which a per-project workspace user's
+    /// actual data no longer lives in. `backups_dir` stays nested under it,
+    /// preserving the existing on-disk relationship; the destination guard
+    /// in `cronus_domain::backup` keeps a backup from ever copying itself
+    /// into itself regardless of where this resolves.
     fn state_root_and_backups_dir() -> (PathBuf, PathBuf) {
-        let paths = Paths::os_native();
-        let root = paths.resolve(Root::State);
+        let root = cronus_core::paths::resolve_workspace_root();
         let backups_dir = root.join("backups");
         (root, backups_dir)
     }

@@ -7,11 +7,11 @@ use cronus_domain::invocable::{Dispatcher, InvocableRegistry, Registrant};
 
 use super::{core_id, text_arg};
 
-/// On-disk location of the codegraph index, under the state tier — the same
-/// resolution `board.rs`/`memory.rs` use for their own stores.
+/// On-disk location of the codegraph index. An index is symbols from a
+/// specific project's own source tree — resolves against the current
+/// workspace (F-02), the same resolution `board.rs`/`memory.rs` use.
 fn index_db_path() -> std::path::PathBuf {
-    cronus_domain::paths::Paths::os_native()
-        .resolve(cronus_domain::paths::Root::State)
+    cronus_domain::paths::resolve_workspace_root()
         .join("codegraph")
         .join("index.db")
 }

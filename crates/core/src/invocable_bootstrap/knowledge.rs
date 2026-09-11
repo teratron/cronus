@@ -15,9 +15,11 @@ use super::{core_id, list_arg, opt_text_arg, text_arg};
 /// multi-user grant store.
 const LOCAL_USER: &str = "local";
 
+/// A knowledge collection ingests documents for a specific project — resolves
+/// against the current workspace (F-02), same as every other project-scoped
+/// semantic verb.
 fn db_path() -> std::path::PathBuf {
-    cronus_domain::paths::Paths::os_native()
-        .resolve(cronus_domain::paths::Root::State)
+    cronus_domain::paths::resolve_workspace_root()
         .join("knowledge")
         .join("knowledge.db")
 }

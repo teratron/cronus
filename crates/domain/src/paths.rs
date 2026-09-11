@@ -109,6 +109,50 @@ impl Paths {
     }
 }
 
+/// The name `cronus init` seeds under a workspace root, and the marker
+/// [`resolve_workspace_root_from`] searches for — the same shape
+/// `crate::state::bootstrap_at` writes.
+const WORKSPACE_MARKER: &str = "app.json";
+
+/// The workspace root every semantic verb's state resolves against: the
+/// nearest ancestor of the current directory that `cronus init` scaffolded
+/// (marked by [`WORKSPACE_MARKER`]), falling back to the OS state tier
+/// ([`Root::State`], honoring [`PORTABLE_DIR_ENV`]) for a directory tree
+/// with no initialized workspace anywhere above it.
+///
+/// Every semantic invocable (`board`, `memory`, `role`, `schedule`,
+/// `registry`, `knowledge`, `codegraph`, …) resolves its own state through
+/// this — the project a user is actually standing in, rather than one
+/// machine-global tier `cronus init` never wrote to (F-02). A workspace
+/// that was never initialized anywhere still resolves to the same global
+/// fallback every verb already used before this existed, so existing
+/// machine-global data stays exactly where it was and keeps working
+/// unchanged for anyone who never adopted a per-project `.cronus/`.
+pub fn resolve_workspace_root() -> PathBuf {
+    let cwd = std::env::current_dir().ok();
+    let fallback = Paths::os_native().resolve(Root::State);
+    resolve_workspace_root_from(cwd.as_deref(), fallback)
+}
+
+/// Pure resolver: the first ancestor of `start` whose `.cronus/` holds
+/// [`WORKSPACE_MARKER`], else the first ancestor that holds a bare marker
+/// (the OS state tier's own shape), else `fallback`. Split out so it is
+/// testable without mutating the process working directory.
+pub fn resolve_workspace_root_from(start: Option<&std::path::Path>, fallback: PathBuf) -> PathBuf {
+    if let Some(start) = start {
+        for ancestor in start.ancestors() {
+            let dot = ancestor.join(".cronus");
+            if dot.join(WORKSPACE_MARKER).is_file() {
+                return dot;
+            }
+            if ancestor.join(WORKSPACE_MARKER).is_file() {
+                return ancestor.to_path_buf();
+            }
+        }
+    }
+    fallback
+}
+
 /// Render a path for human output, dropping the Windows `\\?\` (and `\\?\UNC\`)
 /// verbatim/extended-length prefix that `Path::canonicalize` adds. `cronus init`
 /// and `workflow scaffold` reported `\\?\C:\Users\...`, which is technically the
@@ -158,5 +202,65 @@ mod tests {
         assert!(!state.as_os_str().is_empty());
         assert!(!cache.as_os_str().is_empty());
         assert_ne!(state, cache);
+    }
+
+    fn unique_temp_dir(tag: &str) -> PathBuf {
+        std::env::temp_dir().join(format!(
+            "cronus-workspace-root-{tag}-{}-{}",
+            std::process::id(),
+            std::time::SystemTime::now()
+                .duration_since(std::time::UNIX_EPOCH)
+                .map(|d| d.as_nanos())
+                .unwrap_or(0)
+        ))
+    }
+
+    #[test]
+    fn resolves_the_nearest_dot_cronus_ancestor_over_the_fallback() {
+        let root = unique_temp_dir("ancestor");
+        let nested = root.join("a").join("b");
+        std::fs::create_dir_all(&nested).unwrap();
+        std::fs::create_dir_all(root.join(".cronus")).unwrap();
+        std::fs::write(root.join(".cronus").join("app.json"), "{}\n").unwrap();
+        let fallback = root.join("nonexistent-fallback");
+
+        let resolved = resolve_workspace_root_from(Some(&nested), fallback.clone());
+        assert_eq!(
+            resolved,
+            root.join(".cronus"),
+            "must resolve the nearest ancestor's .cronus/, not the fallback"
+        );
+
+        let _ = std::fs::remove_dir_all(&root);
+    }
+
+    #[test]
+    fn falls_back_when_no_ancestor_has_a_workspace_marker() {
+        let bare = unique_temp_dir("bare");
+        std::fs::create_dir_all(&bare).unwrap();
+        let fallback = bare.join("nonexistent-fallback");
+
+        assert_eq!(
+            resolve_workspace_root_from(Some(&bare), fallback.clone()),
+            fallback,
+            "with no app.json in any ancestor, resolve to the fallback"
+        );
+
+        let _ = std::fs::remove_dir_all(&bare);
+    }
+
+    #[test]
+    fn a_bare_app_json_without_dot_cronus_is_also_recognized() {
+        // The OS state tier's own shape: app.json directly at the root, not
+        // nested under `.cronus/` — the fallback path itself must resolve
+        // this way when it is the ancestor being searched.
+        let root = unique_temp_dir("bare-marker");
+        std::fs::create_dir_all(&root).unwrap();
+        std::fs::write(root.join("app.json"), "{}\n").unwrap();
+        let fallback = root.join("nonexistent-fallback");
+
+        assert_eq!(resolve_workspace_root_from(Some(&root), fallback), root);
+
+        let _ = std::fs::remove_dir_all(&root);
     }
 }
