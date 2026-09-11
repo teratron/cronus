@@ -1,6 +1,6 @@
 # Simulation
 
-**Version:** 1.0.0
+**Version:** 1.0.1
 **Status:** Stable
 **Layer:** concept
 
@@ -27,6 +27,7 @@ capability, gives it one contract, and reconciles those realizations under it.
 
 ## Related Specifications
 
+- [l1-usage-simulation.md](l1-usage-simulation.md) — the near-name sibling with the **inverted** effects discipline. This spec plays out a *generated mechanism* with effects suppressed (SIM-2); that one plays out *usage of the shipped product* with effects real inside a disposable world (USM-2). Each discipline is correct for its own subject and the two must not be unified under one effects contract — suppression preserves the subject here and destroys it there.
 - [l1-lookahead-planning.md](l1-lookahead-planning.md) — the consequence-prediction sibling; lookahead predicts one proposed action's downstream effects to gate a commit, simulation plays out a whole mechanism to reveal its behaviour (SIM-7 demarcation).
 - [l1-evaluation-suites.md](l1-evaluation-suites.md) — the grading sibling; its sandboxed run (ES-11) is a realization of SIM-2, and a simulation may be the run an evaluation grades (SIM-7).
 - [l1-automation-pipeline.md](l1-automation-pipeline.md) — its dry-run side-effect quarantine (AP §4.9) is the precedent realization of SIM-2 for pipeline nodes.
@@ -229,3 +230,4 @@ mechanics should converge on the SIM-2 contract rather than each re-deriving it.
 | Version | Date | Author | Notes |
 | --- | --- | --- | --- |
 | 1.0.0 | 2026-07-07 | Core Team | Initial spec — simulation as a first-class capability to play out a generated mechanism in a modeled, side-effect-suppressed, observable, repeatable run, distinct from testing/evaluation/lookahead: play-out not assertion (SIM-1); no production side effects — modeled world (SIM-2, generalizing the automation dry-run §4.9 + evaluation ES-11 quarantine); declared legible fidelity structural/modeled/shadow (SIM-3); deterministic & repeatable via seeding (SIM-4); mechanism-addressable — simulates what was generated (SIM-5); observable play-out trace as the product (SIM-6, composes l1-log-legibility); distinct from evaluation & lookahead, the four-questions taxonomy (SIM-7); bounded & safe by default (SIM-8). Reconciles the scattered dry-run/sandbox realizations under one contract; nodus realization of the execution-mode-provenance half = l1-nodus-observability HO-12. |
+| 1.0.1 | 2026-09-11 | Core Team | Patch — cross-reference to `l1-usage-simulation`, the near-name sibling whose effects discipline is the deliberate inverse of SIM-2: a generated mechanism is rehearsed with effects suppressed, shipped-product usage is exercised with effects real inside a disposable world. Documentation linkage only; no invariant added or changed. |

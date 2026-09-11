@@ -1,6 +1,6 @@
 # Project Specification Rules
 
-**Version:** 1.6.0
+**Version:** 1.7.0
 **Status:** Active
 
 ## Overview
@@ -312,8 +312,18 @@ The SDD engine (`.magic/`, `workflows/`, `skills/`, `rules/`) and the `.design/`
 2. **Scaffolding, handled as scaffolding**: the engine is a means, not a deliverable. It is maintained to serve implementation and MUST NOT be elevated into the product's own architecture, feature set, or public surface.
 3. **Provisional by design**: the current external-tool arrangement is a bootstrapping phase, not a permanent dependency. Design and planning SHOULD anticipate the eventual handoff in which Cronus drives its own development, so no product component is built assuming the SDD engine will always sit alongside it.
 
+### C30 — Usage-Simulation Companion Artifact
+
+New user-observable behaviour ships **together with** the usage-simulation scenario that exercises it, authored in the same change (`l1-usage-simulation` USM-10). A scenario fixes the user's *intent* — persona, goal, declared vantage, starting world, perturbations, falsifiable obligations — and never the route; prescribing the commands turns it back into the cheaper deterministic test it should have been. Where behaviour genuinely lands without a scenario, that is recorded as quality debt (QLY-8), never passed over in silence.
+
+1. **Authoring is part of the change, not a follow-up.** A scenario written afterwards is written against what was built rather than against what was meant.
+2. **Discovery and guarding are separate instruments.** A defect a scenario finds is pinned by a cheap deterministic test before its finding closes; an expensive free-route run is never the only thing guarding a known defect.
+3. **A run reports; it does not repair.** Findings are evidence, and fixing them is a separate, separately-authorized act.
+4. **Distinct from C11.** `magic.simulate` is an engine-validation tool for the scaffolding; this rule governs simulation of the *product's own* user-facing surfaces and survives the scaffolding's removal (C29).
+
 ## Document History
 
 | Version | Date | Change |
 | --- | --- | --- |
+| 1.7.0 | 2026-09-11 | Added C30 — Usage-Simulation Companion Artifact: user-observable behaviour ships with the scenario that exercises it (USM-10); intent fixed and route free; discovery pinned by a cheap deterministic test before a finding closes; a run reports and never repairs; explicitly distinct from C11 engine simulation. |
 | 1.6.0 | 2026-07-24 | Added C29 — SDD Engine as Provisional Scaffolding: the SDD engine (`.magic/`, `workflows/`, `skills/`, `rules/`) and the `.design/` layer are build scaffolding, not part of the Cronus product or core; provisional, to be superseded once Cronus self-hosts its own development; product artifacts must remain fully functional without them (the shared rationale beneath C1 and §6). Document History table introduced with this entry. |

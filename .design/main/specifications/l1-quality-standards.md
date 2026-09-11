@@ -1,6 +1,6 @@
 # Quality Standards
 
-**Version:** 1.1.0
+**Version:** 1.1.1
 **Status:** Stable
 **Layer:** concept
 
@@ -13,6 +13,7 @@ The technology-agnostic definition of "ideal code" for Cronus: a set of mandator
 - [l1-kanban-model.md](l1-kanban-model.md) - Gates are the entry condition for the `done` state.
 - [l1-office-model.md](l1-office-model.md) - Quality roles (test, review, refactor, performance, security) enforce the gates; continuous improvement (OFF-9).
 - [l2-quality-pipeline.md](l2-quality-pipeline.md) - Concrete per-language toolchains, CI/pre-commit gates, and commands.
+- [l1-usage-simulation.md](l1-usage-simulation.md) - The free-route discovery instrument that sits beside the gates rather than inside them: its cheap tier joins the always-on gates (QLY-2), its exhaustive sweep is conditional (QLY-3), and a behaviour shipped with no scenario covering it is QLY-8 quality debt (USM-10).
 
 ## 1. Motivation
 
@@ -100,5 +101,6 @@ The same gate concepts apply whether the office is building a client's project (
 
 | Version | Date | Author | Notes |
 | --- | --- | --- | --- |
+| 1.1.1 | 2026-09-11 | Core Team | Patch — cross-reference to `l1-usage-simulation`: the free-route discovery instrument that sits beside these gates, with its cheap tier joining QLY-2, its exhaustive sweep conditional under QLY-3, and a behaviour shipped with no covering scenario recorded as QLY-8 quality debt. Documentation linkage only; no invariant added or changed. |
 | 1.1.0 | 2026-07-16 | Core Team | Added QLY-9 (gate-scope completeness): always-on gates cover every shipped deliverable unit; a unit outside the default gate runner requires an equivalent explicit lane, recorded; an uncovered shipped unit is a surfaced QLY-8 debt finding. §4.4 extended (enumerated scope, aggregated completion claim). History table added with this entry. Audit finding: a shell built outside the primary build graph was invisible to the workspace-wide gates. |
 | 1.0.0 | 2026-06-24 | Core Team | Initial stable spec — QLY-1…QLY-8: tiered mandatory gates as definition-of-done, role-enforced, universal + dogfooding. |
