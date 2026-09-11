@@ -165,7 +165,7 @@ impl ArchetypeCatalog {
     ) -> Result<CustomArchetype, ArchetypeError> {
         let preset = self
             .get(preset_id)
-            .ok_or_else(|| ArchetypeError::UnknownRole(preset_id.to_string()))?;
+            .ok_or_else(|| ArchetypeError::UnknownPreset(preset_id.to_string()))?;
         let mut definition = preset.clone();
         definition.id = name.to_string();
 
@@ -278,10 +278,19 @@ mod tests {
         let dir =
             std::env::temp_dir().join(format!("cronus-archetype-b01b-{}", std::process::id()));
         let catalog = ArchetypeCatalog::program();
+        let err = catalog
+            .create_from_preset(&dir, "x", "no-such-preset")
+            .unwrap_err();
+        // F-28: naming the *preset* catalog, not the role catalog — a
+        // caller reading the message must not have to guess which
+        // "no-such-preset" failed to resolve.
         assert!(
-            catalog
-                .create_from_preset(&dir, "x", "no-such-preset")
-                .is_err()
+            matches!(&err, ArchetypeError::UnknownPreset(id) if id == "no-such-preset"),
+            "expected UnknownPreset(\"no-such-preset\"), got {err:?}"
+        );
+        assert_eq!(
+            err.to_string(),
+            "archetype preset not found: no-such-preset"
         );
     }
 }

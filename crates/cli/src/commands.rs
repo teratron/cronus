@@ -725,7 +725,7 @@ pub(crate) mod workspace {
                 0
             }
             Ok(false) => {
-                eprintln!("error: workspace '{ws_id}' not found");
+                eprintln!("error: workspace not found: {ws_id}");
                 1
             }
             Err(e) => {
@@ -1685,17 +1685,23 @@ pub(crate) mod archetype_cmd {
     use std::path::PathBuf;
 
     use cronus_core::archetype::{ArchetypeCatalog, ValidationStatus};
-    use cronus_core::paths::{Paths, Root};
 
-    use crate::output::{Context, json_escape};
+    use crate::output::{Context, describe_io_error, json_escape};
 
     // Reached directly from `crate::installation::dispatch` now — the
     // installation half's own generated grammar owns the `archetype`
     // group, so no `ArchetypeCommand`-shaped wrapper is needed here any
     // more.
 
+    /// Which archetype an office is staffed against is a specific project's
+    /// choice, not the machine's — resolves against the current workspace
+    /// (F-02), same as `role` (hired instances) and every other
+    /// project-scoped semantic verb. Missed in the original workspace-
+    /// scoping sweep since `archetype` wasn't among the groups that sweep's
+    /// own evidence had exercised; found while touching this module for a
+    /// separate fix.
     fn state_dir() -> PathBuf {
-        Paths::os_native().resolve(Root::State)
+        cronus_core::paths::resolve_workspace_root()
     }
 
     /// The office's active-archetype marker. A single state-tier file: absent
@@ -1833,7 +1839,7 @@ pub(crate) mod archetype_cmd {
             );
             0
         } else {
-            eprintln!("cronus archetype info: unknown archetype '{id}'");
+            eprintln!("error: archetype not found: {id}");
             1
         }
     }
@@ -1843,7 +1849,7 @@ pub(crate) mod archetype_cmd {
         if let Some(parent) = marker.parent()
             && let Err(e) = std::fs::create_dir_all(parent)
         {
-            eprintln!("cronus archetype set: {e}");
+            eprintln!("error: {}", describe_io_error(&e, parent));
             return 1;
         }
 
@@ -1858,7 +1864,7 @@ pub(crate) mod archetype_cmd {
         }
 
         let Some(id) = id else {
-            eprintln!("cronus archetype set: provide an archetype id or --clear");
+            eprintln!("error: provide an archetype id or --clear");
             return 1;
         };
 
@@ -1867,15 +1873,15 @@ pub(crate) mod archetype_cmd {
         let catalog = ArchetypeCatalog::program();
         if catalog.get(&id).is_none() {
             if catalog.blocked_status(&id).is_some() {
-                eprintln!("cronus archetype set: '{id}' is declared-blocked and cannot be applied");
+                eprintln!("error: '{id}' is declared-blocked and cannot be applied");
             } else {
-                eprintln!("cronus archetype set: unknown archetype '{id}'");
+                eprintln!("error: archetype not found: {id}");
             }
             return 1;
         }
 
         if let Err(e) = std::fs::write(&marker, &id) {
-            eprintln!("cronus archetype set: {e}");
+            eprintln!("error: {}", describe_io_error(&e, &marker));
             return 1;
         }
         if ctx.is_json() {
@@ -1905,7 +1911,7 @@ pub(crate) mod archetype_cmd {
                 0
             }
             Err(e) => {
-                eprintln!("cronus archetype create: {e}");
+                eprintln!("error: {e}");
                 1
             }
         }
@@ -1922,7 +1928,7 @@ pub(crate) mod dev_office_cmd {
     use cronus_core::dev_office_gate::{AuthLocalAdmissionReader, repo_authenticity};
     use cronus_core::paths::{Paths, Root};
 
-    use crate::output::Context;
+    use crate::output::{Context, describe_io_error};
 
     /// The shipped default (DVO-5): the feedback tier is off. A build/deploy
     /// opt-in, not something this CLI exposes as a runtime flag.
@@ -1976,7 +1982,9 @@ pub(crate) mod dev_office_cmd {
         if let Some(parent) = path.parent() {
             let _ = std::fs::create_dir_all(parent);
         }
-        match DeveloperAdmissionStore::open(path).mint(&HumanPrincipal::assert_human_operated()) {
+        match DeveloperAdmissionStore::open(path.clone())
+            .mint(&HumanPrincipal::assert_human_operated())
+        {
             Ok(()) => {
                 if ctx.is_json() {
                     println!("{{\"result\":\"admitted\"}}");
@@ -1986,7 +1994,7 @@ pub(crate) mod dev_office_cmd {
                 0
             }
             Err(e) => {
-                eprintln!("cronus dev admit: {e}");
+                eprintln!("error: {}", describe_io_error(&e, &path));
                 1
             }
         }
@@ -1997,7 +2005,9 @@ pub(crate) mod dev_office_cmd {
         if let Some(parent) = path.parent() {
             let _ = std::fs::create_dir_all(parent);
         }
-        match DeveloperAdmissionStore::open(path).revoke(&HumanPrincipal::assert_human_operated()) {
+        match DeveloperAdmissionStore::open(path.clone())
+            .revoke(&HumanPrincipal::assert_human_operated())
+        {
             Ok(()) => {
                 if ctx.is_json() {
                     println!("{{\"result\":\"revoked\"}}");
@@ -2007,7 +2017,7 @@ pub(crate) mod dev_office_cmd {
                 0
             }
             Err(e) => {
-                eprintln!("cronus dev revoke: {e}");
+                eprintln!("error: {}", describe_io_error(&e, &path));
                 1
             }
         }

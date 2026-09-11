@@ -107,7 +107,7 @@ fn hire_with_custom_name() {
 fn hire_unknown_preset_returns_not_found() {
     let (mgr, _, _) = make_manager("hire-unknown");
     let err = mgr.hire("non-existent-role", None).unwrap_err();
-    assert!(matches!(err, RoleError::NotFound(_)));
+    assert!(matches!(err, RoleError::PresetNotFound(_)));
 }
 
 #[test]
@@ -136,7 +136,7 @@ fn fire_archives_memory_and_removes_from_roster() {
 fn fire_unknown_instance_returns_not_found() {
     let (mgr, _, _) = make_manager("fire-unknown");
     let err = mgr.fire("no-such-instance").unwrap_err();
-    assert!(matches!(err, RoleError::NotFound(_)));
+    assert!(matches!(err, RoleError::InstanceNotFound(_)));
 }
 
 #[test]

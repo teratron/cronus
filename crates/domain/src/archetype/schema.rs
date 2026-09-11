@@ -59,6 +59,12 @@ pub enum ArchetypeError {
     /// catalog (OA-10) — the reason the two non-technical archetypes are
     /// blocked rather than shipped.
     UnknownRole(String),
+    /// An archetype *preset* id (`archetype create --from <id>`) does not
+    /// resolve against the shipped catalog — distinct from
+    /// [`ArchetypeError::UnknownRole`] (F-28): naming a role catalog for a
+    /// failure that was actually about the archetype-preset catalog
+    /// mis-described which lookup failed.
+    UnknownPreset(String),
     /// More than `SEED_CAP` seed entries (OA-2).
     SeedTooLarge(usize),
     /// A seed entry carries an empty justification (OA-2).
@@ -81,6 +87,9 @@ impl std::fmt::Display for ArchetypeError {
                     f,
                     "role '{id}' does not resolve against the role catalog (OA-10)"
                 )
+            }
+            ArchetypeError::UnknownPreset(id) => {
+                write!(f, "archetype preset not found: {id}")
             }
             ArchetypeError::SeedTooLarge(n) => {
                 write!(f, "seed has {n} entries; the cap is {SEED_CAP} (OA-2)")

@@ -166,7 +166,7 @@ fn register_show(registry: &mut InvocableRegistry, dispatcher: &mut Dispatcher) 
                     ),
                 ])),
                 Ok(None) => Outcome::Unavailable {
-                    reason: format!("role '{role_id}' not found"),
+                    reason: format!("hired instance not found: {role_id}"),
                 },
                 Err(e) => Outcome::Unavailable {
                     reason: e.to_string(),

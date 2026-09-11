@@ -19,7 +19,15 @@ pub mod revision;
 
 #[derive(Debug)]
 pub enum RoleError {
-    NotFound(String),
+    /// A `preset_id` that does not resolve against [`PRESET_CATALOG`] —
+    /// distinct from [`RoleError::InstanceNotFound`] (F-30): "no such
+    /// preset to hire from" and "no such hired instance" are different
+    /// facts about different collections, and collapsing them into one
+    /// generic "role not found" message named the wrong thing on whichever
+    /// one it wasn't.
+    PresetNotFound(String),
+    /// A hired-instance `id` that has no directory under `employees/`.
+    InstanceNotFound(String),
     AlreadyHired(String),
     PresetReadOnly,
     Io(std::io::Error),
@@ -29,7 +37,8 @@ pub enum RoleError {
 impl std::fmt::Display for RoleError {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
-            RoleError::NotFound(id) => write!(f, "role not found: {id}"),
+            RoleError::PresetNotFound(id) => write!(f, "preset not found: {id}"),
+            RoleError::InstanceNotFound(id) => write!(f, "hired instance not found: {id}"),
             RoleError::AlreadyHired(id) => write!(f, "role already hired: {id}"),
             RoleError::PresetReadOnly => write!(f, "preset roles are read-only"),
             RoleError::Io(e) => write!(f, "I/O error: {e}"),
@@ -106,7 +115,7 @@ impl RoleManager {
         let preset = PRESET_CATALOG
             .iter()
             .find(|r| r.id == preset_id)
-            .ok_or_else(|| RoleError::NotFound(preset_id.to_string()))?;
+            .ok_or_else(|| RoleError::PresetNotFound(preset_id.to_string()))?;
 
         // Without a custom name, the id is `<preset>-<n>` for the lowest free
         // `n` — deterministic given the state tier and readable, rather than a
@@ -193,7 +202,7 @@ impl RoleManager {
         let preset = PRESET_CATALOG
             .iter()
             .find(|r| r.id == preset_id)
-            .ok_or_else(|| RoleError::NotFound(preset_id.to_string()))?;
+            .ok_or_else(|| RoleError::PresetNotFound(preset_id.to_string()))?;
 
         let instance_dir = self.state_dir.join("employees").join(id);
         if instance_dir.exists() {
@@ -233,7 +242,7 @@ impl RoleManager {
     pub fn fire(&self, id: &str) -> Result<()> {
         let instance_dir = self.state_dir.join("employees").join(id);
         if !instance_dir.exists() {
-            return Err(RoleError::NotFound(id.to_string()));
+            return Err(RoleError::InstanceNotFound(id.to_string()));
         }
 
         let memory_dir = instance_dir.join("memory");

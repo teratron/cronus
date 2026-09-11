@@ -41,7 +41,24 @@ impl fmt::Display for KanbanError {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
             KanbanError::InvalidTransition { from, to } => {
-                write!(f, "invalid transition: {from:?} → {to:?}")
+                let legal = from.legal_targets();
+                if legal.is_empty() {
+                    write!(
+                        f,
+                        "invalid transition: {from:?} → {to:?} ({from:?} is terminal)"
+                    )
+                } else {
+                    let names = legal
+                        .iter()
+                        .map(|s| format!("{s:?}"))
+                        .collect::<Vec<_>>()
+                        .join(", ");
+                    write!(
+                        f,
+                        "invalid transition: {from:?} → {to:?} (from {from:?}, only {names} {} allowed)",
+                        if legal.len() == 1 { "is" } else { "are" }
+                    )
+                }
             }
             KanbanError::BlockedRequiresReason => write!(f, "blocked state requires a reason"),
             KanbanError::CardNotFound(id) => write!(f, "card not found: {id}"),
@@ -135,6 +152,20 @@ impl CardState {
             "done" => Some(CardState::Done),
             _ => None,
         }
+    }
+
+    /// Every state `self` may transition to directly — derived from
+    /// [`Self::can_transition_to`] rather than a second, hand-maintained
+    /// list, so the two can never drift apart. Used to name what *is*
+    /// allowed in an [`KanbanError::InvalidTransition`] message (F-34):
+    /// naming only what was rejected leaves a caller to discover the legal
+    /// set by trial.
+    pub fn legal_targets(self) -> Vec<CardState> {
+        Self::NAMES
+            .iter()
+            .filter_map(|s| Self::parse(s))
+            .filter(|&to| self.can_transition_to(to))
+            .collect()
     }
 
     /// Returns true when the transition from self → to is valid.
@@ -574,6 +605,60 @@ mod tests {
         // A plain id still works.
         assert!(board.add_card("card-1", "TASK", 1).is_ok());
         let _ = fs::remove_dir_all(&root);
+    }
+
+    #[test]
+    fn invalid_transition_message_names_the_legal_targets() {
+        // F-34: `board block` from Todo (only legal from Running) used to
+        // report the rejected pair with no hint of what *was* allowed.
+        let err = KanbanError::InvalidTransition {
+            from: CardState::Todo,
+            to: CardState::Blocked,
+        };
+        let msg = err.to_string();
+        assert!(msg.contains("Ready"), "must name a legal target: {msg}");
+        assert!(
+            msg.contains("Triage"),
+            "must name every legal target: {msg}"
+        );
+    }
+
+    #[test]
+    fn invalid_transition_message_names_a_terminal_state_as_terminal() {
+        let err = KanbanError::InvalidTransition {
+            from: CardState::Done,
+            to: CardState::Todo,
+        };
+        assert!(err.to_string().contains("terminal"));
+    }
+
+    #[test]
+    fn legal_targets_matches_can_transition_to_for_every_state() {
+        // The derivation this fix relies on: legal_targets() must never
+        // drift from can_transition_to()'s own decisions.
+        for &from in &[
+            CardState::Triage,
+            CardState::Todo,
+            CardState::Ready,
+            CardState::Running,
+            CardState::Blocked,
+            CardState::Done,
+        ] {
+            for &to in &[
+                CardState::Triage,
+                CardState::Todo,
+                CardState::Ready,
+                CardState::Running,
+                CardState::Blocked,
+                CardState::Done,
+            ] {
+                assert_eq!(
+                    from.legal_targets().contains(&to),
+                    from.can_transition_to(to),
+                    "legal_targets()/can_transition_to() disagree for {from:?} -> {to:?}"
+                );
+            }
+        }
     }
 
     #[test]
