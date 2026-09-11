@@ -193,6 +193,15 @@ pub fn bind_args(binders: &[Binder], args: &[String]) -> Result<ArgValues, Rejec
             }
         }
     }
+    // A positional token past what any declared binder consumes (F-14): the
+    // CLI's own clap-composed grammar already rejects this ("unexpected
+    // argument"), so a surplus positional the TUI silently drops is an
+    // invocation the two surfaces disagree on, not one this surface is
+    // extending the sibling CLI frontend's own vocabulary to accept.
+    let extra: Vec<&str> = positionals.collect();
+    if !extra.is_empty() {
+        return Err(too_many_positionals(&extra));
+    }
     Ok(values)
 }
 
@@ -201,6 +210,21 @@ fn malformed(binder: &'static str, raw: &str) -> Rejection {
         binder,
         mode: RejectionMode::Malformed,
         detail: format!("{raw:?} is not a valid value for this argument"),
+    }
+}
+
+fn too_many_positionals(extra: &[&str]) -> Rejection {
+    Rejection {
+        binder: "<unexpected>",
+        mode: RejectionMode::IllShaped,
+        detail: format!(
+            "unexpected extra argument(s): {}",
+            extra
+                .iter()
+                .map(|s| format!("{s:?}"))
+                .collect::<Vec<_>>()
+                .join(", ")
+        ),
     }
 }
 
@@ -359,6 +383,37 @@ mod tests {
             args.get("collection"),
             Some(&ArgValue::List(vec!["a".to_string(), "b".to_string()]))
         );
+    }
+
+    /// F-14: a positional token past what any declared binder consumes is
+    /// rejected, not silently dropped — `board add T2 ref2 EXTRA` used to
+    /// succeed identically to `board add T2 ref2`.
+    #[test]
+    fn bind_args_rejects_a_surplus_positional_rather_than_dropping_it() {
+        let binders = vec![
+            binder("id", BinderKind::Text, false),
+            binder("task_ref", BinderKind::Text, false),
+        ];
+        let err = bind_args(&binders, &strings(&["T2", "ref2", "EXTRA"])).unwrap_err();
+        assert_eq!(err.mode, RejectionMode::IllShaped);
+        assert!(err.detail.contains("EXTRA"));
+    }
+
+    #[test]
+    fn bind_args_reports_every_surplus_positional_not_just_the_first() {
+        let binders = vec![binder("id", BinderKind::Text, false)];
+        let err = bind_args(&binders, &strings(&["a", "b", "c"])).unwrap_err();
+        assert!(err.detail.contains("b") && err.detail.contains("c"));
+    }
+
+    #[test]
+    fn bind_args_exact_arg_count_still_succeeds() {
+        let binders = vec![
+            binder("id", BinderKind::Text, false),
+            binder("task_ref", BinderKind::Text, false),
+        ];
+        let args = bind_args(&binders, &strings(&["T2", "ref2"])).unwrap();
+        assert_eq!(args.get("id"), Some(&ArgValue::Text("T2".to_string())));
     }
 
     #[test]

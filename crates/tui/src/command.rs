@@ -28,6 +28,50 @@ pub enum ParseError {
     Empty,
 }
 
+/// Split a command-bar line's body into whitespace-separated tokens,
+/// honoring double- and single-quoted segments as one token each (F-13).
+///
+/// A CLI invocation gets this for free from the shell that splits its
+/// argv; the command bar has no shell in front of it, so without this a
+/// verb taking a prose argument — `board block A1 "waiting on dep"` — has
+/// no TUI spelling at all: a bare whitespace split breaks the quoted
+/// phrase into five separate tokens instead of one. Quote characters are
+/// stripped from the token they delimit; an unterminated quote runs to the
+/// end of the line rather than erroring, so a trailing typo degrades
+/// gracefully instead of losing the whole command.
+fn tokenize(body: &str) -> Vec<String> {
+    let mut tokens = Vec::new();
+    let mut chars = body.chars().peekable();
+    while chars.peek().is_some() {
+        while chars.peek().is_some_and(|c| c.is_whitespace()) {
+            chars.next();
+        }
+        if chars.peek().is_none() {
+            break;
+        }
+        let mut token = String::new();
+        while let Some(&c) = chars.peek() {
+            if c.is_whitespace() {
+                break;
+            }
+            if c == '"' || c == '\'' {
+                chars.next(); // consume the opening quote
+                for inner in chars.by_ref() {
+                    if inner == c {
+                        break;
+                    }
+                    token.push(inner);
+                }
+            } else {
+                token.push(c);
+                chars.next();
+            }
+        }
+        tokens.push(token);
+    }
+    tokens
+}
+
 /// Parse a command-bar line into a [`SlashCommand`].
 ///
 /// Syntactic only — it does not check the verb against a catalog; use
@@ -37,11 +81,11 @@ pub fn parse(input: &str) -> Result<SlashCommand, ParseError> {
         .trim()
         .strip_prefix('/')
         .ok_or(ParseError::NotACommand)?;
-    let mut parts = body.split_whitespace();
-    let verb = parts.next().ok_or(ParseError::Empty)?;
+    let mut tokens = tokenize(body).into_iter();
+    let verb = tokens.next().ok_or(ParseError::Empty)?;
     Ok(SlashCommand {
-        verb: verb.to_string(),
-        args: parts.map(str::to_string).collect(),
+        verb,
+        args: tokens.collect(),
     })
 }
 
@@ -188,6 +232,33 @@ mod tests {
     fn command_parse_rejects_bare_slash() {
         assert_eq!(parse("/"), Err(ParseError::Empty));
         assert_eq!(parse("/   "), Err(ParseError::Empty));
+    }
+
+    /// F-13: a double-quoted phrase is one argument, not several — without
+    /// this, `board block A1 "waiting on dep"` has no TUI spelling at all.
+    #[test]
+    fn command_parse_keeps_a_double_quoted_phrase_as_one_argument() {
+        let cmd = parse(r#"/board block A1 "waiting on dep""#).expect("parses");
+        assert_eq!(cmd.verb, "board");
+        assert_eq!(cmd.args, vec!["block", "A1", "waiting on dep"]);
+    }
+
+    #[test]
+    fn command_parse_keeps_a_single_quoted_phrase_as_one_argument() {
+        let cmd = parse("/board block A1 'waiting on dep'").expect("parses");
+        assert_eq!(cmd.args, vec!["block", "A1", "waiting on dep"]);
+    }
+
+    #[test]
+    fn command_parse_an_unterminated_quote_runs_to_end_of_line() {
+        let cmd = parse(r#"/board block A1 "trailing"#).expect("parses");
+        assert_eq!(cmd.args, vec!["block", "A1", "trailing"]);
+    }
+
+    #[test]
+    fn command_parse_a_quote_mid_token_still_joins_into_one_argument() {
+        let cmd = parse(r#"/memory store key pre"mid word"post"#).expect("parses");
+        assert_eq!(cmd.args, vec!["store", "key", "premid wordpost"]);
     }
 
     /// A small, hand-built catalog — deliberately not `build_catalog`'s own
