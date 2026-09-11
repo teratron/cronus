@@ -16,7 +16,12 @@ fn state_dir() -> std::path::PathBuf {
 
 fn open_manager() -> RoleManager {
     let state = state_dir();
-    RoleManager::new(state.clone(), state.join("employees"))
+    // F-22: `RoleManager`'s own methods already join "employees" onto
+    // `state_dir` wherever they need that subdirectory (`hire`, `fire`,
+    // `get`, …) — passing `state.join("employees")` here doubled it
+    // (`employees/employees/<id>/`). `state_dir` is the workspace root
+    // itself, same as every other manager this bootstrap layer opens.
+    RoleManager::new(state.clone(), state)
 }
 
 pub(super) fn register(registry: &mut InvocableRegistry, dispatcher: &mut Dispatcher) {
