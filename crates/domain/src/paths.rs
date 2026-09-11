@@ -157,15 +157,26 @@ pub fn resolve_workspace_root_from(start: Option<&std::path::Path>, fallback: Pa
 /// verbatim/extended-length prefix that `Path::canonicalize` adds. `cronus init`
 /// and `workflow scaffold` reported `\\?\C:\Users\...`, which is technically the
 /// same path but reads as noise and does not match what a user would type back.
+///
+/// On Windows, also normalizes every `/` to `\` (F-23): Windows accepts
+/// both as a separator, so a path built by joining a component that
+/// happened to contain a forward slash (an env-var override, a value a
+/// caller supplied) displays with a visibly inconsistent mix — `backup
+/// list` showed exactly this (`C:/Users/…/iso\Cronus\backups\backup-…`).
+/// Display-only: this never touches the `Path`/`PathBuf` a caller goes on
+/// to use for real I/O, only the string shown to a person.
 pub fn display_clean(path: &std::path::Path) -> String {
     let s = path.display().to_string();
-    if let Some(rest) = s.strip_prefix(r"\\?\UNC\") {
+    let s = if let Some(rest) = s.strip_prefix(r"\\?\UNC\") {
         format!(r"\\{rest}")
     } else if let Some(rest) = s.strip_prefix(r"\\?\") {
         rest.to_string()
     } else {
         s
-    }
+    };
+    #[cfg(target_os = "windows")]
+    let s = s.replace('/', r"\");
+    s
 }
 
 #[cfg(test)]
@@ -188,6 +199,34 @@ mod tests {
             display_clean(Path::new(r"\\?\UNC\server\share")),
             r"\\server\share"
         );
+    }
+
+    /// F-23: a path containing a `/` (a env-var override, a caller-supplied
+    /// value) must display with the platform's own separator throughout,
+    /// never a mix — `backup list` showed exactly the mixed form this
+    /// guards against (`C:/Users/…/iso\Cronus\backups\backup-…`). Windows
+    /// accepts `/` as an alternate separator with no normalization of its
+    /// own; elsewhere `/` is the only separator, so there is nothing to
+    /// normalize.
+    #[test]
+    #[cfg(target_os = "windows")]
+    fn display_clean_normalizes_forward_slashes_on_windows() {
+        use std::path::Path;
+        assert_eq!(
+            display_clean(Path::new("C:/Users/a/b/c")),
+            r"C:\Users\a\b\c"
+        );
+        assert_eq!(
+            display_clean(Path::new(r"C:/Users/a\b/c")),
+            r"C:\Users\a\b\c",
+            "a mix of both separators must normalize to one"
+        );
+    }
+
+    #[test]
+    #[cfg(not(target_os = "windows"))]
+    fn display_clean_leaves_plain_paths_unchanged_off_windows() {
+        use std::path::Path;
         assert_eq!(
             display_clean(Path::new("/plain/unix/path")),
             "/plain/unix/path"

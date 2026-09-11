@@ -383,18 +383,17 @@ pub(crate) mod backup_cmd {
         let options = BackupOptions { include_logs };
         match backup::create(state_root, backups_dir, to, options) {
             Ok(backup_ref) => {
+                // F-23: a mixed-separator path (an env-var override, a
+                // caller-supplied --to) must display consistently.
+                let shown = cronus_core::paths::display_clean(&backup_ref.path);
                 if ctx.is_json() {
                     println!(
                         "{{\"id\":\"{}\",\"path\":\"{}\"}}",
                         json_escape(&backup_ref.id),
-                        json_escape(&backup_ref.path.display().to_string())
+                        json_escape(&shown)
                     );
                 } else {
-                    println!(
-                        "backup created: {} ({})",
-                        backup_ref.id,
-                        backup_ref.path.display()
-                    );
+                    println!("backup created: {} ({shown})", backup_ref.id);
                 }
                 0
             }
@@ -422,7 +421,7 @@ pub(crate) mod backup_cmd {
                         format!(
                             "{{\"id\":\"{}\",\"path\":\"{}\",\"created_at\":{}}}",
                             json_escape(&b.id),
-                            json_escape(&b.path.display().to_string()),
+                            json_escape(&cronus_core::paths::display_clean(&b.path)),
                             b.created_at_unix
                         )
                     })
@@ -432,7 +431,11 @@ pub(crate) mod backup_cmd {
             }
             Ok(backups) => {
                 for backup_ref in &backups {
-                    println!("{}\t{}", backup_ref.id, backup_ref.path.display());
+                    println!(
+                        "{}\t{}",
+                        backup_ref.id,
+                        cronus_core::paths::display_clean(&backup_ref.path)
+                    );
                 }
                 0
             }
