@@ -136,11 +136,31 @@ pub enum KnowledgeServiceError {
     Access(KnowledgeAccessError),
 }
 
+/// Appended to an embedding failure (F-22): the domain-tier `IngestError`/
+/// `RetrievalError` only ever carry the backend's own message ("Timeout",
+/// with no context), since domain code has no I/O and so cannot know which
+/// endpoint or model was configured — that lives here, where
+/// [`DEFAULT_EMBED_ENDPOINT`]/[`DEFAULT_EMBED_MODEL`] actually are. Without
+/// this, "embedding failed: Timeout" gives a user nothing to act on.
+fn embed_guidance() -> String {
+    format!(
+        "expects a local embedding server at {DEFAULT_EMBED_ENDPOINT} serving \
+         \"{DEFAULT_EMBED_MODEL}\" — e.g. install Ollama, run `ollama pull \
+         {DEFAULT_EMBED_MODEL}`, then `ollama serve`"
+    )
+}
+
 impl std::fmt::Display for KnowledgeServiceError {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
             KnowledgeServiceError::Store(m) => write!(f, "{m}"),
+            KnowledgeServiceError::Ingest(IngestError::Embed(m)) => {
+                write!(f, "embedding failed: {m} ({})", embed_guidance())
+            }
             KnowledgeServiceError::Ingest(e) => write!(f, "{e}"),
+            KnowledgeServiceError::Retrieval(RetrievalError::Embed(m)) => {
+                write!(f, "query embedding failed: {m} ({})", embed_guidance())
+            }
             KnowledgeServiceError::Retrieval(e) => write!(f, "{e}"),
             KnowledgeServiceError::Access(e) => write!(f, "{e}"),
         }
@@ -457,5 +477,46 @@ mod tests {
             parse_http_url("http://localhost:8080").unwrap(),
             ("localhost".to_string(), 8080, "/".to_string())
         );
+    }
+
+    /// F-22: a bare backend message ("Timeout") gives a user nothing to
+    /// act on — the rendered error must name what is expected (the local
+    /// server, its address, and the model) so they know what to start.
+    #[test]
+    fn an_ingest_embedding_failure_names_what_to_start() {
+        let err = KnowledgeServiceError::Ingest(IngestError::Embed("Timeout".to_string()));
+        let msg = err.to_string();
+        assert!(
+            msg.contains("Timeout"),
+            "the backend's own message survives: {msg}"
+        );
+        assert!(
+            msg.contains(DEFAULT_EMBED_ENDPOINT),
+            "must name the expected endpoint: {msg}"
+        );
+        assert!(
+            msg.contains(DEFAULT_EMBED_MODEL),
+            "must name the expected model: {msg}"
+        );
+        assert!(msg.contains("ollama"), "must name what to start: {msg}");
+    }
+
+    #[test]
+    fn a_query_embedding_failure_also_names_what_to_start() {
+        let err = KnowledgeServiceError::Retrieval(RetrievalError::Embed("Timeout".to_string()));
+        let msg = err.to_string();
+        assert!(msg.contains(DEFAULT_EMBED_ENDPOINT));
+        assert!(msg.contains(DEFAULT_EMBED_MODEL));
+    }
+
+    #[test]
+    fn a_non_embedding_ingest_failure_is_unchanged() {
+        // Only the Embed variant gets the guidance appended — a store or
+        // extraction failure has nothing to do with the embedding server,
+        // so it must not carry misleading advice about starting one.
+        let err = KnowledgeServiceError::Ingest(IngestError::Store("disk full".to_string()));
+        let msg = err.to_string();
+        assert!(!msg.contains(DEFAULT_EMBED_ENDPOINT));
+        assert!(!msg.contains("ollama"));
     }
 }
