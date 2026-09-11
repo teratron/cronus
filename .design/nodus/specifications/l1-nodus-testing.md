@@ -1,6 +1,6 @@
 # Nodus DSL Testing Contract
 
-**Version:** 1.1.0
+**Version:** 1.1.1
 **Status:** Stable
 **Layer:** concept
 
@@ -12,6 +12,7 @@ The testing facility is language-level: it is syntax that any conforming impleme
 
 ## Related Specifications
 
+- [l1-nodus-authoring.md](l1-nodus-authoring.md) — [ADDED v1.1.1] the other subject. NT asserts a *workflow's* outputs under fixed inputs; NA exercises *nodus itself* under an author who has not been told what to write, and is the only instrument that can see an intent the language cannot express or a diagnostic that names no recovery. NT-5's provider stubbing is the precedent NA-5 extends; NT-10's route coverage is per-workflow where NA-4's is over the diagnostic taxonomy.
 - [l1-nodus-language.md](l1-nodus-language.md) — parent language spec; defines `@test:` block as a section declaration (§4.2)
 - [l2-nodus-runtime.md](l2-nodus-runtime.md) — Rust runtime; `Executor`, `RunResult`
 - [l2-nodus-testing.md](l2-nodus-testing.md) — Rust implementation of this spec; `TestBlock`, `test()`/`test_with_tags()`, assertion evaluator, NT-1…NT-10 compliance table
@@ -183,6 +184,7 @@ between realizations of an already-correct workflow.
 
 | Version | Date | Change |
 | --- | --- | --- |
+| 1.1.1 | 2026-09-11 | Patch — cross-reference to `l1-nodus-authoring`, the free-route instrument whose subject is nodus rather than a workflow: NT tests what an author wrote, NA tests whether it could be written and whether the diagnostics taught. Documentation linkage only; no invariant added or changed. |
 | 1.1.0 | 2026-07-02 | Added NT-11 (differential parity across execution paths — interpreter↔transpiler or two conforming hosts must produce equal observable results, output + trace shape, on a recorded fixture corpus; the executable form of portability LP-3) and §4.7 differential-parity harness (content-addressed fixtures, per-path comparators, declared-non-determinism exclusion, shared normative corpus). Parity asserts equivalence between realizations, complementary to `@test:` correctness assertions. Related Specifications extended with l1-nodus-portability. |
 | 1.0.1 | 2026-06-24 | §4.6: corrected diagnostic codes — W006 (pre-existing ROUTE coverage) replaces spec-proposed W001; W009 (new no-expected advisory) replaces spec-proposed W002 to avoid conflict with existing validator codes |
 | 1.0.0 | 2026-06-24 | Initial spec — NT-1…NT-10 invariants, block structure, execution protocol, assertion semantics, TestReport contract, tag filtering, validation diagnostics |
