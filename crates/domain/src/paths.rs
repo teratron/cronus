@@ -25,15 +25,30 @@ pub struct Paths {
     portable_base: Option<PathBuf>,
 }
 
+/// Overrides OS-native resolution with portable mode grouped under one
+/// directory — the isolation seam a test run, a CI job, or a QA pass needs
+/// so the product never touches the real per-OS user directories. Every
+/// caller resolves through [`Paths::os_native`], so setting this reaches
+/// all of them with no call-site changes; an explicit [`Paths::portable`]
+/// base still wins when a caller chooses one directly.
+pub const PORTABLE_DIR_ENV: &str = "CRONUS_PORTABLE_DIR";
+
 impl Paths {
-    /// OS-native resolution (the default deployment mode).
+    /// OS-native resolution (the default deployment mode) — unless
+    /// [`PORTABLE_DIR_ENV`] is set to a non-empty value, in which case every
+    /// root groups under that one directory instead ([`Self::portable`]).
     pub fn os_native() -> Self {
-        Self {
-            portable_base: None,
+        match std::env::var(PORTABLE_DIR_ENV) {
+            Ok(dir) if !dir.is_empty() => Self::portable(dir),
+            _ => Self {
+                portable_base: None,
+            },
         }
     }
 
-    /// Portable mode: all roots live under `base`.
+    /// Portable mode: all roots live under `base`. Bypasses
+    /// [`PORTABLE_DIR_ENV`] — an explicit base always wins over the
+    /// environment.
     pub fn portable(base: impl Into<PathBuf>) -> Self {
         Self {
             portable_base: Some(base.into()),
