@@ -1723,7 +1723,19 @@ pub(crate) mod archetype_cmd {
     }
 
     pub(crate) fn list(catalog_only: bool, active: bool, ctx: &Context) -> i32 {
-        let _ = catalog_only;
+        // F-29: `--catalog` and `--active` are two different display modes
+        // for this same command — silently letting `--active` win (the
+        // prior behavior) discarded `--catalog` with no feedback. Same
+        // application-level refusal shape `workflow transpile`'s
+        // `--human`/`--compact` conflict already established: the
+        // installation half's own grammar is built from the same `Binder`
+        // descriptors the semantic half is (no cross-binder constraint
+        // concept), so a clap-level `conflicts_with` isn't available here
+        // either.
+        if catalog_only && active {
+            eprintln!("error: --catalog and --active cannot both be given");
+            return 1;
+        }
         let catalog = ArchetypeCatalog::program();
         if active {
             let current = read_active();
@@ -1914,6 +1926,34 @@ pub(crate) mod archetype_cmd {
                 eprintln!("error: {e}");
                 1
             }
+        }
+    }
+
+    #[cfg(test)]
+    mod tests {
+        use crate::output::{Context, OutputFormat};
+
+        use super::list;
+
+        /// F-29: `--catalog` and `--active` are two different display modes
+        /// for the same command — must be refused together, not silently
+        /// resolved by letting one win.
+        #[test]
+        fn catalog_and_active_together_are_refused() {
+            let ctx = Context::new(OutputFormat::Text);
+            assert_eq!(
+                list(true, true, &ctx),
+                1,
+                "--catalog and --active together must be refused"
+            );
+        }
+
+        #[test]
+        fn either_flag_alone_still_succeeds() {
+            let ctx = Context::new(OutputFormat::Text);
+            assert_eq!(list(true, false, &ctx), 0, "--catalog alone must succeed");
+            assert_eq!(list(false, true, &ctx), 0, "--active alone must succeed");
+            assert_eq!(list(false, false, &ctx), 0, "neither flag must succeed");
         }
     }
 }
