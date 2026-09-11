@@ -40,6 +40,21 @@ fn add_card_starts_in_triage() {
 }
 
 #[test]
+fn adding_an_existing_card_id_is_rejected_not_upserted() {
+    let board = temp_board("add-dup");
+    board.init().unwrap();
+    board.add_card("c1", "first-ref", T0).unwrap();
+
+    let err = board.add_card("c1", "second-ref", T0 + 1).unwrap_err();
+    assert!(matches!(err, KanbanError::CardAlreadyExists(id) if id == "c1"));
+
+    // Confirmed against the actual on-disk state, not just the error type:
+    // the first card's task_ref must survive a second `add` for the same id.
+    let card = board.get_card("c1").unwrap().unwrap();
+    assert_eq!(card.task_ref, "first-ref");
+}
+
+#[test]
 fn get_card_returns_none_when_not_found() {
     let board = temp_board("get-none");
     board.init().unwrap();

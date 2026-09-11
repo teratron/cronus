@@ -22,6 +22,12 @@ pub enum KanbanError {
     },
     BlockedRequiresReason,
     CardNotFound(String),
+    /// `add_card` was given an id an existing card already holds. Adding
+    /// never upserts (a silent overwrite would discard the existing card's
+    /// `task_ref`, `created_at`, and transition history with no way to tell
+    /// "created" from "clobbered" apart) — callers who want an explicit
+    /// replace go through `move_card`/`archive` first.
+    CardAlreadyExists(String),
     /// The card id is not a safe single path segment (empty, or contains a
     /// separator, a `..` component, a drive/root prefix, or a control byte).
     /// Card ids are turned into `cards/<id>.json` filenames, so an id that
@@ -39,6 +45,7 @@ impl fmt::Display for KanbanError {
             }
             KanbanError::BlockedRequiresReason => write!(f, "blocked state requires a reason"),
             KanbanError::CardNotFound(id) => write!(f, "card not found: {id}"),
+            KanbanError::CardAlreadyExists(id) => write!(f, "card already exists: {id}"),
             KanbanError::InvalidCardId(id) => {
                 write!(f, "invalid card id {id:?}: must be a single path segment")
             }
@@ -300,9 +307,13 @@ impl Board {
         Ok(())
     }
 
-    /// Add a new card (starts in Triage).
+    /// Add a new card (starts in Triage). Rejects an id an existing card
+    /// already holds — see [`KanbanError::CardAlreadyExists`].
     pub fn add_card(&self, id: &str, task_ref: &str, now: u64) -> Result<Card> {
         validate_card_id(id)?;
+        if self.get_card(id)?.is_some() {
+            return Err(KanbanError::CardAlreadyExists(id.to_string()));
+        }
         fs::create_dir_all(self.cards_dir())?;
         let card = Card::new(id, task_ref, now);
         self.save_card(&card)?;
@@ -551,6 +562,27 @@ mod tests {
         );
         // A plain id still works.
         assert!(board.add_card("card-1", "TASK", 1).is_ok());
+        let _ = fs::remove_dir_all(&root);
+    }
+
+    #[test]
+    fn add_card_rejects_a_duplicate_id_rather_than_silently_overwriting() {
+        let (board, root) = tmp_board();
+        let first = board.add_card("c1", "first-ref", 1).unwrap();
+
+        let err = board.add_card("c1", "second-ref", 2).unwrap_err();
+        assert!(
+            matches!(&err, KanbanError::CardAlreadyExists(id) if id == "c1"),
+            "expected CardAlreadyExists(\"c1\"), got {err:?}"
+        );
+
+        // The original card survives untouched — task_ref, created_at, and
+        // the (empty) history are exactly what the first add produced.
+        let reloaded = board.get_card("c1").unwrap().expect("card must survive");
+        assert_eq!(reloaded.task_ref, "first-ref");
+        assert_eq!(reloaded.created_at, first.created_at);
+        assert!(reloaded.history.is_empty());
+
         let _ = fs::remove_dir_all(&root);
     }
 
