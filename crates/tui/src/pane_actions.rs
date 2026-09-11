@@ -51,7 +51,7 @@ impl PaneAction {
         PaneAction::Quit,
     ];
 
-    fn verb(self) -> &'static str {
+    pub(crate) fn verb(self) -> &'static str {
         match self {
             PaneAction::FocusNext => "focus-next",
             PaneAction::FocusPrev => "focus-prev",
@@ -80,6 +80,18 @@ impl PaneAction {
     pub fn id(self) -> InvocableId {
         InvocableId::new(format!("core:pane.{}", self.verb()))
             .expect("a literal pane-action identity must be well-formed — a bug if it isn't")
+    }
+
+    /// The action a slash command's own `group`/sub-verb name, if any —
+    /// checked against this exact enum rather than by re-deriving the
+    /// `core:pane.{verb}` identity string, so the command bar's dispatch
+    /// path can recognize "this submitted line names one of my own actions"
+    /// without constructing an [`InvocableId`] just to compare it.
+    pub(crate) fn from_slash(group: &str, verb: &str) -> Option<Self> {
+        if group != "pane" {
+            return None;
+        }
+        Self::ALL.into_iter().find(|action| action.verb() == verb)
     }
 }
 
@@ -167,5 +179,22 @@ mod tests {
             dispatcher.dispatch(&registry, &invocation),
             cronus_contract::Dispatched::Unknown
         ));
+    }
+
+    /// `from_slash` recognizes every declared action by its own group/verb —
+    /// the same pair the command bar splits a submitted line into — so the
+    /// app's command-bar dispatch path can find the right variant without
+    /// re-deriving an [`InvocableId`] just to compare it.
+    #[test]
+    fn from_slash_recognizes_every_declared_action_by_its_own_verb() {
+        for action in PaneAction::ALL {
+            assert_eq!(PaneAction::from_slash("pane", action.verb()), Some(action));
+        }
+    }
+
+    #[test]
+    fn from_slash_rejects_a_different_group_or_an_unknown_verb() {
+        assert_eq!(PaneAction::from_slash("board", "focus-next"), None);
+        assert_eq!(PaneAction::from_slash("pane", "bogus"), None);
     }
 }

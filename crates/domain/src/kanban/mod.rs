@@ -128,6 +128,7 @@ impl CardState {
                 | (CardState::Ready, CardState::Running)
                 | (CardState::Running, CardState::Done)
                 | (CardState::Running, CardState::Blocked)
+                | (CardState::Running, CardState::Todo) // allow running-back
                 | (CardState::Blocked, CardState::Ready)
                 | (CardState::Blocked, CardState::Todo)
                 | (CardState::Todo, CardState::Triage) // allow triage-back
@@ -582,6 +583,31 @@ mod tests {
             CardState::Todo
         );
         assert!(board.events_dir().join("c1.jsonl").exists());
+        let _ = fs::remove_dir_all(&root);
+    }
+
+    /// `l2-kanban-board.md` names `running → todo` as an allowed backward
+    /// move, the same kind as `blocked → todo` — a simulation-qa pass found
+    /// `can_transition_to` missing this exact pair, rejecting it as an
+    /// `InvalidTransition` despite the spec.
+    #[test]
+    fn running_card_can_move_back_to_todo() {
+        let (board, root) = tmp_board();
+        board.add_card("c1", "TASK", 1).unwrap();
+        board
+            .move_card("c1", CardState::Todo, "t", None, 2)
+            .unwrap();
+        board
+            .move_card("c1", CardState::Ready, "t", None, 3)
+            .unwrap();
+        board
+            .move_card("c1", CardState::Running, "t", None, 4)
+            .unwrap();
+
+        let card = board
+            .move_card("c1", CardState::Todo, "t", None, 5)
+            .expect("running -> todo must be a valid backward move");
+        assert_eq!(card.state, CardState::Todo);
         let _ = fs::remove_dir_all(&root);
     }
 }

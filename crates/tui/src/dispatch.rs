@@ -237,7 +237,7 @@ fn render_value(value: &OutcomeValue) -> String {
         OutcomeValue::List(items) if items.is_empty() => "no results".to_string(),
         OutcomeValue::List(items) => items
             .iter()
-            .map(render_value)
+            .map(render_list_item)
             .collect::<Vec<_>>()
             .join(", "),
         OutcomeValue::Record(fields) => fields
@@ -245,6 +245,22 @@ fn render_value(value: &OutcomeValue) -> String {
             .map(|(name, v)| format!("{name}: {}", render_value(v)))
             .collect::<Vec<_>>()
             .join(", "),
+    }
+}
+
+/// Render one element of a list, delimiting it when it is itself a compound
+/// value (a record's own fields, or a nested list) — otherwise a list of
+/// records renders as one undifferentiated, comma-joined string with no way
+/// to tell where one record's fields end and the next record begins (a real
+/// simulation-qa finding: `/board list` with two cards rendered as `id: k1,
+/// state: running, id: k2, state: blocked`). A scalar element is rendered
+/// exactly as `render_value` already would, so an existing all-scalar list
+/// (e.g. `cards: a, b`) is unaffected.
+fn render_list_item(value: &OutcomeValue) -> String {
+    match value {
+        OutcomeValue::Record(_) => format!("{{{}}}", render_value(value)),
+        OutcomeValue::List(_) => format!("[{}]", render_value(value)),
+        other => render_value(other),
     }
 }
 
@@ -372,6 +388,34 @@ mod tests {
             ]),
         )])));
         assert_eq!(rendered, "cards: a, b");
+    }
+
+    /// The simulation-qa finding this fixes: a list of records (the exact
+    /// shape `core:board.list` returns for more than one card) must keep
+    /// each record's own fields visually distinguishable from the next
+    /// list element, never one undifferentiated comma-joined string.
+    #[test]
+    fn render_outcome_marks_record_boundaries_inside_a_list() {
+        let rendered = render_outcome(Outcome::Value(OutcomeValue::List(vec![
+            OutcomeValue::Record(vec![
+                ("id".to_string(), OutcomeValue::Text("k1".to_string())),
+                (
+                    "state".to_string(),
+                    OutcomeValue::Text("running".to_string()),
+                ),
+            ]),
+            OutcomeValue::Record(vec![
+                ("id".to_string(), OutcomeValue::Text("k2".to_string())),
+                (
+                    "state".to_string(),
+                    OutcomeValue::Text("blocked".to_string()),
+                ),
+            ]),
+        ])));
+        assert_eq!(
+            rendered, "{id: k1, state: running}, {id: k2, state: blocked}",
+            "each record's braces must make the element boundary legible"
+        );
     }
 
     /// The literal Verify criterion this task names: a slash line whose

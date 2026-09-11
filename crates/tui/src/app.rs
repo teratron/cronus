@@ -206,9 +206,30 @@ impl App {
         //     to no invocable (`Dispatched::Unknown`) — ordinary input, not a
         //     rendered failure (l2-tui v1.2.0), so feedback is cleared exactly
         //     as it would be for any other line with nothing to report.
+        //
+        //     A line naming one of this surface's own pane actions (e.g.
+        //     `/pane focus-next`) is routed through `dispatch_pane_action`
+        //     instead: that is the one place a real `Dispatched::Ran` answer
+        //     is turned into the actual view mutation (focus change, quit),
+        //     the same effect a direct Tab/Esc key press applies. Rendering
+        //     only the dispatch's own stateless `Outcome::Value(Empty)` text
+        //     — the prior behavior — left the command-bar form of `/pane`
+        //     dispatching successfully while doing nothing a user could see.
         if let Some(command) = self.pending_dispatch.take() {
-            self.view.command_feedback =
-                dispatch::dispatch_command(&self.registry, &self.dispatcher, &command);
+            let pane_action = command
+                .args
+                .first()
+                .and_then(|sub_verb| PaneAction::from_slash(&command.verb, sub_verb));
+            match pane_action {
+                Some(action) => {
+                    self.dispatch_pane_action(action);
+                    self.view.command_feedback = None;
+                }
+                None => {
+                    self.view.command_feedback =
+                        dispatch::dispatch_command(&self.registry, &self.dispatcher, &command);
+                }
+            }
             needs_redraw = true;
         }
 
@@ -1152,6 +1173,122 @@ mod tests {
             "the secret never reaches the view-model or the screen buffer"
         );
         assert!(feedback.contains("***"), "the leaked value renders masked");
+    }
+
+    /// The literal defect a live simulation pass found: dispatching `/pane
+    /// focus-next` through the command bar answered `Dispatched::Ran` (the
+    /// stateless `Outcome::Value(Empty)` every pane action returns) and
+    /// rendered nothing wrong — but `view.focus` never moved, because only
+    /// the direct Tab key path applied the actual mutation. Proven here
+    /// through the real, registered pane actions and the real catalog they
+    /// build, not a stand-in.
+    #[test]
+    fn command_bar_pane_action_focus_next_moves_focus_like_the_tab_key_does() {
+        let (registry, dispatcher) = registry_with_pane_actions();
+        let invocables: Vec<&Invocable> = registry.all().collect();
+        let catalog = command::build_catalog(&invocables);
+        let mut app = App::new(
+            ViewModel {
+                focus: Focus::CommandBar,
+                ..Default::default()
+            },
+            registry,
+            dispatcher,
+            catalog,
+        );
+        let mut source = ScriptedSource::new(vec![]);
+        let mut renderer = RecordingRenderer::default();
+
+        for c in "pane focus-next".chars() {
+            app.tick(&[TermEvent::Key(Key::Char(c))], &mut source, &mut renderer)
+                .unwrap();
+        }
+        app.tick(&[TermEvent::Key(Key::Enter)], &mut source, &mut renderer)
+            .unwrap();
+
+        assert_eq!(
+            app.view().focus,
+            Focus::Board,
+            "the command-bar form of /pane focus-next must move focus exactly like Tab does"
+        );
+        assert_eq!(
+            app.view().command_feedback,
+            None,
+            "the effect itself is the feedback, matching the direct-key path's own silence"
+        );
+    }
+
+    /// The other half of the same defect: `/pane quit` through the command
+    /// bar must actually end the session, not merely echo a stateless
+    /// acknowledgment while the loop keeps running.
+    #[test]
+    fn command_bar_pane_action_quit_actually_quits_the_session() {
+        let (registry, dispatcher) = registry_with_pane_actions();
+        let invocables: Vec<&Invocable> = registry.all().collect();
+        let catalog = command::build_catalog(&invocables);
+        let mut app = App::new(
+            ViewModel {
+                focus: Focus::CommandBar,
+                ..Default::default()
+            },
+            registry,
+            dispatcher,
+            catalog,
+        );
+        let mut source = ScriptedSource::new(vec![]);
+        let mut renderer = RecordingRenderer::default();
+
+        for c in "pane quit".chars() {
+            app.tick(&[TermEvent::Key(Key::Char(c))], &mut source, &mut renderer)
+                .unwrap();
+        }
+        let result = app
+            .tick(&[TermEvent::Key(Key::Enter)], &mut source, &mut renderer)
+            .unwrap();
+
+        assert!(
+            result.quit,
+            "the command-bar form of /pane quit must quit exactly like Esc does outside the command bar"
+        );
+    }
+
+    /// A submitted line that merely *looks* like a pane action (right group,
+    /// wrong verb) must fall through to the ordinary dispatch path rather
+    /// than being silently swallowed by the pane-action shortcut.
+    #[test]
+    fn command_bar_pane_group_with_an_unknown_verb_falls_through_to_ordinary_dispatch() {
+        let (registry, dispatcher) = registry_with_pane_actions();
+        let invocables: Vec<&Invocable> = registry.all().collect();
+        let catalog = command::build_catalog(&invocables);
+        let mut app = App::new(
+            ViewModel {
+                focus: Focus::CommandBar,
+                ..Default::default()
+            },
+            registry,
+            dispatcher,
+            catalog,
+        );
+        let mut source = ScriptedSource::new(vec![]);
+        let mut renderer = RecordingRenderer::default();
+
+        for c in "pane bogus".chars() {
+            app.tick(&[TermEvent::Key(Key::Char(c))], &mut source, &mut renderer)
+                .unwrap();
+        }
+        app.tick(&[TermEvent::Key(Key::Enter)], &mut source, &mut renderer)
+            .unwrap();
+
+        assert_eq!(
+            app.view().command_feedback,
+            None,
+            "an unresolved candidate identity is ordinary input, not a rendered failure"
+        );
+        assert_eq!(
+            app.view().focus,
+            Focus::CommandBar,
+            "no action ran, so focus must not move"
+        );
     }
 
     /// A representative populated view-model for render-from-state tests.
