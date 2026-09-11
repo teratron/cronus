@@ -42,7 +42,19 @@ fn register_store(registry: &mut InvocableRegistry, dispatcher: &mut Dispatcher)
     let invocable = Invocable {
         id: id.clone(),
         name: "Store",
-        summary: "Store a key-value memory entry.",
+        // F-33: "key-value" promised single-value-per-key uniqueness this
+        // verb never delivered — MemoryEntry has no key field to be unique
+        // on (only `title`/`body`), and every call adds a genuinely new,
+        // separately timestamped entry, never replacing a same-titled one.
+        // That is a deliberate property of the richer domain model (trust
+        // scoring, decay, `superseded_at`-based history) this thin CLI
+        // binding does not attempt to collapse into overwrite-in-place —
+        // a real title-keyed supersession policy belongs to that model's
+        // own consolidation pass (store-local's `consolidate` module),
+        // not to a silent side effect of this handler. Named honestly
+        // instead: this adds an entry, it does not set a value.
+        summary: "Add a titled memory entry (does not replace a same-titled one — see \
+                   `memory search`).",
         group: "memory",
         locus: Locus::Semantic,
         binders: vec![
