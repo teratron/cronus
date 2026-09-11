@@ -383,6 +383,42 @@ fn render_value(value: OutcomeValue, ctx: &output::Context) -> Rendered {
             };
         }
     }
+    // `core:workflow.validate`'s own shape — a Record naming "status" plus
+    // "errors"/"warnings"/"infos" (each a List of {code, message, line}
+    // Records) — gets its own arm ahead of the failed/aborted/… check
+    // below (F-16): the general fallback flattened every diagnostic and
+    // the record's own "status"/"errors: "/"warnings: " labels onto one
+    // comma-separated line, unreadable past a couple of findings. --format
+    // json already produced well-structured, valid nesting through the
+    // general recursive render_json below — only the text path needed
+    // fixing, so JSON keeps using it unchanged.
+    if let OutcomeValue::Record(fields) = &value
+        && let [
+            ("status", OutcomeValue::Text(status)),
+            ("errors", OutcomeValue::List(errors)),
+            ("warnings", OutcomeValue::List(warnings)),
+            ("infos", OutcomeValue::List(infos)),
+        ] = fields
+            .iter()
+            .map(|(name, v)| (name.as_str(), v))
+            .collect::<Vec<_>>()
+            .as_slice()
+    {
+        if ctx.is_json() {
+            return Rendered::stdout_only(render_json(&value), if status == "ok" { 0 } else { 1 });
+        }
+        let mut lines = vec![format!("status: {status}")];
+        for (label, diags) in [("error", errors), ("warning", warnings), ("info", infos)] {
+            for diag in diags.iter() {
+                lines.push(render_diagnostic_line(label, diag));
+            }
+        }
+        return Rendered {
+            stdout: lines,
+            exit_code: if status == "ok" { 0 } else { 1 },
+            ..Default::default()
+        };
+    }
     // A Record naming its own "status" among "failed"/"aborted"/
     // "stopped"/"paused" (`core:workflow.run` today) is the one shape
     // among the shipped verbs whose success is not uniformly exit 0.
@@ -454,6 +490,31 @@ fn render_value(value: OutcomeValue, ctx: &output::Context) -> Rendered {
         other if ctx.is_json() => Rendered::stdout_only(render_json(other), 0),
         other => Rendered::stdout_only(render_text_line(other), 0),
     }
+}
+
+/// One `workflow.validate` diagnostic (a `{code, message, line}` Record) as
+/// its own line: `"{label}[{code}] line {line}: {message}"`. Missing/
+/// mistyped fields degrade to an empty/zero placeholder rather than
+/// panicking — this renders whatever the domain layer actually produced,
+/// never asserts its shape.
+fn render_diagnostic_line(label: &str, diag: &OutcomeValue) -> String {
+    let OutcomeValue::Record(fields) = diag else {
+        return format!("{label}: {}", render_text_inline(diag));
+    };
+    let get = |key: &str| fields.iter().find(|(name, _)| name == key).map(|(_, v)| v);
+    let code = match get("code") {
+        Some(OutcomeValue::Text(s)) => s.as_str(),
+        _ => "",
+    };
+    let message = match get("message") {
+        Some(OutcomeValue::Text(s)) => s.as_str(),
+        _ => "",
+    };
+    let line = match get("line") {
+        Some(OutcomeValue::Integer(n)) => *n,
+        _ => 0,
+    };
+    format!("{label}[{code}] line {line}: {message}")
 }
 
 /// A general JSON projection of any `OutcomeValue` shape — recursive, so a
