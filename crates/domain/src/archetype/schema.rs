@@ -77,25 +77,19 @@ impl std::fmt::Display for ArchetypeError {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
             ArchetypeError::UnknownKey(k) => {
-                write!(
-                    f,
-                    "unrecognized archetype key '{k}': the schema is closed (OA-4)"
-                )
+                write!(f, "unrecognized archetype key '{k}': the schema is closed")
             }
             ArchetypeError::UnknownRole(id) => {
-                write!(
-                    f,
-                    "role '{id}' does not resolve against the role catalog (OA-10)"
-                )
+                write!(f, "role '{id}' does not resolve against the role catalog")
             }
             ArchetypeError::UnknownPreset(id) => {
                 write!(f, "archetype preset not found: {id}")
             }
             ArchetypeError::SeedTooLarge(n) => {
-                write!(f, "seed has {n} entries; the cap is {SEED_CAP} (OA-2)")
+                write!(f, "seed has {n} entries; the cap is {SEED_CAP}")
             }
             ArchetypeError::MissingJustification(role) => {
-                write!(f, "seed entry for '{role}' has no justification (OA-2)")
+                write!(f, "seed entry for '{role}' has no justification")
             }
             ArchetypeError::Io(e) => write!(f, "archetype state I/O error: {e}"),
         }

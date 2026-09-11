@@ -43,7 +43,7 @@ fn register_collection_create(registry: &mut InvocableRegistry, dispatcher: &mut
     let invocable = Invocable {
         id: id.clone(),
         name: "Collection Create",
-        summary: "Create a named, access-controlled document collection (KB-1).",
+        summary: "Create a named, access-controlled document collection.",
         group: "knowledge",
         locus: Locus::Semantic,
         binders: vec![
@@ -92,7 +92,7 @@ fn register_add(registry: &mut InvocableRegistry, dispatcher: &mut Dispatcher) {
     let invocable = Invocable {
         id: id.clone(),
         name: "Add",
-        summary: "Ingest a plain-text/JSON record into a collection (KB-5).",
+        summary: "Ingest a plain-text/JSON record into a collection.",
         group: "knowledge",
         locus: Locus::Semantic,
         binders: vec![
@@ -156,7 +156,7 @@ fn register_add_url(registry: &mut InvocableRegistry, dispatcher: &mut Dispatche
     let invocable = Invocable {
         id: id.clone(),
         name: "Add Url",
-        summary: "Ingest a web page by URL (KB-5). http:// only.",
+        summary: "Ingest a web page by URL. http:// only.",
         group: "knowledge",
         locus: Locus::Semantic,
         binders: vec![
@@ -220,8 +220,7 @@ fn register_query(registry: &mut InvocableRegistry, dispatcher: &mut Dispatcher)
     let invocable = Invocable {
         id: id.clone(),
         name: "Query",
-        summary: "Hybrid semantic+keyword retrieval over one or more collections \
-                   (KB-1/KB-6/KB-7).",
+        summary: "Hybrid semantic+keyword retrieval over one or more collections.",
         group: "knowledge",
         locus: Locus::Semantic,
         binders: vec![

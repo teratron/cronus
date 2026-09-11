@@ -142,7 +142,7 @@ pub fn declared_invocables() -> Vec<Invocable> {
             id: id("dev.admit"),
             name: "Dev Admit",
             summary: "Grant developer-office admission — a human-operator act; run this \
-                       yourself, never through an agent-invoked path (DVO-3)",
+                       yourself, never through an agent-invoked path",
             group: "dev",
             locus: Locus::Installation,
             binders: Vec::new(),
@@ -237,7 +237,7 @@ pub fn declared_invocables() -> Vec<Invocable> {
             id: id("activation.status"),
             name: "Activation Status",
             summary: "Print the observed activation state — read from the OS, never a \
-                       remembered value (BA-8)",
+                       remembered value",
             group: "activation",
             locus: Locus::Installation,
             binders: Vec::new(),
@@ -247,8 +247,8 @@ pub fn declared_invocables() -> Vec<Invocable> {
         Invocable {
             id: id("activation.enable"),
             name: "Activation Enable",
-            summary: "Register background activation for a mode (BA-5: an autonomy grant, \
-                       not a preference — disclosed and confirmed before it takes effect)",
+            summary: "Register background activation for a mode — an autonomy grant, not a \
+                       preference, disclosed and confirmed before it takes effect",
             group: "activation",
             locus: Locus::Installation,
             binders: vec![
@@ -261,8 +261,8 @@ pub fn declared_invocables() -> Vec<Invocable> {
         Invocable {
             id: id("activation.disable"),
             name: "Activation Disable",
-            summary: "Remove whatever activation registration is currently active (BA-7: \
-                       removed and verified, never left partially registered)",
+            summary: "Remove whatever activation registration is currently active — removed \
+                       and verified, never left partially registered",
             group: "activation",
             locus: Locus::Installation,
             binders: Vec::new(),
@@ -1152,6 +1152,62 @@ mod tests {
             "the launcher parser and the registered catalog must advertise exactly the same \
              verbs — any difference means the two are drifting from separately maintained lists \
              rather than deriving from the one declaration"
+        );
+    }
+
+    /// SDD reference containment (F-18): a requirement-clause id
+    /// ("KB-1", "OA-10", "BA-8", "DVO-3", ...) resolves to nothing once
+    /// `.design/` is absent from a release — printing one in a `--help`
+    /// summary a user reads leaves dead, unexplained text behind. Scans
+    /// every `summary` across both grammar halves (installation's own
+    /// `declared_invocables`, plus the semantic half a real bootstrap
+    /// registers) for the shape a citation takes: a parenthesized run of
+    /// 2-4 uppercase letters, a hyphen, and digits.
+    #[test]
+    fn no_summary_in_either_grammar_half_cites_a_spec_layer_requirement_id() {
+        fn citation_in(s: &str) -> Option<&str> {
+            let bytes = s.as_bytes();
+            let mut i = 0;
+            while let Some(open) = s[i..].find('(') {
+                let start = i + open + 1;
+                let rest = &s[start..];
+                let letters_end = rest
+                    .find(|c: char| !c.is_ascii_uppercase())
+                    .unwrap_or(rest.len());
+                if (2..=4).contains(&letters_end)
+                    && rest[letters_end..].starts_with('-')
+                    && rest[letters_end + 1..]
+                        .chars()
+                        .next()
+                        .is_some_and(|c| c.is_ascii_digit())
+                {
+                    return Some(&rest[..letters_end]);
+                }
+                i = start;
+                if i >= bytes.len() {
+                    break;
+                }
+            }
+            None
+        }
+
+        let mut offenders = Vec::new();
+        for invocable in declared_invocables() {
+            if let Some(id) = citation_in(invocable.summary) {
+                offenders.push(format!("{} (installation): cites {id}", invocable.id));
+            }
+        }
+        let (registry, _dispatcher) =
+            cronus_core::invocable_bootstrap::bootstrap(cronus_core::Engine::new());
+        for invocable in registry.all() {
+            if let Some(id) = citation_in(invocable.summary) {
+                offenders.push(format!("{} (semantic): cites {id}", invocable.id));
+            }
+        }
+        assert!(
+            offenders.is_empty(),
+            "a summary must restate spec-layer rationale in plain language, never cite the \
+             requirement id directly: {offenders:?}"
         );
     }
 }
