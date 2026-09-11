@@ -5,7 +5,7 @@ pub(crate) mod init {
 
     use cronus_core::state;
 
-    use crate::output::{Context, json_escape};
+    use crate::output::{Context, describe_io_error, json_escape};
 
     pub fn run(path: Option<PathBuf>, ctx: &Context) -> i32 {
         let dir =
@@ -45,7 +45,7 @@ pub(crate) mod init {
                 0
             }
             Err(e) => {
-                eprintln!("error: {e}");
+                eprintln!("error: {}", describe_io_error(&e, target));
                 1
             }
         }
@@ -852,7 +852,7 @@ pub(crate) mod ext {
         ExtensionState,
     };
 
-    use crate::output::Context;
+    use crate::output::{Context, describe_io_error};
 
     // Reached directly from `crate::installation::dispatch` now — the
     // installation half's own generated grammar owns the `ext` group
@@ -885,7 +885,7 @@ pub(crate) mod ext {
         let json = match std::fs::read_to_string(&path) {
             Ok(s) => s,
             Err(e) => {
-                eprintln!("error: {e}");
+                eprintln!("error: {}", describe_io_error(&e, &path));
                 return 1;
             }
         };
@@ -926,7 +926,7 @@ pub(crate) mod ext {
         let content = match std::fs::read_to_string(&path) {
             Ok(s) => s,
             Err(e) => {
-                eprintln!("error: {e}");
+                eprintln!("error: {}", describe_io_error(&e, &path));
                 return 1;
             }
         };
@@ -1023,7 +1023,7 @@ pub(crate) mod ext {
         use cronus_core::skills::store::{SkillId, SkillStore, SkillTier};
         use cronus_core::skills::synthesize::{self, AuthoredSkill, SynthesizeError};
 
-        use crate::output::Context;
+        use crate::output::{Context, describe_io_error};
 
         /// Single-name lookups aren't pack-qualified at the CLI surface yet;
         /// everything resolves under one placeholder pack until a real
@@ -1052,7 +1052,7 @@ pub(crate) mod ext {
             let content = match std::fs::read_to_string(path) {
                 Ok(s) => s,
                 Err(e) => {
-                    eprintln!("error: {e}");
+                    eprintln!("error: {}", describe_io_error(&e, path));
                     return 1;
                 }
             };
