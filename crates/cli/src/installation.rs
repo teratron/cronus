@@ -219,7 +219,7 @@ pub fn declared_invocables() -> Vec<Invocable> {
             summary: "Create a backup",
             group: "backup",
             locus: Locus::Installation,
-            binders: vec![named_text("to", true), flag("include_logs")],
+            binders: vec![named_text("to", true), flag("include-logs")],
             stability: Stability::Shipped,
             journal_raw_input: true,
         },
@@ -253,7 +253,7 @@ pub fn declared_invocables() -> Vec<Invocable> {
             locus: Locus::Installation,
             binders: vec![
                 named_text("mode", false),
-                flag("acknowledge_unattended_execution"),
+                flag("acknowledge-unattended-execution"),
             ],
             stability: Stability::Shipped,
             journal_raw_input: true,
@@ -766,7 +766,7 @@ fn dispatch_leaf(group: &str, verb: &str, matches: &ArgMatches, ctx: &Context) -
             let to = matches
                 .get_one::<String>("to")
                 .map(std::path::PathBuf::from);
-            let include_logs = matches.get_flag("include_logs");
+            let include_logs = matches.get_flag("include-logs");
             crate::commands::backup_cmd::create(to, include_logs, ctx)
         }
         ("backup", "list") => crate::commands::backup_cmd::list(ctx),
@@ -788,7 +788,7 @@ fn dispatch_leaf(group: &str, verb: &str, matches: &ArgMatches, ctx: &Context) -
                     return 1;
                 }
             };
-            let acknowledged = matches.get_flag("acknowledge_unattended_execution");
+            let acknowledged = matches.get_flag("acknowledge-unattended-execution");
             crate::commands::activation_cmd::enable(mode, acknowledged, ctx)
         }
         ("activation", "disable") => crate::commands::activation_cmd::disable(ctx),

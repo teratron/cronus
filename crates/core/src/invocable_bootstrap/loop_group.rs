@@ -45,7 +45,7 @@ fn register_run(registry: &mut InvocableRegistry, dispatcher: &mut Dispatcher) {
                 optional: false,
             },
             Binder {
-                name: "max_iter",
+                name: "max-iter",
                 kind: BinderKind::NamedText,
                 optional: true,
             },
@@ -69,7 +69,7 @@ fn register_run(registry: &mut InvocableRegistry, dispatcher: &mut Dispatcher) {
             // here rather than invented under this task's own pressure.
             // The default (1) matches the pre-migration
             // `#[arg(default_value_t = 1)]`.
-            let max_iter = match opt_text_arg(args, "max_iter") {
+            let max_iter = match opt_text_arg(args, "max-iter") {
                 None => 1,
                 Some(s) => match s.parse::<u32>() {
                     Ok(n) => n,

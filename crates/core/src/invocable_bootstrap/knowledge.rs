@@ -231,7 +231,7 @@ fn register_query(registry: &mut InvocableRegistry, dispatcher: &mut Dispatcher)
                 optional: false,
             },
             Binder {
-                name: "top_k",
+                name: "top-k",
                 kind: BinderKind::NamedText,
                 optional: true,
             },
@@ -258,7 +258,7 @@ fn register_query(registry: &mut InvocableRegistry, dispatcher: &mut Dispatcher)
             // application-level refusal (exit 1) rather than a
             // clap-level usage failure (exit 2) — the same disclosed
             // shift `loop run --max-iter` already carries.
-            let top_k = match opt_text_arg(args, "top_k") {
+            let top_k = match opt_text_arg(args, "top-k") {
                 None => 5usize,
                 Some(s) => match s.parse::<usize>() {
                     Ok(n) => n,

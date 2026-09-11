@@ -105,10 +105,10 @@ pub(crate) fn binder_help(invocable_id: &str, binder_name: &str) -> Option<&'sta
         ("knowledge.add-url", "id") => "id for the ingested page",
         ("knowledge.add-url", "url") => "http:// URL to ingest",
         ("knowledge.query", "text") => "the question to retrieve for",
-        ("knowledge.query", "top_k") => "max results to return",
+        ("knowledge.query", "top-k") => "max results to return",
         ("learn.approve" | "learn.reject", "id") => "skill-proposal id",
         ("loop.run", "file") => "unit file the oracle watches for",
-        ("loop.run", "max_iter") => "iteration ceiling",
+        ("loop.run", "max-iter") => "iteration ceiling",
         ("loop.evolve", "harness_id") => "harness to evolve",
         ("loop.log" | "loop.show", "run_id") => "loop run id",
         ("memory.store", "key") => "entry key",
@@ -142,9 +142,9 @@ pub(crate) fn binder_help(invocable_id: &str, binder_name: &str) -> Option<&'sta
         ("workspace.create", "name") => "display name",
         ("workspace.create", "path") => "workspace directory (default: derived from id)",
         ("backup.create", "to") => "destination path for the archive",
-        ("backup.create", "include_logs") => "include the logs tier in the backup",
+        ("backup.create", "include-logs") => "include the logs tier in the backup",
         ("activation.enable", "mode") => "login or system",
-        ("activation.enable", "acknowledge_unattended_execution") => {
+        ("activation.enable", "acknowledge-unattended-execution") => {
             "confirm unattended execution (required non-interactively)"
         }
         ("archetype.list", "catalog") => "show the shipped catalog",
