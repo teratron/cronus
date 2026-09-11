@@ -164,8 +164,15 @@ impl AgentRegistry {
         }
     }
 
+    /// Active agent definitions, sorted by name (F-12): `agents` is a
+    /// `HashMap`, whose iteration order is randomized per process — without
+    /// this, `registry list` printed a different first row on every run,
+    /// unusable for anything that diffs or scripts over the output.
     pub fn list_active(&self) -> Vec<&AgentDefinition> {
-        self.agents.values().filter(|d| !d.disabled).collect()
+        let mut agents: Vec<&AgentDefinition> =
+            self.agents.values().filter(|d| !d.disabled).collect();
+        agents.sort_by(|a, b| a.name.cmp(&b.name));
+        agents
     }
 
     pub fn builtin_count(&self) -> usize {
@@ -340,5 +347,20 @@ mod tests {
             "definitely-not-a-real-registry-file.json",
         ));
         assert_eq!(reg.list_active().len(), BUILTIN_NAMES.len());
+    }
+
+    /// F-12: `agents` is a `HashMap`, whose iteration order is randomized
+    /// per process — `list_active()` must sort rather than pass that
+    /// randomness through, or `registry list` prints a different order on
+    /// every run.
+    #[test]
+    fn list_active_is_sorted_by_name() {
+        let reg = AgentRegistry::load_from(std::path::Path::new(
+            "definitely-not-a-real-registry-file-either.json",
+        ));
+        let names: Vec<&str> = reg.list_active().iter().map(|d| d.name.as_str()).collect();
+        let mut sorted = names.clone();
+        sorted.sort();
+        assert_eq!(names, sorted, "list_active() must already be sorted");
     }
 }
