@@ -118,5 +118,6 @@ copilot-instructions.md
 .design/spec-graph.html
 .design/spec-graph.json
 .design/graph-before.json
+.design/graph-snapshot.json
 .design/.graph-cache/
 .design/wiki/
