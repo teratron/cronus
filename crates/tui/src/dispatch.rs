@@ -67,7 +67,7 @@ pub fn dispatch_command(
     };
     let args = match bind_args(binders, &command.args[1..]) {
         Ok(args) => args,
-        Err(rejection) => return Some(render_outcome(Outcome::Rejected(rejection))),
+        Err(rejection) => return render_outcome(Outcome::Rejected(rejection)),
     };
 
     let invocation = Invocation {
@@ -77,7 +77,7 @@ pub fn dispatch_command(
     };
     match dispatcher.dispatch(registry, &invocation) {
         Dispatched::Unknown => None,
-        Dispatched::Ran(outcome) => Some(render_outcome(outcome)),
+        Dispatched::Ran(outcome) => render_outcome(outcome),
     }
 }
 
@@ -229,7 +229,15 @@ fn too_many_positionals(extra: &[&str]) -> Rejection {
 }
 
 /// Render a dispatched `Outcome` into the single feedback string the
-/// command bar shows.
+/// command bar shows — `None` when a real success carries nothing to say
+/// (F-26): a stateless acknowledgment (`core:pane.*`'s own `Outcome::Value(
+/// Empty)`, "ran, no further detail") is not the same fact as "empty
+/// result" or "empty string", so it renders as no feedback line at all
+/// rather than the placeholder text `"(empty)"`. That placeholder still
+/// appears wherever `Empty` shows up *inside* a larger structure (a
+/// `Record` field genuinely absent, e.g. `board show`'s `reason: (empty)`)
+/// — only this top-level, bare case changes, since only here does "nothing
+/// to say" and "the value was empty" collapse into the same shape.
 ///
 /// `Rejected`/`Unavailable` render their binder/mode/reason directly rather
 /// than being flattened into an undifferentiated string, so the two stay
@@ -237,17 +245,18 @@ fn too_many_positionals(extra: &[&str]) -> Rejection {
 /// sibling CLI frontend's own renderer already holds to. `Value` recurses
 /// through the same shape `OutcomeValue` can take; reimplemented locally
 /// (not imported from the CLI, which this crate must not depend on, INV-2).
-pub fn render_outcome(outcome: Outcome) -> String {
+pub fn render_outcome(outcome: Outcome) -> Option<String> {
     match outcome {
-        Outcome::Value(value) => render_value(&value),
-        Outcome::Rejected(rejection) => format!(
+        Outcome::Value(OutcomeValue::Empty) => None,
+        Outcome::Value(value) => Some(render_value(&value)),
+        Outcome::Rejected(rejection) => Some(format!(
             "rejected: {} ({:?}) — {}",
             rejection.binder, rejection.mode, rejection.detail
+        )),
+        Outcome::Unavailable { reason } => Some(format!("unavailable: {reason}")),
+        Outcome::Stream(_) => Some(
+            "error: internal: a stream outcome has no renderer on this surface yet".to_string(),
         ),
-        Outcome::Unavailable { reason } => format!("unavailable: {reason}"),
-        Outcome::Stream(_) => {
-            "error: internal: a stream outcome has no renderer on this surface yet".to_string()
-        }
     }
 }
 
@@ -422,7 +431,8 @@ mod tests {
             binder: "id",
             mode: RejectionMode::Absent,
             detail: "no value supplied".to_string(),
-        }));
+        }))
+        .expect("a rejection always carries feedback text");
         assert!(
             rendered.contains("id"),
             "the offending binder must be named"
@@ -441,7 +451,8 @@ mod tests {
                 OutcomeValue::Text("a".to_string()),
                 OutcomeValue::Text("b".to_string()),
             ]),
-        )])));
+        )])))
+        .expect("a nonempty Record always carries feedback text");
         assert_eq!(rendered, "cards: a, b");
     }
 
@@ -466,11 +477,39 @@ mod tests {
                     OutcomeValue::Text("blocked".to_string()),
                 ),
             ]),
-        ])));
+        ])))
+        .expect("a nonempty List always carries feedback text");
         assert_eq!(
             rendered, "{id: k1, state: running}, {id: k2, state: blocked}",
             "each record's braces must make the element boundary legible"
         );
+    }
+
+    /// F-26: a pane action's own stateless acknowledgment
+    /// (`Outcome::Value(Empty)`, the exact shape every `core:pane.*`
+    /// handler answers) used to render the literal placeholder text
+    /// `"(empty)"` — a real success with nothing further to say is not the
+    /// same fact as "the value was empty".
+    #[test]
+    fn render_outcome_shows_no_feedback_for_a_bare_empty_success() {
+        let rendered = render_outcome(Outcome::Value(OutcomeValue::Empty));
+        assert_eq!(
+            rendered, None,
+            "a stateless acknowledgment must render no feedback line at all"
+        );
+    }
+
+    /// The same `Empty` value *inside* a larger structure is a different
+    /// fact (a field the domain layer genuinely left absent) and keeps its
+    /// placeholder text — only the bare top-level case changes.
+    #[test]
+    fn render_outcome_still_shows_empty_placeholder_for_a_nested_field() {
+        let rendered = render_outcome(Outcome::Value(OutcomeValue::Record(vec![(
+            "reason".to_string(),
+            OutcomeValue::Empty,
+        )])))
+        .expect("a Record with a field always carries feedback text");
+        assert_eq!(rendered, "reason: (empty)");
     }
 
     /// The literal Verify criterion this task names: a slash line whose
