@@ -656,6 +656,31 @@ pub fn launch_tui() -> i32 {
     }
 }
 
+/// Recursively disables clap's auto-generated `help <verb>` pseudo-subcommand
+/// on `command` and every subcommand it owns, at every nesting level.
+///
+/// `-h`/`--help` stays fully available on every command — `disable_help_
+/// subcommand` is documented as leaving the flag untouched, it only removes
+/// the redundant `help` subcommand alias for it. Recurses via
+/// `mut_subcommands`, which maps this same function over each immediate
+/// subcommand — since that in turn calls `mut_subcommands` on itself, the
+/// whole tree is walked regardless of depth, not just one level.
+///
+/// A simulation-qa pass found the generated bash completion script at
+/// ~240KB: clap injects a `help` subcommand at every level that has
+/// children, so a two-level `<group> <verb>` grammar gets one real
+/// subcommand entry plus one `help`-alias entry per node, roughly doubling
+/// the case-arm count every completion generator has to emit. This trims
+/// the tree handed to `clap_complete::generate` specifically — the tree
+/// used for real argument parsing (`main.rs`'s `command`) is untouched, so
+/// `cronus <group> help <verb>` keeps working exactly as before; only the
+/// generated completion scripts get smaller.
+fn strip_help_subcommand(command: Command) -> Command {
+    command
+        .disable_help_subcommand(true)
+        .mut_subcommands(strip_help_subcommand)
+}
+
 /// Write a shell completion script for the composed command tree to stdout.
 ///
 /// `command` is the *whole* tree — every installation and semantic group,
@@ -663,6 +688,11 @@ pub fn launch_tui() -> i32 {
 /// faithful, static snapshot of the current surface. It is generated once (at
 /// install time); the script itself does the per-keystroke work without
 /// re-invoking `cronus`.
+///
+/// Generates from a [`strip_help_subcommand`]-trimmed *clone* of `command`,
+/// never `command` itself: the caller's tree still serves real argument
+/// parsing (`--help`, usage errors) after this call returns, so trimming it
+/// in place would leak into every other consumer of the same `Command`.
 pub fn emit_completion(matches: &ArgMatches, command: &mut Command) -> i32 {
     let shell_arg = matches
         .get_one::<String>("shell")
@@ -681,7 +711,8 @@ pub fn emit_completion(matches: &ArgMatches, command: &mut Command) -> i32 {
             return 2;
         }
     };
-    clap_complete::generate(shell, command, "cronus", &mut std::io::stdout());
+    let mut trimmed = strip_help_subcommand(command.clone());
+    clap_complete::generate(shell, &mut trimmed, "cronus", &mut std::io::stdout());
     0
 }
 
@@ -1208,6 +1239,122 @@ mod tests {
             offenders.is_empty(),
             "a summary must restate spec-layer rationale in plain language, never cite the \
              requirement id directly: {offenders:?}"
+        );
+    }
+
+    // --- F-31: completion-script trimming (`strip_help_subcommand`) --------
+
+    /// A small tree, three levels deep, matching the real grammar's own
+    /// shape (`cronus <group> <subgroup> <verb>`, e.g. `ext skill install`).
+    fn three_level_tree() -> Command {
+        Command::new("root").subcommand(
+            Command::new("group").subcommand(
+                Command::new("subgroup")
+                    .subcommand(Command::new("verb").arg(clap::Arg::new("flag").long("flag"))),
+            ),
+        )
+    }
+
+    /// Baseline: clap injects a `help` subcommand at every node with
+    /// children by default — the exact behavior that makes an un-stripped
+    /// tree's completion script roughly double the size it needs to be
+    /// (F-31). `Command::build()` is what `clap_complete::generate` (and
+    /// real parsing) triggers internally to synthesize that subcommand —
+    /// a fresh, unbuilt tree does not show it yet, so this test forces the
+    /// same build pass a completion generator relies on. If a future clap
+    /// upgrade ever changes this default, this test fails loudly rather
+    /// than `strip_help_subcommand` silently becoming a no-op nobody
+    /// notices.
+    #[test]
+    fn an_unstripped_tree_carries_the_help_subcommand_by_default() {
+        let mut tree = three_level_tree();
+        assert!(!tree.is_disable_help_subcommand_set());
+        tree.build();
+        assert!(tree.get_subcommands().any(|s| s.get_name() == "help"));
+    }
+
+    /// The actual fix: after `strip_help_subcommand`, every node at every
+    /// depth has the setting flipped — not just the root, and not just one
+    /// level down.
+    #[test]
+    fn strip_help_subcommand_disables_it_at_every_depth() {
+        let mut stripped = strip_help_subcommand(three_level_tree());
+
+        fn assert_disabled_recursively(command: &Command) {
+            assert!(
+                command.is_disable_help_subcommand_set(),
+                "{:?} still has the help subcommand enabled",
+                command.get_name()
+            );
+            for sub in command.get_subcommands() {
+                assert_disabled_recursively(sub);
+            }
+        }
+        assert_disabled_recursively(&stripped);
+
+        // The real subcommand at each level must still be there — only the
+        // `help` alias was removed, not real structure.
+        assert!(stripped.get_subcommands().any(|s| s.get_name() == "group"));
+        let group = stripped
+            .get_subcommands()
+            .find(|s| s.get_name() == "group")
+            .expect("the real 'group' subcommand must survive stripping");
+        assert!(
+            group.get_subcommands().any(|s| s.get_name() == "subgroup"),
+            "nested real subcommands must survive stripping too"
+        );
+
+        // The functional mirror of the baseline test: after the same
+        // `build()` pass that made the baseline tree grow a `help` node,
+        // the stripped tree must grow none, at any depth.
+        stripped.build();
+        fn assert_no_help_subcommand_recursively(command: &Command) {
+            assert!(
+                !command.get_subcommands().any(|s| s.get_name() == "help"),
+                "{:?} still synthesized a help subcommand after build()",
+                command.get_name()
+            );
+            for sub in command.get_subcommands() {
+                assert_no_help_subcommand_recursively(sub);
+            }
+        }
+        assert_no_help_subcommand_recursively(&stripped);
+    }
+
+    /// `disable_help_subcommand` is documented as leaving `-h`/`--help`
+    /// untouched — proven here against a real parse rather than trusted
+    /// from the doc comment alone, since this whole fix depends on it.
+    #[test]
+    fn strip_help_subcommand_leaves_the_help_flag_working() {
+        let mut stripped = strip_help_subcommand(three_level_tree());
+        let err = stripped
+            .try_get_matches_from_mut(["root", "--help"])
+            .expect_err("--help always short-circuits into a DisplayHelp error");
+        assert_eq!(err.kind(), clap::error::ErrorKind::DisplayHelp);
+    }
+
+    /// `emit_completion` must never trim the caller's own tree — only a
+    /// clone. A regression here would strip `help` out of the live
+    /// `Command` `main.rs` also uses for `--help`/usage errors, which
+    /// nothing in this crate's other tests would catch (none of them call
+    /// `emit_completion` directly).
+    #[test]
+    fn emit_completion_never_mutates_the_callers_command_tree() {
+        let mut tree = three_level_tree();
+        assert!(!tree.is_disable_help_subcommand_set());
+
+        let matches = Command::new("cronus")
+            .arg(clap::Arg::new("shell").required(true))
+            .try_get_matches_from(["cronus", "bash"])
+            .expect("well-formed test args");
+        // `emit_completion` writes to stdout as a side effect; the return
+        // code and stdout content are not under test here, only whether
+        // `tree` itself was left untouched.
+        let _ = emit_completion(&matches, &mut tree);
+
+        assert!(
+            !tree.is_disable_help_subcommand_set(),
+            "emit_completion must generate from a clone, never mutate the caller's tree"
         );
     }
 }
