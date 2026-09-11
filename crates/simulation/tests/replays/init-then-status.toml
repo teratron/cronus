@@ -1,0 +1,9 @@
+id = "init-then-status"
+
+[[step]]
+argv = ["init"]
+expect_exit = 0
+
+[[step]]
+argv = ["status"]
+expect_exit = 0

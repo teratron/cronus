@@ -1,0 +1,24 @@
+[package]
+name = "cronus-simulation"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+repository.workspace = true
+
+[dependencies]
+# Deliberately the ports tier and nothing else — mirrors cronus-conformance's
+# rationale (crates/conformance/Cargo.toml): the desktop shell builds in a
+# detached workspace and holds no registry at all, only a catalog delivered
+# over its IPC seam. A harness that named a domain-tier type would be a
+# harness that surface could never call, which is exactly the corpus one
+# surface can never join. The scenario coverage complement (§4.1, coverage.rs)
+# reads the catalog through the same projectable-face seam every surface
+# already answers through, never a live registry.
+cronus-contract = { workspace = true }
+serde = { workspace = true }
+serde_json = { workspace = true }
+toml = { workspace = true }
+
+[[bin]]
+name = "cronus-sim"
+path = "src/bin/cronus_sim.rs"
