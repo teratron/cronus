@@ -4,19 +4,20 @@
 <!-- Maximum 100 lines. Agent updates AFTER each completed action. -->
 
 **Workspace:** main
-**Updated:** 2026-09-11 15:47
-**Phase:** None — plan complete
-**Status:** Idle
+**Updated:** 2026-09-11 16:00
+**Phase:** 30 — Usage-Simulation Harness
+**Status:** Active
 
 ## Current Position
 
 - **Task:** `/magic.run main` Done: **T-29T01 — PHASE 29 COMPLETE, 7/7 tasks, all four tracks (7/7).** Full quality gates green across both halves: `cargo fmt --all -- --check`/`clippy --workspace --all-targets -- -D warnings` clean; `cargo build -p cronus-desktop` succeeds; `cargo test -p cronus-desktop --all-targets` re-confirmed unable to *run* on this host (disclosed `STATUS_ENTRYPOINT_NOT_FOUND`, not assumed from earlier checkpoints); `pnpm -C packages/ui test` 181/181, `build` clean; `fallow audit` zero issues every run this phase. `rg`-audited every phase-touched Rust file: zero new production-path `unwrap()`/`panic!()`. Phase-wide containment sweep across all 20 touched files found and fixed one real leak this phase introduced (`catalog.ts`'s own spec-filename mention) and disclosed two pre-existing, out-of-phase leaks via `record-diagnostic` rather than silently fixing files outside this task's own scope. Both disclosed exceptions verified explicitly by name: `capability_version`/`status` unchanged; `core_bridge()`'s secret list still `Vec::new()`. The Phase Notes' own renarrowing held through execution — none of the four disclaimed residual corrections were touched.
-- **Next Action:** Run /magic.task main to update the plan
+- **Next Action:** Execute T-30A01 The crate exists in the ports tier, and a world refuses to be built inside the repository via /magic.run main
 
 ## Progress
 
 ```
-Overall: [28/28] ████████ 100%
+Phase 30: [0/8] ░░░░░░░░ 0%
+Overall: [28/29] ████████ 97%
 ```
 
 - 2026-09-09 **Decision:** `/magic.task main` — **Registry sync + historical correction, no new phase (v2.72.0).** Pre-flight `ok:true` (290 specs, 290 Stable, 0 Draft; engine `.magic/.version` 2.1.80 == snapshot; Rules Parity RULES v1.6.0 == TASKS Based-on-RULES; registry unchanged at INDEX v1.0.193, matching PLAN.md's own already-current `Based on` pointer — no new spec content since the last sync). Pre-Planning Stabilization a genuine no-op (0 Draft). **Found and fixed a real, disclosed staleness the phase-closure left behind**: PLAN.md's own Phase 27/28/29 section headers never gained the `— Done` marker every completed phase since 16 carries; Phase 27's own section text and a Risk-section note both still predicted "corrected in Phase 29" for the four residual behaviours — a claim Phase 29's own planning had already disproven, but which this Overview-level prose never caught up to. Corrected all of it in this pass rather than leaving the archived record to contradict the plan's own narrative: three headers marked `— Done`; both stale predictions rewritten with `[CORRECTED]` markers naming what actually happened. TASKS.md's own Overview paragraph (line 24, "27 (root + CLI) → 28 (TUI + single binary) → 29 (desktop + residual corrections)") carried the identical stale claim — corrected there too, in T-29T01's own closing pass. Added one consolidated `Revision v2.72.0 (milestone sync)` paragraph closing out Phases 27/28/29 together, since none of the three ever received its own milestone-sync entry when it actually closed (each closure lived only in TASKS.md's decision log and its own phase file) — catching up three silent gaps in one entry rather than leaving them unaddressed or writing three separately. **No new phase opened, and none is mechanically available to open**: every currently-Stable spec is built, the Backlog is empty (0 RFC, 0 Draft) — the same "nothing left to plan" state the Risk section's own v2.68.0 note already predicted this exact scenario would look like. Computed next step (DA-6): none to compute mechanically — the pipeline's next motion is authorship (`/magic.spec`, a human decision about what Cronus builds next), narrated as a fact rather than proactively invoked (magic.md §5 — `/magic.spec` is never a workflow this agent starts on its own). `node .magic/scripts/executor.js generate-context --workspace=main` and `export-wiki` both run after the write-back. (Revert: `git restore .design/main/{PLAN,TASKS,STATE}.md`)

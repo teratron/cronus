@@ -1,6 +1,6 @@
 # Project Context
 
-**Generated:** 2026-09-09
+**Generated:** 2026-09-11
 
 ## Active Technologies
 
@@ -24,7 +24,6 @@
 │   ├── .version
 │   ├── INDEX.md
 │   ├── RULES.md
-│   ├── graph-snapshot.json
 │   ├── main/
 │   ├── nodus/
 │   └── workspace.json
@@ -34,6 +33,7 @@
 │   ├── UX-дизайн - 6 психологических принципов.md
 │   ├── heartbeat.md
 │   ├── project-names.md
+│   ├── qa-remediation-progress.md
 │   ├── references.md
 │   ├── reverse-derivation-mechanism.md
 │   ├── technology-stack-research.md
