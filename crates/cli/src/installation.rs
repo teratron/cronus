@@ -631,6 +631,13 @@ pub fn format_arg() -> Arg {
         .global(true)
         .value_parser(clap::value_parser!(crate::output::OutputFormat))
         .default_value("text")
+        // F-20: `Cli`'s derive-generated `--format` gets its `<FORMAT>` value
+        // name and "Output format" help text from the field name and its
+        // doc comment automatically; this hand-built duplicate needs the
+        // same two calls to match, or the two halves render the same flag
+        // differently in --help.
+        .value_name("FORMAT")
+        .help("Output format")
 }
 
 /// Launch the terminal UI and map its result to a process exit code — the
