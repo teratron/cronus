@@ -1,6 +1,6 @@
 # Task Graph Model
 
-**Version:** 1.1.0
+**Version:** 1.1.1
 **Status:** Stable
 **Layer:** concept
 
@@ -31,6 +31,7 @@ design; this model is the shared vocabulary they compose around.
 - [l1-development-workflow.md](l1-development-workflow.md) - Five-stage Design→Plan→Execute→Review→Deliver pipeline; this model details the Plan/Execute substrate it relies on.
 - [l1-orchestration.md](l1-orchestration.md) - Delegation, adaptive topology, error containment; the runtime that drives §6 autonomous execution.
 - [l1-agent-framework-skeleton.md](l1-agent-framework-skeleton.md) - Primitive triad and coordination patterns; the orchestrator/executor split of §6 is the work-unit realization of its hierarchical pattern; TG-12 ties to AFS-13.
+- [l1-scenario-derivation.md](l1-scenario-derivation.md) - The co-product of the same generation act: usage scenarios derived from the same requirements artifact (SD-1). TG-3's per-unit verification strategy and a derived journey are both required and neither substitutes for the other — a journey crosses units by definition, so no unit can own it (SD-2); TG-9 re-planning triggers SD-6 re-derivation.
 - [l1-quality-standards.md](l1-quality-standards.md) - Tiered quality gates as definition-of-done; the verification each task unit must declare (TG-3) and the green-gate of TG-14.
 - [l1-version-control.md](l1-version-control.md) - Commit authority, card-aligned boundaries, isolated staging; the commit/branch guardrails of TG-14.
 - [l1-lookahead-planning.md](l1-lookahead-planning.md) - Pre-execution consequence simulation; complements TG-6 complexity scoring as a second analytical gate.
@@ -400,3 +401,4 @@ are named by structural idea, not by product.
 | --- | --- | --- |
 | 1.0.0 | 2026-06-25 | Initial model: requirement-to-graph decomposition algebra, complexity-gated breakdown, dependency DAG with deterministic next-selection, isolated planning contexts, append-only journal, drift-driven re-planning, and the coordinator/executor work-unit protocol for guarded autonomous delivery (TG-1…TG-14). |
 | 1.1.0 | 2026-08-26 | Amended — TG-15: absent its source artifact, generation is **refused, never improvised**. TG-1 states where a graph comes from and was silent on the case that actually occurs — no requirements artifact exists. A planner asked for a plan produces one anyway, filling the absent requirement with plausible scope, and the result is **indistinguishable in form** from a real graph while every unit below the invented part carries invented scope. An artifact that exists but is **substantially unsettled** counts as absent, since generating from it produces the same guessing with better cover; and the refusal **names the upstream phase** (`l1-exploratory-planning`) rather than terminating, because the work is not blocked, it is upstream. |
+| 1.1.1 | 2026-09-11 | Patch — cross-reference to `l1-scenario-derivation`: the scenario set derived from the same requirements artifact in the same act, the demarcation that TG-3's per-unit verification strategy cannot hold a cross-unit journey, and TG-9 drift as the trigger for re-derivation. Documentation linkage only; no invariant added or changed. |

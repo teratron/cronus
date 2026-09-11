@@ -1,6 +1,6 @@
 # Usage Simulation
 
-**Version:** 1.0.0
+**Version:** 1.0.1
 **Status:** Stable
 **Layer:** concept
 
@@ -35,6 +35,7 @@ discovers, the pinned test guards, and neither does the other's job.
 ## Related Specifications
 
 - [l1-simulation.md](l1-simulation.md) — The near-name sibling with the **inverted** effects discipline: it plays out a *generated mechanism* with effects suppressed (SIM-2), this plays out *usage of the shipped product* with effects real inside a disposable world (USM-2). The two must not be reconciled into one contract (§4.8).
+- [l1-scenario-derivation.md](l1-scenario-derivation.md) — When a scenario comes into existence and from what. SD-1…SD-9 derive scenarios at planning time as a co-product of the task graph; SD-4 strengthens USM-10 wherever a planning step exists, and USM-10 remains the floor for behaviour that arrives without one.
 - [l1-quality-standards.md](l1-quality-standards.md) — Where gates live. The cheap scenario tier joins the always-on gates (QLY-2); the exhaustive sweep is a conditional gate (QLY-3), never a per-change one (USM-9).
 - [l1-acceptance-oracle.md](l1-acceptance-oracle.md) — Scenario obligations are acceptance criteria and inherit AO-1…AO-10 wholesale (USM-11).
 - [l1-surface-parity.md](l1-surface-parity.md) — SP-11's action catalog is what coverage is claimed against (USM-8); SP-6's corpus is the deterministic sibling that compares surfaces on fixed fixtures rather than exploring free routes.
@@ -468,3 +469,4 @@ breaks will be this one, because suppression is the more conservative-looking de
 | Version | Date | Author | Notes |
 | --- | --- | --- | --- |
 | 1.0.0 | 2026-09-11 | Core Team | Initial spec — usage simulation as a durable, re-runnable scenario in which an agent plays a user pursuing a goal against the product's real shipped surfaces: intent fixed, route free (USM-1); real surfaces and real effects inside a disposable world, deliberately inverting the mechanism-simulation effects discipline (USM-2); route-independent obligations separated from route-specific discoveries so only the former can gate (USM-3); the declared vantage that makes the simulator's unreliable narration detectable rather than hoped against (USM-4); observed output as the only evidence (USM-5); perturbation as scenario content, with an eleven-class catalog of situation developments (USM-6); every run replayable and every finding pinned by a cheap deterministic test — simulation discovers, the pinned test guards (USM-7); coverage claimed against the action catalog so silence reads as a gap (USM-8); short/broad/exhaustive tiers with declared cadence, the exhaustive sweep never the per-change gate, each run bounded in steps/time/spend because a free-route actor has no natural stopping point, and a bounded-out or interrupted run reported `incomplete` — a third outcome that is neither pass nor fail (USM-9); scenario as a companion artifact of the behaviour it exercises (USM-10); obligations inherit the acceptance-oracle contract (USM-11); a run reports and never repairs (USM-12). |
+| 1.0.1 | 2026-09-11 | Core Team | Patch — cross-reference to `l1-scenario-derivation`, which schedules this instrument: scenarios derived at planning time from the requirements artifact, as a co-product of the task graph, with SD-4 strengthening USM-10 where a planning step exists. Documentation linkage only; no invariant added or changed. |

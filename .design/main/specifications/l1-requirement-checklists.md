@@ -1,6 +1,6 @@
 # Requirement-Quality Checklists
 
-**Version:** 1.0.1
+**Version:** 1.0.2
 **Status:** Stable
 **Layer:** concept
 
@@ -18,6 +18,7 @@ This is the third, distinct member of the quality family, and it must not be con
 
 ## Related Specifications
 
+- [l1-scenario-derivation.md](l1-scenario-derivation.md) — [ADDED v1.0.2] the behavioural twin at the same stage. RQ audits whether the requirement prose is complete, clear and measurable; SD asks whether the behaviour that prose promises can be shown at all, and files an underivable scenario back as a requirement defect (SD-3). Same falsifiability instinct, same timing, different axis.
 - [l1-evaluation-suites.md](l1-evaluation-suites.md) — dynamic behavioral testing of customizations; this is its static, requirements-side counterpart (tests the spec prose, not runtime behavior).
 - [l2-quality-pipeline.md](l2-quality-pipeline.md) — automated semantic lint + fixed maturity rubric; this checklist is the generated, human-readable complement, not a replacement.
 - [l1-quality-standards.md](l1-quality-standards.md) — tiered definition-of-done gates; an unresolved checklist is a gate input.
@@ -179,5 +180,6 @@ These are adoption *candidates* recorded at concept level; the concrete language
 
 | Version | Date | Author | Notes |
 | --- | --- | --- | --- |
+| 1.0.2 | 2026-09-11 | Core Team | Patch — cross-reference to `l1-scenario-derivation`, the behavioural twin operating at the same pre-implementation stage: RQ audits the requirement prose, SD asks whether the behaviour it promises can be shown and reports an underivable scenario back as a requirement defect. Documentation linkage only; no invariant added or changed. |
 | 1.0.1 | 2026-08-25 | Core Team | Related Specifications extended with `l1-acceptance-oracle` — the adjacent layer sharing this spec's falsifiability instinct but pointed at a different subject: RQ asks whether the *requirements* are well written, AO asks whether the *criteria that judge the work* can fail. Neither subsumes the other; a perfectly specified requirement can be gated by an instrument incapable of failing. Link-only; no invariant changed. |
 | 1.0.0 | 2026-06-25 | Core Team | Initial spec — RQ-1…RQ-8; requirements-quality checklists as "unit tests for the spec": test-requirements-not-implementation boundary, generated domain-tailored items, falsifiable dimension-tagged anchored/gap-marked items, stable-id append-only, pre-planning gate; placement in the quality family; ideas-to-adopt + nodus-relevance mapping (mined from an external spec-driven-development toolkit) |
