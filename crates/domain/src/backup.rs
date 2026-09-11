@@ -10,9 +10,15 @@ use std::path::{Path, PathBuf};
 use std::time::{SystemTime, UNIX_EPOCH};
 
 /// Top-level state-tier entries excluded from every backup by default
-/// (§4.1): the secret file and regenerable cache. `logs` is excluded by
-/// default too but is the one entry a caller may opt back in (§4.1 "optional").
-const ALWAYS_EXCLUDED: &[&str] = &[".env", "cache"];
+/// (§4.1): the secret file, the regenerable cache, and the backups
+/// directory itself — a backup must never contain other backups nested
+/// inside it, which is also what the default `backups_dir` sitting under
+/// `state_root` would otherwise produce (see the destination guard in
+/// [`copy_tree_excluding`] for the general case, where an explicit `--to`
+/// resolves inside `state_root` under a different name). `logs` is excluded
+/// by default too but is the one entry a caller may opt back in (§4.1
+/// "optional").
+const ALWAYS_EXCLUDED: &[&str] = &[".env", "cache", "backups"];
 const LOGS_ENTRY: &str = "logs";
 
 /// What to leave out of a backup, beyond the always-excluded secret file
@@ -40,12 +46,21 @@ fn excluded_top_level_names(options: BackupOptions) -> Vec<&'static str> {
 }
 
 /// Recursively copy `from` into `to`, skipping any entry whose *top-level*
-/// name (relative to the original `from` root) is in `excluded`. Creates
-/// `to` and any needed parent directories.
+/// name (relative to the original `from` root) is in `excluded`, and — at
+/// any depth — an entry whose canonical path equals `dest_guard`.
+///
+/// `dest_guard` is what actually prevents a backup from copying itself into
+/// itself: `ALWAYS_EXCLUDED`'s literal `"backups"` only catches the default
+/// wiring (`backups_dir` named `backups` directly under `state_root`); an
+/// explicit `--to` can resolve anywhere, including some other path inside
+/// `state_root` under a different name. Without this guard that copies the
+/// destination into itself, recursing until the process runs out of stack.
+/// Creates `to` and any needed parent directories.
 fn copy_tree_excluding(
     from: &Path,
     to: &Path,
     excluded: &[&str],
+    dest_guard: Option<&Path>,
     is_top_level: bool,
 ) -> io::Result<()> {
     fs::create_dir_all(to)?;
@@ -57,10 +72,16 @@ fn copy_tree_excluding(
             continue;
         }
         let src = entry.path();
-        let dst = to.join(&name);
         let file_type = entry.file_type()?;
+        if file_type.is_dir()
+            && let Some(guard) = dest_guard
+            && fs::canonicalize(&src).is_ok_and(|c| c == guard)
+        {
+            continue;
+        }
+        let dst = to.join(&name);
         if file_type.is_dir() {
-            copy_tree_excluding(&src, &dst, excluded, false)?;
+            copy_tree_excluding(&src, &dst, excluded, dest_guard, false)?;
         } else if file_type.is_file() {
             fs::copy(&src, &dst)?;
         }
@@ -68,6 +89,23 @@ fn copy_tree_excluding(
         // never silently escapes the state tier through a link target.
     }
     Ok(())
+}
+
+/// A sibling path `list()` never recognizes as a backup (it only matches a
+/// top-level `backup-<unix-seconds>` name): the same directory name with a
+/// leading dot and a `.partial` suffix. Always a sibling of `target`, so a
+/// rename from here into `target` stays on the same filesystem even when
+/// `target` itself (an explicit `--to`) is on a different volume than the
+/// default `backups_dir`.
+fn staging_path_for(target: &Path) -> PathBuf {
+    let name = target
+        .file_name()
+        .map(|n| n.to_string_lossy().into_owned())
+        .unwrap_or_else(|| "backup".to_string());
+    match target.parent() {
+        Some(parent) => parent.join(format!(".{name}.partial")),
+        None => PathBuf::from(format!(".{name}.partial")),
+    }
 }
 
 fn unix_now() -> u64 {
@@ -81,6 +119,11 @@ fn unix_now() -> u64 {
 /// `backups_dir` (or `dest` if given explicitly, `--to <path>`), excluding
 /// secrets/cache/logs per `options`. Self-contained: nothing outside the
 /// returned directory is needed to restore it.
+///
+/// Written under a staging name first and renamed into place only once the
+/// copy fully succeeds (STO-2/5): `list()` only ever recognizes the final
+/// `backup-<unix-seconds>` name, so a crash or I/O error mid-copy leaves no
+/// half-written directory for a later `list`/`restore` to pick up.
 pub fn create(
     state_root: &Path,
     backups_dir: &Path,
@@ -93,8 +136,32 @@ pub fn create(
         .map(Path::to_path_buf)
         .unwrap_or_else(|| backups_dir.join(&id));
 
+    let staging = staging_path_for(&target);
+    let _ = fs::remove_dir_all(&staging); // a leftover from a prior crash, if any
+    fs::create_dir_all(&staging)?;
+    let dest_guard = fs::canonicalize(&staging).ok();
+
     let excluded = excluded_top_level_names(options);
-    copy_tree_excluding(state_root, &target, &excluded, true)?;
+    if let Err(err) =
+        copy_tree_excluding(state_root, &staging, &excluded, dest_guard.as_deref(), true)
+    {
+        let _ = fs::remove_dir_all(&staging);
+        return Err(err);
+    }
+
+    // `fs::rename` fails on Windows when `target` already exists (an
+    // explicit `--to` may name a directory the caller already created) —
+    // remove it first and retry once the replacement is fully written, so
+    // the old target is never destroyed unless a complete new one is ready
+    // to take its place.
+    if let Err(err) = fs::rename(&staging, &target) {
+        if target.exists() {
+            fs::remove_dir_all(&target)?;
+            fs::rename(&staging, &target)?;
+        } else {
+            return Err(err);
+        }
+    }
 
     Ok(BackupRef {
         id,
@@ -134,7 +201,9 @@ pub fn list(backups_dir: &Path) -> io::Result<Vec<BackupRef>> {
 /// the runtime to resume from. `dest` is created if missing; existing files
 /// at colliding paths are overwritten (a fresh restore target is expected).
 pub fn restore(backup: &BackupRef, dest: &Path) -> io::Result<()> {
-    copy_tree_excluding(&backup.path, dest, &[], true)
+    fs::create_dir_all(dest)?;
+    let dest_guard = fs::canonicalize(dest).ok();
+    copy_tree_excluding(&backup.path, dest, &[], dest_guard.as_deref(), true)
 }
 
 #[cfg(test)]
@@ -276,6 +345,138 @@ mod tests {
 
         let _ = fs::remove_dir_all(&state_root);
         let _ = fs::remove_dir_all(&backups_dir);
+    }
+
+    #[test]
+    fn backup_does_not_recurse_into_itself_under_the_production_layout() {
+        // The real wiring (`crates/cli/src/commands.rs`) resolves
+        // `backups_dir` as `state_root.join("backups")` — the destination
+        // sits *inside* the tree being backed up. Before the fix this
+        // recursed until the stack overflowed; this reproduces that exact
+        // layout and asserts it completes and produces no nested `backups`.
+        let state_root = temp_dir("state-selfref");
+        let backups_dir = state_root.join("backups");
+        seed_state_tier(&state_root);
+
+        let backup_ref = create(&state_root, &backups_dir, None, BackupOptions::default())
+            .expect("must not recurse into its own destination");
+
+        assert!(backup_ref.path.join("config.json").exists());
+        assert!(
+            !backup_ref.path.join("backups").exists(),
+            "a backup must never contain other backups nested inside it"
+        );
+
+        let _ = fs::remove_dir_all(&state_root);
+    }
+
+    #[test]
+    fn an_explicit_destination_inside_state_root_is_also_guarded() {
+        // A `--to` the caller chose to point somewhere else *inside*
+        // `state_root`, under a name other than "backups" — the literal
+        // `ALWAYS_EXCLUDED` entry can't catch this; the canonical-path
+        // destination guard in `copy_tree_excluding` is what must.
+        let state_root = temp_dir("state-selfref-to");
+        let backups_dir = temp_dir("backups-selfref-to");
+        seed_state_tier(&state_root);
+        let chosen = state_root.join("my-backup");
+
+        let backup_ref = create(
+            &state_root,
+            &backups_dir,
+            Some(&chosen),
+            BackupOptions::default(),
+        )
+        .expect("must not recurse when --to resolves inside state_root");
+
+        assert_eq!(backup_ref.path, chosen);
+        assert!(backup_ref.path.join("config.json").exists());
+        assert!(!backup_ref.path.join("my-backup").exists());
+
+        let _ = fs::remove_dir_all(&state_root);
+        let _ = fs::remove_dir_all(&backups_dir);
+    }
+
+    #[test]
+    fn a_completed_backup_replaces_an_existing_destination() {
+        // `explicit_destination_overrides_the_default_backups_directory`
+        // already covers a fresh `--to`; this covers `--to` naming a
+        // directory the caller already created (the staging+rename fallback
+        // path — `fs::rename` fails on Windows when the target exists).
+        let state_root = temp_dir("state-reuse-dest");
+        let backups_dir = temp_dir("backups-reuse-dest");
+        let chosen = temp_dir("chosen-reuse-dest"); // pre-created and non-empty
+        write(&chosen.join("stale.txt"), "from a previous run");
+        seed_state_tier(&state_root);
+
+        let backup_ref = create(
+            &state_root,
+            &backups_dir,
+            Some(&chosen),
+            BackupOptions::default(),
+        )
+        .unwrap();
+
+        assert!(backup_ref.path.join("config.json").exists());
+        assert!(
+            !backup_ref.path.join("stale.txt").exists(),
+            "a completed backup replaces whatever was at an existing --to, not merges with it"
+        );
+
+        let _ = fs::remove_dir_all(&state_root);
+        let _ = fs::remove_dir_all(&backups_dir);
+        let _ = fs::remove_dir_all(&chosen);
+    }
+
+    #[test]
+    fn a_leftover_staging_directory_is_never_listed_or_restorable() {
+        let backups_dir = temp_dir("backups-partial");
+        // Simulate what a crash mid-copy leaves behind: the staging name,
+        // never renamed into the final `backup-<unix-seconds>` form.
+        let leftover = staging_path_for(&backups_dir.join("backup-1000"));
+        fs::create_dir_all(&leftover).unwrap();
+
+        let listed = list(&backups_dir).unwrap();
+        assert!(
+            listed.is_empty(),
+            "a staging directory must not be reported as a usable backup"
+        );
+
+        let _ = fs::remove_dir_all(&backups_dir);
+    }
+
+    #[test]
+    fn a_retry_at_the_same_destination_cleans_up_a_leftover_staging_directory_first() {
+        // If a prior run crashed leaving a staging directory in place, the
+        // next `create()` for the same destination must not treat leftover
+        // bytes inside it as already-correct content. `dest` pins the
+        // target path exactly (bypassing the timestamp-derived default id),
+        // so the collision is deterministic rather than timing-dependent.
+        let state_root = temp_dir("state-retry");
+        let backups_dir = temp_dir("backups-retry");
+        seed_state_tier(&state_root);
+
+        let target = temp_dir("chosen-retry");
+        let leftover = staging_path_for(&target);
+        write(&leftover.join("stale-from-a-crash.txt"), "poison");
+
+        let backup_ref = create(
+            &state_root,
+            &backups_dir,
+            Some(&target),
+            BackupOptions::default(),
+        )
+        .unwrap();
+        assert!(backup_ref.path.join("config.json").exists());
+        assert!(
+            !backup_ref.path.join("stale-from-a-crash.txt").exists(),
+            "a leftover staging directory from a prior crash must not survive into the new backup"
+        );
+
+        let _ = fs::remove_dir_all(&state_root);
+        let _ = fs::remove_dir_all(&backups_dir);
+        let _ = fs::remove_dir_all(&target);
+        let _ = fs::remove_dir_all(&leftover);
     }
 
     #[test]
