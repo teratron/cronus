@@ -43,7 +43,7 @@ Cronus is a polyglot monorepo: a Rust workspace (`crates/`) for the engine and b
 
 ## Conventions
 
-- **CLI grammar**: verb-first with flags, explicit verbs, command groups — `cronus <group> <verb> [--flags]`. The TUI mirrors each with a leading slash; the library method is the source of truth and the CLI/TUI are thin bindings.
+- **CLI grammar**: verb-first with flags, explicit verbs, command groups — `cronus <group> <verb> [--flags]`. The TUI mirrors every *semantic* group with a leading slash (`/board add …`); installation-half verbs (`status`, `doctor`, `backup`, `restore`, `workspace`, `dev`, `archetype`, `ext`, `activation`, `init`, `completion`) are CLI-only by design — an installation verb must stay answerable even when the composition the TUI itself depends on fails to come up. The library method is the source of truth and the CLI/TUI are thin bindings.
 - **Definition of done**: a change is done only when its required quality gates pass — tests + lint + type/format always; benchmarks for performance-relevant changes; security review for sensitive ones.
 - **One source of truth**: domain logic lives in the core; frontends and shells hold none.
 
