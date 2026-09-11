@@ -391,8 +391,7 @@ fn tui_help_exits_0() {
 }
 
 /// The retired standalone `cronus-tui` executable's replacement is
-/// discoverable from the one binary's own top-level listing (l2-tui.md
-/// §4.4).
+/// discoverable from the one binary's own top-level listing.
 #[test]
 fn top_level_help_lists_tui() {
     let output = bin()

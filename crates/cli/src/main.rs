@@ -53,9 +53,9 @@ fn main() -> std::process::ExitCode {
     let args: Vec<String> = std::env::args().collect();
 
     match launch_mode(&args) {
-        // A bare invocation is the default composition (LH-4, l2-tui.md
-        // §4.4 v1.2.0): meeting the product by typing its name brings up the
-        // terminal UI, exactly as `cronus tui` names the same composition
+        // A bare invocation is the default composition (LH-4): meeting the
+        // product by typing its name brings up the terminal UI, exactly as
+        // `cronus tui` names the same composition
         // explicitly. Answered with the same zero-composition property
         // every installation verb already has (LH-1/LH-5) —
         // `cronus_tui::run()` composes its own registry/dispatcher

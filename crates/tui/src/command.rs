@@ -119,7 +119,7 @@ pub fn is_projected(invocable: &Invocable) -> bool {
 ///
 /// One entry per **group**, not per invocable: this surface's slash form
 /// mirrors the CLI's own two-level `<noun> <verb>` grammar (`/<noun> <verb>
-/// …`, l2-cli.md §4.4) — the noun is the slash verb here, and the CLI-side
+/// …`) — the noun is the slash verb here, and the CLI-side
 /// verb travels as the command's first argument. A slash verb and its shell
 /// counterpart are still two renderings of one descriptor once a group+args
 /// pair resolves to a specific invocable; this catalog is the discovery

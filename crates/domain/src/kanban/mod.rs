@@ -731,10 +731,10 @@ mod tests {
         let _ = fs::remove_dir_all(&root);
     }
 
-    /// `l2-kanban-board.md` names `running → todo` as an allowed backward
-    /// move, the same kind as `blocked → todo` — a simulation-qa pass found
-    /// `can_transition_to` missing this exact pair, rejecting it as an
-    /// `InvalidTransition` despite the spec.
+    /// `running → todo` is an allowed backward move, the same kind as
+    /// `blocked → todo` — a simulation-qa pass found `can_transition_to`
+    /// missing this exact pair, rejecting it as an `InvalidTransition`
+    /// despite being a legitimate transition.
     #[test]
     fn running_card_can_move_back_to_todo() {
         let (board, root) = tmp_board();

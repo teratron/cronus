@@ -208,7 +208,7 @@ impl ConfigProvider for DefaultConfigProvider {
 /// the [`ExtensionRole::Model`] role from its host.
 ///
 /// `pub(crate)`: read directly by `validator.rs`'s DG-11 authoring advisories
-/// (`l2-nodus-dialog.md` §4.8) — a produced-artifact reference (`W017`) needs
+/// — a produced-artifact reference (`W017`) needs
 /// the same model-command classification this module already owns.
 pub(crate) const MODEL_COMMANDS: &[&str] = &["GEN", "ANALYZE"];
 
@@ -216,7 +216,7 @@ pub(crate) const MODEL_COMMANDS: &[&str] = &["GEN", "ANALYZE"];
 /// A workflow invoking one without a `+default` requires the [`ExtensionRole::Dialog`] role.
 ///
 /// `pub(crate)`: read directly by `validator.rs`'s DG-11 authoring advisories
-/// (`l2-nodus-dialog.md` §4.8) — placement (`W016`) and payload (`W017`) both
+/// — placement (`W016`) and payload (`W017`) both
 /// need the same dialog-command classification this module already owns.
 pub(crate) const DIALOG_COMMANDS: &[&str] = &["ASK", "CONFIRM"];
 

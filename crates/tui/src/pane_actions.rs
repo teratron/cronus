@@ -1,6 +1,6 @@
 //! This surface's own actions — pane focus and quitting the session —
 //! registered as `ClientLocal` invocables through the same door a core or
-//! contributed verb uses (l2-tui.md §4.4, v1.2.0 clause).
+//! contributed verb uses.
 //!
 //! [`PaneAction`] is the single source of truth for what these actions are:
 //! [`register`] iterates every variant to build the registry entry, and

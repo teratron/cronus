@@ -371,9 +371,9 @@ pub struct EnvRunResult {
 impl EnvRunResult {
     /// Build an archivable candidate tuple (NE-12). `workflow_source` is the
     /// source the caller ran, hashed for `workflow_digest` at the AST level —
-    /// the same `digest_ast` computation `ReproRecipe.workflow_digest`
-    /// (`l2-nodus-observability.md` §4.7) uses, so a `CandidateResult` and a
-    /// `RunManifest` for the same run agree on the pinned generation. Falls
+    /// the same `digest_ast` computation `ReproRecipe.workflow_digest` uses,
+    /// so a `CandidateResult` and a `RunManifest` for the same run agree on
+    /// the pinned generation. Falls
     /// back to the raw-text `digest_source` hash only if `workflow_source`
     /// fails to parse (the caller passed something other than what it ran) —
     /// an honest degrade, not a panic; `run_id` is the caller's own tracking

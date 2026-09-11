@@ -10,11 +10,11 @@
 //! code.
 //!
 //! This task's own scope is the surface-set family and the declared-locus-
-//! difference mechanism (l2-tui.md §4.3 v1.2.0, l2-surface-conformance.md
-//! §4.6, SP-8) — proving `DeclaredExclusion` is load-bearing, not merely
-//! documented in prose. The full corpus run (schema + outcome families, the
-//! accepted-residual assertion, and finding F-2's repayment) is a separate,
-//! later obligation this registration is built to satisfy without rework.
+//! difference mechanism (SP-8) — proving `DeclaredExclusion` is
+//! load-bearing, not merely documented in prose. The full corpus run
+//! (schema + outcome families, the accepted-residual assertion, and finding
+//! F-2's repayment) is a separate, later obligation this registration is
+//! built to satisfy without rework.
 
 use std::sync::Arc;
 
@@ -176,11 +176,10 @@ mod tests {
 
     /// A local corpus (never the shared `fixtures::corpus()` itself) that
     /// adds exactly one synthetic `Installation`-locus canonical member to
-    /// the real shared fixture set — the shape l2-tui.md §4.3's v1.2.0
-    /// clause and l2-surface-conformance.md §4.6 both describe: an
-    /// installation verb has no meaning inside a live session, so this
-    /// surface must never expose it, and that must be a **declared**
-    /// omission the corpus can check, not a silent one.
+    /// the real shared fixture set — an installation verb has no meaning
+    /// inside a live session, so this surface must never expose it, and
+    /// that must be a **declared** omission the corpus can check, not a
+    /// silent one.
     fn corpus_with_an_installation_only_member() -> (Corpus, InvocableId) {
         let mut data = corpus();
         let id = InvocableId::new("conformance:installation-only")
@@ -207,7 +206,7 @@ mod tests {
         let projection = TuiProjection::new();
         let exclusions = [DeclaredExclusion::new(
             installation_only,
-            "an installation verb has no meaning inside a live session (l2-tui.md §4.3)",
+            "an installation verb has no meaning inside a live session",
         )];
 
         assert_eq!(

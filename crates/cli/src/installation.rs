@@ -455,8 +455,8 @@ pub fn declared_invocables() -> Vec<Invocable> {
         },
         // `Installation`, not `Semantic`/`ClientLocal`: launching the
         // terminal UI has no meaning inside an already-running session, the
-        // same reasoning that places every other verb here (l2-tui.md §4.4,
-        // LH-10). Answerable with zero composition, matching every other
+        // same reasoning that places every other verb here (LH-10).
+        // Answerable with zero composition, matching every other
         // installation verb — the terminal UI composes its own registry and
         // dispatcher internally the moment it starts, so this launcher never
         // needs to build one first.

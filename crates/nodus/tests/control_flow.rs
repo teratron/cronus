@@ -280,10 +280,10 @@ fn retry_reruns_failing_step_up_to_bound() {
     );
     // NL-9: exhausted retries leave an uncaught DIALOG_TIMEOUT behind, and
     // RETRY_TIMEOUT_WF declares `@err: ESCALATE(human)` — the handler now
-    // dispatches (l2-nodus-error-dispatch.md), which is the terminal action
-    // for the run, so step 2 (`LOG`) no longer executes. This assertion was
-    // written before NL-9 dispatch existed, when "routes to @err:" was still
-    // documented-but-unbuilt (l1-nodus-language.md's own ~RETRY:n row always
+    // dispatches, which is the terminal action for the run, so step 2
+    // (`LOG`) no longer executes. This assertion was written before NL-9
+    // dispatch existed, when "routes to @err:" was still
+    // documented-but-unbuilt (the language spec's own ~RETRY:n row always
     // said exhaustion "routes to @err:"); updated to match the real behavior
     // rather than the pre-fix absence of it.
     assert!(

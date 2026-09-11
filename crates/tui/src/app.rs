@@ -261,7 +261,7 @@ impl App {
     /// bar, Esc quits; inside it, keys edit the command line (Esc cancels).
     ///
     /// Which key triggers which action is decided right here — key bindings
-    /// stay local presentation (l2-tui.md §4.4 v1.2.0 Notes). What does NOT
+    /// stay local presentation. What does NOT
     /// stay local is what each action *is*: every one of these is a real
     /// `ClientLocal` invocable ([`pane_actions`]), and this match only ever
     /// names which one a key requests, never what running it does.

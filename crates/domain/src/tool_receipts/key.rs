@@ -40,7 +40,7 @@ impl Drop for ReceiptKey {
         // register or a `memcpy` temporary earlier in the key's life — that
         // residual is accepted because the threat model's adversary is the
         // in-context reasoning model, which reads prompts and tool results,
-        // not process memory (l2-tool-receipts.md §4.3).
+        // not process memory.
         for byte in self.0.iter_mut() {
             // SAFETY: `byte` is a valid `&mut u8` for the duration of the
             // call; `write_volatile` only prevents the store being elided.

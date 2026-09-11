@@ -1,5 +1,5 @@
-//! The canonical, length-prefixed action binding (l2-tool-receipts.md §4.2)
-//! — the MAC input. Every field is length-prefixed so the encoding is
+//! The canonical, length-prefixed action binding — the MAC input. Every
+//! field is length-prefixed so the encoding is
 //! injective: naive concatenation lets a boundary shift between two
 //! adjacent fields produce byte-identical output for two different
 //! actions (`kind="ab", inputs="c"` colliding with `kind="a",

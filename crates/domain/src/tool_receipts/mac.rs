@@ -1,5 +1,5 @@
 //! Minting and verifying receipts: `blake3::keyed_hash` over the canonical
-//! binding (l2-tool-receipts.md §4.2), with a constant-time tag comparison
+//! binding, with a constant-time tag comparison
 //! so `verify` never leaks tag bytes positionally under repeated probing.
 
 use super::binding::{ActionBinding, encode};

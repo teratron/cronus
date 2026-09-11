@@ -413,8 +413,8 @@ impl Validator {
         diags
     }
 
-    /// NL-27 — a `@macro` name admits exactly one holder (l2-nodus-runtime.md
-    /// §3.1). Modelled on `e015_no_duplicate_test_names`: same shape, same
+    /// NL-27 — a `@macro` name admits exactly one holder. Modelled on
+    /// `e015_no_duplicate_test_names`: same shape, same
     /// per-extra-occurrence firing, applied to `wf.macros` instead of
     /// `wf.tests`.
     fn e020_no_duplicate_macro_names(wf: &WorkflowFile, filename: &str) -> Vec<Diagnostic> {
@@ -448,7 +448,7 @@ impl Validator {
         diags
     }
 
-    /// DG-11 (`l2-nodus-dialog.md` §4.8.2) — advise moving a dialog past a
+    /// DG-11 — advise moving a dialog past a
     /// step that does not need to precede it, so the human is asked once,
     /// late, with the material assembled.
     ///
@@ -473,7 +473,7 @@ impl Validator {
         diags
     }
 
-    /// DG-11 (`l2-nodus-dialog.md` §4.8.3) — advise against a dialog prompt
+    /// DG-11 — advise against a dialog prompt
     /// that carries a produced artifact rather than a reference to it. Fires
     /// on a bare `$var` argument to `ASK`/`CONFIRM` whose producing command is
     /// model-backed (`GEN`/`ANALYZE`) — the whole-argument reference model
@@ -3231,7 +3231,7 @@ mod tests {
         );
     }
 
-    // ─── W016 / W017 (DG-11, l2-nodus-dialog.md §4.8) ─────────────────────────
+    // ─── W016 / W017 (DG-11) ───────────────────────────────────────────────
 
     use crate::ast::RuntimeBlock;
 

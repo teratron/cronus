@@ -1,5 +1,5 @@
 //! Deferred-action lifecycle (TR-8): an action detached from the current
-//! turn (`l1-execution-graph.md` EG-12) cannot be receipted at dispatch,
+//! turn (EG-12) cannot be receipted at dispatch,
 //! because its result — the thing TR-3 requires inside the MAC — does not
 //! exist yet. `Pending` is a distinct state, never a receipt over a
 //! placeholder result: a tag computed over a fabricated result would be a
