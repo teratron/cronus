@@ -1,17 +1,25 @@
 use std::sync::Arc;
 
-use cronus_contract::{Binder, BinderKind, Invocable, Locus, Outcome, OutcomeValue, Stability};
-use cronus_domain::exec_workspace::ExecWorkspaceManager;
+use cronus_contract::{Binder, BinderKind, Invocable, Locus, Outcome, Stability};
 use cronus_domain::invocable::{Dispatcher, InvocableRegistry, Registrant};
-use cronus_domain::tool_security::now_ms;
 
-use super::{core_id, text_arg};
+use super::core_id;
 
-fn base_dir() -> std::path::PathBuf {
-    cronus_domain::paths::Paths::os_native()
-        .resolve(cronus_domain::paths::Root::State)
-        .join("exec-workspaces")
-}
+/// `ExecWorkspaceManager` (`cronus_domain::exec_workspace`) is a real,
+/// tested foundation — id validation, worktree directory lifecycle, the
+/// no-remote-git contract — but it is in-memory-only by its own doc comment
+/// ("SQLite-backed in production"); no manifest describing a workspace's
+/// id/state/timestamps survives on disk, so nothing could reconstruct a
+/// listing after the process that created it exits. Every verb here used
+/// to construct a fresh manager per call and discard it on return — `create`
+/// even wrote a real worktree directory to disk while doing so, an orphaned
+/// side effect no later `list`/`finalize`/`discard` could ever see or clean
+/// up. INV-9 shipped-surface honesty (matching `core:loop.evolve`'s own
+/// precedent): present and documented, but answering `Unavailable` with the
+/// reason, never a silent success stub — and never touching the filesystem
+/// on a call that cannot actually be tracked afterward.
+const EXEC_UNAVAILABLE: &str =
+    "cronus exec is unavailable: no persistent exec-workspace store exists in this workspace yet";
 
 pub(super) fn register(registry: &mut InvocableRegistry, dispatcher: &mut Dispatcher) {
     register_list(registry, dispatcher);
@@ -25,7 +33,8 @@ fn register_list(registry: &mut InvocableRegistry, dispatcher: &mut Dispatcher) 
     let invocable = Invocable {
         id: id.clone(),
         name: "List",
-        summary: "List execution workspaces.",
+        summary: "List execution workspaces. Unavailable in this workspace: no persistent \
+                   exec-workspace store exists yet.",
         group: "exec",
         locus: Locus::Semantic,
         binders: Vec::new(),
@@ -37,28 +46,8 @@ fn register_list(registry: &mut InvocableRegistry, dispatcher: &mut Dispatcher) 
         .expect("core:exec.list registers cleanly at bootstrap — a duplicate id here is a bug");
     dispatcher.attach(
         id,
-        Arc::new(|_args| {
-            // `ExecWorkspaceManager::new()` is genuinely in-memory (its own
-            // doc comment says so), so a fresh one here sees nothing a
-            // separate `create` dispatch wrote — the same ephemeral-per-
-            // call shape `memory`/`codegraph` already carry, preserved
-            // exactly (SP-9/SP-10) rather than fixed under this task's
-            // pressure, recorded separately.
-            let mgr = ExecWorkspaceManager::new();
-            Outcome::Value(OutcomeValue::List(
-                mgr.list()
-                    .iter()
-                    .map(|w| {
-                        OutcomeValue::Record(vec![
-                            ("id".to_string(), OutcomeValue::Text(w.id.clone())),
-                            (
-                                "state".to_string(),
-                                OutcomeValue::Text(w.state.as_str().to_string()),
-                            ),
-                        ])
-                    })
-                    .collect(),
-            ))
+        Arc::new(|_args| Outcome::Unavailable {
+            reason: EXEC_UNAVAILABLE.to_string(),
         }),
     );
 }
@@ -68,7 +57,8 @@ fn register_create(registry: &mut InvocableRegistry, dispatcher: &mut Dispatcher
     let invocable = Invocable {
         id: id.clone(),
         name: "Create",
-        summary: "Create an execution workspace for a card.",
+        summary: "Create an execution workspace for a card. Unavailable in this workspace: no \
+                   persistent exec-workspace store exists yet.",
         group: "exec",
         locus: Locus::Semantic,
         binders: vec![
@@ -91,21 +81,8 @@ fn register_create(registry: &mut InvocableRegistry, dispatcher: &mut Dispatcher
         .expect("core:exec.create registers cleanly at bootstrap — a duplicate id here is a bug");
     dispatcher.attach(
         id,
-        Arc::new(|args| {
-            let ws_id = text_arg(args, "ws_id");
-            let card_id = text_arg(args, "card_id");
-            let dir = base_dir();
-            let _ = std::fs::create_dir_all(&dir);
-            let mut mgr = ExecWorkspaceManager::new();
-            match mgr.create(ws_id, card_id, &dir, now_ms()) {
-                Ok(w) => Outcome::Value(OutcomeValue::Record(vec![(
-                    "id".to_string(),
-                    OutcomeValue::Text(w.id.clone()),
-                )])),
-                Err(e) => Outcome::Unavailable {
-                    reason: e.to_string(),
-                },
-            }
+        Arc::new(|_args| Outcome::Unavailable {
+            reason: EXEC_UNAVAILABLE.to_string(),
         }),
     );
 }
@@ -115,7 +92,8 @@ fn register_finalize(registry: &mut InvocableRegistry, dispatcher: &mut Dispatch
     let invocable = Invocable {
         id: id.clone(),
         name: "Finalize",
-        summary: "Finalize an execution workspace.",
+        summary: "Finalize an execution workspace. Unavailable in this workspace: no persistent \
+                   exec-workspace store exists yet.",
         group: "exec",
         locus: Locus::Semantic,
         binders: vec![Binder {
@@ -131,20 +109,8 @@ fn register_finalize(registry: &mut InvocableRegistry, dispatcher: &mut Dispatch
         .expect("core:exec.finalize registers cleanly at bootstrap — a duplicate id here is a bug");
     dispatcher.attach(
         id,
-        Arc::new(|args| {
-            let ws_id = text_arg(args, "id");
-            let mut mgr = ExecWorkspaceManager::new();
-            // `gate_passed: true` hardcoded — the exact pre-existing CLI
-            // behavior, not something this migration decides anew.
-            match mgr.finalize(ws_id, true, now_ms()) {
-                Ok(()) => Outcome::Value(OutcomeValue::Record(vec![(
-                    "id".to_string(),
-                    OutcomeValue::Text(ws_id.to_string()),
-                )])),
-                Err(e) => Outcome::Unavailable {
-                    reason: e.to_string(),
-                },
-            }
+        Arc::new(|_args| Outcome::Unavailable {
+            reason: EXEC_UNAVAILABLE.to_string(),
         }),
     );
 }
@@ -154,7 +120,8 @@ fn register_discard(registry: &mut InvocableRegistry, dispatcher: &mut Dispatche
     let invocable = Invocable {
         id: id.clone(),
         name: "Discard",
-        summary: "Discard an execution workspace.",
+        summary: "Discard an execution workspace. Unavailable in this workspace: no persistent \
+                   exec-workspace store exists yet.",
         group: "exec",
         locus: Locus::Semantic,
         binders: vec![Binder {
@@ -170,18 +137,8 @@ fn register_discard(registry: &mut InvocableRegistry, dispatcher: &mut Dispatche
         .expect("core:exec.discard registers cleanly at bootstrap — a duplicate id here is a bug");
     dispatcher.attach(
         id,
-        Arc::new(|args| {
-            let ws_id = text_arg(args, "id");
-            let mut mgr = ExecWorkspaceManager::new();
-            match mgr.discard(ws_id) {
-                Ok(()) => Outcome::Value(OutcomeValue::Record(vec![(
-                    "id".to_string(),
-                    OutcomeValue::Text(ws_id.to_string()),
-                )])),
-                Err(e) => Outcome::Unavailable {
-                    reason: e.to_string(),
-                },
-            }
+        Arc::new(|_args| Outcome::Unavailable {
+            reason: EXEC_UNAVAILABLE.to_string(),
         }),
     );
 }

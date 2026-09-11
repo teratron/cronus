@@ -7,6 +7,31 @@ use cronus_domain::invocable::{Dispatcher, InvocableRegistry, Registrant};
 
 use super::{core_id, text_arg};
 
+/// On-disk location of the codegraph index, under the state tier — the same
+/// resolution `board.rs`/`memory.rs` use for their own stores.
+fn index_db_path() -> std::path::PathBuf {
+    cronus_domain::paths::Paths::os_native()
+        .resolve(cronus_domain::paths::Root::State)
+        .join("codegraph")
+        .join("index.db")
+}
+
+/// Open the **persistent** codegraph index. `index` used to open a fresh
+/// `open_in_memory()` database that was dropped when the handler returned,
+/// so a later `search` in a separate invocation never saw what an earlier
+/// `index` stored (the same class of defect `memory.rs`'s own
+/// `open_memory_store` already fixed — see its doc comment). One file,
+/// opened by both verbs, is what makes the round-trip work.
+fn open_index() -> Result<CodeIndex, String> {
+    let path = index_db_path();
+    if let Some(parent) = path.parent()
+        && let Err(e) = std::fs::create_dir_all(parent)
+    {
+        return Err(format!("cannot create codegraph directory: {e}"));
+    }
+    CodeIndex::open(&path).map_err(|e| e.to_string())
+}
+
 pub(super) fn register(registry: &mut InvocableRegistry, dispatcher: &mut Dispatcher) {
     register_index(registry, dispatcher);
     register_search(registry, dispatcher);
@@ -35,18 +60,10 @@ fn register_index(registry: &mut InvocableRegistry, dispatcher: &mut Dispatcher)
         id,
         Arc::new(|args| {
             let path = std::path::PathBuf::from(text_arg(args, "path"));
-            // Ephemeral per call — `CodeIndex::open_in_memory` is the same
-            // shape `MemoryStore::open_in_memory` already carries, and the
-            // same residual applies: a later `search` in a separate
-            // invocation cannot see what an earlier `index` stored. Not
-            // fixed here — preserved exactly (SP-9/SP-10), recorded
-            // separately (`CODEGRAPH_INDEX_EPHEMERAL_PER_CALL`).
-            let index = match CodeIndex::open_in_memory() {
+            let index = match open_index() {
                 Ok(index) => index,
-                Err(e) => {
-                    return Outcome::Unavailable {
-                        reason: e.to_string(),
-                    };
+                Err(reason) => {
+                    return Outcome::Unavailable { reason };
                 }
             };
             let extractor = RegexExtractor;
@@ -105,12 +122,10 @@ fn register_search(registry: &mut InvocableRegistry, dispatcher: &mut Dispatcher
         id,
         Arc::new(|args| {
             let query = text_arg(args, "query");
-            let index = match CodeIndex::open_in_memory() {
+            let index = match open_index() {
                 Ok(index) => index,
-                Err(e) => {
-                    return Outcome::Unavailable {
-                        reason: e.to_string(),
-                    };
+                Err(reason) => {
+                    return Outcome::Unavailable { reason };
                 }
             };
             match index.search(query, 10) {

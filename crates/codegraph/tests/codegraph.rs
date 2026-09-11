@@ -94,6 +94,50 @@ fn index_store_returns_count() {
     assert_eq!(n, 2);
 }
 
+// ── Index: persistent open (F-03) ─────────────────────────────────────────────
+
+fn temp_db_path(tag: &str) -> std::path::PathBuf {
+    std::env::temp_dir().join(format!("cronus-codegraph-{tag}-{}.db", std::process::id()))
+}
+
+#[test]
+fn a_symbol_indexed_at_a_path_survives_reopening_it() {
+    // The shape of the actual product defect: `index` and `search` are two
+    // separate CLI invocations, i.e. two separate `CodeIndex` values opened
+    // at the same path with nothing else in common — closing the first and
+    // opening a second at the same path is the faithful in-process
+    // equivalent of that.
+    let path = temp_db_path("reopen");
+    let _ = std::fs::remove_file(&path);
+
+    {
+        let idx = CodeIndex::open(&path).unwrap();
+        let syms = RegexExtractor.extract("fn survives_reopen() {}");
+        idx.index_symbols("src/a.rs", &syms).unwrap();
+    } // idx (and its Connection) dropped here
+
+    let reopened = CodeIndex::open(&path).unwrap();
+    let found = reopened.get_by_name("survives_reopen").unwrap();
+    assert!(
+        found.is_some(),
+        "a symbol indexed in one CodeIndex::open must be visible in the next"
+    );
+
+    let _ = std::fs::remove_file(&path);
+}
+
+#[test]
+fn opening_a_fresh_path_starts_with_an_empty_but_working_schema() {
+    let path = temp_db_path("fresh");
+    let _ = std::fs::remove_file(&path);
+
+    let idx = CodeIndex::open(&path).unwrap();
+    assert!(idx.get_by_name("anything").unwrap().is_none());
+    assert!(idx.search("anything", 10).unwrap().is_empty());
+
+    let _ = std::fs::remove_file(&path);
+}
+
 // ── Index: FTS5 search ────────────────────────────────────────────────────────
 
 #[test]

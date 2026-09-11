@@ -103,16 +103,6 @@ fn flag_arg(args: &ArgValues, name: &str) -> bool {
     matches!(args.get(name), Some(ArgValue::Flag))
 }
 
-/// Read one required, already-bound `Float` argument. Same IB-2 guarantee
-/// `text_arg` relies on — a miss here is a bug in this file, not a caller
-/// condition.
-fn float_arg(args: &ArgValues, name: &str) -> f64 {
-    match args.get(name) {
-        Some(ArgValue::Float(value)) => *value,
-        _ => 0.0,
-    }
-}
-
 /// Read one `RepeatableNamedText` argument as the list it collected —
 /// empty when the binder was declared optional and the caller supplied
 /// none.

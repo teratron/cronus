@@ -1,10 +1,22 @@
 use std::sync::Arc;
 
-use cronus_contract::{Binder, BinderKind, Invocable, Locus, Outcome, OutcomeValue, Stability};
-use cronus_domain::budget::{BudgetEngine, BudgetPeriod, BudgetPolicy};
+use cronus_contract::{Binder, BinderKind, Invocable, Locus, Outcome, Stability};
 use cronus_domain::invocable::{Dispatcher, InvocableRegistry, Registrant};
 
-use super::{core_id, float_arg};
+use super::core_id;
+
+/// `BudgetEngine` (`cronus_domain::budget`) is a real, tested foundation —
+/// policy CRUD, cost ingestion, hard-stop enforcement — but it is
+/// in-memory-only by its own doc comment ("SQLite-backed in production");
+/// no persistent store or kanban-seam wiring exists yet. Every verb here
+/// used to construct a fresh engine per call and discard it on return,
+/// so `set` followed by `show` in the next invocation always reported the
+/// engine's own zero default — a command that *looked* wired reporting
+/// nothing was ever recorded. INV-9 shipped-surface honesty (matching
+/// `core:loop.evolve`'s own precedent): present and documented, but
+/// answering `Unavailable` with the reason, never a silent success stub.
+const BUDGET_UNAVAILABLE: &str =
+    "cronus budget is unavailable: no persistent budget store exists in this workspace yet";
 
 pub(super) fn register(registry: &mut InvocableRegistry, dispatcher: &mut Dispatcher) {
     register_show(registry, dispatcher);
@@ -17,7 +29,8 @@ fn register_show(registry: &mut InvocableRegistry, dispatcher: &mut Dispatcher) 
     let invocable = Invocable {
         id: id.clone(),
         name: "Show",
-        summary: "Show current budget usage.",
+        summary: "Show current budget usage. Unavailable in this workspace: no persistent \
+                   budget store exists yet.",
         group: "budget",
         locus: Locus::Semantic,
         binders: Vec::new(),
@@ -29,16 +42,8 @@ fn register_show(registry: &mut InvocableRegistry, dispatcher: &mut Dispatcher) 
         .expect("core:budget.show registers cleanly at bootstrap — a duplicate id here is a bug");
     dispatcher.attach(
         id,
-        Arc::new(|_args| {
-            // `BudgetEngine::new()` is ephemeral per call — the same
-            // residual `memory`/`codegraph`/`exec`/`learn` already carry,
-            // preserved exactly rather than fixed here.
-            let engine = BudgetEngine::new();
-            let spent = engine.spent_for("default");
-            Outcome::Value(OutcomeValue::Record(vec![(
-                "spent".to_string(),
-                OutcomeValue::Float(spent),
-            )]))
+        Arc::new(|_args| Outcome::Unavailable {
+            reason: BUDGET_UNAVAILABLE.to_string(),
         }),
     );
 }
@@ -48,7 +53,8 @@ fn register_set(registry: &mut InvocableRegistry, dispatcher: &mut Dispatcher) {
     let invocable = Invocable {
         id: id.clone(),
         name: "Set",
-        summary: "Set a workspace budget limit (USD).",
+        summary: "Set a workspace budget limit (USD). Unavailable in this workspace: no \
+                   persistent budget store exists yet.",
         group: "budget",
         locus: Locus::Semantic,
         binders: vec![Binder {
@@ -64,15 +70,8 @@ fn register_set(registry: &mut InvocableRegistry, dispatcher: &mut Dispatcher) {
         .expect("core:budget.set registers cleanly at bootstrap — a duplicate id here is a bug");
     dispatcher.attach(
         id,
-        Arc::new(|args| {
-            let limit = float_arg(args, "limit");
-            let mut engine = BudgetEngine::new();
-            let policy = BudgetPolicy::workspace("default", limit, BudgetPeriod::Monthly);
-            engine.add_policy(policy);
-            Outcome::Value(OutcomeValue::Record(vec![(
-                "limit".to_string(),
-                OutcomeValue::Float(limit),
-            )]))
+        Arc::new(|_args| Outcome::Unavailable {
+            reason: BUDGET_UNAVAILABLE.to_string(),
         }),
     );
 }
@@ -82,7 +81,8 @@ fn register_reset(registry: &mut InvocableRegistry, dispatcher: &mut Dispatcher)
     let invocable = Invocable {
         id: id.clone(),
         name: "Reset",
-        summary: "Reset budget counters.",
+        summary: "Reset budget counters. Unavailable in this workspace: no persistent budget \
+                   store exists yet.",
         group: "budget",
         locus: Locus::Semantic,
         binders: Vec::new(),
@@ -94,13 +94,8 @@ fn register_reset(registry: &mut InvocableRegistry, dispatcher: &mut Dispatcher)
         .expect("core:budget.reset registers cleanly at bootstrap — a duplicate id here is a bug");
     dispatcher.attach(
         id,
-        Arc::new(|_args| {
-            let mut engine = BudgetEngine::new();
-            engine.reset();
-            Outcome::Value(OutcomeValue::Record(vec![(
-                "result".to_string(),
-                OutcomeValue::Text("reset".to_string()),
-            )]))
+        Arc::new(|_args| Outcome::Unavailable {
+            reason: BUDGET_UNAVAILABLE.to_string(),
         }),
     );
 }

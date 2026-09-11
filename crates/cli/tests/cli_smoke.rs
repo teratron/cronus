@@ -276,22 +276,44 @@ fn schedule_list_exits_0() {
     );
 }
 
+/// `budget` has no persistent store yet (F-03/F-04) — every verb answers
+/// `Unavailable` honestly rather than a silent success stub, matching
+/// `loop evolve`'s established INV-9 pattern.
 #[test]
-fn budget_show_exits_0() {
-    let status = bin()
+fn budget_show_is_honestly_unavailable() {
+    let output = bin()
         .args(["budget", "show"])
-        .status()
+        .output()
         .expect("failed to spawn binary");
-    assert!(status.success(), "budget show must exit 0");
+    assert!(
+        !output.status.success(),
+        "budget show must not report success while nothing persists"
+    );
+    let stderr = String::from_utf8_lossy(&output.stderr);
+    assert!(
+        stderr.contains("no persistent budget store"),
+        "stderr must explain why, got: {stderr}"
+    );
 }
 
+/// `exec` has no persistent store yet (F-03) — every verb answers
+/// `Unavailable` honestly rather than a silent success stub, matching
+/// `loop evolve`'s established INV-9 pattern.
 #[test]
-fn exec_list_exits_0() {
-    let status = bin()
+fn exec_list_is_honestly_unavailable() {
+    let output = bin()
         .args(["exec", "list"])
-        .status()
+        .output()
         .expect("failed to spawn binary");
-    assert!(status.success(), "exec list must exit 0 (empty list is ok)");
+    assert!(
+        !output.status.success(),
+        "exec list must not report success while nothing persists"
+    );
+    let stderr = String::from_utf8_lossy(&output.stderr);
+    assert!(
+        stderr.contains("no persistent exec-workspace store"),
+        "stderr must explain why, got: {stderr}"
+    );
 }
 
 #[test]

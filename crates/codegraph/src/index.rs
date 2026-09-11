@@ -6,6 +6,8 @@
 //! which is what keeps persistence from leaking into a frontend (a frontend
 //! that could name `rusqlite::Connection` could also open one directly).
 
+use std::path::Path;
+
 use rusqlite::{Connection, params};
 
 use crate::extractor::Symbol;
@@ -19,9 +21,23 @@ pub struct CodeIndex {
 }
 
 impl CodeIndex {
-    /// Open a fresh in-memory index with the schema already migrated.
+    /// Open a fresh in-memory index with the schema already migrated. Every
+    /// caller gets a private, empty database — useful for tests, but never
+    /// what a CLI/TUI invocation wants: an `index` in one process call and a
+    /// `search` in the next would never see each other's data. Product
+    /// code opens [`Self::open`] against a real path instead.
     pub fn open_in_memory() -> IndexResult<Self> {
         let conn = Connection::open_in_memory()?;
+        migrate(&conn)?;
+        Ok(Self { conn })
+    }
+
+    /// Open (creating if absent) a persistent, file-backed index at `path`
+    /// with the schema migrated. The parent directory must already exist —
+    /// callers create it themselves, the same convention the sibling memory
+    /// store uses.
+    pub fn open(path: &Path) -> IndexResult<Self> {
+        let conn = Connection::open(path)?;
         migrate(&conn)?;
         Ok(Self { conn })
     }

@@ -196,11 +196,14 @@ fn agent_status_reports_no_active_session() {
     }
 }
 
+/// `exec` has no persistent store yet (F-03/F-04): every verb answers
+/// `Unavailable` honestly (INV-9, matching `core:loop.evolve`'s own
+/// precedent) rather than a `List([])` that implies a real, empty listing.
 #[test]
-fn exec_list_with_nothing_created_is_an_empty_list_not_an_empty_result() {
+fn exec_list_is_unavailable_not_a_silent_empty_success() {
     match ran("core:exec.list", cronus_contract::ArgValues::new()) {
-        Outcome::Value(OutcomeValue::List(items)) => assert!(items.is_empty()),
-        other => panic!("expected an empty List, not Empty or anything else, got {other:?}"),
+        Outcome::Unavailable { reason } => assert!(reason.contains("exec-workspace")),
+        other => panic!("expected Unavailable naming why, got {other:?}"),
     }
 }
 
