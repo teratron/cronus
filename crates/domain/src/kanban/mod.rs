@@ -47,19 +47,30 @@ impl fmt::Display for KanbanError {
             KanbanError::CardNotFound(id) => write!(f, "card not found: {id}"),
             KanbanError::CardAlreadyExists(id) => write!(f, "card already exists: {id}"),
             KanbanError::InvalidCardId(id) => {
-                write!(f, "invalid card id {id:?}: must be a single path segment")
+                write!(
+                    f,
+                    "invalid card id {id:?}: must be a single path segment of at most {MAX_CARD_ID_LEN} characters"
+                )
             }
             KanbanError::Io(e) => write!(f, "I/O error: {e}"),
         }
     }
 }
 
+/// Comfortably under NTFS's 255-UTF-16-code-unit filename component limit
+/// even with the longest suffix a card id ever grows (`.jsonl`, in
+/// `events_dir`) — an id past this reaches the OS's own filename-length
+/// error (F-08) instead of a clear product one.
+const MAX_CARD_ID_LEN: usize = 200;
+
 /// Reject any card id that would not stay inside `cards/` when turned into a
 /// `<id>.json` filename. Accepts a plain single segment; rejects empty ids,
-/// `.`/`..`, ids containing `/`, `\`, or a NUL/control byte, and anything the
-/// OS would treat as absolute or drive-qualified.
+/// `.`/`..`, ids containing `/`, `\`, or a NUL/control byte, anything the OS
+/// would treat as absolute or drive-qualified, and anything over
+/// [`MAX_CARD_ID_LEN`] characters.
 fn validate_card_id(id: &str) -> Result<()> {
     let bad = id.is_empty()
+        || id.chars().count() > MAX_CARD_ID_LEN
         || id == "."
         || id == ".."
         || id.contains('/')
@@ -562,6 +573,23 @@ mod tests {
         );
         // A plain id still works.
         assert!(board.add_card("card-1", "TASK", 1).is_ok());
+        let _ = fs::remove_dir_all(&root);
+    }
+
+    #[test]
+    fn add_card_rejects_an_overlong_id_as_a_product_error_not_an_os_one() {
+        let (board, root) = tmp_board();
+        let long_id = "x".repeat(MAX_CARD_ID_LEN + 1);
+        let err = board.add_card(&long_id, "TASK", 1).unwrap_err();
+        assert!(
+            matches!(err, KanbanError::InvalidCardId(_)),
+            "an id past the cap must be InvalidCardId, got {err:?}"
+        );
+
+        // At the cap is still fine.
+        let ok_id = "x".repeat(MAX_CARD_ID_LEN);
+        assert!(board.add_card(&ok_id, "TASK", 1).is_ok());
+
         let _ = fs::remove_dir_all(&root);
     }
 
