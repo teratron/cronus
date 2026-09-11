@@ -419,6 +419,52 @@ fn render_value(value: OutcomeValue, ctx: &output::Context) -> Rendered {
             ..Default::default()
         };
     }
+    // `core:board.show`'s own shape — a multi-field Record naming "id" and
+    // "history" (a List of transition Records) — gets a dedicated
+    // multi-line renderer (F-21/F-24): once `show` grew beyond id+state to
+    // the card's full detail, the general one-line-per-Record fallback
+    // flattened every field, including the whole transition history, onto
+    // one unreadable line. Recognized by field shape (an "id" field plus a
+    // "history" List) rather than verb identity, so any future card-shaped
+    // verb gets the same rendering for free. --format json already renders
+    // this shape correctly through the general recursive render_json below
+    // — only text needed a dedicated arm.
+    if !ctx.is_json()
+        && let OutcomeValue::Record(fields) = &value
+        && fields.iter().any(|(n, _)| n == "id")
+        && let Some(OutcomeValue::List(history)) =
+            fields.iter().find(|(n, _)| n == "history").map(|(_, v)| v)
+    {
+        let get = |key: &str| fields.iter().find(|(n, _)| n == key).map(|(_, v)| v);
+        let mut lines = Vec::new();
+        for key in [
+            "id",
+            "state",
+            "task_ref",
+            "reason",
+            "assignee",
+            "priority",
+            "created_at",
+            "updated_at",
+        ] {
+            if let Some(v) = get(key) {
+                lines.push(format!("{key}: {}", render_text_inline(v)));
+            }
+        }
+        if history.is_empty() {
+            lines.push("history: (none)".to_string());
+        } else {
+            lines.push("history:".to_string());
+            for entry in history {
+                lines.push(format!("  {}", render_text_line(entry)));
+            }
+        }
+        return Rendered {
+            stdout: lines,
+            exit_code: 0,
+            ..Default::default()
+        };
+    }
     // A Record naming its own "status" among "failed"/"aborted"/
     // "stopped"/"paused" (`core:workflow.run` today) is the one shape
     // among the shipped verbs whose success is not uniformly exit 0.
@@ -774,6 +820,41 @@ mod render_tests {
                 )]),
                 1,
             ),
+            (
+                "board show: card detail with history",
+                OutcomeValue::Record(vec![
+                    ("id".to_string(), OutcomeValue::Text("A1".to_string())),
+                    ("state".to_string(), OutcomeValue::Text("todo".to_string())),
+                    (
+                        "history".to_string(),
+                        OutcomeValue::List(vec![OutcomeValue::Record(vec![(
+                            "from".to_string(),
+                            OutcomeValue::Text("triage".to_string()),
+                        )])]),
+                    ),
+                ]),
+                0,
+            ),
+            (
+                "workflow validate: ok with warnings",
+                OutcomeValue::Record(vec![
+                    ("status".to_string(), OutcomeValue::Text("ok".to_string())),
+                    ("errors".to_string(), OutcomeValue::List(Vec::new())),
+                    (
+                        "warnings".to_string(),
+                        OutcomeValue::List(vec![OutcomeValue::Record(vec![
+                            ("code".to_string(), OutcomeValue::Text("W001".to_string())),
+                            (
+                                "message".to_string(),
+                                OutcomeValue::Text("no tests".to_string()),
+                            ),
+                            ("line".to_string(), OutcomeValue::Integer(0)),
+                        ])]),
+                    ),
+                    ("infos".to_string(), OutcomeValue::List(Vec::new())),
+                ]),
+                0,
+            ),
         ];
 
         for (label, shape, expected_exit) in cases {
@@ -834,6 +915,71 @@ mod render_tests {
                 );
             }
         }
+    }
+
+    /// F-21/F-24: `board show`'s text rendering is one field per line, with
+    /// the transition history indented underneath rather than flattened
+    /// onto the same comma-separated line every other field-name shape
+    /// falls back to.
+    #[test]
+    fn board_show_renders_one_field_per_line_with_indented_history() {
+        let shape = OutcomeValue::Record(vec![
+            ("id".to_string(), OutcomeValue::Text("A1".to_string())),
+            ("state".to_string(), OutcomeValue::Text("todo".to_string())),
+            (
+                "history".to_string(),
+                OutcomeValue::List(vec![OutcomeValue::Record(vec![
+                    ("from".to_string(), OutcomeValue::Text("triage".to_string())),
+                    ("to".to_string(), OutcomeValue::Text("todo".to_string())),
+                ])]),
+            ),
+        ]);
+        let rendered = render(value(shape), &text());
+        assert_eq!(rendered.stdout[0], "id: A1");
+        assert_eq!(rendered.stdout[1], "state: todo");
+        assert_eq!(rendered.stdout[2], "history:");
+        assert!(
+            rendered.stdout[3].starts_with("  ") && rendered.stdout[3].contains("triage"),
+            "a history entry must be indented under its own line: {:?}",
+            rendered.stdout[3]
+        );
+    }
+
+    #[test]
+    fn board_show_renders_no_history_explicitly_rather_than_an_empty_section() {
+        let shape = OutcomeValue::Record(vec![
+            ("id".to_string(), OutcomeValue::Text("A1".to_string())),
+            ("history".to_string(), OutcomeValue::List(Vec::new())),
+        ]);
+        let rendered = render(value(shape), &text());
+        assert!(rendered.stdout.iter().any(|l| l == "history: (none)"));
+    }
+
+    /// F-16: each `workflow validate` diagnostic renders on its own line,
+    /// never flattened together with the record's own status/errors/
+    /// warnings/infos labels.
+    #[test]
+    fn workflow_validate_renders_one_diagnostic_per_line() {
+        let shape = OutcomeValue::Record(vec![
+            ("status".to_string(), OutcomeValue::Text("ok".to_string())),
+            ("errors".to_string(), OutcomeValue::List(Vec::new())),
+            (
+                "warnings".to_string(),
+                OutcomeValue::List(vec![OutcomeValue::Record(vec![
+                    ("code".to_string(), OutcomeValue::Text("W001".to_string())),
+                    (
+                        "message".to_string(),
+                        OutcomeValue::Text("no tests".to_string()),
+                    ),
+                    ("line".to_string(), OutcomeValue::Integer(3)),
+                ])]),
+            ),
+            ("infos".to_string(), OutcomeValue::List(Vec::new())),
+        ]);
+        let rendered = render(value(shape), &text());
+        assert_eq!(rendered.stdout[0], "status: ok");
+        assert_eq!(rendered.stdout[1], "warning[W001] line 3: no tests");
+        assert_eq!(rendered.stdout.len(), 2, "no empty errors/infos lines");
     }
 
     /// A rejected/unavailable/unresolved dispatch renders as plain

@@ -93,15 +93,77 @@ fn register_show(registry: &mut InvocableRegistry, dispatcher: &mut Dispatcher) 
             let card_id = text_arg(args, "id");
             let board = open_board();
             match board.get_card(card_id) {
+                // F-24: `board show` used to render exactly what `board list`
+                // already does (id + state) — no reason a detail view for
+                // one card should hold less than the card itself carries.
                 Ok(Some(c)) => Outcome::Value(OutcomeValue::Record(vec![
                     ("id".to_string(), OutcomeValue::Text(c.id)),
                     (
                         "state".to_string(),
                         OutcomeValue::Text(c.state.as_str().to_string()),
                     ),
+                    ("task_ref".to_string(), OutcomeValue::Text(c.task_ref)),
+                    (
+                        "reason".to_string(),
+                        match c.reason {
+                            Some(r) => OutcomeValue::Text(r),
+                            None => OutcomeValue::Empty,
+                        },
+                    ),
+                    (
+                        "assignee".to_string(),
+                        match c.assignee {
+                            Some(a) => OutcomeValue::Text(a),
+                            None => OutcomeValue::Empty,
+                        },
+                    ),
+                    (
+                        "priority".to_string(),
+                        match c.priority {
+                            Some(p) => OutcomeValue::Text(p.as_str().to_string()),
+                            None => OutcomeValue::Empty,
+                        },
+                    ),
+                    (
+                        "created_at".to_string(),
+                        OutcomeValue::Integer(c.created_at as i64),
+                    ),
+                    (
+                        "updated_at".to_string(),
+                        OutcomeValue::Integer(c.updated_at as i64),
+                    ),
+                    (
+                        "history".to_string(),
+                        OutcomeValue::List(
+                            c.history
+                                .into_iter()
+                                .map(|t| {
+                                    OutcomeValue::Record(vec![
+                                        (
+                                            "from".to_string(),
+                                            OutcomeValue::Text(t.from.as_str().to_string()),
+                                        ),
+                                        (
+                                            "to".to_string(),
+                                            OutcomeValue::Text(t.to.as_str().to_string()),
+                                        ),
+                                        ("actor".to_string(), OutcomeValue::Text(t.actor)),
+                                        ("at".to_string(), OutcomeValue::Integer(t.at as i64)),
+                                        (
+                                            "reason".to_string(),
+                                            match t.reason {
+                                                Some(r) => OutcomeValue::Text(r),
+                                                None => OutcomeValue::Empty,
+                                            },
+                                        ),
+                                    ])
+                                })
+                                .collect(),
+                        ),
+                    ),
                 ])),
                 Ok(None) => Outcome::Unavailable {
-                    reason: format!("card '{card_id}' not found"),
+                    reason: format!("card not found: {card_id}"),
                 },
                 Err(e) => Outcome::Unavailable {
                     reason: e.to_string(),
