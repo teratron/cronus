@@ -1,6 +1,6 @@
 # Project Context
 
-**Generated:** 2026-09-11
+**Generated:** 2026-09-12
 
 ## Active Technologies
 
@@ -110,3 +110,4 @@
 - T-30D02: `coverage::CoverageReport` — the catalog complement (never a percentage) against the product's own shell-completion script, disclosed as a best-effort structural approximation rather than the exact locus/stability-filtered set no callable seam yet exposes; wired as `cronus-sim coverage`
 - T-30T01: full-workspace validation — `cargo check`/`clippy -D warnings`/`fmt --check`/`test` all green in one pass (87 test-result blocks, 0 failed, no `-j 2` retry needed); USM-1…USM-12 mapped to their discharging code/tests, with USM-4/USM-6 named as partially discharged and USM-10 as a process discipline this phase's code does not mechanically check; structural and reference containment both clean on inspection
 - Verify: `cargo test --workspace` green — 87 `test result: ok` blocks, 0 failed (37 of them new, in `cronus-simulation`); `cargo clippy --workspace --all-targets -- -D warnings` clean; `cargo fmt --all -- --check` clean
+

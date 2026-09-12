@@ -4,14 +4,14 @@
 <!-- Maximum 100 lines. Agent updates AFTER each completed action. -->
 
 **Workspace:** main
-**Updated:** 2026-09-11 21:22
-**Phase:** 30 — Usage-Simulation Harness
-**Status:** Active
+**Updated:** 2026-09-12 05:11
+**Phase:** None — plan complete
+**Status:** Idle
 
 ## Current Position
 
 - **Task:** T-30D02 Coverage reports the complement against the catalog, never a percentage
-- **Next Action:** Run /magic.task main to update the plan
+- **Next Action:** No build phase open in main. Two standing candidates from the prior /magic.spec pass: add the user-actor preset to l2-role-catalog (l1-uninformed-actor's own named gap), or continue nodus's registry drift (orphan + RFC + 4 Backlog items) via a separate /magic.task nodus / /magic.spec nodus. Human decides which.
 
 ## Progress
 
