@@ -1,0 +1,10 @@
+id = "memory-search-is-literal-not-semantic"
+
+[[step]]
+argv = ["memory", "store", "wifi-password", "hunter2"]
+expect_exit = 0
+
+[[step]]
+argv = ["memory", "search", "network"]
+expect_exit = 0
+

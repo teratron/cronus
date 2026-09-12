@@ -78,7 +78,9 @@
 │   └── tui/
 ├── docs/
 │   ├── README.md
-│   └── building.ru.md
+│   ├── building.ru.md
+│   ├── simulation.md
+│   └── simulation.ru.md
 ├── installer/
 ├── package.json
 ├── packages/
@@ -90,6 +92,7 @@
 │   └── check-domain-boundary.mjs
 └── simulations/
     ├── README.md
+    ├── broad/
     └── short/
 ```
 

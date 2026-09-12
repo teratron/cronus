@@ -1,6 +1,6 @@
 # Usage Simulation
 
-**Version:** 1.0.3
+**Version:** 1.1.1
 **Status:** Stable
 **Layer:** concept
 
@@ -50,6 +50,7 @@ discovers, the pinned test guards, and neither does the other's job.
 - [l1-development-workflow.md](l1-development-workflow.md) — Scenarios are authored in Design and run in Review; DW-4's spec-compliance verdict is what a scenario set makes checkable rather than asserted.
 - [l1-outcome-attributed-cost.md](l1-outcome-attributed-cost.md) — An agent-driven run costs real inference; tiering exists because of it (USM-9).
 - [l1-user-model.md](l1-user-model.md) — The product's model of its *actual* user; a scenario persona is a deliberately constructed fiction and never reads from it.
+- [l1-improvement-loop.md](l1-improvement-loop.md) — USM-13 reuses this spec's own five-name finding taxonomy (IMP-1: defect / friction / inefficiency / optimization opportunity / improvement idea) so a simulation discovery is named in the product's own vocabulary rather than a second, competing one. The two mechanisms stay separate on purpose: that loop observes real installations doing real work and files upstream over the network; this one observes an agent inside a disposable world and files nothing anywhere — a structured discovery here is report content, never a write into the live findings ledger (RP-6).
 
 ## 1. Motivation
 
@@ -221,6 +222,19 @@ Rules every Layer 2 implementation MUST NOT violate:
   as it goes destroys the evidence for the defect it found, makes the next run's baseline
   unknowable, and converts a measurement into an unreviewed change.
 
+- **USM-13 (A discovery may be classified, and may propose):** a discovery is not required to
+  stay plain text. It MAY carry a **class** drawn from the improvement loop's own taxonomy
+  (`l1-improvement-loop` IMP-1 — defect, friction, inefficiency, optimization opportunity,
+  improvement idea) and, optionally, a **proposed remedy**: what the reporter judges would
+  close the gap. Neither addition changes USM-3 or USM-12 — a classified discovery still
+  cannot gate a run, and a proposed remedy is a claim for a human to weigh, never an act the
+  run performs. Only the `defect` class has anywhere to go beyond the report: it follows
+  USM-7's existing pinning path unchanged. The other four classes name something that failed
+  no stated contract, so there is nothing to pin against; their disposition is inclusion in
+  the run's own report, exactly as filed, for a human to accept into a future planning act or
+  set aside. Reusing IMP-1's five names rather than inventing a sixth vocabulary for the same
+  ideas is itself the point — a second taxonomy for one concept is its own kind of defect.
+
 > L2 specs cannot reach RFC status until all invariants here are addressed in their
 > "Invariant Compliance" section.
 
@@ -362,7 +376,7 @@ simulator's account of what it did, which is precisely the thing USM-5 declines 
 And a torn-down world is what keeps runs independent: a second run that inherits the first
 run's leftovers is measuring an accident.
 
-### 4.6 Findings and the Promotion Path (USM-7 / USM-12)
+### 4.6 Findings and the Promotion Path (USM-7 / USM-12 / USM-13)
 
 A run produces findings, never fixes (USM-12). Each finding is attributed before it is
 filed, because three different things produce a failed obligation and only one of them is a
@@ -390,6 +404,17 @@ graph LR
 
 Once a case is pinned, the simulation is free to stop finding it — which is the point. The
 expensive instrument is spent on what is not yet known, and the cheap one keeps what is.
+
+The table above attributes a **failed obligation**; USM-13's classes apply more broadly, to
+any discovery, including one that never touched an obligation at all — friction observed on
+a route where every obligation still passed. A `defect`-classed discovery always enters the
+promotion path above, whether it surfaced as a failed obligation attributed to the product
+or as a freestanding observation with no obligation to fail — the two are the same fact seen
+from different vantage points, not separate conditions that must both hold. `friction`,
+`inefficiency`, `optimization opportunity`, and `improvement idea` name something no stated
+contract forbids, so there is no failing test to pin against; they stop at the run's own
+report, carried exactly as filed, with whatever remedy was proposed attached to them, for a
+human to weigh into a future planning act.
 
 ### 4.7 Tiers and Cadence (USM-9)
 
@@ -474,3 +499,5 @@ breaks will be this one, because suppression is the more conservative-looking de
 | 1.0.1 | 2026-09-11 | Core Team | Patch — cross-reference to `l1-scenario-derivation`, which schedules this instrument: scenarios derived at planning time from the requirements artifact, as a co-product of the task graph, with SD-4 strengthening USM-10 where a planning step exists. Documentation linkage only; no invariant added or changed. |
 | 1.0.2 | 2026-09-11 | Core Team | Patch — cross-reference to the nodus realization `l1-nodus-authoring` (NA-1…NA-9): the instrument transferred to a language, where the free route is the source an author writes, the vantage excludes the runtime source, and coverage is claimed over the error taxonomy on a reachability axis and a recovery axis. Documentation linkage only; no invariant added or changed. |
 | 1.0.3 | 2026-09-11 | Core Team | Patch — cross-reference to `l1-uninformed-actor`, the office role that performs a scenario: USM-4's declared vantage restated as a staffing property (UIA-2), plus instance rotation, persona-matched capability, independent observation in place of self-report, and the office's corrupting helping reflexes named. Documentation linkage only; no invariant added or changed. |
+| 1.1.0 | 2026-09-12 | Core Team | Minor — **USM-13 (a discovery may be classified, and may propose)**: a discovery MAY carry a class from `l1-improvement-loop`'s own IMP-1 taxonomy (defect/friction/inefficiency/optimization-opportunity/improvement-idea) and an optional proposed remedy, reusing that vocabulary rather than inventing a second one. Neither addition touches USM-3/USM-12 — classification and a proposed remedy are report content, never a gate and never an applied change. Only `defect` has anywhere to go beyond the report (USM-7's existing pinning path, unchanged); the other four classes stop at the run's own report for a human to weigh (§4.6 extended). Deliberately demarcated from the improvement loop's own pipeline: a simulation discovery is local, synchronous, dev-time report content — it is never written into the live findings ledger (RP-6), which is that spec's mechanism for real, shipped installations. Motivated by real practice: two of this project's own early scenario runs surfaced genuine friction (an undocumented state-machine transition order; a scaffolder whose default output fails its own validator) that no obligation was positioned to fail, and which existed only as unstructured prose in a `note` until now. `[DR]` The classification lives in `l1-usage-simulation` itself rather than a new standalone spec or a wire into `l1-improvement-loop`'s pipeline — the finding's *vocabulary* is shared, its *mechanism* is not, and unifying the two would repeat the exact mistake §4.8 already warns against for `l1-simulation` (two disciplines whose subjects are opposite, merged because both are called by a similar name). Status reverts `Stable → RFC` per the amendment rule pending Post-Update Review. |
+| 1.1.1 | 2026-09-12 | Core Team | Patch — **second review: `RFC → Stable`.** A genuinely independent second pass (not a restatement of the same-session authoring check) found one real inconsistency the first pass missed: §4.6's added paragraph read "only the `product`-attributed, `defect`-classed case enters the promotion path" — a phrasing that, read literally, requires a discovery to have *both* failed an obligation *and* been attributed via the three-row table before USM-7's pinning applies, silently excluding the freestanding case USM-13's own first sentence names as in scope ("a discovery... including one that never touched an obligation at all"). USM-7 itself pins *any* discovered defect, with no attribution-table prerequisite — the added sentence had accidentally narrowed a pre-existing invariant while restating it. Corrected: a `defect`-classed discovery always enters the promotion path, whether reached via a failed-and-attributed obligation or as a freestanding observation — "the same fact seen from different vantage points, not separate conditions that must both hold." One additional term was checked and cleared, not changed: USM-13's "the reporter" reuses §2's own pre-existing definition ("the actor is also the reporter") rather than introducing new vocabulary — flagged in review, verified against the full document, retracted as a non-issue. No other lens (Layer Purity, Ecosystem/Extensibility, Execution/Testability) surfaced a blocking finding. `[DR]` Promoted to Stable on this pass rather than held for a third review — the bar the amendment rule sets is a genuine second, independent look, which this was, and it found and fixed exactly one real defect; holding further would be process for its own sake. `l2-simulation-suite` is un-quarantined in the same act (C12 upward reversal, `spec.md`'s own authority) and its USM-13 row moves from **Pending** to its normal compliance-tracking state, reconciled at the next `/magic.task main`. |

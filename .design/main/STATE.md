@@ -4,14 +4,14 @@
 <!-- Maximum 100 lines. Agent updates AFTER each completed action. -->
 
 **Workspace:** main
-**Updated:** 2026-09-12 05:28
-**Phase:** None — plan complete
+**Updated:** 2026-09-12 13:21
+**Phase:** None - plan complete
 **Status:** Idle
 
 ## Current Position
 
 - **Task:** T-30D02 Coverage reports the complement against the catalog, never a percentage
-- **Next Action:** No build phase open in main. /magic.task nodus is the immediate next step (user's own /magic.spec nodus -> /magic.task nodus sequence, spec half now done: l1-nodus-graph promoted RFC->Stable) -- absorbing that promotion plus the standing orphan/SYNC_GAP/Backlog items into nodus PLAN.md/TASKS.md. Separately, one standing candidate remains for main whenever a human picks it up: add the user-actor preset to l2-role-catalog (l1-uninformed-actor's own named gap).
+- **Next Action:** No build phase open and Backlog is empty. The standing l2-role-catalog user-actor preset gap (l1-uninformed-actor's own named gap) remains the one recorded design item, whenever a human wants it. Otherwise the next motion is authorship -- a human decision about what Cronus builds next, which planning cannot compute for itself.
 
 ## Progress
 

@@ -1,8 +1,8 @@
 # Master Task Index (Registry)
 
-**Version:** 1.57.0
+**Version:** 1.59.0
 **Generated:** 2026-09-12
-**Based on:** .design/main/PLAN.md v2.74.0
+**Based on:** .design/main/PLAN.md v2.76.0
 **Based on RULES:** .design/RULES.md v1.7.0
 **Execution Mode:** Parallel
 **Status:** Active
@@ -30,6 +30,10 @@ Tactical registry of all phases and their statuses, ordered by the growth metaph
 **Registry sync (v1.57.0) — no phase change.** `PLAN.md` v2.73.0 → v2.74.0 (Retro L2 realization-status correction wave: `l2-file-store`/`l2-notes` 1.0.0→1.1.0, `l2-knowledge-store` 1.1.0→1.1.1, `l2-crate-topology` 1.1.1→1.1.2). All four already `[x]` Done under their original phases with no status/scope change — checked against `PLAN.md`'s existing entries, which already matched the correction and needed none of their own. No task in this registry references any of the four.
 
 **Two L1s are recorded as `concept-only`, and one design gap is recorded rather than planned.** `l1-scenario-derivation` and `l1-uninformed-actor` have no authored L2 and join the Concept Library under C28. `l1-usage-simulation` does **not** take the marker — its L2 exists and is built here. The gap: `l1-uninformed-actor` declares a `user-actor` preset that `l2-role-catalog` does not yet carry, and adding it is spec-authoring work for `/magic.spec`, not a build task against a spec that does not say so. The Nodus lens of the same wave (`l1-nodus-authoring`) is planned separately under `/magic.task nodus`.
+
+**`l1-usage-simulation` amended and quarantined (v1.58.0) — no phase change, Phase 30 untouched.** `/magic.spec main` added **USM-13** (a discovery may carry a class from `l1-improvement-loop`'s own taxonomy — defect/friction/inefficiency/optimization-opportunity/improvement-idea — and an optional proposed remedy, neither gating nor auto-applied) to `l1-usage-simulation` (1.0.3→1.1.0), reverting it `Stable → RFC` per the amendment rule for a deliberate second review rather than same-pass self-certification — the `l1-nodus-graph` precedent already set in the nodus workspace. `l2-simulation-suite` quarantined `Stable → RFC` in the same step (C12), its own §3 recording USM-13 **Pending**. `l1-improvement-loop` took a reciprocal patch (1.0.0→1.0.1). The pair parks in `PLAN.md`'s Backlog (`**Based on:**` INDEX v1.0.198 → v1.0.199, PLAN v2.74.0 → v2.75.0) — everything Phase 30 already built and shipped stands exactly as delivered; only the new increment has no phase to enter while its spec sits below `Stable`. Motivated by two real findings this session (an undocumented, asymmetric board state-machine transition order; a `workflow scaffold` output that fails its own validator) that no obligation was positioned to fail and that existed only as unstructured `note` prose until now.
+
+**`l1-usage-simulation` second review absorbed; Backlog empty again (v1.59.0) — no phase change.** `/magic.spec main`'s independent second pass found and fixed one real §4.6 inconsistency (a promotion-path sentence that accidentally demanded both obligation-failure attribution and `defect` classification, when USM-7 requires only the latter) and promoted both `l1-usage-simulation` (1.1.0→1.1.1) and, via C12's upward reversal, `l2-simulation-suite` (1.0.1→1.0.2) back to `Stable`. The one-item Backlog entry the pair held since v1.58.0 is retired — folded into `PLAN.md`'s departure record. Phase 30 stands exactly as delivered throughout; `l2-simulation-suite`'s own §3 still honestly records USM-13 **Pending** (`**Based on:**` PLAN v2.75.0 → v2.76.0, INDEX v1.0.199 → v1.0.200).
 
 ## Active Phases
 

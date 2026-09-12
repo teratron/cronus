@@ -1,6 +1,6 @@
 # Improvement Loop
 
-**Version:** 1.0.0
+**Version:** 1.0.1
 **Status:** Stable
 **Layer:** concept
 
@@ -22,6 +22,7 @@ This spec owns the loop contract and its upstream half. The device-side halves a
 - [l1-dev-office.md](l1-dev-office.md) - The developer office; the triage service is a maintainer-side office held to the same governance (DVO-5 feedback tier kinship).
 - [l1-quality-standards.md](l1-quality-standards.md) - Dogfooding bar (QLY-6): the triage service is Cronus running Cronus.
 - [l1-deployment-neutrality.md](l1-deployment-neutrality.md) - Zero-server default: upstream intake is maintainer infrastructure, never a product runtime dependency.
+- [l1-usage-simulation.md](l1-usage-simulation.md) - USM-13 reuses this spec's IMP-1 taxonomy so a simulation-run discovery is named in the product's own vocabulary; the mechanisms stay separate — that instrument observes a disposable, synthetic world at dev time and files nothing anywhere, this loop observes real installations and files upstream over the network. A simulation discovery is never written into the findings ledger (RP-6).
 
 ## 1. Motivation
 
@@ -184,3 +185,4 @@ All four live on the human-write-only authority plane (SEC-10): the agent reads 
 | Version | Date | Author | Notes |
 | --- | --- | --- | --- |
 | 1.0.0 | 2026-07-16 | Core Team | Initial spec — the closed product self-improvement loop: in-work non-blocking observation (IMP-1), product-subject-only generalized capture (IMP-2), user-governed submission autonomy off/confirm/automatic as a standing audited grant (IMP-3), managed AI intake triage (IMP-4), evidence-over-eloquence weak-submitter robustness (IMP-5), append-only supersedable rejection memory with auto-answer (IMP-6), disposition feedback closing the loop (IMP-7), dogfooded triage office (IMP-8), optional-by-construction zero-server posture (IMP-9). |
+| 1.0.1 | 2026-09-12 | Core Team | Patch — cross-reference to `l1-usage-simulation`'s new USM-13, which reuses this spec's IMP-1 taxonomy for a simulation run's own discoveries while staying a wholly separate, local, dev-time mechanism never wired into this loop's findings ledger (RP-6). Documentation linkage only; no invariant added or changed. |
