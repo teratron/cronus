@@ -321,12 +321,25 @@ fn canonical_or_self(path: &Path) -> PathBuf {
 /// rather than hashing it — small, human-diffable when a contamination
 /// finding is reported, and avoids pulling in a hashing crate for a value
 /// nothing here needs to be fixed-width.
+///
+/// Excludes `crates/simulation/tests/replays/` by pathspec: `cronus-sim
+/// pin` writes a new file there *by design*, and it must run before
+/// `finish` (which deletes the world `pin` reads from) — so a legitimate
+/// pin always lands between the digest this function computes at world
+/// creation and the one it recomputes at finish. Without the exclusion,
+/// every pinned discovery would report its own run `contaminated`, the
+/// exact false positive this check exists to avoid; the exclusion is
+/// narrow enough that no other write, product or otherwise, is hidden by
+/// it.
 fn repo_dirty_digest(repo_root: &Path) -> Option<String> {
     let output = Command::new("git")
         .arg("-C")
         .arg(repo_root)
         .arg("status")
         .arg("--porcelain")
+        .arg("--")
+        .arg(".")
+        .arg(":(exclude)crates/simulation/tests/replays")
         .output()
         .ok()?;
     if !output.status.success() {

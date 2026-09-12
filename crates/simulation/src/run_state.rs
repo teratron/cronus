@@ -55,6 +55,11 @@ pub struct RunState {
     pub repo_dirty_digest_at_build: Option<String>,
     pub bound_steps: u32,
     pub bound_wall_secs: u32,
+    /// The scenario's declared dollar ceiling on the *driving agent's own*
+    /// cost while it explores — the product itself has no notion of a
+    /// dollar, so only [`Self::record_spend`] can move this, never
+    /// [`Self::record_run`] on its own.
+    pub bound_spend_usd: f64,
     pub created_at_unix_ms: u128,
     pub obligation_ids: Vec<String>,
     #[serde(default)]
@@ -63,6 +68,9 @@ pub struct RunState {
     pub verdicts: BTreeMap<String, VerdictState>,
     #[serde(default)]
     pub notes: Vec<String>,
+    /// Cumulative spend reported so far via [`Self::record_spend`].
+    #[serde(default)]
+    pub spend_usd_used: f64,
 }
 
 #[derive(Debug)]
@@ -78,6 +86,8 @@ pub enum RunStateError {
         bound_steps: u32,
         wall_elapsed_secs: u64,
         bound_wall_secs: u32,
+        spend_usd_used: f64,
+        bound_spend_usd: f64,
     },
 }
 
@@ -104,10 +114,13 @@ impl fmt::Display for RunStateError {
                 bound_steps,
                 wall_elapsed_secs,
                 bound_wall_secs,
+                spend_usd_used,
+                bound_spend_usd,
             } => write!(
                 f,
                 "this world's bound is exhausted ({entries_used}/{bound_steps} steps, \
-                 {wall_elapsed_secs}/{bound_wall_secs}s elapsed) — call finish"
+                 {wall_elapsed_secs}/{bound_wall_secs}s elapsed, \
+                 ${spend_usd_used:.2}/${bound_spend_usd:.2} spent) — call finish"
             ),
         }
     }
@@ -131,11 +144,13 @@ impl RunState {
             repo_dirty_digest_at_build: world.repo_dirty_digest.clone(),
             bound_steps: scenario.bound.steps,
             bound_wall_secs: scenario.bound.wall_secs,
+            bound_spend_usd: scenario.bound.spend_usd,
             created_at_unix_ms: now_unix_ms(),
             obligation_ids: scenario.obligations.iter().map(|o| o.id.clone()).collect(),
             entries: Vec::new(),
             verdicts: BTreeMap::new(),
             notes: Vec::new(),
+            spend_usd_used: 0.0,
         };
         // `world` owns the directory it just created; letting it fall out
         // of scope here does NOT delete anything — teardown is an explicit
@@ -174,20 +189,36 @@ impl RunState {
         (now.saturating_sub(self.created_at_unix_ms) / 1000) as u64
     }
 
+    /// `Some(..)` once any one of the three declared bounds (steps, wall
+    /// clock, dollar spend) has been reached — a pure snapshot, so it can
+    /// be checked (and tested) without spawning anything. Three meters,
+    /// one gate: `record_run` refuses to spawn once any of them trips.
+    fn bound_status(&self) -> Option<RunStateError> {
+        let steps_exhausted = self.entries.len() as u32 >= self.bound_steps;
+        let wall_exhausted = self.wall_elapsed_secs() >= u64::from(self.bound_wall_secs);
+        let spend_exhausted = self.spend_usd_used >= self.bound_spend_usd;
+
+        if steps_exhausted || wall_exhausted || spend_exhausted {
+            Some(RunStateError::BoundExhausted {
+                entries_used: self.entries.len() as u32,
+                bound_steps: self.bound_steps,
+                wall_elapsed_secs: self.wall_elapsed_secs(),
+                bound_wall_secs: self.bound_wall_secs,
+                spend_usd_used: self.spend_usd_used,
+                bound_spend_usd: self.bound_spend_usd,
+            })
+        } else {
+            None
+        }
+    }
+
     /// Spawn `argv` inside this world and append the resulting entry.
     /// Refuses (without spawning anything) once the scenario's declared
     /// bound is exhausted — the mechanism that stops a stuck actor from
     /// spending without limit on a goal the product cannot satisfy.
     pub fn record_run(&mut self, argv: &[String]) -> Result<usize, RunStateError> {
-        if self.entries.len() as u32 >= self.bound_steps
-            || self.wall_elapsed_secs() >= u64::from(self.bound_wall_secs)
-        {
-            return Err(RunStateError::BoundExhausted {
-                entries_used: self.entries.len() as u32,
-                bound_steps: self.bound_steps,
-                wall_elapsed_secs: self.wall_elapsed_secs(),
-                bound_wall_secs: self.bound_wall_secs,
-            });
+        if let Some(err) = self.bound_status() {
+            return Err(err);
         }
 
         let world = self.attached();
@@ -231,6 +262,19 @@ impl RunState {
     /// (USM-3) — a discovery is information, not an obligation.
     pub fn add_note(&mut self, text: String) -> Result<(), RunStateError> {
         self.notes.push(text);
+        self.save()
+    }
+
+    /// Record incremental dollar spend the driving agent itself incurred
+    /// while producing the step(s) since its last report — its own token
+    /// cost, not anything the product can measure, which is why this is a
+    /// separate, explicit call rather than something `record_run` infers.
+    /// Always succeeds (recording a cost is never itself refusable, the
+    /// same way `add_note` never is); the bound it feeds is enforced the
+    /// next time `record_run` is attempted, exactly like the wall-clock
+    /// meter, which also accumulates passively between calls.
+    pub fn record_spend(&mut self, usd: f64) -> Result<(), RunStateError> {
+        self.spend_usd_used += usd;
         self.save()
     }
 
@@ -308,4 +352,98 @@ fn now_unix_ms() -> u128 {
         .duration_since(UNIX_EPOCH)
         .map(|d| d.as_millis())
         .unwrap_or(0)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    /// A minimal, in-memory-shaped `RunState` with generous steps/wall
+    /// bounds and a tight, caller-supplied dollar bound — everything this
+    /// module's bound logic needs, none of it backed by a real spawned
+    /// process or a real world directory (this state is never `save()`d
+    /// in these tests, so `root` never needs to exist).
+    fn state_with_spend_bound(bound_spend_usd: f64) -> RunState {
+        RunState {
+            world_id: "spend-test-world".to_string(),
+            root: std::env::temp_dir().join("cronus-sim-spend-bound-test-unused"),
+            resolved_binary: PathBuf::from("cronus"),
+            product_version: "0.0.0".to_string(),
+            repo_dirty_digest_at_build: None,
+            bound_steps: 1_000,
+            bound_wall_secs: 1_000,
+            bound_spend_usd,
+            created_at_unix_ms: now_unix_ms(),
+            obligation_ids: Vec::new(),
+            entries: Vec::new(),
+            verdicts: BTreeMap::new(),
+            notes: Vec::new(),
+            spend_usd_used: 0.0,
+        }
+    }
+
+    #[test]
+    fn bound_status_is_none_while_spend_stays_under_the_declared_ceiling() {
+        let mut state = state_with_spend_bound(1.00);
+        state.spend_usd_used = 0.99;
+        assert!(state.bound_status().is_none());
+    }
+
+    #[test]
+    fn bound_status_trips_once_accumulated_spend_reaches_the_declared_ceiling() {
+        let mut state = state_with_spend_bound(1.00);
+        state.spend_usd_used = 1.00;
+        let err = state
+            .bound_status()
+            .expect("spend at exactly the bound must trip it");
+        match err {
+            RunStateError::BoundExhausted {
+                spend_usd_used,
+                bound_spend_usd,
+                ..
+            } => {
+                assert_eq!(spend_usd_used, 1.00);
+                assert_eq!(bound_spend_usd, 1.00);
+            }
+            other => panic!("expected BoundExhausted, got {other}"),
+        }
+    }
+
+    #[test]
+    fn record_spend_accumulates_across_calls_rather_than_replacing() {
+        let mut state = state_with_spend_bound(10.0);
+        // `save()` needs `root` to exist; these tests only assert on the
+        // in-memory accumulator, not on the persisted file, so give it a
+        // real (temporary) directory rather than special-casing save().
+        std::fs::create_dir_all(&state.root).expect("create test world root");
+
+        state.record_spend(0.30).expect("first report must succeed");
+        state
+            .record_spend(0.25)
+            .expect("second report must succeed");
+        assert_eq!(state.spend_usd_used, 0.55);
+
+        let _ = std::fs::remove_dir_all(&state.root);
+    }
+
+    #[test]
+    fn record_spend_never_itself_refuses_even_once_it_crosses_the_bound() {
+        // Mirrors the wall-clock meter: crossing a bound is discovered the
+        // next time `record_run` is attempted, not at the moment the meter
+        // ticks past it — reporting a cost is information, like a note,
+        // never an action that can itself be rejected.
+        let mut state = state_with_spend_bound(1.00);
+        std::fs::create_dir_all(&state.root).expect("create test world root");
+
+        state
+            .record_spend(5.00)
+            .expect("reporting spend must succeed even when it exceeds the bound");
+        assert_eq!(state.spend_usd_used, 5.00);
+        assert!(
+            state.bound_status().is_some(),
+            "the next bound check must now see the crossed ceiling"
+        );
+
+        let _ = std::fs::remove_dir_all(&state.root);
+    }
 }

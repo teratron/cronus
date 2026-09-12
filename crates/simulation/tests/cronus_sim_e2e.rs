@@ -97,6 +97,7 @@ fn write_scenario(
     file_stem: &str,
     bound_steps: u32,
     bound_wall_secs: u32,
+    bound_spend_usd: f64,
     obligation_ids: &[&str],
 ) -> PathBuf {
     let mut obligations_toml = String::new();
@@ -118,7 +119,7 @@ fn write_scenario(
          roles = [\"owner\"]\n\
          vantage = \"builtin-help\"\n\
          world = \"fresh\"\n\
-         bound = {{ steps = {bound_steps}, wall_secs = {bound_wall_secs}, spend_usd = 1.0 }}\n\n\
+         bound = {{ steps = {bound_steps}, wall_secs = {bound_wall_secs}, spend_usd = {bound_spend_usd} }}\n\n\
          {obligations_toml}\
          ---\n\n\
          ## Persona\n\nA test persona.\n\n\
@@ -135,7 +136,7 @@ fn write_scenario(
 #[test]
 fn a_run_whose_obligations_all_pass_exits_zero() {
     let _lock = serialize_repo_access();
-    let scenario = write_scenario("all-pass", 10, 60, &["goal-reachable"]);
+    let scenario = write_scenario("all-pass", 10, 60, 100.0, &["goal-reachable"]);
     let world_id = world_new(&scenario);
 
     let ran = run_sim(&["run", &world_id, "--", "--help"]);
@@ -171,7 +172,7 @@ fn a_run_whose_obligations_all_pass_exits_zero() {
 #[test]
 fn a_run_with_one_failing_obligation_exits_non_zero() {
     let _lock = serialize_repo_access();
-    let scenario = write_scenario("one-fail", 10, 60, &["goal-reachable"]);
+    let scenario = write_scenario("one-fail", 10, 60, 100.0, &["goal-reachable"]);
     let world_id = world_new(&scenario);
 
     let ran = run_sim(&["run", &world_id, "--", "--help"]);
@@ -194,7 +195,7 @@ fn a_run_with_one_failing_obligation_exits_non_zero() {
 #[test]
 fn a_note_only_discovery_does_not_affect_a_passing_outcome() {
     let _lock = serialize_repo_access();
-    let scenario = write_scenario("note-only", 10, 60, &["goal-reachable"]);
+    let scenario = write_scenario("note-only", 10, 60, 100.0, &["goal-reachable"]);
     let world_id = world_new(&scenario);
 
     let ran = run_sim(&["run", &world_id, "--", "--help"]);
@@ -231,7 +232,7 @@ fn a_bounded_out_run_exits_incomplete_and_names_the_undecided_obligation() {
     let _lock = serialize_repo_access();
     // bound.steps = 1: exactly one `run` is allowed before the wrapper
     // refuses further invocations.
-    let scenario = write_scenario("bounded-out", 1, 600, &["goal-reachable"]);
+    let scenario = write_scenario("bounded-out", 1, 600, 100.0, &["goal-reachable"]);
     let world_id = world_new(&scenario);
 
     let first = run_sim(&["run", &world_id, "--", "--help"]);
@@ -269,13 +270,122 @@ fn a_bounded_out_run_exits_incomplete_and_names_the_undecided_obligation() {
 }
 
 #[test]
+fn a_spend_exhausted_run_is_refused_and_reports_incomplete() {
+    let _lock = serialize_repo_access();
+    // A generous steps/wall bound, but a dollar ceiling low enough that a
+    // single `spend` report exceeds it — proves the wrapper enforces the
+    // agent's own reported cost, not just steps and wall clock.
+    let scenario = write_scenario("spend-exhausted", 100, 600, 0.05, &["goal-reachable"]);
+    let world_id = world_new(&scenario);
+
+    let first = run_sim(&["run", &world_id, "--", "--help"]);
+    assert_eq!(first.code, 0, "the first, allowed run must succeed");
+
+    let spent = run_sim(&["spend", &world_id, "0.10"]);
+    assert_eq!(
+        spent.code, 0,
+        "reporting spend must itself succeed even though it crosses the bound: {}",
+        spent.stderr
+    );
+
+    let second = run_sim(&["run", &world_id, "--", "status"]);
+    assert_ne!(
+        second.code, 0,
+        "a run attempted after the dollar bound is crossed must be refused"
+    );
+    assert!(
+        second.stderr.contains("spent") || second.stderr.contains("exhausted"),
+        "the refusal must explain itself in terms of spend: {}",
+        second.stderr
+    );
+
+    let finished = run_sim(&["finish", &world_id]);
+    assert_eq!(
+        finished.code, 2,
+        "a spend-exhausted run with an undecided obligation must report `incomplete`: {}",
+        finished.stdout
+    );
+    assert!(finished.stdout.contains("outcome: incomplete"));
+
+    let _ = std::fs::remove_file(&scenario);
+}
+
+#[test]
+fn a_negative_spend_amount_is_refused() {
+    let _lock = serialize_repo_access();
+    let scenario = write_scenario("negative-spend", 10, 60, 100.0, &["goal-reachable"]);
+    let world_id = world_new(&scenario);
+
+    let rejected = run_sim(&["spend", &world_id, "-1.00"]);
+    assert_ne!(
+        rejected.code, 0,
+        "a negative spend amount must be refused, not silently accepted"
+    );
+
+    let _ = std::fs::remove_file(&scenario);
+}
+
+/// Cleans up a replay file this test itself pinned into the real,
+/// checked-in `tests/replays/` directory — a test artifact, never meant to
+/// join the always-on replay lane it exists to prove doesn't wrongly flag
+/// this exact pattern.
+struct PinnedReplayGuard(PathBuf);
+
+impl Drop for PinnedReplayGuard {
+    fn drop(&mut self) {
+        let _ = std::fs::remove_file(&self.0);
+    }
+}
+
+#[test]
+fn pinning_a_route_before_finish_does_not_report_the_run_contaminated() {
+    let _lock = serialize_repo_access();
+    // `pin` must run before `finish` (finish deletes the world `pin` reads
+    // from), and `pin` itself writes a new file into the real, tracked
+    // `tests/replays/` directory — exactly the kind of tracked-file change
+    // the contamination check exists to catch when the *product* does it.
+    // This proves that specific, sanctioned write is excluded rather than
+    // producing a false `contaminated` on every single pinned discovery.
+    let scenario = write_scenario("pin-then-finish", 10, 60, 100.0, &["goal-reachable"]);
+    let world_id = world_new(&scenario);
+
+    let ran = run_sim(&["run", &world_id, "--", "--help"]);
+    assert_eq!(ran.code, 0);
+
+    let replay_path = Path::new(env!("CARGO_MANIFEST_DIR"))
+        .join("tests/replays")
+        .join("pin-then-finish-contamination-guard-test.toml");
+    let _guard = PinnedReplayGuard(replay_path.clone());
+
+    let pinned = run_sim(&["pin", &world_id, "pin-then-finish-contamination-guard-test"]);
+    assert_eq!(pinned.code, 0, "pin must succeed: {}", pinned.stderr);
+    assert!(
+        replay_path.exists(),
+        "pin must have written the replay file at {replay_path:?}"
+    );
+
+    let verdicted = run_sim(&["verdict", &world_id, "goal-reachable", "pass"]);
+    assert_eq!(verdicted.code, 0);
+
+    let finished = run_sim(&["finish", &world_id]);
+    assert_eq!(
+        finished.code, 0,
+        "pinning a route must never itself cause `finish` to report contamination: {}",
+        finished.stdout
+    );
+    assert!(finished.stdout.contains("outcome: pass"));
+
+    let _ = std::fs::remove_file(&scenario);
+}
+
+#[test]
 fn with_no_override_the_resolved_binary_sits_under_the_workspace_target_directory() {
     let _lock = serialize_repo_access();
     // Ensure `cronus` exists before `cronus-sim` tries to discover it on
     // its own — same build-order concern `ensure_cronus_binary` exists for.
     ensure_cronus_binary();
 
-    let scenario = write_scenario("no-override-resolution", 10, 60, &["goal-reachable"]);
+    let scenario = write_scenario("no-override-resolution", 10, 60, 100.0, &["goal-reachable"]);
     let out = run_sim(&["world", "new", scenario.to_str().unwrap()]);
     assert_eq!(
         out.code, 0,
@@ -326,7 +436,7 @@ fn repo_root() -> PathBuf {
 #[test]
 fn a_repository_dirtied_during_the_run_is_reported_contaminated() {
     let _lock = serialize_repo_access();
-    let scenario = write_scenario("contaminated", 10, 60, &["goal-reachable"]);
+    let scenario = write_scenario("contaminated", 10, 60, 100.0, &["goal-reachable"]);
     let world_id = world_new(&scenario);
 
     let ran = run_sim(&["run", &world_id, "--", "--help"]);
@@ -363,7 +473,7 @@ fn a_world_that_cannot_be_torn_down_is_attributed_environment_not_a_product_find
     // removal, which is not reliably true on POSIX (a file may be deleted
     // while still open there). Cross-platform coverage of this exact path
     // is future work.
-    let scenario = write_scenario("undeleteable", 10, 60, &["goal-reachable"]);
+    let scenario = write_scenario("undeleteable", 10, 60, 100.0, &["goal-reachable"]);
     let world_id = world_new(&scenario);
 
     let ran = run_sim(&["run", &world_id, "--", "--help"]);

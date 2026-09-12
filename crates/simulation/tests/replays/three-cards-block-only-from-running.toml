@@ -1,0 +1,74 @@
+id = "three-cards-block-only-from-running"
+
+[[step]]
+argv = ["board", "add", "card-1", "write the proposal"]
+expect_exit = 0
+
+[[step]]
+argv = ["board", "add", "card-2", "review the budget"]
+expect_exit = 0
+
+[[step]]
+argv = ["board", "add", "card-3", "call the vendor"]
+expect_exit = 0
+
+[[step]]
+argv = ["board", "list"]
+expect_exit = 0
+
+[[step]]
+argv = ["board", "move", "card-1", "running"]
+expect_exit = 1
+
+[[step]]
+argv = ["board", "move", "card-1", "todo"]
+expect_exit = 0
+
+[[step]]
+argv = ["board", "move", "card-1", "ready"]
+expect_exit = 0
+
+[[step]]
+argv = ["board", "move", "card-1", "running"]
+expect_exit = 0
+
+[[step]]
+argv = ["board", "move", "card-1", "ready"]
+expect_exit = 1
+
+[[step]]
+argv = ["board", "move", "card-1", "todo"]
+expect_exit = 0
+
+[[step]]
+argv = ["board", "block", "card-3", "not needed right now"]
+expect_exit = 1
+
+[[step]]
+argv = ["board", "move", "card-3", "todo"]
+expect_exit = 0
+
+[[step]]
+argv = ["board", "block", "card-3", "not needed right now"]
+expect_exit = 1
+
+[[step]]
+argv = ["board", "move", "card-3", "ready"]
+expect_exit = 0
+
+[[step]]
+argv = ["board", "move", "card-3", "running"]
+expect_exit = 0
+
+[[step]]
+argv = ["board", "block", "card-3", "not needed right now"]
+expect_exit = 0
+
+[[step]]
+argv = ["board", "show", "card-2"]
+expect_exit = 0
+
+[[step]]
+argv = ["board", "list"]
+expect_exit = 0
+

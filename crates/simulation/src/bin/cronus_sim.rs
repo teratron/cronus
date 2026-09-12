@@ -8,6 +8,9 @@
 //! cronus-sim world new [--bin <path>] <scenario-file>   -> prints a world id
 //! cronus-sim run <world-id> -- <argv...>                 -> spawns the product
 //! cronus-sim note <world-id> <text...>                   -> records a discovery
+//! cronus-sim spend <world-id> <usd>                      -> reports the driving
+//!                                                            agent's own incremental
+//!                                                            cost since its last report
 //! cronus-sim verdict <world-id> <obligation-id> <pass|fail> [--cite i,j,...]
 //! cronus-sim finish <world-id>                           -> pass/fail/incomplete/
 //!                                                            contaminated/void
@@ -64,13 +67,14 @@ fn dispatch(args: &[String]) -> Result<i32, CliError> {
         Some("world") => cmd_world(&args[1..]),
         Some("run") => cmd_run(&args[1..]),
         Some("note") => cmd_note(&args[1..]),
+        Some("spend") => cmd_spend(&args[1..]),
         Some("verdict") => cmd_verdict(&args[1..]),
         Some("finish") => cmd_finish(&args[1..]),
         Some("pin") => cmd_pin(&args[1..]),
         Some("coverage") => cmd_coverage(&args[1..]),
         Some(other) => Err(CliError::Usage(format!("unknown subcommand `{other}`"))),
         None => Err(CliError::Usage(
-            "a subcommand is required: world | run | note | verdict | finish | pin | coverage"
+            "a subcommand is required: world | run | note | spend | verdict | finish | pin | coverage"
                 .to_string(),
         )),
     }
@@ -154,6 +158,27 @@ fn cmd_note(args: &[String]) -> Result<i32, CliError> {
     }
     let mut state = RunState::load(world_id)?;
     state.add_note(text)?;
+    Ok(0)
+}
+
+fn cmd_spend(args: &[String]) -> Result<i32, CliError> {
+    let world_id = args
+        .first()
+        .ok_or_else(|| CliError::Usage("usage: spend <world-id> <usd>".to_string()))?;
+    let usd_str = args
+        .get(1)
+        .ok_or_else(|| CliError::Usage("spend requires a dollar amount".to_string()))?;
+    let usd: f64 = usd_str
+        .parse()
+        .map_err(|_| CliError::Usage(format!("spend amount must be a number, got `{usd_str}`")))?;
+    if usd < 0.0 {
+        return Err(CliError::Usage(
+            "spend amount must not be negative".to_string(),
+        ));
+    }
+
+    let mut state = RunState::load(world_id)?;
+    state.record_spend(usd)?;
     Ok(0)
 }
 
@@ -303,6 +328,7 @@ mod tests {
             repo_dirty_digest_at_build: None,
             bound_steps: 10,
             bound_wall_secs: 60,
+            bound_spend_usd: 5.0,
             created_at_unix_ms: 0,
             obligation_ids: Vec::new(),
             entries: vec![
@@ -327,6 +353,7 @@ mod tests {
             ],
             verdicts: BTreeMap::new(),
             notes: Vec::new(),
+            spend_usd_used: 0.0,
         }
     }
 
