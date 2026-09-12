@@ -1,6 +1,6 @@
 # Crate Topology (Core Decomposition)
 
-**Version:** 1.1.1
+**Version:** 1.1.2
 **Status:** Stable
 **Layer:** implementation
 **Implements:** l1-architecture.md
@@ -171,12 +171,12 @@ pub trait UserDataStore: MemorySearch + Send + Sync {
 
 The seam trades in **contract types**, never an adapter's own representation (INV-10). `cronus-store-local` maps its `rusqlite` row struct to and from `MemoryEntry` inside the adapter; the row struct is private to the crate and never appears in `cronus-domain`. A remote provider maps its own DTO the same way. Both representations evolve independently of the domain, which is what lets the pure-`std` domain compile and unit-test with an in-memory provider and no backend at all.
 
-### 4.6 The single inverted edge
+### 4.6 The single inverted edge — realized
 
-Ten of the eleven inter-module edges already point the right way: infrastructure depends on domain (`scheduler → tool_security`, `error_reporting → redact`), or domain depends on domain. Exactly one edge is inverted:
+Ten of the eleven inter-module edges already pointed the right way: infrastructure depends on domain (`scheduler → tool_security`, `error_reporting → redact`), or domain depends on domain. Exactly one edge was inverted, at spec-authoring time:
 
 ```text
-[REFERENCE] crates/core/src/context_router.rs
+[REFERENCE — pre-migration state, no longer current] crates/core/src/context_router.rs
     use crate::memory::{MemoryEntry, MemoryStore, Result as MemResult};
 
     pub struct ContextRouter<'a> {
@@ -186,9 +186,9 @@ Ten of the eleven inter-module edges already point the right way: infrastructure
     self.memory_store.search_fts(query, limit)
 ```
 
-`ContextRouter` — domain logic — names a concrete persistence struct in order to call one method. That single field is why the pure-`std` 82% of the engine cannot be compiled without SQLite, and it is DN-2's violation in miniature: domain code targeting a backend instead of an interface.
+`ContextRouter` — domain logic — named a concrete persistence struct in order to call one method. That single field was why the pure-`std` 82% of the engine could not be compiled without SQLite, and it was DN-2's violation in miniature: domain code targeting a backend instead of an interface.
 
-Inverting it is the pivot of the entire migration. `MemorySearch` moves to `cronus-contract`; `ContextRouter` holds a `&dyn MemorySearch` (or a generic parameter); `cronus-store-local::MemoryStore` implements it. With that one edge reversed, the domain/infrastructure cut is clean and mechanical, because no other domain module reaches downward.
+**This is done.** `crates/domain/src/context_router.rs` now depends on `cronus_contract::MemorySearch` (the seam this section specified), not on the concrete `MemoryStore` — confirmed by the module's own doc comment, which names this section by number: *"The pivot of the crate-topology migration (§4.6): this module depends on the `MemorySearch` seam, never on a concrete persistence type."* `crates/domain/Cargo.toml` carries no dependency on `cronus-store-local`; `crates/core/src/lib.rs` imports `context_router` *from* `domain` — confirming the inward direction holds. With that edge reversed, the domain/infrastructure cut is clean and mechanical, because no other domain module reaches downward.
 
 The six infrastructure modules split rather than move wholesale:
 
@@ -275,13 +275,14 @@ Recorded here because each bears on the topology, and each is independently acti
 | `[WORKSPACE]` | `Cargo.toml` | Current workspace members and the shared dependency table the split repartitions |
 | `[CORE-LIB]` | `crates/core/src/lib.rs` | The 53 `pub mod` declarations this topology partitions |
 | `[CORE-MANIFEST]` | `crates/core/Cargo.toml` | The external dependencies that determine each module's tier |
-| `[PIVOT]` | `crates/core/src/context_router.rs` | The single inverted domain→infrastructure edge (§4.6); step 2 of the migration |
+| `[PIVOT]` | `crates/domain/src/context_router.rs` | The realized migration pivot (§4.6) — moved here from `crates/core/src/`; depends on `cronus_contract::MemorySearch`, not the concrete store. |
 | `[EXEMPLAR]` | `crates/nodus/Cargo.toml` | The zero-dependency discipline (LP-1/LP-2) this spec applies to the core |
 
 ## Document History
 
 | Version | Date | Notes |
 | --- | --- | --- |
+| 1.1.2 | 2026-09-12 | **Migration confirmed realized** (Retro L2 finding, `/magic.spec main`): §4.6 and the `[PIVOT]` Canonical Reference described the pre-migration state (`crates/core/src/context_router.rs`, holding a concrete `&MemoryStore`) as though it were still current. Verified by direct inspection that the migration this section specified actually landed: the module is now `crates/domain/src/context_router.rs`, depends on `cronus_contract::MemorySearch`, and its own doc comment names this section by number as the pivot it realized. `crates/domain/Cargo.toml` carries no `store-local` dependency; `crates/core/src/lib.rs` imports the module *from* domain, confirming the inward direction. §4.6 rewritten to past tense with the confirming evidence; `[PIVOT]` path corrected. No invariant, decomposition rule, or migration step changed — this is a realization-status correction only. |
 | 1.0.0 | 2026-07-10 | Initial spec. Resolves the `l2-source-layout.md` §4.4 crate-granularity TBD: decompose on the dependency/seam axis (contract · domain · store-local · auth-local · facade), not the domain axis. Establishes the crate-minting rule (§4.4), realizes the DN-2 provider seams as crate boundaries (§4.5), identifies the single inverted `context_router → MemoryStore` edge as the migration pivot (§4.6), and distinguishes a crate boundary from a process boundary under INV-8 (§4.7). Records five analysis findings (§6), incl. an INV-2 violation in the CLI and the absent DN-2 seams. |
 | 1.0.0 | 2026-07-10 | `RFC → Stable`. Post-Update Review passed (`@role:spec-critic` + `@role:prompt-engineer`). The sole open question — the §2 reading of the stack spec's "one crate → desktop + mobile" — was resolved against `l2-technology-stack` INV-1 (the constraint is on the embeddable unit, preserved by the facade; the workspace already ships five crates) with no conflict; the TBD marker was cleared and the confirming rationale recorded inline. No design change; status advance only. |
 | 1.0.1 | 2026-07-17 | Registered `cronus-model-local` (`crates/model-local`) as a fourth **adapter** crate in the §4.2 crate set — the model-transport adapter shipped in the Model Transport build phase, implementing `contract::InferenceBackend` over a loopback HTTP endpoint plus egress-gated remote profiles. It was already minted by the existing §4.4(a) rule (needs network I/O) and already covered by the CI `domain → adapter` boundary guard; this patch records the existing crate in the table and notes it is **not** one of the three DN-2 provider planes. Also extended the `cronus-contract` row to list the later-added `InferenceBackend` and `WikiCache`/`WikiReadSurface` seam traits. Documentation reconciliation of shipped structure — no new requirement, no design change; stays Stable. |

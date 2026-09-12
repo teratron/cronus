@@ -1,13 +1,13 @@
 # Knowledge Store (Implementation)
 
-**Version:** 1.1.0
+**Version:** 1.1.1
 **Status:** Stable
 **Layer:** implementation
 **Implements:** l1-knowledge-base.md
 
 ## Overview
 
-Concrete implementation of the knowledge base subsystem: SQLite schema for collections, directories, and documents; sqlite-vec for dense vector search; FTS5 for keyword search; RRF fusion for hybrid retrieval; an async ingestion pipeline; storage-enforced authorship zones (human/agent write boundary) and a curation lifecycle (draft→reviewed→stable); an optional query-preparation seam; and the Rust crate that exposes a `KnowledgeStore` service.
+Concrete implementation of the knowledge base subsystem: SQLite schema for collections, directories, and documents; sqlite-vec for dense vector search; FTS5 for keyword search; RRF fusion for hybrid retrieval; an async ingestion pipeline; storage-enforced authorship zones (human/agent write boundary) and a curation lifecycle (draft→reviewed→stable); an optional query-preparation seam. Realized as tier-split Rust modules exposing a `KnowledgeStore` service (§4.7) — verified faithful to this design, including schema and table names, by direct inspection; only the module placement below was ever out of date.
 
 ## Related Specifications
 
@@ -15,7 +15,7 @@ Concrete implementation of the knowledge base subsystem: SQLite schema for colle
 - [l2-memory-store.md](l2-memory-store.md) - Memory store also uses sqlite-vec; the embedding engine is shared.
 - [l2-resource-sharing.md](l2-resource-sharing.md) - `access-grants` crate enforces KB-4 access control.
 - [l2-file-store.md](l2-file-store.md) - Files are the source documents; `FileId` is referenced from `document`.
-- [l2-source-layout.md](l2-source-layout.md) - Crate placement under `crates/knowledge-store/`.
+- [l2-crate-topology.md](l2-crate-topology.md) - The dependency/seam-axis decomposition (contract · domain · store-local · facade) this subsystem's real module split follows — decided after this spec's original authoring (§4.7).
 
 ## 1. Motivation
 
@@ -254,7 +254,28 @@ Preparation is opt-in: with no `QueryPreparer` wired, retrieval embeds the raw q
 - `DELETE /document/:id` sets `document.status = 'deleted'`. Chunks are excluded from all queries via `JOIN knowledge_document WHERE status != 'deleted'`.
 - A GC job (runs at startup and periodically) finds documents with `status = 'deleted'` older than the retention window, deletes their `knowledge_chunk`, `knowledge_chunk_vec`, and `knowledge_chunk_fts` entries, then deletes the document row.
 
-### 4.7 Crate Layout
+### 4.7 Module Layout
+
+**Today (real):** this spec's original design assumed a single dedicated `crates/knowledge-store/`
+crate. `l2-crate-topology.md` (authored after this spec, 2026-07-10) later decomposed the whole
+workspace on the dependency/seam axis instead (contract · domain · store-local · facade) — so
+knowledge lives split across that decomposition, not in a crate of its own:
+
+```plaintext
+crates/store-local/src/knowledge.rs        // schema, SQLite queries, sqlite-vec, FTS5,
+                                            // authorship-zone + curation write guards (§4.1, KB-9/10)
+crates/domain/src/knowledge_access.rs      // GatedKnowledge — KB-4 access-grant check before every query
+crates/domain/src/knowledge_ingest.rs      // ingestion pipeline + EmbeddingBackend seam (§4.2)
+crates/domain/src/knowledge_retrieval.rs   // hybrid search + RRF fusion (§4.3)
+crates/core/src/knowledge_bootstrap.rs     // facade wiring
+crates/core/tests/knowledge_invariants.rs  // KB-1…KB-11 integration coverage
+```
+
+The schema (table names, columns, indices), the authorship-zone and curation write guards, and
+the retrieval flow all verified faithful to §4.1–§4.6 by direct inspection — this spec's content
+was never wrong, only its assumption of a single dedicated crate.
+
+**As originally specified (superseded):**
 
 ```plaintext
 crates/
@@ -299,10 +320,12 @@ crates/
 | `[MEMORY]` | `.design/main/specifications/l2-memory-store.md` | Shared EmbeddingEngine pattern and sqlite-vec usage. |
 | `[FILES]` | `.design/main/specifications/l2-file-store.md` | FileId referenced in knowledge_document. |
 | `[SHARING]` | `.design/main/specifications/l2-resource-sharing.md` | Access grant enforcement for collections. |
+| `[REAL]` | `crates/store-local/src/knowledge.rs` | The real schema/store module — confirms table names and column shapes match §4.1 exactly. |
 
 ## Document History
 
 | Version | Date | Author | Notes |
 | --- | --- | --- | --- |
+| 1.1.1 | 2026-09-12 | Core Team | **Module-placement correction** (Retro L2 finding, `/magic.spec main`): this spec's §4.7 assumed a single dedicated `crates/knowledge-store/` crate, minted before `l2-crate-topology.md` (2026-07-10) later decomposed the whole workspace on the dependency/seam axis instead. The subsystem was built correctly against that later decision — split across `crates/store-local/src/knowledge.rs`, `crates/domain/src/knowledge_{access,ingest,retrieval}.rs`, and `crates/core/src/knowledge_bootstrap.rs` — but §4.7 and the dead `l2-source-layout.md` citation (a spec that never covered this placement) were never updated to say so. Verified by direct inspection that the schema, table names, authorship-zone/curation guards, and retrieval flow all match §4.1–§4.6 exactly — this correction touches only the module-layout claim; no invariant, schema, or behavior description changes. |
 | 1.1.0 | 2026-07-18 | Core Team | Completed Invariant Compliance to the full KB-1…KB-11 parent (`l1-knowledge-base` v1.2.0). KB-9 authorship zones (`knowledge_document.origin` + store-enforced read-only human zone with an audited `WriteOverride::HumanDirected` token, §4.4). KB-10 curation lifecycle (`knowledge_document.curation` draft→reviewed→stable, human-gated transitions, `RetrievalRequest.min_curation` trust floor, §4.4). KB-11 query preparation (`QueryPreparer` seam with fallback-to-raw floor, transparent prepared+raw recording, sub-query RRF merge, §4.5). Schema gains `origin`/`curation` columns + `ix_kdoc_curation`; retrieval flow gains the prep step + curation filter. Reconciled the stale "Pending (v1.1.0 parent)" rows — the parent has defined KB-9/KB-10 since v1.1.0 and KB-11 since v1.2.0. Promoted RFC→Stable. |
 | 1.0.0 | 2026-06-25 | Core Team | Initial RFC — SQLite schema (collection/directory/document/chunk), sqlite-vec ANN, FTS5 keyword, RRF hybrid fusion, async ingestion (file/URL/record adapters), soft-delete GC, crate layout. KB-1…KB-8 compliant; KB-9/KB-10 deferred pending the parent invariants. |

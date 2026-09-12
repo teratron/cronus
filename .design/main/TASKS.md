@@ -1,8 +1,8 @@
 # Master Task Index (Registry)
 
-**Version:** 1.56.0
-**Generated:** 2026-09-11
-**Based on:** .design/main/PLAN.md v2.73.0
+**Version:** 1.57.0
+**Generated:** 2026-09-12
+**Based on:** .design/main/PLAN.md v2.74.0
 **Based on RULES:** .design/RULES.md v1.7.0
 **Execution Mode:** Parallel
 **Status:** Active
@@ -26,6 +26,8 @@ Tactical registry of all phases and their statuses, ordered by the growth metaph
 **Phase 30 opened (v1.56.0) — the first build phase since the command-surface wave closed at Phase 29, and the first whose scope came from a user proposal rather than a reference pass or a code audit.** One session produced four Stable specs: `l1-usage-simulation` (the free-route instrument — intent fixed, route never prescribed, real effects in a disposable world), `l1-scenario-derivation` (scenarios derived at planning time as a co-product of the task graph), `l1-uninformed-actor` (the office role whose qualification is *not knowing*), and `l2-simulation-suite` (the realization). Only the L2 carries build work and it is this phase: eight tasks across four tracks plus validation, landing the crate, the disposable world with its containment refusal, the as-it-happens transcript, the parse-time validator that refuses obligations which cannot fail, the `cronus-sim` wrapper, the coverage complement, and the replay lane — with exactly one authored scenario, enough to prove the lane runs and not enough to claim coverage.
 
 **Rules parity re-synced (v1.56.0).** The header's `Based on RULES` advanced `v1.6.0 → v1.7.0`: the same session added **C30 — Usage-Simulation Companion Artifact** to the constitution (user-observable behaviour ships with the scenario that exercises it; intent fixed and route free; a discovery pinned by a cheap deterministic test before its finding closes; a run reports and never repairs). The drift existed because the rule landed through `/magic.spec`'s T4 path between plan revisions, which is the sanctioned route — this is the re-sync, not a correction.
+
+**Registry sync (v1.57.0) — no phase change.** `PLAN.md` v2.73.0 → v2.74.0 (Retro L2 realization-status correction wave: `l2-file-store`/`l2-notes` 1.0.0→1.1.0, `l2-knowledge-store` 1.1.0→1.1.1, `l2-crate-topology` 1.1.1→1.1.2). All four already `[x]` Done under their original phases with no status/scope change — checked against `PLAN.md`'s existing entries, which already matched the correction and needed none of their own. No task in this registry references any of the four.
 
 **Two L1s are recorded as `concept-only`, and one design gap is recorded rather than planned.** `l1-scenario-derivation` and `l1-uninformed-actor` have no authored L2 and join the Concept Library under C28. `l1-usage-simulation` does **not** take the marker — its L2 exists and is built here. The gap: `l1-uninformed-actor` declares a `user-actor` preset that `l2-role-catalog` does not yet carry, and adding it is spec-authoring work for `/magic.spec`, not a build task against a spec that does not say so. The Nodus lens of the same wave (`l1-nodus-authoring`) is planned separately under `/magic.task nodus`.
 

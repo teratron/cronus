@@ -1,8 +1,8 @@
 # Implementation Plan
 
-**Version:** 2.73.0
-**Generated:** 2026-09-11
-**Based on:** .design/main/INDEX.md v1.0.197
+**Version:** 2.74.0
+**Generated:** 2026-09-12
+**Based on:** .design/main/INDEX.md v1.0.198
 **Status:** Active
 
 ## Overview
@@ -17,6 +17,8 @@ Implementation plan for Cronus from the project registry (294 registered specs: 
 - **Hardening** = operational productionization — Phase 9.
 
 Execution mode: **Parallel** (C3); tracks grouped by file independence. Critical path runs through `crates/core` and the `crates/nodus` runtime it depends on.
+
+*Revision v2.74.0 (registry sync only, `/magic.task main`) — **Based on:** INDEX v1.0.197 → v1.0.198. Absorbs the previous session's Retro L2 realization-status correction wave: `l2-file-store` 1.0.0→1.1.0, `l2-notes` 1.0.0→1.1.0, `l2-knowledge-store` 1.1.0→1.1.1, `l2-crate-topology` 1.1.1→1.1.2 — all four stayed `Stable`, none changed phase, status, or scope. **No plan or task change resulted, checked rather than assumed**: each spec's existing entry here (Notes, File Store, Crate Topology, Knowledge Store) was re-read against the correction and already matched it — the Notes/File Store one-liners already named only the real domain-tier algebra properties (CRDT convergence, dedup, ref-tracked GC) and never the SQL/async/access-control machinery the specs had over-claimed; Knowledge Store's entry already cited the real `store-local`/`domain`/`core` module split, never a dedicated crate; Crate Topology's entry already claimed the `context_router` edge-inversion as delivered work. The drift the spec pass corrected was confined to the specification documents themselves — this plan's build record was accurate throughout.
 
 *Revision v2.73.0 (`/magic.task main`) — **Phase 30 opens**, the first build phase since the command-surface wave closed at Phase 29, and the first whose scope came from a user proposal rather than from a reference pass or a code audit. Four Stable specs arrived across one session: `l1-usage-simulation` (USM-1…USM-12, the free-route instrument), `l1-scenario-derivation` (SD-1…SD-9, scenarios derived at planning time as a co-product of the task graph), `l1-uninformed-actor` (UIA-1…UIA-10, the office role whose qualification is not knowing), and `l2-simulation-suite` (the realization). Only the L2 carries build work, and it is Phase 30. The two L1s with no authored L2 join the Concept Library as `concept-only`; `l1-usage-simulation` does **not** take the marker, because its L2 exists and is being built here (C28 §4). One design gap is recorded rather than planned: `l1-uninformed-actor` declares a `user-actor` preset that `l2-role-catalog` does not yet carry, and adding it is spec-authoring work for `/magic.spec`, not a build task against a spec that does not say so. The Nodus lens of the same wave (`l1-nodus-authoring`) is planned separately under `/magic.task nodus`.*
 
