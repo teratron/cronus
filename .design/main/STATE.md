@@ -4,14 +4,14 @@
 <!-- Maximum 100 lines. Agent updates AFTER each completed action. -->
 
 **Workspace:** main
-**Updated:** 2026-09-12 05:11
+**Updated:** 2026-09-12 05:28
 **Phase:** None — plan complete
 **Status:** Idle
 
 ## Current Position
 
 - **Task:** T-30D02 Coverage reports the complement against the catalog, never a percentage
-- **Next Action:** No build phase open in main. Two standing candidates from the prior /magic.spec pass: add the user-actor preset to l2-role-catalog (l1-uninformed-actor's own named gap), or continue nodus's registry drift (orphan + RFC + 4 Backlog items) via a separate /magic.task nodus / /magic.spec nodus. Human decides which.
+- **Next Action:** No build phase open in main. /magic.task nodus is the immediate next step (user's own /magic.spec nodus -> /magic.task nodus sequence, spec half now done: l1-nodus-graph promoted RFC->Stable) -- absorbing that promotion plus the standing orphan/SYNC_GAP/Backlog items into nodus PLAN.md/TASKS.md. Separately, one standing candidate remains for main whenever a human picks it up: add the user-actor preset to l2-role-catalog (l1-uninformed-actor's own named gap).
 
 ## Progress
 

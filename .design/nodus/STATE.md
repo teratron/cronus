@@ -4,15 +4,15 @@
 <!-- Maximum 100 lines. Agent updates AFTER each completed action. -->
 
 **Workspace:** nodus
-**Updated:** 2026-09-11 15:38
+**Updated:** 2026-09-12 05:32
 **Phase:** — plan saturated: phases 1–33 Done, no active phase
 **Status:** Active
 
 ## Current Position
 
-- **Task:** `/magic.spec nodus` (INDEX v1.0.102) — `l1-nodus-graph` Post-Update Review: spec-critic 5-lens Council + prompt-engineer, **PASS-WITH-REWRITES**, `Draft → RFC`. One real invariant-scope error fixed — **NG-7** deferred loop-bound *and* branch-exhaustiveness to NL-25/NL-26 for a generated-value guard, but NL-25 owns only *which arm*, not termination bounds; loop-bound (NG-3) now explicitly independent. Three clarity fixes (NG-4 entry defined + "structural companion" not "generalizes" NT-10; `calls`-cycle → advisory since recursive macro expansion is deferred; "output shape" → "binding surface"). **Held at RFC, not Stable** — one authoring + one adversarial pass; concept-only so nothing gated. Re-decided the 3 standing design-debt Backlog items against `l2-nodus-runtime` §3.1 / `l2-nodus-portability` §3.2: **nothing new buildable**; NL-25 recorded as nearer (`@err:` landing place now real; two `execute_switch` violation sites; NG-7 a new spec-layer consumer).
-- **Spec:** INDEX v1.0.102 / PLAN v1.51.0 / TASKS v2.44.0 — all three in sync. RULES v1.6.0 (unchanged). 21 nodus specs: 20 Stable, **1 RFC** (`l1-nodus-graph`). Phases 1–33 all Done. Pre-flight: `SPEC_STATUS` (the RFC — non-Stable) + standing `DESIGN_DEBT_PENDING` (Backlog 4 — the RFC stays parked per C6).
-- **Next Action:** Run /magic.task nodus to update the plan
+- **Task:** `/magic.task nodus` — registry sync absorbing the preceding `/magic.spec nodus` pass. Resolved `SYNC_GAP` (PLAN basis v1.0.102 -> v1.0.104, from `l1-nodus-graph`'s second review: a real NL-25/NL-26 citation defect fixed across 5 sites, promoted RFC -> Stable) and `ORPHANED_SPEC` (`l1-nodus-authoring.md`, Stable since INDEX v1.0.103, added as a new Backlog bullet — same concept-only/no-L2-yet disposition `l1-nodus-graph` got at v1.50.0). The 4 standing design-debt Backlog items untouched per their own wait-for-a-real-need policy.
+- **Spec:** INDEX v1.0.104 / PLAN v1.52.0 / TASKS v2.45.0 — all three in sync. RULES v1.6.0 (unchanged). 22 nodus specs, all Stable, 0 Draft, 0 RFC. Phases 1–33 all Done. Pre-flight: only the standing `DESIGN_DEBT_PENDING` (Backlog now 5, was 4).
+- **Next Action:** No build phase open — every genuinely open item is blocked on a design decision, none on implementation capacity. `/magic.spec nodus` whenever a real feature need motivates one: NL-25 is the strongest of the 4 older Backlog items (nearest to buildable); `l2-nodus-authoring` or `l2-nodus-graph` authoring are the two newer concept-only specs' own next step. Not urgent — nothing depends on any of them yet.
 
 ## Progress
 
