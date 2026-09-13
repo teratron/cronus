@@ -1,6 +1,6 @@
 # Improvement Loop
 
-**Version:** 1.0.1
+**Version:** 1.0.2
 **Status:** Stable
 **Layer:** concept
 
@@ -22,6 +22,7 @@ This spec owns the loop contract and its upstream half. The device-side halves a
 - [l1-dev-office.md](l1-dev-office.md) - The developer office; the triage service is a maintainer-side office held to the same governance (DVO-5 feedback tier kinship).
 - [l1-quality-standards.md](l1-quality-standards.md) - Dogfooding bar (QLY-6): the triage service is Cronus running Cronus.
 - [l1-deployment-neutrality.md](l1-deployment-neutrality.md) - Zero-server default: upstream intake is maintainer infrastructure, never a product runtime dependency.
+- [l1-remedy-authority.md](l1-remedy-authority.md) - The contract §5 deferred as "a separate, future contract with its own authority model", now written. It grants against this spec's IMP-1 taxonomy and borrows IMP-3's ladder *shape* for a different subject: IMP-3 governs whether a finding **leaves the device**, RA-1…RA-10 govern whether a finding **changes the product where it was found**. IMP-4 is untouched — triage still manages only the queue, and nothing in that contract reaches the maintainer-side intake.
 - [l1-usage-simulation.md](l1-usage-simulation.md) - USM-13 reuses this spec's IMP-1 taxonomy so a simulation-run discovery is named in the product's own vocabulary; the mechanisms stay separate — that instrument observes a disposable, synthetic world at dev time and files nothing anywhere, this loop observes real installations and files upstream over the network. A simulation discovery is never written into the findings ledger (RP-6).
 
 ## 1. Motivation
@@ -167,7 +168,7 @@ All four live on the human-write-only authority plane (SEC-10): the agent reads 
 - **Adversarial fleet (spam waves, poisoned reports):** intake is a public-facing surface. Mitigated: reports are untrusted data (IMP-5, CP-1), quarantine is recorded not silent, rate and corroboration gates protect the queue; hardening details are L2 concerns bound by SEC.
 - **Alternative — human-only triage:** rejected; does not scale to fleet volume and burns the protected resource the loop exists to protect.
 - **Alternative — fold the upstream half into l1-dev-office:** rejected; the dev office is a device-side workspace gated on a genuine checkout (DVO-2), while triage is standing maintainer infrastructure at the intake. They share governance posture, not identity.
-- **Alternative — let triage auto-apply trivial fixes:** rejected at L1; triage manages the queue only (IMP-4). Any self-application of accepted changes is a separate, future contract with its own authority model.
+- **Alternative — let triage auto-apply trivial fixes:** rejected at L1, and the rejection stands unchanged — triage manages the queue only (IMP-4), and nothing upstream merges code on its own authority. The separate contract this entry deferred now exists as `l1-remedy-authority`, and it is deliberately **device-side**: it governs whether a finding may change the product *where it was found*, under a per-class rung and a failing pin as precondition. It grants nothing to the intake, and the maintainer-side queue is outside its scope entirely. The two halves stay demarcated exactly as IMP-3 and RA-1 each describe their own: this loop decides whether a finding **leaves**, that contract decides whether a finding **changes what is here**.
 
 ## Canonical References
 
@@ -186,3 +187,4 @@ All four live on the human-write-only authority plane (SEC-10): the agent reads 
 | --- | --- | --- | --- |
 | 1.0.0 | 2026-07-16 | Core Team | Initial spec — the closed product self-improvement loop: in-work non-blocking observation (IMP-1), product-subject-only generalized capture (IMP-2), user-governed submission autonomy off/confirm/automatic as a standing audited grant (IMP-3), managed AI intake triage (IMP-4), evidence-over-eloquence weak-submitter robustness (IMP-5), append-only supersedable rejection memory with auto-answer (IMP-6), disposition feedback closing the loop (IMP-7), dogfooded triage office (IMP-8), optional-by-construction zero-server posture (IMP-9). |
 | 1.0.1 | 2026-09-12 | Core Team | Patch — cross-reference to `l1-usage-simulation`'s new USM-13, which reuses this spec's IMP-1 taxonomy for a simulation run's own discoveries while staying a wholly separate, local, dev-time mechanism never wired into this loop's findings ledger (RP-6). Documentation linkage only; no invariant added or changed. |
+| 1.0.2 | 2026-09-13 | Core Team | Patch — §5's deferred contract is named. The entry "Alternative — let triage auto-apply trivial fixes" rejected self-application at L1 and recorded that "any self-application of accepted changes is a separate, future contract with its own authority model"; that contract now exists as `l1-remedy-authority` (RA-1…RA-10) and is cross-referenced from §5 and from Related Specifications. The **rejection itself is unchanged and restated explicitly**: the new contract is device-side, governing whether a finding may change the product where it was found, and grants nothing whatsoever to the upstream intake — IMP-4's queue-management-only scope stands exactly as written, and no triage decision reaches code. The demarcation is stated in the vocabulary each spec already owns: IMP-3 decides whether a finding **leaves**, RA-1 decides whether a finding **changes what is here**. `[DR]` Patch rather than minor: no invariant was added, removed, or altered — an alternative entry that deferred a contract now points at it, which is linkage. Status stays `Stable`; no cascade. |

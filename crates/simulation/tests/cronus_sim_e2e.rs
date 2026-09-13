@@ -541,3 +541,138 @@ fn coverage_against_the_real_product_runs_clean_with_a_non_empty_complement() {
         out.stdout
     );
 }
+
+#[test]
+fn a_classified_discovery_with_a_proposed_remedy_survives_into_the_finish_report() {
+    let _lock = serialize_repo_access();
+    let scenario = write_scenario("classified-note", 10, 60, 100.0, &["goal-reachable"]);
+    let world_id = world_new(&scenario);
+
+    let ran = run_sim(&["run", &world_id, "--", "--help"]);
+    assert_eq!(ran.code, 0);
+
+    let noted = run_sim(&[
+        "note",
+        &world_id,
+        "--class",
+        "improvement-idea",
+        "--remedy",
+        "surface the flag in --help too",
+        "the",
+        "flag",
+        "works",
+        "but",
+        "is",
+        "undocumented",
+    ]);
+    assert_eq!(
+        noted.code, 0,
+        "a classified note with a remedy must be accepted: {}",
+        noted.stderr
+    );
+
+    let verdicted = run_sim(&["verdict", &world_id, "goal-reachable", "pass"]);
+    assert_eq!(verdicted.code, 0);
+
+    let finished = run_sim(&["finish", &world_id]);
+    assert_eq!(
+        finished.code, 0,
+        "a defect-free run stays pass regardless of an unrelated classified discovery (USM-3): {}",
+        finished.stdout
+    );
+    assert!(finished.stdout.contains("outcome: pass"));
+    assert!(
+        finished
+            .stdout
+            .contains("the flag works but is undocumented"),
+        "the discovery text must appear: {}",
+        finished.stdout
+    );
+    assert!(
+        finished.stdout.contains("class: improvement-idea"),
+        "the class must be rendered: {}",
+        finished.stdout
+    );
+    assert!(
+        finished.stdout.contains("proposed remedy")
+            && finished.stdout.contains("surface the flag in --help too"),
+        "the remedy must be rendered as a proposal, not an applied change: {}",
+        finished.stdout
+    );
+
+    let _ = std::fs::remove_file(&scenario);
+}
+
+#[test]
+fn an_unrecognized_discovery_class_is_a_usage_error_naming_all_five_valid_classes() {
+    let _lock = serialize_repo_access();
+    let scenario = write_scenario("bad-class", 10, 60, 100.0, &["goal-reachable"]);
+    let world_id = world_new(&scenario);
+
+    let ran = run_sim(&["run", &world_id, "--", "--help"]);
+    assert_eq!(ran.code, 0);
+
+    let noted = run_sim(&[
+        "note",
+        &world_id,
+        "--class",
+        "bug",
+        "something odd happened",
+    ]);
+    assert_eq!(
+        noted.code, 5,
+        "an unrecognized class must be a usage error: stdout={} stderr={}",
+        noted.stdout, noted.stderr
+    );
+    for name in [
+        "defect",
+        "friction",
+        "inefficiency",
+        "optimization-opportunity",
+        "improvement-idea",
+    ] {
+        assert!(
+            noted.stderr.contains(name),
+            "the error must name `{name}` as a valid class: {}",
+            noted.stderr
+        );
+    }
+
+    let _ = std::fs::remove_file(&scenario);
+}
+
+#[test]
+fn an_unclassified_note_renders_exactly_as_it_did_before_usm_13() {
+    let _lock = serialize_repo_access();
+    let scenario = write_scenario("unclassified-note", 10, 60, 100.0, &["goal-reachable"]);
+    let world_id = world_new(&scenario);
+
+    let ran = run_sim(&["run", &world_id, "--", "--help"]);
+    assert_eq!(ran.code, 0);
+
+    let noted = run_sim(&["note", &world_id, "no class or remedy attached to this one"]);
+    assert_eq!(noted.code, 0);
+
+    let verdicted = run_sim(&["verdict", &world_id, "goal-reachable", "pass"]);
+    assert_eq!(verdicted.code, 0);
+
+    let finished = run_sim(&["finish", &world_id]);
+    assert_eq!(finished.code, 0);
+    assert!(
+        finished
+            .stdout
+            .contains("no class or remedy attached to this one")
+    );
+    assert!(
+        !finished.stdout.contains("class:"),
+        "an unclassified discovery must carry no class label: {}",
+        finished.stdout
+    );
+    assert!(
+        !finished.stdout.contains("proposed remedy"),
+        "a remedy-free discovery must carry no remedy label: {}",
+        finished.stdout
+    );
+
+    let _ = std::fs::remove_file(&scenario);
+}

@@ -15,7 +15,7 @@ use std::time::{Instant, SystemTime, UNIX_EPOCH};
 
 use serde::{Deserialize, Serialize};
 
-use crate::findings::{FinishReport, RunOutcome};
+use crate::findings::{Discovery, DiscoveryClass, FinishReport, RunOutcome};
 use crate::scenario::Scenario;
 use crate::world::World;
 
@@ -67,7 +67,7 @@ pub struct RunState {
     #[serde(default)]
     pub verdicts: BTreeMap<String, VerdictState>,
     #[serde(default)]
-    pub notes: Vec<String>,
+    pub notes: Vec<Discovery>,
     /// Cumulative spend reported so far via [`Self::record_spend`].
     #[serde(default)]
     pub spend_usd_used: f64,
@@ -258,10 +258,23 @@ impl RunState {
         self.entries.get(index)
     }
 
-    /// Append a discovery. Never consulted when computing an outcome
-    /// (USM-3) — a discovery is information, not an obligation.
-    pub fn add_note(&mut self, text: String) -> Result<(), RunStateError> {
-        self.notes.push(text);
+    /// Append a discovery, optionally classified against the
+    /// improvement-loop taxonomy and optionally carrying a proposed remedy
+    /// (USM-13). Neither addition is consulted when computing an outcome
+    /// (USM-3 unchanged) — a discovery is information, not an obligation,
+    /// classified or not — and a remedy here is a claim recorded for a
+    /// human to weigh, never an act this call performs (USM-12).
+    pub fn add_note(
+        &mut self,
+        text: String,
+        class: Option<DiscoveryClass>,
+        remedy: Option<String>,
+    ) -> Result<(), RunStateError> {
+        self.notes.push(Discovery {
+            text,
+            class,
+            remedy,
+        });
         self.save()
     }
 
@@ -424,6 +437,114 @@ mod tests {
         assert_eq!(state.spend_usd_used, 0.55);
 
         let _ = std::fs::remove_dir_all(&state.root);
+    }
+
+    /// A `RunState` whose `root` actually agrees with what
+    /// [`World::root_for_id`] computes for `id` — unlike
+    /// [`state_with_spend_bound`], which deliberately never round-trips
+    /// through [`RunState::load`]. These tests need a real reload, so the
+    /// two must match.
+    fn persistable_state(id: &str) -> RunState {
+        RunState {
+            world_id: id.to_string(),
+            root: World::root_for_id(id),
+            resolved_binary: PathBuf::from("cronus"),
+            product_version: "0.0.0".to_string(),
+            repo_dirty_digest_at_build: None,
+            bound_steps: 1_000,
+            bound_wall_secs: 1_000,
+            bound_spend_usd: 100.0,
+            created_at_unix_ms: now_unix_ms(),
+            obligation_ids: Vec::new(),
+            entries: Vec::new(),
+            verdicts: BTreeMap::new(),
+            notes: Vec::new(),
+            spend_usd_used: 0.0,
+        }
+    }
+
+    #[test]
+    fn discoveries_of_every_shape_persist_and_reload_through_run_state_json() {
+        let id = "discovery-persist-test-world";
+        let mut state = persistable_state(id);
+        std::fs::create_dir_all(&state.root).expect("create test world root");
+
+        state
+            .add_note(
+                "the scaffold truncates hyphenated names".to_string(),
+                Some(DiscoveryClass::Defect),
+                Some("stop splitting on the first hyphen".to_string()),
+            )
+            .expect("fully-classified discovery must save");
+        state
+            .add_note("just a plain observation".to_string(), None, None)
+            .expect("text-only discovery must save");
+        state
+            .add_note(
+                "search is literal, not semantic".to_string(),
+                Some(DiscoveryClass::Friction),
+                None,
+            )
+            .expect("classified discovery with no remedy must save");
+
+        let reloaded = RunState::load(id).expect("world must reload");
+        assert_eq!(reloaded.notes.len(), 3);
+
+        assert_eq!(
+            reloaded.notes[0].text,
+            "the scaffold truncates hyphenated names"
+        );
+        assert_eq!(reloaded.notes[0].class, Some(DiscoveryClass::Defect));
+        assert_eq!(
+            reloaded.notes[0].remedy.as_deref(),
+            Some("stop splitting on the first hyphen")
+        );
+
+        assert_eq!(reloaded.notes[1].text, "just a plain observation");
+        assert_eq!(reloaded.notes[1].class, None);
+        assert_eq!(reloaded.notes[1].remedy, None);
+
+        assert_eq!(reloaded.notes[2].text, "search is literal, not semantic");
+        assert_eq!(reloaded.notes[2].class, Some(DiscoveryClass::Friction));
+        assert_eq!(reloaded.notes[2].remedy, None);
+
+        let _ = std::fs::remove_dir_all(&state.root);
+    }
+
+    #[test]
+    fn a_run_state_json_with_no_notes_key_at_all_still_loads_with_an_empty_discovery_list() {
+        // Simulates a schema older than USM-13's two new `Discovery` fields
+        // ever existing at the `RunState` level — not merely a `Discovery`
+        // missing `class`/`remedy` (covered in `findings.rs`), but a whole
+        // persisted world whose `notes` key is absent entirely. The field's
+        // `#[serde(default)]` must still produce an empty list rather than
+        // a load failure.
+        let id = "discovery-legacy-load-test-world";
+        let root = World::root_for_id(id);
+        std::fs::create_dir_all(&root).expect("create test world root");
+
+        let raw = r#"{
+            "world_id": "discovery-legacy-load-test-world",
+            "root": "dummy-root",
+            "resolved_binary": "cronus",
+            "product_version": "0.0.0",
+            "repo_dirty_digest_at_build": null,
+            "bound_steps": 10,
+            "bound_wall_secs": 60,
+            "bound_spend_usd": 5.0,
+            "created_at_unix_ms": 0,
+            "obligation_ids": [],
+            "entries": [],
+            "verdicts": {}
+        }"#;
+        std::fs::write(root.join(STATE_FILE_NAME), raw).expect("write legacy-shaped state");
+
+        let loaded =
+            RunState::load(id).expect("must load despite missing notes/spend_usd_used keys");
+        assert!(loaded.notes.is_empty());
+        assert_eq!(loaded.spend_usd_used, 0.0);
+
+        let _ = std::fs::remove_dir_all(&root);
     }
 
     #[test]

@@ -7,7 +7,15 @@
 //! ```text
 //! cronus-sim world new [--bin <path>] <scenario-file>   -> prints a world id
 //! cronus-sim run <world-id> -- <argv...>                 -> spawns the product
-//! cronus-sim note <world-id> <text...>                   -> records a discovery
+//! cronus-sim note <world-id> [--class <name>] [--remedy <text>] <text...>
+//!                                                        -> records a discovery,
+//!                                                           optionally classified
+//!                                                           (defect | friction |
+//!                                                           inefficiency |
+//!                                                           optimization-opportunity |
+//!                                                           improvement-idea) and
+//!                                                           optionally carrying a
+//!                                                           proposed remedy
 //! cronus-sim spend <world-id> <usd>                      -> reports the driving
 //!                                                            agent's own incremental
 //!                                                            cost since its last report
@@ -25,6 +33,7 @@ use std::fmt;
 use std::path::{Path, PathBuf};
 
 use cronus_simulation::coverage;
+use cronus_simulation::findings::DiscoveryClass;
 use cronus_simulation::product;
 use cronus_simulation::run_state::{RunState, RunStateError};
 use cronus_simulation::scenario;
@@ -149,15 +158,50 @@ fn cmd_run(args: &[String]) -> Result<i32, CliError> {
 }
 
 fn cmd_note(args: &[String]) -> Result<i32, CliError> {
-    let world_id = args
-        .first()
-        .ok_or_else(|| CliError::Usage("usage: note <world-id> <text...>".to_string()))?;
-    let text = args[1..].join(" ");
+    let world_id = args.first().ok_or_else(|| {
+        CliError::Usage(
+            "usage: note <world-id> [--class <name>] [--remedy <text>] <text...>".to_string(),
+        )
+    })?;
+
+    let mut class: Option<DiscoveryClass> = None;
+    let mut remedy: Option<String> = None;
+    let mut text_words: Vec<String> = Vec::new();
+
+    let mut i = 1;
+    while i < args.len() {
+        match args[i].as_str() {
+            "--class" => {
+                i += 1;
+                let raw = args
+                    .get(i)
+                    .ok_or_else(|| CliError::Usage("--class requires a value".to_string()))?;
+                class = Some(DiscoveryClass::parse(raw).ok_or_else(|| {
+                    CliError::Usage(format!(
+                        "unknown discovery class `{raw}` — valid classes: {}",
+                        DiscoveryClass::all_names_joined()
+                    ))
+                })?);
+            }
+            "--remedy" => {
+                i += 1;
+                let value = args
+                    .get(i)
+                    .ok_or_else(|| CliError::Usage("--remedy requires a value".to_string()))?;
+                remedy = Some(value.clone());
+            }
+            word => text_words.push(word.to_string()),
+        }
+        i += 1;
+    }
+
+    let text = text_words.join(" ");
     if text.trim().is_empty() {
         return Err(CliError::Usage("note requires non-empty text".to_string()));
     }
+
     let mut state = RunState::load(world_id)?;
-    state.add_note(text)?;
+    state.add_note(text, class, remedy)?;
     Ok(0)
 }
 

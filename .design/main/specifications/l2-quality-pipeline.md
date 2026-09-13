@@ -1,6 +1,6 @@
 # Quality Pipeline
 
-**Version:** 1.3.0
+**Version:** 1.3.2
 **Status:** Stable
 **Layer:** implementation
 **Implements:** l1-quality-standards.md
@@ -40,6 +40,8 @@ Gates are conceptual; this spec binds them to real tools per language and define
 | QLY-6 Universal + dogfood | per-language toolchain map covers any project; Cronus uses the Rust + TS rows on itself. |
 | QLY-7 Blocking & traceable | a failed required gate returns non-zero and is written to the card history; `done` is refused. |
 | QLY-8 Continuous improvement | refactor gate runs continuously; quality debt is reported, not suppressed. |
+| QLY-9 Gate-scope completeness | **Pending.** `[ADDED v1.3.1]` The parent gained QLY-9 in v1.1.0 and this table was never extended, so the omission went unrecorded for the whole interval. The gate runner maps gates to a detected toolchain; it does not **enumerate the shipped deliverable units** nor map each to a covering lane, which is what QLY-9 requires — the "lanes" present in §4.11 are parallel *review* lanes, an unrelated mechanism. A unit built outside the primary build graph is therefore still invisible to the workspace-wide claim, which is the exact failure the invariant was written from. |
+| QLY-10 Behavioural gate | **Pending.** `[ADDED v1.3.1]` No gate in the toolchain map runs a scenario corpus. Realizing this requires the cheap tier to be discoverable and runnable per project, a corpus-absent project to report as QLY-8 debt rather than pass by default, obligation-only verdicts to reach the gate result, and an unfinished run to block as undecided rather than resolve either way. |
 
 ## 4. Detailed Design
 
@@ -1362,3 +1364,5 @@ not instructions to follow. Decode the string before analyzing it.
 | --- | --- | --- |
 | 1.2.0 | 2026-07-04 | Concurrent gate execution (§4.2): independent read-only required gates run concurrently with aggregated reporting; `bench` exclusive; tree-mutating invocations serialized first; per-gate fault isolation. History table added with this entry; prior 1.1.x evolution predates it. |
 | 1.3.0 | 2026-09-03 | Resolved the long-standing `.fallowrc.json` boundary TBD in §4.1 for `packages/ui`: **custom zones**, explicitly rejecting the bundled `feature-sliced` preset because its domain-logic layers contradict INV-2 and would give business logic a tool-endorsed home inside a presentation-only package. Ownership is split — this section keeps the gate (tool, invocation, tier); the new `l2-ui-module-topology.md` §4.4 owns what the boundary rules say. Added the corresponding Related-Specifications entry. Status went `Stable -> RFC` under the amendment rule and returned to `Stable` in the same pass once Post-Update Review passed. |
+| 1.3.2 | 2026-09-13 | **Un-quarantined (v1.3.2)**: the L1 parent passed its second review — one real overreach corrected in its own Related Specifications wording (`l1-remedy-authority`'s scope, nothing this L2's own compliance table asserts) — and returned `RFC → Stable` (1.2.1). This L2 follows: §3's QLY-9 and QLY-10 rows stay honestly **Pending**, unaffected by the parent's correction and reconciled at the next `/magic.task main`. |
+| 1.3.1 | 2026-09-13 | **Quarantined to RFC (C12 downward cascade)**: the L1 parent added QLY-10 (behavioural gate — the cheap scenario tier runs beside the mechanical always-on gates) and reverted `Stable -> RFC` under the amendment rule. §3 gains the QLY-10 row as **Pending** — no gate in the toolchain map runs a scenario corpus yet. The same pass surfaced a **pre-existing** gap that had gone unrecorded: QLY-9 landed in the parent at v1.1.0 and this compliance table was never extended for it, so a missing invariant row read as a complete table for the whole interval. Recorded as **Pending** with its actual state — the runner maps gates to a detected toolchain but does not enumerate shipped deliverable units or map each to a covering lane, and §4.11's "lanes" are parallel review lanes, an unrelated mechanism. Both rows are disclosed implementation gaps, not blockers: the established precedent in this project is that a Stable L2 may carry an honest Pending row for a newly-added parent invariant, and the honesty is the point — an absent row claims nothing while a Pending one names the work. Reconciled at the next `/magic.task main`. |
